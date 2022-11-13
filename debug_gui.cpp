@@ -255,6 +255,10 @@ void DbgGui::loadPreviousSessionSettings() {
                     Scalar* scalar = m_scalars[id].get();
                     scalar->scale = scalar_data["scale"];
                     scalar->offset = scalar_data["offset"];
+                    if (scalar_data.contains("alias")) {
+                        scalar->alias = scalar_data["alias"];
+                        scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+                    }
                 }
             }
 
@@ -300,7 +304,7 @@ void DbgGui::updateSavedSettings() {
                 settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis_min;
                 settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis_max;
             }
-            settings["scalar_plots"][scalar_plot.name]["signals"][signal->name_and_group] = signal->id;
+            settings["scalar_plots"][scalar_plot.name]["signals"][signal->str_id] = signal->id;
         }
     }
 
@@ -322,9 +326,10 @@ void DbgGui::updateSavedSettings() {
 
     for (auto& scalar : m_scalars) {
         if (!scalar.second->hide_from_scalars_window) {
-            settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
-            settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
-            settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
+            settings["scalars"][scalar.second->str_id]["id"] = scalar.second->id;
+            settings["scalars"][scalar.second->str_id]["scale"] = scalar.second->scale;
+            settings["scalars"][scalar.second->str_id]["offset"] = scalar.second->offset;
+            settings["scalars"][scalar.second->str_id]["alias"] = scalar.second->alias;
         }
     }
 
@@ -344,8 +349,8 @@ void DbgGui::updateSavedSettings() {
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
     size_t id = addScalar(sym->getValueSource(), group, sym->getFullName());
     Scalar* scalar = m_scalars[id].get();
-    m_saved_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
-    m_saved_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
+    m_saved_settings["scalar_symbols"][scalar->str_id]["name"] = scalar->name;
+    m_saved_settings["scalar_symbols"][scalar->str_id]["group"] = scalar->group;
     m_manual_save_settings = true;
     return scalar;
 }
@@ -374,9 +379,11 @@ size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::
         ptr->group = group;
     }
     ptr->name = name;
-    ptr->name_and_group = name + " (" + ptr->group + ")";
+    ptr->alias = ptr->name;
+    ptr->str_id = name + " (" + ptr->group + ")";
+    ptr->alias_and_group = ptr->str_id;
     ptr->group_and_name = ptr->group + " " + ptr->name;
-    size_t id = hasher(ptr->name_and_group);
+    size_t id = hasher(ptr->str_id);
     if (m_scalars.contains(id)) {
         return id;
     }

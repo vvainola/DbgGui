@@ -78,25 +78,25 @@ void DbgGui::showScalarPlots() {
                                                                                            1000,
                                                                                            signal->scale,
                                                                                            signal->offset);
-                ImPlot::PlotLine(signal->name_and_group.c_str(),
+                ImPlot::PlotLine(signal->alias_and_group.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
-                ImPlot::PlotLine(signal->name_and_group.c_str(),
+                ImPlot::PlotLine(signal->alias_and_group.c_str(),
                                  values.time.data(),
                                  values.y_max.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
-                ImPlot::PlotShaded(signal->name_and_group.c_str(),
+                ImPlot::PlotShaded(signal->alias_and_group.c_str(),
                                    values.time.data(),
                                    values.y_min.data(),
                                    values.y_max.data(),
                                    int(values.time.size()),
                                    ImPlotLineFlags_None);
                 // Legend right-click
-                if (ImPlot::BeginLegendPopup(signal->name_and_group.c_str())) {
+                if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
                     double pause_level = getSourceValue(signal->src);
                     ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f");
                     if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -132,7 +132,7 @@ void DbgGui::showScalarPlots() {
 
         if (signal_to_remove) {
             remove(scalar_plot.signals, signal_to_remove);
-            m_saved_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            m_saved_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->str_id);
             m_manual_save_settings = true;
         }
     }

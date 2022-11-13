@@ -31,7 +31,9 @@ struct Scalar {
     size_t id;
     std::string group;
     std::string name;
-    std::string name_and_group;
+    std::string alias;
+    std::string alias_and_group;
+    std::string str_id; // name_and_group
     std::string group_and_name;
     ValueSource src;
     std::unique_ptr<ScrollingBuffer> buffer;
