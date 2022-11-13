@@ -37,7 +37,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         m_type = Type::Arithmetic;
         BasicType basic_type = getBaseType(*symbol);
         std::optional<DWORD> bitfield_position = std::nullopt;
-        if (basic_type == BasicType::btUInt) {
+        if (basic_type == BasicType::btUInt || basic_type == BasicType::btBool) {
             bitfield_position = getBitPosition(*symbol);
         }
         m_arithmetic_symbol.emplace(basic_type, m_address, symbol->info.Size, bitfield_position);
