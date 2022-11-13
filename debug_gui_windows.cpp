@@ -88,6 +88,9 @@ void addScalarContextMenu(Scalar* scalar) {
                          scalar->alias.data(),
                          MAX_NAME_LENGTH)) {
             scalar->alias = std::string(scalar->alias.data());
+            if (scalar->alias.empty()) {
+                scalar->alias = scalar->name;
+            }
             scalar->alias_and_group = std::string(scalar->alias.data()) + " (" + scalar->group + ")";
         }
         ImGui::EndPopup();
