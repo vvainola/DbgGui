@@ -1,7 +1,7 @@
 // utility structure for realtime plot
 struct ScrollingBuffer {
-    size_t current_idx = 0;
-    size_t buffer_size;
+    int32_t current_idx = 0;
+    int32_t buffer_size;
 
     std::vector<double> time;
     std::vector<double> data;
@@ -12,7 +12,7 @@ struct ScrollingBuffer {
     };
     bool full_buffer_looped = false;
 
-    ScrollingBuffer(size_t max_size)
+    ScrollingBuffer(int32_t max_size)
         : buffer_size(max_size),
           time(buffer_size * 2),
           data(buffer_size * 2) {
@@ -30,8 +30,8 @@ struct ScrollingBuffer {
         }
     }
 
-    size_t binarySearch(double t, size_t start, size_t end) {
-        size_t mid = std::midpoint(start, end);
+    int32_t binarySearch(double t, int32_t start, int32_t end) {
+        int32_t mid = std::midpoint(start, end);
         while (start <= end) {
             mid = std::midpoint(start, end);
             double val = time[mid];
@@ -49,8 +49,8 @@ struct ScrollingBuffer {
     DecimatedValues getValuesInRange(double x_min, double x_max, int n_points, double scale = 1, double offset = 0) {
         DecimatedValues decimated_values;
         x_max = std::min(time[current_idx - 1], x_max);
-        size_t start_idx = current_idx - 1;
-        size_t end_idx = current_idx - 1 + buffer_size;
+        int32_t start_idx = current_idx - 1;
+        int32_t end_idx = current_idx - 1 + buffer_size;
         if (!full_buffer_looped) {
             // Nothing sampled yet
             if (current_idx == 0) {
@@ -68,7 +68,7 @@ struct ScrollingBuffer {
         }
         end_idx = std::max(end_idx, start_idx + 2);
 
-        size_t decimation = static_cast<size_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
+        int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
 
         decimated_values.time.reserve(end_idx - start_idx);
         decimated_values.y_min.reserve(end_idx - start_idx);
@@ -77,7 +77,7 @@ struct ScrollingBuffer {
         double current_min = INFINITY;
         double current_max = -INFINITY;
         int64_t counter = 0;
-        for (size_t i = start_idx; i < end_idx; i++) {
+        for (int32_t i = start_idx; i < end_idx; i++) {
             if (counter < 0) {
                 decimated_values.time.push_back(time[i]);
                 decimated_values.y_min.push_back(scale * current_min + offset);

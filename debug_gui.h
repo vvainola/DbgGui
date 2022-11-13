@@ -41,7 +41,7 @@ struct Scalar {
 
     void startBuffering() {
         if (buffer == nullptr) {
-            buffer = std::make_unique<ScrollingBuffer>(size_t(1e6));
+            buffer = std::make_unique<ScrollingBuffer>(int32_t(1e6));
         }
     }
 
