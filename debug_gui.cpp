@@ -30,7 +30,7 @@ static void glfw_error_callback(int error, const char* description) {
 
 
 DbgGui::DbgGui() {
-    strcpy(m_group_to_add_symbols, "debug");
+    strcpy_s(m_group_to_add_symbols, "debug");
 }
 
 DbgGui::~DbgGui() {
@@ -262,7 +262,7 @@ void DbgGui::loadPreviousSessionSettings() {
             }
 
             std::string group_to_add_symbols = m_saved_settings["group_to_add_symbols"];
-            strcpy(m_group_to_add_symbols, group_to_add_symbols.data());
+            strcpy_s(m_group_to_add_symbols, group_to_add_symbols.data());
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
