@@ -163,6 +163,7 @@ void addFirstChildToArray(RawSymbol& parent) {
     addChildrenToSymbol(*first_child);
 }
 
+// https://yanshurong.wordpress.com/2009/01/02/how-to-use-dbghelp-to-access-type-information-from-www-debuginfo-com/
 void addChildrenToSymbol(RawSymbol& parent) {
     // Copy structure from reference symbol if children have already been looked up for same type before
     using ModBase = ULONG64;
