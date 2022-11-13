@@ -54,7 +54,10 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label) {
         ImGui::SameLine();
     }
 
-    ImGuiInputTextFlags edit_flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsScientific;
+    ImGuiInputTextFlags edit_flags = ImGuiInputTextFlags_EnterReturnsTrue
+                                   | ImGuiInputTextFlags_AutoSelectAll
+                                   | ImGuiInputTextFlags_CharsScientific
+                                   | ImGuiInputTextFlags_CharsDecimal;
     char value[20];
     strcpy(value, numberAsStr(getSourceValue(signal_src)).c_str());
     ImGui::SetNextItemWidth(-FLT_MIN);
