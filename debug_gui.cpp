@@ -5,6 +5,8 @@
 // + read the top of imgui.cpp. Read online:
 // https://github.com/ocornut/imgui/tree/master/docs
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "debug_gui.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -27,7 +29,6 @@ std::hash<std::string> hasher;
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
-
 
 DbgGui::DbgGui() {
     strcpy_s(m_group_to_add_symbols, "debug");
@@ -190,7 +191,9 @@ void DbgGui::updateLoop() {
 }
 
 void DbgGui::loadPreviousSessionSettings() {
-    std::ifstream f("settings.json");
+    std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
+    ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
+    std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         try {
             m_saved_settings = nlohmann::json::parse(f);
@@ -327,8 +330,12 @@ void DbgGui::updateSavedSettings() {
     settings["group_to_add_symbols"] = m_group_to_add_symbols;
     if (m_saved_settings != settings || m_manual_save_settings) {
         m_saved_settings = settings;
-        ImGui::SaveIniSettingsToDisk("imgui.ini");
-        std::ofstream("settings.json") << std::setw(4) << m_saved_settings;
+        std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
+        if (!std::filesystem::exists(settings_dir)) {
+            std::filesystem::create_directories(settings_dir);
+        }
+        ImGui::SaveIniSettingsToDisk((settings_dir + "imgui.ini").c_str());
+        std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_saved_settings;
         m_manual_save_settings = false;
     }
 }
