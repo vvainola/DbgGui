@@ -4,6 +4,7 @@ project('test_project', 'cpp',
         'cpp_std=c++latest',
         'b_debug=false',
         'buildtype=plain',
+        'warning_level=3'
     ]
 )
 add_project_arguments('-Z7', '-DNOMINMAX', language : 'cpp')

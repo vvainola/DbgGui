@@ -59,7 +59,7 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label) {
                                    | ImGuiInputTextFlags_CharsScientific
                                    | ImGuiInputTextFlags_CharsDecimal;
     char value[20];
-    strcpy(value, numberAsStr(getSourceValue(signal_src)).c_str());
+    strcpy_s(value, numberAsStr(getSourceValue(signal_src)).c_str());
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags)) {
         setSourceValue(signal_src, std::stod(value));
@@ -121,7 +121,7 @@ void DbgGui::showConfigurationWindow() {
                                                     .y_axis_min = -1,
                                                     .y_axis_max = 1,
                                                     .x_range = 1});
-                strcpy(scalar_plot_name, "");
+                strcpy_s(scalar_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -137,7 +137,7 @@ void DbgGui::showConfigurationWindow() {
                                  IM_ARRAYSIZE(vector_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_vector_plots.push_back(VectorPlot{.name = vector_plot_name});
-                strcpy(vector_plot_name, "");
+                strcpy_s(vector_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();

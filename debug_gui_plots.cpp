@@ -38,7 +38,7 @@ void DbgGui::showScalarPlots() {
         ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
         ImPlotAxisFlags y_flags = ImPlotAxisFlags_None;
 
-        float time_range = scalar_plot.x_range * 1000;
+        float time_range = static_cast<float>(scalar_plot.x_range * 1000);
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
         bool time_range_changed = ImGui::SliderFloat("Time range", &time_range, 1, 1000, "%.1f ms");
         scalar_plot.x_range = time_range * 1e-3f;
@@ -70,7 +70,7 @@ void DbgGui::showScalarPlots() {
             }
             ImPlot::SetupAxis(ImAxis_X1, NULL, x_flags);
             ImPlot::SetupAxis(ImAxis_Y1, NULL, y_flags);
-            scalar_plot.x_range = std::max(1e-6f, scalar_plot.x_range);
+            scalar_plot.x_range = std::max(1e-6, scalar_plot.x_range);
 
             for (Scalar* signal : scalar_plot.signals) {
                 ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(scalar_plot.x_axis_min,
@@ -81,19 +81,19 @@ void DbgGui::showScalarPlots() {
                 ImPlot::PlotLine(signal->name_and_group.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
-                                 values.time.size(),
+                                 int(values.time.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::PlotLine(signal->name_and_group.c_str(),
                                  values.time.data(),
                                  values.y_max.data(),
-                                 values.time.size(),
+                                 int(values.time.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
                 ImPlot::PlotShaded(signal->name_and_group.c_str(),
                                    values.time.data(),
                                    values.y_min.data(),
                                    values.y_max.data(),
-                                   values.time.size(),
+                                   int(values.time.size()),
                                    ImPlotLineFlags_None);
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->name_and_group.c_str())) {
@@ -172,14 +172,14 @@ void DbgGui::showVectorPlots() {
             ImPlot::PlotLine("##Unit circle",
                              &UNIT_CIRCLE.data()->x,
                              &UNIT_CIRCLE.data()->y,
-                             UNIT_CIRCLE.size(),
+                             int(UNIT_CIRCLE.size()),
                              ImPlotLineFlags_None,
                              0,
                              2 * sizeof(double));
             ImPlot::PlotLine("##Half unit circle",
                              &HALF_UNIT_CIRCLE.data()->x,
                              &HALF_UNIT_CIRCLE.data()->y,
-                             HALF_UNIT_CIRCLE.size(),
+                             int(HALF_UNIT_CIRCLE.size()),
                              ImPlotLineFlags_None,
                              0,
                              2 * sizeof(double));
@@ -190,14 +190,14 @@ void DbgGui::showVectorPlots() {
                 if (!m_paused) {
                     time_offset = 0;
                 }
-                float last_sample_time = m_timestamp - time_offset;
+                double last_sample_time = m_timestamp - time_offset;
                 ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
                 ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
                 size_t count = std::min(values_x.y_min.size(), values_y.y_min.size());
                 ImPlot::PlotLine(signal->name_and_group.c_str(),
                                  values_x.y_min.data(),
                                  values_y.y_min.data(),
-                                 count,
+                                 int(count),
                                  ImPlotLineFlags_None);
                 // Plot line from origin to latest sample
                 double x_to_latest[2] = {0, values_x.y_min.back()};

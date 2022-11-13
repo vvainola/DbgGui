@@ -171,7 +171,7 @@ struct ScalarPlot {
     double y_axis_max;
     double x_axis_min;
     double x_axis_max;
-    float x_range;
+    double x_range;
     bool autofit_y = true;
     bool open = true;
 

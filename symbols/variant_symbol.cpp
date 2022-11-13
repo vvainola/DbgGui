@@ -57,7 +57,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         m_children.reserve(symbol->array_element_count);
         RawSymbol* first_element = symbol->children[0].get();
         MemoryAddress original_address = m_address;
-        for (int32_t i = 0; i < symbol->array_element_count; ++i) {
+        for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
             m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
             m_address += first_element->info.Size;
         }
@@ -78,7 +78,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
 
 VariantSymbol* binarySearchSymbol(std::vector<std::unique_ptr<VariantSymbol>>& symbols, MemoryAddress address) {
     int32_t start = 0;
-    int32_t end = symbols.size() - 1;
+    int32_t end = static_cast<int32_t>(symbols.size() - 1);
     int32_t mid = std::midpoint(start, end);
     while (start <= end) {
         mid = std::midpoint(start, end);

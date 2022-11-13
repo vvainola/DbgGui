@@ -1,7 +1,9 @@
 #include "dbghelp_symbols_lookup.h"
 
+#pragma warning(push, 0)
 #define FTS_FUZZY_MATCH_IMPLEMENTATION
 #include "fts_fuzzy_match.h"
+#pragma warning(pop)
 
 #include "variant_symbol.h"
 #include "symbol_helpers.h"
@@ -15,7 +17,7 @@ bool startsWith(std::string const& s, std::string const& w) {
     return s.rfind(w, 0) == 0;
 }
 
-BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID UserContext) {
+BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     // Skip non-userspace symbols
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagFunction && pSymInfo->Tag != SymTagData)

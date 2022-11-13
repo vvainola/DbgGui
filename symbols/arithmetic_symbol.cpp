@@ -11,6 +11,7 @@ ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
                                    std::optional<uint32_t> bitfield_idx)
     : m_address(address),
       m_size(size),
+      m_bitfield_idx(bitfield_idx),
       m_value(addressAsVariant(basic_type, address, size)) {
 }
 
