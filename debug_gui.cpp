@@ -53,7 +53,7 @@ void DbgGui::sample(double timestamp) {
         for (auto& signal : m_scalars) {
             if (signal.second->buffer != nullptr) {
                 double value = getSourceValue(signal.second->src);
-                signal.second->buffer->AddPoint(timestamp, value);
+                signal.second->buffer->addPoint(timestamp, value);
                 m_paused = m_paused || signal.second->checkTriggers(value);
             }
         }

@@ -18,7 +18,7 @@ struct ScrollingBuffer {
           data(buffer_size * 2) {
     }
 
-    void AddPoint(double x, double y) {
+    void addPoint(double x, double y) {
         // y += 0.1 * (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) - 0.5);
         time[current_idx] = x;
         time[current_idx + buffer_size] = x;
