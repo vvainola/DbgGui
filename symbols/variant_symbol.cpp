@@ -7,7 +7,8 @@
 VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                              RawSymbol* symbol,
                              VariantSymbol* parent)
-    : m_root_symbols(root_symbols) {
+    : m_root_symbols(root_symbols),
+      m_parent(parent) {
     if (parent) {
         m_address = parent->getAddress() + symbol->offset_to_parent;
     } else {
@@ -17,13 +18,10 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     if (parent && parent->getType() == Type::Array) {
         std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
         m_name = parent->getName() + idx;
-        m_full_name = parent->getFullName() + idx;
     } else if (parent) {
         m_name = symbol->name;
-        m_full_name = parent->getFullName() + "." + symbol->name;
     } else {
         m_name = symbol->name;
-        m_full_name = symbol->full_name;
     }
 
     switch (symbol->tag) {
