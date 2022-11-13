@@ -32,6 +32,7 @@ struct Scalar {
     std::string group;
     std::string name;
     std::string name_and_group;
+    std::string group_and_name;
     ValueSource src;
     std::unique_ptr<ScrollingBuffer> buffer;
     bool hide_from_scalars_window = false;

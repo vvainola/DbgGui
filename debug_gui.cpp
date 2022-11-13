@@ -317,8 +317,7 @@ void DbgGui::updateSavedSettings() {
     }
 
     for (Scalar* scalar : m_custom_window_scalars) {
-        // TODO: Save with group first so that the signals get sorted by group on reload
-        settings["custom_window_signals"][scalar->name_and_group] = scalar->id;
+        settings["custom_window_signals"][scalar->group_and_name] = scalar->id;
     }
 
     for (auto& scalar : m_scalars) {
@@ -376,6 +375,7 @@ size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::
     }
     ptr->name = name;
     ptr->name_and_group = name + " (" + ptr->group + ")";
+    ptr->group_and_name = ptr->group + " " + ptr->name;
     size_t id = hasher(ptr->name_and_group);
     if (m_scalars.contains(id)) {
         return id;
