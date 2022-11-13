@@ -353,6 +353,15 @@ void DbgGui::showSymbolsWindow() {
         if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank)) {
             if (std::string(symbols_to_search).size() > 2) {
                 m_symbol_search_results = m_dbghelp_symbols.findMatchingRootSymbols(symbols_to_search);
+                auto begin_it = m_symbol_search_results.begin();
+                // Don't sort first element if it is an exact match
+                if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
+                    begin_it++;
+                }
+                // Sort search results
+                std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
+                    return l->getFullName() < r->getFullName();
+                });
             } else {
                 m_symbol_search_results.clear();
             }
