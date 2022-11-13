@@ -43,6 +43,8 @@ Index of this file:
 #pragma once
 
 // Configuration file with compile-time options (edit imconfig.h or '#define IMGUI_USER_CONFIG "myfilename.h" from your build system')
+#include "imgui_export_headers.h"
+
 #ifdef IMGUI_USER_CONFIG
 #include IMGUI_USER_CONFIG
 #endif

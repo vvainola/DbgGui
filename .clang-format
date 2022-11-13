@@ -1,0 +1,25 @@
+---
+Language:    	Cpp
+IndentWidth: 4
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: false
+NamespaceIndentation : None
+AllowAllArgumentsOnNextLine : true
+UseTab : Never
+UseCRLF : true
+DeriveLineEnding : true
+PointerAlignment : Left
+#IndentAccessModifiers : false
+BinPackArguments: false
+BinPackParameters: false
+AlignOperands : AlignAfterOperator
+BreakBeforeBinaryOperators : NonAssignment
+AllowAllParametersOfDeclarationOnNextLine : true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine : false
+SortIncludes : false
+ColumnLimit: 0
+ConstructorInitializerAllOnOneLineOrOnePerLine : true
+AllowShortBlocksOnASingleLine : false
+AllowShortIfStatementsOnASingleLine : false
