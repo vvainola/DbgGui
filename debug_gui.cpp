@@ -317,14 +317,16 @@ void DbgGui::updateSavedSettings() {
     }
 
     for (Scalar* scalar : m_custom_window_scalars) {
-        // Save with group first so that the signals get sorted by group on reload
+        // TODO: Save with group first so that the signals get sorted by group on reload
         settings["custom_window_signals"][scalar->name_and_group] = scalar->id;
     }
 
     for (auto& scalar : m_scalars) {
-        settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
-        settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
-        settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
+        if (!scalar.second->hide_from_scalars_window) {
+            settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
+            settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
+            settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
+        }
     }
 
     settings["group_to_add_symbols"] = m_group_to_add_symbols;

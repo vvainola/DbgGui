@@ -184,6 +184,7 @@ void DbgGui::showScalarWindow() {
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                         m_saved_settings["scalar_symbols"].erase(scalar->name_and_group);
+                        m_saved_settings["scalars"].erase(scalar->name_and_group);
                         m_manual_save_settings = true;
                         scalar->hide_from_scalars_window = true;
                     }
@@ -237,6 +238,8 @@ void DbgGui::showVectorWindow() {
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                         m_saved_settings["vector_symbols"].erase(signal->name_and_group);
+                        m_saved_settings["scalars"].erase(signal->x->name_and_group);
+                        m_saved_settings["scalars"].erase(signal->y->name_and_group);
                         m_manual_save_settings = true;
                         signal->hide_from_vector_window = true;
                     }
