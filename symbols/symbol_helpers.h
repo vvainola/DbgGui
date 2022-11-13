@@ -10,3 +10,8 @@ SymTagEnum getSymbolTag(SymbolInfo const& sym);
 BasicType getBaseType(RawSymbol const& sym);
 
 void addChildrenToSymbol(RawSymbol& parent_symbol);
+
+// Currently unused helpers
+DataKind getDataKind(RawSymbol const& sym);
+std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
+

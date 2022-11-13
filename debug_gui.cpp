@@ -110,13 +110,15 @@ void DbgGui::updateLoop() {
     style.WindowPadding.y = 5;
     style.FramePadding.x = 1;
     style.FramePadding.y = 1;
+    style.CellPadding.y = 1;
+    style.IndentSpacing = 20;
     ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 14.0f);
+    io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
     setTheme();
 
     loadPreviousSessionSettings();

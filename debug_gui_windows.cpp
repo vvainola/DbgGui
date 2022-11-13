@@ -340,8 +340,11 @@ void DbgGui::showSymbolsWindow() {
         return;
     }
 
-    static ImGuiTableFlags flags = ImGuiTableFlags_BordersV | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings;
-    if (ImGui::BeginTable("symbols_table", 2, flags)) {
+    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
+                                       | ImGuiTableFlags_BordersH
+                                       | ImGuiTableFlags_Resizable
+                                       | ImGuiTableFlags_NoSavedSettings;
+    if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
         ImGui::TableNextColumn();
         static char symbols_to_search[MAX_NAME_LENGTH];
         if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank)) {
@@ -389,14 +392,21 @@ void DbgGui::showSymbolsWindow() {
                     static bool selected_symbol_idx = 0;
                     static VariantSymbol* selected_symbols[2] = {nullptr, nullptr};
                     bool selected = (sym == selected_symbols[0]) || (sym == selected_symbols[1]);
-                    if (ImGui::Selectable(sym->getName().c_str(), &selected)) {
-                        selected_symbols[selected_symbol_idx] = sym;
-                        selected_symbol_idx = (selected_symbol_idx + 1) % 2;
-                        if (!ImGui::GetIO().KeyCtrl) // Clear selection when CTRL is not held
-                        {
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
+                    if (selected) {
+                        flags |= ImGuiTreeNodeFlags_Selected;
+                    }
+                    ImGui::TreeNodeEx(sym->getName().c_str(), flags);
+                    ImGui::TreePop();
+                    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
+                        // Clear if already selected
+                        if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
                             selected_symbol_idx = 0;
                             selected_symbols[0] = nullptr;
                             selected_symbols[1] = nullptr;
+                        } else {
+                            selected_symbols[selected_symbol_idx] = sym;
+                            selected_symbol_idx = (selected_symbol_idx + 1) % 2;
                         }
                     }
 
