@@ -132,7 +132,7 @@ void DbgGui::showScalarPlots() {
 
         if (signal_to_remove) {
             remove(scalar_plot.signals, signal_to_remove);
-            m_saved_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->str_id);
+            m_saved_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
             m_manual_save_settings = true;
         }
     }

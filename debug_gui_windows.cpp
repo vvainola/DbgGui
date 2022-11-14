@@ -67,7 +67,7 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label) {
 }
 
 void addScalarContextMenu(Scalar* scalar) {
-    if (ImGui::BeginPopupContextItem((scalar->str_id + "_context_menu").c_str())) {
+    if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = getSourceValue(scalar->src);
         ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f");
         if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -194,8 +194,8 @@ void DbgGui::showScalarWindow() {
                     }
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                        m_saved_settings["scalar_symbols"].erase(scalar->str_id);
-                        m_saved_settings["scalars"].erase(scalar->str_id);
+                        m_saved_settings["scalar_symbols"].erase(scalar->name_and_group);
+                        m_saved_settings["scalars"].erase(scalar->name_and_group);
                         m_manual_save_settings = true;
                         scalar->hide_from_scalars_window = true;
                     }
@@ -203,7 +203,7 @@ void DbgGui::showScalarWindow() {
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##" + scalar->str_id);
+                    addInputScalar(scalar->src, "##" + scalar->name_and_group);
                 }
                 ImGui::TreePop();
             }
@@ -249,8 +249,8 @@ void DbgGui::showVectorWindow() {
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                         m_saved_settings["vector_symbols"].erase(signal->name_and_group);
-                        m_saved_settings["scalars"].erase(signal->x->str_id);
-                        m_saved_settings["scalars"].erase(signal->y->str_id);
+                        m_saved_settings["scalars"].erase(signal->x->name_and_group);
+                        m_saved_settings["scalars"].erase(signal->y->name_and_group);
                         m_manual_save_settings = true;
                         signal->hide_from_vector_window = true;
                     }
@@ -314,14 +314,14 @@ void DbgGui::showCustomWindow() {
             // Hide symbol on delete
             if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                 signal_to_remove = scalar;
-                m_saved_settings["custom_window_signals"].erase(scalar->str_id);
+                m_saved_settings["custom_window_signals"].erase(scalar->name_and_group);
                 m_manual_save_settings = true;
             }
             addScalarContextMenu(scalar);
 
             // Show value
             ImGui::TableNextColumn();
-            addInputScalar(scalar->src, "##" + scalar->str_id);
+            addInputScalar(scalar->src, "##" + scalar->name_and_group);
         }
         ImGui::EndTable();
     }

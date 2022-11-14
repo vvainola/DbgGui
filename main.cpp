@@ -123,7 +123,7 @@ int main(int, char**) {
     while (!gui.isClosed()) {
         gui.sample(t);
         t += 10e-6;
-        sfl = t;
+        sfl = (float)t;
         g::sine = sin(10. * 2 * PI * t);
         g::abc.a = sin(10. * 2 * PI * t);
         g::abc.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0);
