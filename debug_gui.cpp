@@ -54,6 +54,9 @@ void DbgGui::sample(double timestamp) {
             if (signal.second->buffer != nullptr) {
                 double value = getSourceValue(signal.second->src);
                 signal.second->buffer->addPoint(timestamp, value);
+            }
+            if (signal.second->m_pause_triggers.size() > 0) {
+                double value = getSourceValue(signal.second->src);
                 m_paused = m_paused || signal.second->checkTriggers(value);
             }
         }
