@@ -8,6 +8,7 @@
 #include "debug_gui.h"
 #include "imgui.h"
 #include "implot.h"
+#include <array>
 
 constexpr double PI = 3.1415926535897;
 

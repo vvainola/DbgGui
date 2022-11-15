@@ -27,7 +27,7 @@ static std::string getSourceValueStr(ValueSource src) {
             if constexpr (std::is_same_v<T, ReadWriteFn>) {
                 return numberAsStr(src(std::nullopt));
             } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
-                return src(std::nullopt).display_str;
+                return src(std::nullopt).first;
             } else {
                 return numberAsStr(*src);
             }

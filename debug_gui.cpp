@@ -31,7 +31,6 @@ static void glfw_error_callback(int error, const char* description) {
 }
 
 DbgGui::DbgGui() {
-    strcpy_s(m_group_to_add_symbols, "debug");
 }
 
 DbgGui::~DbgGui() {

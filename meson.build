@@ -1,21 +1,19 @@
-project('test_project', 'cpp', 
+project('test_project', ['cpp', 'c'], 
     default_options : [
         'b_vscrt=md',
         'cpp_std=c++latest',
-        'b_debug=false',
-        'buildtype=plain',
         'warning_level=3'
     ]
 )
-add_project_arguments('-Z7', '-DNOMINMAX', language : 'cpp')
-add_project_link_arguments('-DEBUG', language : 'cpp')
+
+add_project_arguments('-DNOMINMAX', language : ['c', 'cpp'])
 
 src = [
+    'dbg_gui_wrapper.cpp',
     'debug_gui.cpp',
     'debug_gui_plots.cpp',
     'debug_gui_windows.cpp',
     'debug_gui.h',
-    'main.cpp',
     'imgui/bindings/imgui_impl_opengl3.cpp',
     'imgui/bindings/imgui_impl_opengl3.h',
     'imgui/bindings/imgui_impl_glfw.cpp',
@@ -38,7 +36,7 @@ src = [
     'symbols/variant_symbol.cpp',
     ]
 inc = []
-inc += include_directories('imgui/bindings')
+inc += include_directories('imgui/bindings', 'include')
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
@@ -51,8 +49,20 @@ deps = [
     cpp.find_library('dbghelp'),
 ]
 
-t0 = executable('test_exe',
+lib_gui = static_library('dbg_gui',
     sources : src,
     include_directories : inc,
     dependencies : deps
+)
+
+cpp_gui = executable('test_gui_cpp',
+    sources : 'main.cpp',
+    link_with : lib_gui,
+    include_directories : inc
+)
+
+c_gui = executable('test_gui_c',
+    sources : 'main.c',
+    include_directories : 'include',
+    link_with : lib_gui
 )

@@ -1,3 +1,5 @@
+#include <numeric>
+
 // utility structure for realtime plot
 struct ScrollingBuffer {
     int32_t current_idx = 0;

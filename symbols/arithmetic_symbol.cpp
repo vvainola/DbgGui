@@ -98,7 +98,7 @@ double ArithmeticSymbol::getAddressValue() const {
             if constexpr (std::is_same_v<T, ReadWriteFn>) {
                 return src(std::nullopt);
             } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
-                return src(std::nullopt).value;
+                return src(std::nullopt).second;
             } else {
                 return static_cast<double>(*src);
             }

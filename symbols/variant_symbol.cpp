@@ -149,7 +149,7 @@ ValueSource VariantSymbol::getValueSource() {
             if (write) {
                 m_arithmetic_symbol->write(*write);
             }
-            return CustomStr{valueAsStr(), m_arithmetic_symbol->read()};
+            return std::make_pair(valueAsStr(), m_arithmetic_symbol->read());
         };
     } else {
         return m_arithmetic_symbol->getValueSource();

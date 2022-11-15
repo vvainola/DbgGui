@@ -1,4 +1,4 @@
-#include "debug_gui.h"
+#include "dbg_gui_wrapper.h"
 #include <thread>
 
 struct Vector_ABC {
@@ -16,8 +16,13 @@ float f32;
 double f64;
 double sine;
 
-XY<double> xy;
-XY<double> xy2;
+struct XY {
+    double x;
+    double y;
+};
+
+XY xy;
+XY xy2;
 
 Vector_ABC abc;
 
@@ -57,6 +62,7 @@ float const* const p_float = &p_struct->m_c;
 float* p_null = nullptr;
 
 C array[50];
+C array2[45];
 D d;
 
 enum EnumWithNeg {
@@ -90,24 +96,24 @@ union BitField {
 };
 BitField bitfield;
 
-} // namespace g
-
-XY<double> abc_to_xy(Vector_ABC const& in) {
-    return XY<double>{
+XY abc_to_xy(Vector_ABC const& in) {
+    return XY{
         2.0 / 3.0 * in.a - 1.0 / 3.0 * in.b - 1.0 / 3.0 * in.c,
         SQRT3 / 3.0 * in.b - SQRT3 / 3.0 * in.c};
 }
 
-Vector_ABC xy_to_abc(XY<double> in) {
+Vector_ABC xy_to_abc(XY in) {
     return Vector_ABC{
         in.x,
         -0.5 * in.x + 0.5 * SQRT3 * in.y,
         -0.5 * in.x - 0.5 * SQRT3 * in.y};
 }
+} // namespace g
+
 
 int main(int, char**) {
     static float sfl;
-    DbgGui gui;
+    DbgGuiWrapper gui;
     gui.addScalar(&g::f64, "group 2", "g_f64");
     gui.addScalar(&g::f32, "group 1", "g_f32_2");
     gui.addScalar(&g::f32, "group 1", "g_f32_1");
@@ -128,7 +134,7 @@ int main(int, char**) {
         g::abc.a = sin(10. * 2 * PI * t);
         g::abc.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0);
         g::abc.c = sin(10. * 2 * PI * t - 4.0 * PI / 3.0);
-        g::xy = abc_to_xy(g::abc);
+        g::xy = g::abc_to_xy(g::abc);
         g::xy2.x = g::xy.x * 1.1;
         g::xy2.y = g::xy.y * 1.1;
         g::booli = g::xy2.x > 0.5;

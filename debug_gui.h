@@ -1,10 +1,11 @@
 #pragma once
 
 #include "symbols/dbghelp_symbols_lookup.h"
-#include <nlohmann/json.hpp>
+#include "scrolling_buffer.h"
 #include <mutex>
 #include <thread>
-#include "scrolling_buffer.h"
+#include <map>
+#include <nlohmann/json.hpp>
 
 struct GLFWwindow;
 
@@ -136,7 +137,7 @@ class DbgGui {
 
     DbgHelpSymbols m_dbghelp_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
-    char m_group_to_add_symbols[MAX_NAME_LENGTH]{};
+    char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
 
     std::map<size_t, std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
@@ -175,7 +176,7 @@ inline double getSourceValue(ValueSource src) {
             if constexpr (std::is_same_v<T, ReadWriteFn>) {
                 return src(std::nullopt);
             } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
-                return src(std::nullopt).value;
+                return src(std::nullopt).second;
             } else {
                 return static_cast<double>(*src);
             }

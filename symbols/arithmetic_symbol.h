@@ -4,12 +4,8 @@
 #include <optional>
 #include <variant>
 
-struct CustomStr {
-    std::string display_str;
-    double value;
-};
 using ReadWriteFn = std::function<double(std::optional<double>)>;
-using ReadWriteFnCustomStr = std::function<CustomStr(std::optional<double>)>;
+using ReadWriteFnCustomStr = std::function<std::pair<std::string, double>(std::optional<double>)>;
 using ValueSource = std::variant<
     int8_t*,
     int16_t*,
