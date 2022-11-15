@@ -1,5 +1,5 @@
 #include "dbg_gui_wrapper.h"
-#include "debug_gui.h"
+#include "dbg_gui.h"
 #include <memory>
 
 static std::unique_ptr<DbgGui> gui;

@@ -9,34 +9,34 @@ project('test_project', ['cpp', 'c'],
 add_project_arguments('-DNOMINMAX', language : ['c', 'cpp'])
 
 src = [
-    'dbg_gui_wrapper.cpp',
-    'debug_gui.cpp',
-    'debug_gui_plots.cpp',
-    'debug_gui_windows.cpp',
-    'debug_gui.h',
-    'imgui/bindings/imgui_impl_opengl3.cpp',
-    'imgui/bindings/imgui_impl_opengl3.h',
-    'imgui/bindings/imgui_impl_glfw.cpp',
-    'imgui/bindings/imgui_impl_glfw.h',
-    'imgui/bindings/imgui.cpp',
-    'imgui/bindings/imgui.h',
-    'imgui/bindings/imgui_demo.cpp',
-    'imgui/bindings/imgui_draw.cpp',
-    'imgui/bindings/imgui_internal.h',
-    'imgui/bindings/imgui_tables.cpp',
-    'imgui/bindings/imgui_widgets.cpp',
-    'imgui/bindings/implot.cpp',
-    'imgui/bindings/implot.h',
-    'imgui/bindings/implot_demo.cpp',
-    'imgui/bindings/implot_internal.h',
-    'imgui/bindings/implot_items.cpp',
-    'symbols/arithmetic_symbol.cpp',
-    'symbols/dbghelp_symbols_lookup.cpp',
-    'symbols/symbol_helpers.cpp',
-    'symbols/variant_symbol.cpp',
+    'src/dbg_gui_wrapper.cpp',
+    'src/dbg_gui.cpp',
+    'src/dbg_gui_plots.cpp',
+    'src/dbg_gui_windows.cpp',
+    'src/dbg_gui.h',
+    'src/imgui/imgui_impl_opengl3.cpp',
+    'src/imgui/imgui_impl_opengl3.h',
+    'src/imgui/imgui_impl_glfw.cpp',
+    'src/imgui/imgui_impl_glfw.h',
+    'src/imgui/imgui.cpp',
+    'src/imgui/imgui.h',
+    'src/imgui/imgui_demo.cpp',
+    'src/imgui/imgui_draw.cpp',
+    'src/imgui/imgui_internal.h',
+    'src/imgui/imgui_tables.cpp',
+    'src/imgui/imgui_widgets.cpp',
+    'src/imgui/implot.cpp',
+    'src/imgui/implot.h',
+    'src/imgui/implot_demo.cpp',
+    'src/imgui/implot_internal.h',
+    'src/imgui/implot_items.cpp',
+    'src/symbols/arithmetic_symbol.cpp',
+    'src/symbols/dbghelp_symbols_lookup.cpp',
+    'src/symbols/symbol_helpers.cpp',
+    'src/symbols/variant_symbol.cpp',
     ]
 inc = []
-inc += include_directories('imgui/bindings', 'include')
+inc += include_directories('src/imgui', 'include')
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
@@ -56,13 +56,13 @@ lib_gui = static_library('dbg_gui',
 )
 
 cpp_gui = executable('test_gui_cpp',
-    sources : 'main.cpp',
+    sources : 'src/test_main.cpp',
+    include_directories : 'include',
     link_with : lib_gui,
-    include_directories : inc
 )
 
 c_gui = executable('test_gui_c',
-    sources : 'main.c',
+    sources : 'src/test_main.c',
     include_directories : 'include',
     link_with : lib_gui
 )

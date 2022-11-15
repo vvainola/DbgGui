@@ -5,7 +5,7 @@
 // + read the top of imgui.cpp. Read online:
 // https://github.com/ocornut/imgui/tree/master/docs
 
-#include "debug_gui.h"
+#include "dbg_gui.h"
 #include "imgui.h"
 #include "implot.h"
 #include <array>

@@ -7,7 +7,7 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "debug_gui.h"
+#include "dbg_gui.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
