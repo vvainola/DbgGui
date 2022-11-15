@@ -98,13 +98,22 @@ void DbgGui::showScalarPlots() {
                                    ImPlotLineFlags_None);
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
-                    double pause_level = getSourceValue(signal->src);
-                    ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f");
-                    if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        signal->addTrigger(pause_level);
+                    double current_value = getSourceValue(signal->src);
+                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
+                    ImGui::InputDouble("Value", &current_value, 0, 0, "%.3f");
+                    if (ImGui::IsItemEdited() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+                        setSourceValue(signal->src, current_value);
                         ImGui::CloseCurrentPopup();
                     }
+                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
+                    ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%.3f");
+                    if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+                        signal->addTrigger(current_value);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%.3f");
+                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%.3f");
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;

@@ -35,19 +35,6 @@ static std::string getSourceValueStr(ValueSource src) {
         src);
 }
 
-static void setSourceValue(ValueSource dst, double value) {
-    std::visit(
-        [=](auto&& dst) {
-            using T = std::decay_t<decltype(dst)>;
-            if constexpr (std::is_same_v<T, ReadWriteFn> || std::is_same_v<T, ReadWriteFnCustomStr>) {
-                dst(value);
-            } else {
-                *dst = static_cast<std::remove_pointer<T>::type>(value);
-            }
-        },
-        dst);
-}
-
 void addInputScalar(ValueSource const& signal_src, std::string const& label) {
     if (std::get_if<ReadWriteFnCustomStr>(&signal_src)) {
         ImGui::Text(getSourceValueStr(signal_src).c_str());

@@ -164,7 +164,6 @@ class DbgGui {
     bool m_manual_save_settings = false;
 };
 
-
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
     v.erase(std::remove(v.begin(), v.end(), item), v.end());
@@ -183,4 +182,17 @@ inline double getSourceValue(ValueSource src) {
             }
         },
         src);
+}
+
+inline void setSourceValue(ValueSource dst, double value) {
+    std::visit(
+        [=](auto&& dst) {
+            using T = std::decay_t<decltype(dst)>;
+            if constexpr (std::is_same_v<T, ReadWriteFn> || std::is_same_v<T, ReadWriteFnCustomStr>) {
+                dst(value);
+            } else {
+                *dst = static_cast<std::remove_pointer<T>::type>(value);
+            }
+        },
+        dst);
 }
