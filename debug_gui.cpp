@@ -246,7 +246,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.time_range = vector_plot_data["time_range"];
                 for (size_t id : vector_plot_data["signals"]) {
                     if (m_vectors.contains(id)) {
-                        Vector* vec = m_vectors[id].get();
+                        Vector2D* vec = m_vectors[id].get();
                         plot.addSignalToPlot(vec);
                     }
                 }
@@ -316,7 +316,7 @@ void DbgGui::updateSavedSettings() {
             settings["vector_plots"].erase(vector_plot.name);
             continue;
         }
-        for (Vector* signal : vector_plot.signals) {
+        for (Vector2D* signal : vector_plot.signals) {
             settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
             settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
             settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
@@ -359,9 +359,9 @@ Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
     return scalar;
 }
 
-Vector* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
+Vector2D* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
     size_t id = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName());
-    Vector* vector = m_vectors[id].get();
+    Vector2D* vector = m_vectors[id].get();
     m_saved_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
     m_saved_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
     m_saved_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
@@ -400,7 +400,7 @@ size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::
 }
 
 size_t DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name) {
-    std::unique_ptr<Vector> ptr = std::make_unique<Vector>();
+    std::unique_ptr<Vector2D> ptr = std::make_unique<Vector2D>();
     ptr->name = name;
     ptr->group = group;
     ptr->name_and_group = name + " (" + group + ")";
@@ -418,7 +418,7 @@ size_t DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string
     m_vector_groups[group].push_back(ptr.get());
     // Sort items within the inserted group
     auto& inserted_group = m_vector_groups[group];
-    std::sort(inserted_group.begin(), inserted_group.end(), [](Vector* a, Vector* b) { return a->name < b->name; });
+    std::sort(inserted_group.begin(), inserted_group.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
     m_vectors[ptr->id] = std::move(ptr);
     return id;
 }

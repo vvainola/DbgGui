@@ -226,12 +226,12 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
         for (auto it = m_vector_groups.begin(); it != m_vector_groups.end(); it++) {
-            std::vector<Vector*> const& vectors = it->second;
+            std::vector<Vector2D*> const& vectors = it->second;
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             if (ImGui::TreeNode(it->first.c_str())) {
                 for (int row = 0; row < vectors.size(); row++) {
-                    Vector* signal = vectors[row];
+                    Vector2D* signal = vectors[row];
                     if (signal->hide_from_vector_window) {
                         continue;
                     }

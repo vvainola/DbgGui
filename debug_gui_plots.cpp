@@ -147,7 +147,7 @@ void DbgGui::showVectorPlots() {
             ImGui::End();
             continue;
         }
-        Vector* signal_to_remove = nullptr;
+        Vector2D* signal_to_remove = nullptr;
 
         float time_range_ms = vector_plot.time_range * 1e3f;
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
@@ -186,7 +186,7 @@ void DbgGui::showVectorPlots() {
             ImPlot::PopStyleColor();
 
             // Plot vectors
-            for (Vector* signal : vector_plot.signals) {
+            for (Vector2D* signal : vector_plot.signals) {
                 if (!m_paused) {
                     time_offset = 0;
                 }
@@ -220,13 +220,13 @@ void DbgGui::showVectorPlots() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     size_t id = *(size_t*)payload->Data;
-                    Vector* signal = m_vectors[id].get();
+                    Vector2D* signal = m_vectors[id].get();
                     vector_plot.addSignalToPlot(signal);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
                     VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
-                    Vector* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
+                    Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
                     vector_plot.addSignalToPlot(vector);
                 }
                 ImGui::EndDragDropTarget();

@@ -51,7 +51,7 @@ struct Scalar {
     bool checkTriggers(double value);
 };
 
-struct Vector {
+struct Vector2D {
     size_t id;
     std::string group;
     std::string name;
@@ -87,15 +87,15 @@ struct ScalarPlot {
 
 struct VectorPlot {
     std::string name;
-    std::vector<Vector*> signals;
+    std::vector<Vector2D*> signals;
     float time_range = 20e-3f;
     bool open = true;
 
-    void addSignalToPlot(Vector* new_signal) {
+    void addSignalToPlot(Vector2D* new_signal) {
         new_signal->x->startBuffering();
         new_signal->y->startBuffering();
         // Add signal if it is not already in the plot
-        auto it = std::find_if(signals.begin(), signals.end(), [=](Vector* sig) {
+        auto it = std::find_if(signals.begin(), signals.end(), [=](Vector2D* sig) {
             return sig->id == new_signal->id;
         });
         if (it == signals.end()) {
@@ -130,7 +130,7 @@ class DbgGui {
     void updateSavedSettings();
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
-    Vector* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
+    Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
 
     GLFWwindow* m_window = nullptr;
 
@@ -141,8 +141,8 @@ class DbgGui {
     std::map<size_t, std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
 
-    std::map<size_t, std::unique_ptr<Vector>> m_vectors;
-    std::map<std::string, std::vector<Vector*>> m_vector_groups;
+    std::map<size_t, std::unique_ptr<Vector2D>> m_vectors;
+    std::map<std::string, std::vector<Vector2D*>> m_vector_groups;
     std::vector<Scalar*> m_custom_window_scalars;
 
     std::vector<ScalarPlot> m_scalar_plots;
