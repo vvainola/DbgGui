@@ -87,10 +87,7 @@ int DbgGui_isClosed() {
 #ifdef __cplusplus
 }
 void DbgGui_close() {
-    if (gui) {
-        gui->close();
-        gui = nullptr;
-    }
+    gui = nullptr;
 }
 #endif
 
@@ -99,7 +96,6 @@ DbgGuiWrapper::DbgGuiWrapper() {
 }
 
 DbgGuiWrapper::~DbgGuiWrapper() {
-    gui->close();
     gui = nullptr;
 }
 
@@ -116,7 +112,7 @@ bool DbgGuiWrapper::isClosed() {
 }
 
 void DbgGuiWrapper::close() {
-    gui->close();
+    gui = nullptr;
 }
 
 void DbgGuiWrapper::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {

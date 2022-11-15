@@ -34,7 +34,7 @@ DbgGui::DbgGui() {
 }
 
 DbgGui::~DbgGui() {
-    m_gui_thread.join();
+    close();
 }
 
 void DbgGui::startUpdateLoop() {
@@ -378,9 +378,9 @@ void DbgGui::close() {
         glfwSetWindowShouldClose(m_window, 1);
     }
     m_paused = false;
-
-    while (m_window)
-        ;
+    if (m_gui_thread.joinable()) {
+        m_gui_thread.join();
+    }
 }
 
 size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {
