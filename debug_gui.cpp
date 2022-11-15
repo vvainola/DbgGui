@@ -373,6 +373,16 @@ bool DbgGui::isClosed() {
     return m_initialized && (m_window == nullptr);
 }
 
+void DbgGui::close() {
+    if (m_window) {
+        glfwSetWindowShouldClose(m_window, 1);
+    }
+    m_paused = false;
+
+    while (m_window)
+        ;
+}
+
 size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {
     std::unique_ptr<Scalar> ptr = std::make_unique<Scalar>();
     ptr->src = src;

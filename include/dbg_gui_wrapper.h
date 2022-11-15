@@ -33,6 +33,7 @@ class DbgGuiWrapper {
     void sample(double timestamp);
 
     bool isClosed();
+    void close();
 
     void addScalar(ValueSource const& src, std::string const& group, std::string const& name);
     void addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name);
@@ -62,6 +63,7 @@ void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* n
 void DbgGui_startUpdateLoop(void);
 void DbgGui_sample(double timestamp);
 int DbgGui_isClosed();
+void DbgGui_close();
 #ifdef __cplusplus
 }
 #endif

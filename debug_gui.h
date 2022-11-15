@@ -114,6 +114,7 @@ class DbgGui {
     void sample(double timestamp);
 
     bool isClosed();
+    void close();
 
     size_t addScalar(ValueSource const& src, std::string const& group, std::string const& name);
     size_t addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name);
