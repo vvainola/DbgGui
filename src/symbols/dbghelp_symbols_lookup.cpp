@@ -20,7 +20,7 @@ bool startsWith(std::string const& s, std::string const& w) {
 BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     // Skip non-userspace symbols
     if (pSymInfo->TypeIndex == 0
-        || (pSymInfo->Tag != SymTagFunction && pSymInfo->Tag != SymTagData)
+        || (pSymInfo->Tag != SymTagData)
         || startsWith(pSymInfo->Name, "_")
         || startsWith(pSymInfo->Name, "std::")) {
         return TRUE;
@@ -63,11 +63,7 @@ DbgHelpSymbols::DbgHelpSymbols() {
         }
 
         std::unique_ptr<RawSymbol>& raw_symbol = raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
-        if (symbol.PdbTag == SymTagData) {
-            addChildrenToSymbol(*raw_symbol);
-        } else {
-            raw_symbol->tag = SymTagFunction;
-        }
+        addChildrenToSymbol(*raw_symbol);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }
 

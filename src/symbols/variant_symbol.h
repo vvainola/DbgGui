@@ -13,7 +13,6 @@ class VariantSymbol {
         Arithmetic,
         Pointer,
         Enum,
-        Function,
         Array,
         Object
     };

@@ -25,9 +25,6 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
 
     switch (symbol->tag) {
-    case SymTagFunction:
-        m_type = Type::Function;
-        break;
     case SymTagPointerType:
         m_type = Type::Pointer;
         break;
@@ -170,14 +167,14 @@ std::string VariantSymbol::valueAsStr() const {
         // Try find name just a name with DbgHelp API
         auto sym = getSymbolFromAddress(pointedAddress());
         if (sym) {
-            size_t decoration_offset = sym->info.Name.find("?");
-            if (decoration_offset == sym->info.Name.npos)
-                return sym->info.Name;
-            else {
-                std::string decorated_name = sym->info.Name.substr(decoration_offset);
-                decorated_name.pop_back();
-                return getUndecoratedSymbolName(decorated_name);
+            std::string name = sym->info.Name;
+            size_t decoration_offset = name.find("?");
+            if (decoration_offset != name.npos) {
+                std::string decorated_name = name.substr(decoration_offset);
+                decorated_name.pop_back(); // Remove trailing ")"
+                name = getUndecoratedSymbolName(decorated_name);
             }
+            return name;
         }
         return "??";
     }
@@ -191,8 +188,6 @@ std::string VariantSymbol::valueAsStr() const {
         }
         return "";
     }
-    case Type::Function:
-        return "Function";
     case Type::Array:
         return "Array[" + std::to_string(m_children.size()) + "]";
     case Type::Object:

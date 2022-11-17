@@ -72,8 +72,8 @@ void addScalarContextMenu(Scalar* scalar) {
 
         scalar->alias.reserve(MAX_NAME_LENGTH);
         if (ImGui::InputText("Name##scalar_context_menu",
-                         scalar->alias.data(),
-                         MAX_NAME_LENGTH)) {
+                             scalar->alias.data(),
+                             MAX_NAME_LENGTH)) {
             scalar->alias = std::string(scalar->alias.data());
             if (scalar->alias.empty()) {
                 scalar->alias = scalar->name;
@@ -368,10 +368,6 @@ void DbgGui::showSymbolsWindow() {
         ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
         for (int i = 0; i < m_symbol_search_results.size(); ++i) {
             VariantSymbol* symbol = m_symbol_search_results[i];
-            // Functions are not shown in search results
-            if (symbol->getType() == VariantSymbol::Type::Function) {
-                continue;
-            }
 
             std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
                 ImGui::TableNextRow();
@@ -388,11 +384,15 @@ void DbgGui::showSymbolsWindow() {
                         ImGui::TreePop();
                     }
                 } else if (sym->getType() == VariantSymbol::Type::Pointer) {
-                    bool open = ImGui::TreeNodeEx(sym->getName().c_str());
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+                    VariantSymbol* pointed_symbol = sym->getPointedSymbol();
+                    if (!pointed_symbol) {
+                        flags |= ImGuiTreeNodeFlags_Leaf;
+                    }
+                    bool open = ImGui::TreeNodeEx(sym->getName().c_str(), flags);
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
-                        VariantSymbol* pointed_symbol = sym->getPointedSymbol();
                         if (pointed_symbol) {
                             show_children(pointed_symbol);
                         }
