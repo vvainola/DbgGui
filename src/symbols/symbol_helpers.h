@@ -11,6 +11,8 @@ BasicType getBaseType(RawSymbol const& sym);
 
 void addChildrenToSymbol(RawSymbol& parent_symbol);
 
+std::string getUndecoratedSymbolName(std::string const& name);
+
 // Currently unused helpers
 DataKind getDataKind(RawSymbol const& sym);
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);

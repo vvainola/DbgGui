@@ -42,6 +42,8 @@ class VariantSymbol {
     std::string valueAsStr() const;
 
   private:
+    MemoryAddress pointedAddress() const;
+
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;
     std::string m_name;

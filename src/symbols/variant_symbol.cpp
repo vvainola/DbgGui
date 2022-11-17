@@ -104,12 +104,7 @@ VariantSymbol* VariantSymbol::getPointedSymbol() const {
     if (m_type != Type::Pointer) {
         return nullptr;
     }
-#if _WIN64
-    MemoryAddress pointed_address = *(ULONG64*)m_address;
-#else
-    MemoryAddress pointed_address = *(DWORD*)m_address;
-#endif
-    return binarySearchSymbol(m_root_symbols, pointed_address);
+    return binarySearchSymbol(m_root_symbols, pointedAddress());
 }
 
 void VariantSymbol::setPointedSymbol(VariantSymbol* symbol) {
@@ -164,18 +159,25 @@ std::string VariantSymbol::valueAsStr() const {
         return ss.str();
     }
     case Type::Pointer: {
-#if _WIN64
-        MemoryAddress pointed_address = *(ULONG64*)m_address;
-#else
-        MemoryAddress pointed_address = *(DWORD*)m_address;
-#endif
-        if (pointed_address == NULL) {
+        if (pointedAddress() == NULL) {
             return "NULL";
         }
         VariantSymbol* symbol = getPointedSymbol();
         if (symbol) {
             // Return "name (value)"
             return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
+        }
+        // Try find name just a name with DbgHelp API
+        auto sym = getSymbolFromAddress(pointedAddress());
+        if (sym) {
+            size_t decoration_offset = sym->info.Name.find("?");
+            if (decoration_offset == sym->info.Name.npos)
+                return sym->info.Name;
+            else {
+                std::string decorated_name = sym->info.Name.substr(decoration_offset);
+                decorated_name.pop_back();
+                return getUndecoratedSymbolName(decorated_name);
+            }
         }
         return "??";
     }
@@ -199,4 +201,13 @@ std::string VariantSymbol::valueAsStr() const {
         assert((0, "Invalid type"));
         return "Unknown";
     }
+}
+
+MemoryAddress VariantSymbol::pointedAddress() const {
+    assert(m_type == Type::Pointer);
+#if _WIN64
+    return *(ULONG64*)m_address;
+#else
+    return *(DWORD*)m_address;
+#endif
 }

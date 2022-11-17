@@ -222,3 +222,9 @@ void addChildrenToSymbol(RawSymbol& parent) {
         }
     }
 }
+
+std::string getUndecoratedSymbolName(std::string const& name) {
+    char buffer[MAX_SYM_NAME * sizeof(TCHAR)];
+    UnDecorateSymbolName(name.data(), buffer, MAX_SYM_NAME, 0);
+    return std::string(buffer);
+}
