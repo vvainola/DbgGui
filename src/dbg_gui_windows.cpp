@@ -92,14 +92,14 @@ void DbgGui::showConfigurationWindow() {
 
     ImGui::Text("Time %.3f s", m_timestamp);
     ImGui::SameLine();
-    ImGui::PushItemWidth(400);
+    ImGui::PushItemWidth(0.5 * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
                 1000.0f / ImGui::GetIO().Framerate,
                 ImGui::GetIO().Framerate);
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
-    }
+    } 
 
     if (ImGui::BeginPopup("##Add")) {
         // Always center this window when appearing
