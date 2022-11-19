@@ -92,7 +92,7 @@ void DbgGui::showConfigurationWindow() {
 
     ImGui::Text("Time %.3f s", m_timestamp);
     ImGui::SameLine();
-    ImGui::PushItemWidth(0.5 * ImGui::GetContentRegionAvail().x);
+    ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
                 1000.0f / ImGui::GetIO().Framerate,
@@ -181,9 +181,8 @@ void DbgGui::showScalarWindow() {
                     }
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                        m_saved_settings["scalar_symbols"].erase(scalar->name_and_group);
-                        m_saved_settings["scalars"].erase(scalar->name_and_group);
-                        m_manual_save_settings = true;
+                        m_settings["scalar_symbols"].erase(scalar->name_and_group);
+                        m_settings["scalars"].erase(scalar->name_and_group);
                         scalar->hide_from_scalars_window = true;
                     }
                     addScalarContextMenu(scalar);
@@ -235,10 +234,9 @@ void DbgGui::showVectorWindow() {
 
                     // Hide symbol on delete. It will be removed for real on next start
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                        m_saved_settings["vector_symbols"].erase(signal->name_and_group);
-                        m_saved_settings["scalars"].erase(signal->x->name_and_group);
-                        m_saved_settings["scalars"].erase(signal->y->name_and_group);
-                        m_manual_save_settings = true;
+                        m_settings["vector_symbols"].erase(signal->name_and_group);
+                        m_settings["scalars"].erase(signal->x->name_and_group);
+                        m_settings["scalars"].erase(signal->y->name_and_group);
                         signal->hide_from_vector_window = true;
                     }
 
@@ -301,8 +299,7 @@ void DbgGui::showCustomWindow() {
             // Hide symbol on delete
             if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                 signal_to_remove = scalar;
-                m_saved_settings["custom_window_signals"].erase(scalar->name_and_group);
-                m_manual_save_settings = true;
+                m_settings["custom_window_signals"].erase(scalar->name_and_group);
             }
             addScalarContextMenu(scalar);
 

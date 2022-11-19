@@ -160,8 +160,8 @@ class DbgGui {
     std::thread m_gui_thread;
     std::mutex m_sampling_mutex;
 
-    nlohmann::json m_saved_settings;
-    bool m_manual_save_settings = false;
+    nlohmann::json m_settings;
+    nlohmann::json m_settings_saved;
 };
 
 template <typename T>

@@ -198,20 +198,21 @@ void DbgGui::loadPreviousSessionSettings() {
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         try {
-            m_saved_settings = nlohmann::json::parse(f);
-            int xpos = std::max(0, int(m_saved_settings["window"]["xpos"]));
-            int ypos = std::max(0, int(m_saved_settings["window"]["ypos"]));
+            m_settings = nlohmann::json::parse(f);
+            m_settings_saved = m_settings;
+            int xpos = std::max(0, int(m_settings["window"]["xpos"]));
+            int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
-            glfwSetWindowSize(m_window, m_saved_settings["window"]["width"], m_saved_settings["window"]["height"]);
+            glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
 
-            for (auto symbol : m_saved_settings["scalar_symbols"]) {
+            for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
                 if (sym) {
                     addScalarSymbol(sym, symbol["group"]);
                 }
             }
 
-            for (auto symbol : m_saved_settings["vector_symbols"]) {
+            for (auto symbol : m_settings["vector_symbols"]) {
                 VariantSymbol* sym_x = m_dbghelp_symbols.getSymbol(symbol["x"]);
                 VariantSymbol* sym_y = m_dbghelp_symbols.getSymbol(symbol["y"]);
                 if (sym_x && sym_y) {
@@ -219,7 +220,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-            for (auto scalar_plot_data : m_saved_settings["scalar_plots"]) {
+            for (auto scalar_plot_data : m_settings["scalar_plots"]) {
                 ScalarPlot& plot = m_scalar_plots.emplace_back();
                 plot.name = scalar_plot_data["name"];
                 plot.x_axis_min = 0;
@@ -239,7 +240,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-            for (auto vector_plot_data : m_saved_settings["vector_plots"]) {
+            for (auto vector_plot_data : m_settings["vector_plots"]) {
                 VectorPlot& plot = m_vector_plots.emplace_back();
                 plot.name = vector_plot_data["name"];
                 plot.time_range = vector_plot_data["time_range"];
@@ -251,7 +252,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-            for (auto& scalar_data : m_saved_settings["scalars"]) {
+            for (auto& scalar_data : m_settings["scalars"]) {
                 size_t id = scalar_data["id"];
                 if (m_scalars.contains(id)) {
                     Scalar* scalar = m_scalars[id].get();
@@ -264,13 +265,13 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-            for (size_t id : m_saved_settings["custom_window_signals"]) {
+            for (size_t id : m_settings["custom_window_signals"]) {
                 if (m_scalars.contains(id)) {
                     m_custom_window_scalars.push_back(m_scalars[id].get());
                 }
             }
 
-            std::string group_to_add_symbols = m_saved_settings["group_to_add_symbols"];
+            std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
             strcpy_s(m_group_to_add_symbols, group_to_add_symbols.data());
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
@@ -285,87 +286,84 @@ void DbgGui::updateSavedSettings() {
     glfwGetWindowSize(m_window, &width, &height);
     int xpos, ypos;
     glfwGetWindowPos(m_window, &xpos, &ypos);
-    nlohmann::json settings = m_saved_settings;
-    settings["window"]["width"] = width;
-    settings["window"]["height"] = height;
-    settings["window"]["xpos"] = xpos;
-    settings["window"]["ypos"] = ypos;
+    m_settings["window"]["width"] = width;
+    m_settings["window"]["height"] = height;
+    m_settings["window"]["xpos"] = xpos;
+    m_settings["window"]["ypos"] = ypos;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
-            settings["scalar_plots"].erase(scalar_plot.name);
+            m_settings["scalar_plots"].erase(scalar_plot.name);
             continue;
         }
         for (Scalar* signal : scalar_plot.signals) {
-            settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
-            settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
-            settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
+            m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
+            m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
+            m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
             // Update range only if autofit is not on because otherwise the file
             // could be continously rewritten when autofit range changes
             if (!scalar_plot.autofit_y) {
-                settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis_min;
-                settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis_max;
+                m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis_min;
+                m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis_max;
             }
-            settings["scalar_plots"][scalar_plot.name]["signals"][signal->name_and_group] = signal->id;
+            m_settings["scalar_plots"][scalar_plot.name]["signals"][signal->name_and_group] = signal->id;
         }
     }
 
     for (VectorPlot& vector_plot : m_vector_plots) {
         if (!vector_plot.open) {
-            settings["vector_plots"].erase(vector_plot.name);
+            m_settings["vector_plots"].erase(vector_plot.name);
             continue;
         }
         for (Vector2D* signal : vector_plot.signals) {
-            settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
-            settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
-            settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
+            m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
+            m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
+            m_settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
         }
     }
 
     for (Scalar* scalar : m_custom_window_scalars) {
         // use group first in key so that the signals are sorted alphabetically by group
-        settings["custom_window_signals"][scalar->group + " " + scalar->name] = scalar->id;
+        m_settings["custom_window_signals"][scalar->group + " " + scalar->name] = scalar->id;
     }
 
     for (auto& scalar : m_scalars) {
         if (!scalar.second->hide_from_scalars_window) {
-            settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
-            settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
-            settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
-            settings["scalars"][scalar.second->name_and_group]["alias"] = scalar.second->alias;
+            m_settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
+            m_settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
+            m_settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
+            m_settings["scalars"][scalar.second->name_and_group]["alias"] = scalar.second->alias;
         }
     }
 
-    settings["group_to_add_symbols"] = m_group_to_add_symbols;
-    if (m_saved_settings != settings || m_manual_save_settings) {
-        m_saved_settings = settings;
+    m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
+    if (m_settings != m_settings_saved) {
+        m_settings_saved = m_settings;
+
         std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
         if (!std::filesystem::exists(settings_dir)) {
             std::filesystem::create_directories(settings_dir);
         }
         ImGui::SaveIniSettingsToDisk((settings_dir + "imgui.ini").c_str());
-        std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_saved_settings;
-        m_manual_save_settings = false;
+        std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_settings;
     }
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
     size_t id = addScalar(sym->getValueSource(), group, sym->getFullName());
     Scalar* scalar = m_scalars[id].get();
-    m_saved_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
-    m_saved_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
-    m_manual_save_settings = true;
+    m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
+    m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
     return scalar;
 }
 
 Vector2D* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
     size_t id = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName());
     Vector2D* vector = m_vectors[id].get();
-    m_saved_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
-    m_saved_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
-    m_saved_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
-    m_saved_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
-    m_manual_save_settings = true;
+    m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
+    m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
+    m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
+    m_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
     return vector;
 }
 
