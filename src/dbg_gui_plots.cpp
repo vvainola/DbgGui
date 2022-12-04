@@ -50,7 +50,7 @@ void DbgGui::showScalarPlots() {
         }
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
-        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetWindowHeight() - 65))) {
+        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Initial axes values from settings
             ImPlot::SetupAxisLimits(ImAxis_Y1, scalar_plot.y_axis_min, scalar_plot.y_axis_max, ImGuiCond_Once);
             // Connect link values
@@ -173,7 +173,7 @@ void DbgGui::showVectorPlots() {
         static ImPlotAxisFlags flags = ImPlotAxisFlags_None;
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
-        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetWindowHeight() - 65), ImPlotFlags_Equal)) {
+        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
             ImPlot::SetupAxes(NULL, NULL, flags, flags);
 
             // Plot unit circle
