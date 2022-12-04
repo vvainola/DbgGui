@@ -443,11 +443,11 @@ void setTheme() {
     auto& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    const ImVec4 bgColor = ColorFromBytes(37, 37, 38);
+    const ImVec4 bgColor = ColorFromBytes(25, 25, 25);
     const ImVec4 lightBgColor = ColorFromBytes(82, 82, 85);
     const ImVec4 veryLightBgColor = ColorFromBytes(90, 90, 95);
 
-    const ImVec4 panelColor = ColorFromBytes(51, 51, 55);
+    const ImVec4 panelColor = ColorFromBytes(40, 40, 40);
     const ImVec4 panelHoverColor = ColorFromBytes(29, 151, 236);
     const ImVec4 panelActiveColor = ColorFromBytes(0, 119, 200);
 
