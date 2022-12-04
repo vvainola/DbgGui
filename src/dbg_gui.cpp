@@ -38,12 +38,18 @@ DbgGui::~DbgGui() {
 }
 
 void DbgGui::startUpdateLoop() {
-    m_gui_thread = std::thread(&DbgGui::updateLoop, std::ref(*this));
+    m_gui_thread = std::jthread(&DbgGui::updateLoop, std::ref(*this));
 }
 
 void DbgGui::sample(double timestamp) {
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
+    }
+
+    if (m_time_until_pause > 0) {
+        m_time_until_pause -= (timestamp - m_timestamp);
+        m_paused = m_time_until_pause <= 0;
+        m_time_until_pause = std::max(m_time_until_pause, 0.0f);
     }
 
     {
@@ -61,8 +67,9 @@ void DbgGui::sample(double timestamp) {
         }
     }
 
+
     const double sync_interval = 10e-3;
-    static double next_sync_timestamp = sync_interval;
+    static double next_sync_timestamp = sync_interval * m_simulation_speed;
     if (timestamp > next_sync_timestamp) {
         next_sync_timestamp += sync_interval * m_simulation_speed;
         // Limit sync interval to 1 second in case simulation speed is set very high
