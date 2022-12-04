@@ -141,7 +141,7 @@ void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
 }
 
 void addFirstChildToArray(RawSymbol& parent) {
-    assert((parent.tag == SymTagArrayType , "Symbol is not an array."));
+    assert((parent.tag == SymTagArrayType, "Symbol is not an array."));
     ULONG64 array_size_in_bytes = 0;
     DWORD element_count = 0;
     DWORD array_typeid = 0;
@@ -202,10 +202,9 @@ void addChildrenToSymbol(RawSymbol& parent) {
             if (parent.tag == SymTagEnumerator) {
                 VARIANT variant;       // Enumerators have their values stored as variant
                 VariantInit(&variant); // Variant has to be initialized to be empty
-                if (SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_VALUE, &variant)) {
-                    child->info.Value = static_cast<ULONG64>(getVariantEnumValue(variant));
-                    parent.children.push_back(std::move(child));
-                }
+                assert(SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_VALUE, &variant));
+                child->info.Value = static_cast<ULONG64>(getVariantEnumValue(variant));
+                parent.children.push_back(std::move(child));
                 VariantClear(&variant);
             } else if (SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_OFFSET, &offset_to_parent)) {
                 // Members by default have no address, the address is offset relative to parent
