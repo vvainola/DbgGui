@@ -89,6 +89,7 @@ struct ScalarPlot {
 struct VectorPlot {
     std::string name;
     std::vector<Vector2D*> signals;
+    Vector2D* reference_frame_vector;
     float time_range = 20e-3f;
     bool open = true;
 
@@ -156,7 +157,7 @@ class DbgGui {
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
     float m_simulation_speed = 1e-2f;
-    float m_time_until_pause = 0;
+    double m_time_until_pause = 0;
 
     std::jthread m_gui_thread;
     std::mutex m_sampling_mutex;

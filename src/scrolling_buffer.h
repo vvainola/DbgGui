@@ -1,4 +1,5 @@
 #include <numeric>
+#include <vector>
 
 // utility structure for realtime plot
 struct ScrollingBuffer {

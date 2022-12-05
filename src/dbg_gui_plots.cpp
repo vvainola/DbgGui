@@ -194,14 +194,36 @@ void DbgGui::showVectorPlots() {
                              2 * sizeof(double));
             ImPlot::PopStyleColor();
 
+            if (!m_paused) {
+                time_offset = 0;
+            }
+            double last_sample_time = m_timestamp - time_offset;
+
+            // Collect rotation vectors to rotate samples to reference frame
+            std::vector<XY<double>> frame_rotation_vectors;
+            if (vector_plot.reference_frame_vector) {
+                ScrollingBuffer::DecimatedValues values_x = vector_plot.reference_frame_vector->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
+                ScrollingBuffer::DecimatedValues values_y = vector_plot.reference_frame_vector->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
+                frame_rotation_vectors.reserve(values_x.time.size());
+                for (size_t i = 0; i < values_x.y_max.size(); ++i) {
+                    double angle = -atan2(values_y.y_min[i], values_x.y_min[i]);
+                    frame_rotation_vectors.push_back({cos(angle), sin(angle)});
+                }
+            }
+
             // Plot vectors
             for (Vector2D* signal : vector_plot.signals) {
-                if (!m_paused) {
-                    time_offset = 0;
-                }
-                double last_sample_time = m_timestamp - time_offset;
                 ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
                 ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
+                // Rotate samples
+                if (frame_rotation_vectors.size() > 0) {
+                    for (size_t i = 0; i < values_x.y_max.size(); ++i) {
+                        double x_temp = values_x.y_min[i];
+                        double y_temp = values_y.y_min[i];
+                        values_x.y_min[i] = x_temp * frame_rotation_vectors[i].x - y_temp * frame_rotation_vectors[i].y;
+                        values_y.y_min[i] = x_temp * frame_rotation_vectors[i].y + y_temp * frame_rotation_vectors[i].x;
+                    }
+                }
                 size_t count = std::min(values_x.y_min.size(), values_y.y_min.size());
                 ImPlot::PlotLine(signal->name_and_group.c_str(),
                                  values_x.y_min.data(),
@@ -222,6 +244,17 @@ void DbgGui::showVectorPlots() {
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     };
+
+                    if (signal == vector_plot.reference_frame_vector) {
+                        if (ImGui::Button("Remove reference frame")) {
+                            vector_plot.reference_frame_vector = nullptr;
+                        }
+                    } else {
+                        if (ImGui::Button("Set as reference frame")) {
+                            vector_plot.reference_frame_vector = signal;
+                        };
+                    }
+
                     ImPlot::EndLegendPopup();
                 }
             }

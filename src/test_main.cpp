@@ -25,6 +25,8 @@ XY xy;
 XY xy2;
 
 Vector_ABC abc;
+Vector_ABC abc2;
+double abc2_angle = 10. * PI / 180.;
 
 void func(){};
 void (*funcp)() = &func;
@@ -34,12 +36,16 @@ struct A {
     int m_a = 2;
 
     void (*m_ap)() = &func;
+
+    static void f(){};
 };
 A a;
 
 struct B {
     double m_b = 1;
     A a;
+
+    void (*m_ap)() = A::f;
 };
 B b;
 
@@ -58,7 +64,9 @@ bool booli;
 long g_long = 123;
 C a_struct;
 C* p_struct = &a_struct;
+int const* const p_int = &p_struct->a.m_a;
 float const* const p_float = &p_struct->m_c;
+double const* const p_double = &p_struct->b.m_b;
 float* p_null = nullptr;
 
 C array[50];
@@ -134,9 +142,11 @@ int main(int, char**) {
         g::abc.a = sin(10. * 2 * PI * t);
         g::abc.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0);
         g::abc.c = sin(10. * 2 * PI * t - 4.0 * PI / 3.0);
+        g::abc2.a = sin(10. * 2 * PI * t + g::abc2_angle);
+        g::abc2.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0 + g::abc2_angle);
+        g::abc2.c = sin(10. * 2 * PI * t - 4.0 * PI / 3.0 + g::abc2_angle);
         g::xy = g::abc_to_xy(g::abc);
-        g::xy2.x = g::xy.x * 1.1;
-        g::xy2.y = g::xy.y * 1.1;
+        g::xy2 = g::abc_to_xy(g::abc2);
         g::booli = g::xy2.x > 0.5;
     }
 

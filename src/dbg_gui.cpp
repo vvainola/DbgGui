@@ -49,7 +49,7 @@ void DbgGui::sample(double timestamp) {
     if (m_time_until_pause > 0) {
         m_time_until_pause -= (timestamp - m_timestamp);
         m_paused = m_time_until_pause <= 0;
-        m_time_until_pause = std::max(m_time_until_pause, 0.0f);
+        m_time_until_pause = std::max(m_time_until_pause, 0.0);
     }
 
     {

@@ -98,7 +98,7 @@ void DbgGui::showConfigurationWindow() {
     }
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::InputFloat("Pause after", &m_time_until_pause, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue);
     
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
