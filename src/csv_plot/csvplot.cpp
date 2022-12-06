@@ -33,9 +33,9 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-CsvPlot::CsvPlot(std::string const& csv) {
-    if (!csv.empty()) {
-        std::optional<FileCsvData> data = parseCsvData(csv);
+CsvPlot::CsvPlot(std::vector<std::string> files) {
+    for (std::string file : files) {
+        std::optional<FileCsvData> data = parseCsvData(file);
         if (data) {
             m_csv_data.push_back(*data);
         }
@@ -337,10 +337,9 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
 
     ImGui::SameLine();
     // plot 1 (time series)
-    ImPlotAxisFlags flags = ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoHighlight;
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
     if (ImPlot::BeginPlot("##DND1", ImVec2(-1, -1))) {
-        ImPlot::SetupAxis(ImAxis_X1, NULL, flags);
+        ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
 
         for (FileCsvData& file : files) {
             for (CsvSignal& signal : file.signals) {

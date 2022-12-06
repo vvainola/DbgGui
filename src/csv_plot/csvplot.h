@@ -16,7 +16,7 @@ struct FileCsvData {
 
 class CsvPlot {
   public:
-    CsvPlot(std::string const& csv = "");
+    CsvPlot(std::vector<std::string> files);
 
   private:
     std::vector<FileCsvData> m_csv_data;

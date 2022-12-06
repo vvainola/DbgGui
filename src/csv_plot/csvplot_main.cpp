@@ -8,9 +8,9 @@ int main(int argc, char** argv) {
         std::cerr << "No csv file given";
         return -1;
     }
-    if (argc == 2) {
-        CsvPlot(std::string(argv[1]));
-    } else {
-        CsvPlot();
+    std::vector<std::string> files;
+    for (int i = 1; i < argc; ++i) {
+        files.push_back(argv[i]);
     }
+    CsvPlot({files});
 }
