@@ -8,12 +8,18 @@ project('test_project', ['cpp', 'c'],
 
 add_project_arguments('-DNOMINMAX', language : ['c', 'cpp'])
 
-src = [
-    'src/dbg_gui_wrapper.cpp',
-    'src/dbg_gui.cpp',
-    'src/dbg_gui_plots.cpp',
-    'src/dbg_gui_windows.cpp',
-    'src/dbg_gui.h',
+python = import('python3').find_python()
+cpp = meson.get_compiler('cpp')
+
+deps = [
+    dependency('nlohmann_json'),
+    dependency('magic_enum'),
+    dependency('glfw3'),
+    dependency('kissfft-float'),
+    cpp.find_library('dbghelp'),
+]
+
+imgui_src = files([
     'src/imgui/imgui_impl_opengl3.cpp',
     'src/imgui/imgui_impl_opengl3.h',
     'src/imgui/imgui_impl_glfw.cpp',
@@ -31,6 +37,19 @@ src = [
     'src/imgui/implot_internal.h',
     'src/imgui/implot_items.cpp',
     'src/imgui/implot_items.cpp',
+])
+
+imgui_lib = static_library('imgui',
+    sources : imgui_src,
+    dependencies : deps
+)
+
+src = [
+    'src/dbg_gui_wrapper.cpp',
+    'src/dbg_gui.cpp',
+    'src/dbg_gui_plots.cpp',
+    'src/dbg_gui_windows.cpp',
+    'src/dbg_gui.h',
     'src/nativefiledialog/nfd_common.c',
     'src/nativefiledialog/nfd_win.cpp',
     'src/symbols/arithmetic_symbol.cpp',
@@ -41,20 +60,10 @@ src = [
 inc = []
 inc += include_directories('src/imgui', 'src/nativefiledialog/include', 'include')
 
-python = import('python3').find_python()
-cpp = meson.get_compiler('cpp')
-
-deps = [
-    dependency('nlohmann_json'),
-    dependency('magic_enum'),
-    dependency('glfw3'),
-    dependency('kissfft-float'),
-    cpp.find_library('dbghelp'),
-]
-
 lib_gui = static_library('dbg_gui',
     sources : src,
     include_directories : inc,
+    link_with : imgui_lib,
     dependencies : deps
 )
 
@@ -68,4 +77,14 @@ c_gui = executable('test_gui_c',
     sources : 'src/test_main.c',
     include_directories : 'include',
     link_with : lib_gui
+)
+
+csv_plotter = executable('csv_plotter',
+    sources : [
+        'src/csv_plot/csvplot_main.cpp',
+        'src/csv_plot/csvplot.cpp'
+    ],
+    include_directories : inc + ['src'],
+    link_with : imgui_lib,
+    dependencies : deps,
 )

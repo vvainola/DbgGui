@@ -1,5 +1,8 @@
+#pragma once
+
 #include <numeric>
 #include <vector>
+#include <cmath>
 
 // utility structure for realtime plot
 struct ScrollingBuffer {
