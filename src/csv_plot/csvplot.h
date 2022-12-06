@@ -1,11 +1,10 @@
 #pragma once
 #include <string>
-#include "scrolling_buffer.h"
 #include <filesystem>
 
 struct CsvSignal {
     std::string name;
-    ScrollingBuffer samples;
+    std::vector<double> samples;
     bool visible = false;
 };
 

@@ -6,7 +6,6 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
-#include "scrolling_buffer.h"
 
 #include <nfd.h>
 #include <nlohmann/json.hpp>
@@ -16,6 +15,8 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+
+std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
 void updateSavedSettings(GLFWwindow& window);
@@ -297,16 +298,20 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
     std::vector<std::string> signal_names = split(lines[0], ',');
 
     size_t sample_cnt = lines.size() - 1;
+    for (size_t i = ASCENDING_NUMBERS.size(); i < sample_cnt; ++i) {
+        ASCENDING_NUMBERS.push_back(i);
+    }
+
     std::vector<CsvSignal> csv_signals;
     for (std::string signal_name : signal_names) {
         csv_signals.push_back(CsvSignal{
-            .name = signal_name,
-            .samples = ScrollingBuffer(sample_cnt)});
+            .name = signal_name});
+        csv_signals.back().samples.reserve(sample_cnt);
     }
     for (size_t i = 0; i < sample_cnt; ++i) {
         std::vector<std::string> values = split(lines[i + 1], ',');
         for (size_t j = 0; j < signal_names.size(); ++j) {
-            csv_signals[j].samples.addPoint(double(i), std::stod(values[j]));
+            csv_signals[j].samples.push_back(std::stod(values[j]));
         }
     }
 
@@ -331,13 +336,15 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
     }
 
     static size_t longest_name_length = 0;
-    ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x);
+    if (ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x)) {
+        ImPlot::SetNextAxesToFit();
+    }
     for (FileCsvData& file : files) {
         // Reload file if it has been rewritten
         if (std::filesystem::last_write_time(file.name) != file.write_time
             && file.write_time != std::filesystem::file_time_type()) {
             static int run_number = 0;
-            int expected_line_cnt = int(file.signals[0].samples.time.size()) / 2 + 1;
+            int expected_line_cnt = int(file.signals[0].samples.size()) + 1;
             std::optional<FileCsvData> csv_data = parseCsvData(file.name, expected_line_cnt);
             if (csv_data) {
                 if (csv_data->signals.size() == file.signals.size()) {
@@ -377,18 +384,18 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
                     continue;
                 }
 
-                double* x_data;
+                double const* x_data;
                 if (first_signal_as_x) {
-                    x_data = file.signals[0].samples.data.data();
+                    x_data = file.signals[0].samples.data();
                 } else {
-                    x_data = signal.samples.time.data();
+                    x_data = ASCENDING_NUMBERS.data();
                 }
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << signal.name << " | " << file.displayed_name;
                 ImPlot::PlotLine(ss.str().c_str(),
                                  x_data,
-                                 signal.samples.data.data(),
-                                 int(signal.samples.data.size() / 2),
+                                 signal.samples.data(),
+                                 int(signal.samples.size()),
                                  ImPlotLineFlags_None);
             }
         }
