@@ -316,8 +316,8 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
     }
 
     return FileCsvData{
-        .name = std::filesystem::absolute(csv_filename).string(),
-        .displayed_name = std::filesystem::absolute(csv_filename).string(),
+        .name = std::filesystem::relative(csv_filename).string(),
+        .displayed_name = std::filesystem::relative(csv_filename).string(),
         .signals = csv_signals,
         .write_time = std::filesystem::last_write_time(csv_filename)};
 }
