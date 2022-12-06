@@ -299,7 +299,7 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
 
     size_t sample_cnt = lines.size() - 1;
     for (size_t i = ASCENDING_NUMBERS.size(); i < sample_cnt; ++i) {
-        ASCENDING_NUMBERS.push_back(i);
+        ASCENDING_NUMBERS.push_back(double(i));
     }
 
     std::vector<CsvSignal> csv_signals;
