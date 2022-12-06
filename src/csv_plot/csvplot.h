@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "scrolling_buffer.h"
+#include <filesystem>
 
 struct CsvSignal {
     std::string name;
@@ -10,7 +11,9 @@ struct CsvSignal {
 
 struct FileCsvData {
     std::string name;
+    std::string displayed_name;
     std::vector<CsvSignal> signals;
+    std::filesystem::file_time_type write_time;
 };
 
 

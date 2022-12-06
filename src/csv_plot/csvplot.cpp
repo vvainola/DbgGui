@@ -21,7 +21,7 @@ void setTheme();
 void updateSavedSettings(GLFWwindow& window);
 void loadPreviousSessionSettings(GLFWwindow& window);
 void showScalarPlot(std::vector<FileCsvData>& files);
-std::optional<FileCsvData> parseCsvData(std::string const& csv_filename);
+std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int expected_line_cnt = -1);
 std::optional<FileCsvData> loadCsv();
 
 void exit(std::string const& err) {
@@ -273,7 +273,7 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<FileCsvData> parseCsvData(std::string const& csv_filename) {
+std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int expected_line_cnt) {
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
@@ -284,6 +284,8 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename) {
     std::vector<std::string> lines = split(buffer.str(), '\n');
     if (lines.size() == 0) {
         std::cerr << "No data in file " + csv_filename << std::endl;
+        return std::nullopt;
+    } else if (expected_line_cnt > 0 && lines.size() != expected_line_cnt) {
         return std::nullopt;
     }
 
@@ -306,9 +308,12 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename) {
         }
     }
 
-    return FileCsvData{
+    return FileCsvData {
         .name = std::filesystem::absolute(csv_filename).string(),
-        .signals = csv_signals};
+        .displayed_name = std::filesystem::absolute(csv_filename).string(),
+        .signals = csv_signals,
+        .write_time = std::filesystem::last_write_time(csv_filename)
+    };
 }
 
 void showScalarPlot(std::vector<FileCsvData>& files) {
@@ -316,7 +321,7 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
 
     static bool first_signal_as_x = true;
 
-    ImGui::BeginChild("Signal selection", ImVec2(400, 400));
+    ImGui::BeginChild("Signal selection", ImVec2(400, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
         std::optional<FileCsvData> csv_data = loadCsv();
         if (csv_data) {
@@ -326,9 +331,31 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
 
     ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x);
     for (FileCsvData& file : files) {
-        if (ImGui::TreeNode(file.name.c_str())) {
+        // Reload file if it has been rewritten
+        if (std::filesystem::last_write_time(file.name) != file.write_time && file.write_time != std::filesystem::file_time_type()) {
+            static int run_number = 0;
+            int expected_line_cnt = int(file.signals[0].samples.time.size()) / 2 + 1;
+            std::optional<FileCsvData> csv_data = parseCsvData(file.name, expected_line_cnt);
+            if (csv_data) {
+                if (csv_data->signals.size() == file.signals.size()) {
+                    for (int i = 0; i < file.signals.size(); ++i) {
+                        csv_data->signals[i].visible = file.signals[i].visible;
+                        file.signals[i].visible = false;
+                    }
+                }
+                file.write_time = std::filesystem::file_time_type();
+                run_number++;
+                file.displayed_name += " " + std::to_string(run_number);
+                files.push_back(*csv_data);
+                break;
+            }
+        }
+
+        if (ImGui::TreeNode(file.displayed_name.c_str())) {
             for (CsvSignal& signal : file.signals) {
-                ImGui::Selectable(signal.name.c_str(), &signal.visible);
+                if (ImGui::Selectable(signal.name.c_str(), &signal.visible)) {
+                    ImPlot::SetNextAxesToFit();
+                }
             }
             ImGui::TreePop();
         }
@@ -336,7 +363,6 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
     ImGui::EndChild();
 
     ImGui::SameLine();
-    // plot 1 (time series)
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
     if (ImPlot::BeginPlot("##DND1", ImVec2(-1, -1))) {
         ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
@@ -353,7 +379,7 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
                 } else {
                     x_data = signal.samples.time.data();
                 }
-                ImPlot::PlotLine((file.name + " | " + signal.name).c_str(),
+                ImPlot::PlotLine((file.displayed_name + " | " + signal.name).c_str(),
                                  x_data,
                                  signal.samples.data.data(),
                                  int(signal.samples.data.size() / 2),
