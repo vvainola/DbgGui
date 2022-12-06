@@ -284,10 +284,10 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
     std::stringstream buffer;
     buffer << csv.rdbuf();
     std::vector<std::string> lines = split(buffer.str(), '\n');
-    if (lines.size() == 0) {
-        std::cerr << "No data in file " + csv_filename << std::endl;
+    if (expected_line_cnt > 0 && lines.size() != expected_line_cnt) {
         return std::nullopt;
-    } else if (expected_line_cnt > 0 && lines.size() != expected_line_cnt) {
+    } else if (lines.size() == 0) {
+        std::cerr << "No data in file " + csv_filename << std::endl;
         return std::nullopt;
     }
 
@@ -310,12 +310,11 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
         }
     }
 
-    return FileCsvData {
+    return FileCsvData{
         .name = std::filesystem::absolute(csv_filename).string(),
         .displayed_name = std::filesystem::absolute(csv_filename).string(),
         .signals = csv_signals,
-        .write_time = std::filesystem::last_write_time(csv_filename)
-    };
+        .write_time = std::filesystem::last_write_time(csv_filename)};
 }
 
 void showScalarPlot(std::vector<FileCsvData>& files) {
@@ -335,7 +334,8 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
     ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x);
     for (FileCsvData& file : files) {
         // Reload file if it has been rewritten
-        if (std::filesystem::last_write_time(file.name) != file.write_time && file.write_time != std::filesystem::file_time_type()) {
+        if (std::filesystem::last_write_time(file.name) != file.write_time
+            && file.write_time != std::filesystem::file_time_type()) {
             static int run_number = 0;
             int expected_line_cnt = int(file.signals[0].samples.time.size()) / 2 + 1;
             std::optional<FileCsvData> csv_data = parseCsvData(file.name, expected_line_cnt);
