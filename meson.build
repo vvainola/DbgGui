@@ -30,13 +30,16 @@ src = [
     'src/imgui/implot_demo.cpp',
     'src/imgui/implot_internal.h',
     'src/imgui/implot_items.cpp',
+    'src/imgui/implot_items.cpp',
+    'src/nativefiledialog/nfd_common.c',
+    'src/nativefiledialog/nfd_win.cpp',
     'src/symbols/arithmetic_symbol.cpp',
     'src/symbols/dbghelp_symbols_lookup.cpp',
     'src/symbols/symbol_helpers.cpp',
     'src/symbols/variant_symbol.cpp',
     ]
 inc = []
-inc += include_directories('src/imgui', 'include')
+inc += include_directories('src/imgui', 'src/nativefiledialog/include', 'include')
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')

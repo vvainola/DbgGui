@@ -8,9 +8,14 @@
 #include "dbg_gui.h"
 #include "imgui.h"
 #include "implot.h"
+#include "nfd.h"
 #include <array>
+#include <filesystem>
+#include <fstream>
 
 constexpr double PI = 3.1415926535897;
+
+void savePlotAsCsv(ScalarPlot const& plot);
 
 constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
     std::array<XY<double>, 1000> points;
@@ -36,14 +41,33 @@ void DbgGui::showScalarPlots() {
             continue;
         }
 
-        ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
-        ImPlotAxisFlags y_flags = ImPlotAxisFlags_None;
+        // Menu
+        if (ImGui::Button("Menu")) {
+            ImGui::OpenPopup("##Menu");
+        }
+        if (ImGui::BeginPopup("##Menu")) {
+            if (ImGui::Button("Remove all")) {
+                scalar_plot.signals.clear();
+                m_settings["scalar_plots"][scalar_plot.name]["signals"].clear();
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::Button("Save as csv")) {
+                savePlotAsCsv(scalar_plot);
+            }
+            ImGui::EndPopup();
+        }
 
+        // Time range slider
+        ImGui::SameLine();
         float time_range = static_cast<float>(scalar_plot.x_range * 1000);
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
         bool time_range_changed = ImGui::SliderFloat("Time range", &time_range, 1, 1000, "%.1f ms");
         scalar_plot.x_range = time_range * 1e-3f;
+
+        // Auto fit button
         ImGui::SameLine();
+        ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
+        ImPlotAxisFlags y_flags = ImPlotAxisFlags_None;
         ImGui::Checkbox("Autofit", &scalar_plot.autofit_y);
         if (scalar_plot.autofit_y) {
             y_flags |= ImPlotAxisFlags_AutoFit;
@@ -282,5 +306,45 @@ void DbgGui::showVectorPlots() {
             remove(vector_plot.signals, signal_to_remove);
             m_settings["vector_plots"][vector_plot.name]["signals"].erase(signal_to_remove->name_and_group);
         }
+    }
+}
+
+void savePlotAsCsv(ScalarPlot const& plot) {
+    nfdchar_t* out_path = NULL;
+    auto cwd = std::filesystem::current_path();
+    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+
+    if (result == NFD_OKAY) {
+        std::string out(out_path);
+        free(out_path);
+        if (!out.ends_with(".csv")) {
+            out.append(".csv");
+        }
+        std::ofstream csv(out);
+
+        csv << "time,";
+        std::vector<ScrollingBuffer::DecimatedValues> values;
+        for (Scalar* signal : plot.signals) {
+            csv << signal->name_and_group << ",";
+            values.push_back(signal->buffer->getValuesInRange(plot.x_axis_min,
+                                                              plot.x_axis_max,
+                                                              INT_MAX,
+                                                              signal->scale,
+                                                              signal->offset));
+        }
+        csv << "\n";
+        if (values.size() == 0) {
+            csv.close();
+            return;
+        }
+        for (size_t i = 0; i < values[0].time.size(); ++i) {
+            csv << values[0].time[i] << ",";
+            for (auto& value : values) {
+                csv << value.y_min[i] << ",";
+            }
+            csv << "\n";
+        }
+        csv.close();
+        
     }
 }
