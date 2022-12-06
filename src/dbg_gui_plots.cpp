@@ -53,6 +53,7 @@ void DbgGui::showScalarPlots() {
             }
             if (ImGui::Button("Save as csv")) {
                 savePlotAsCsv(scalar_plot);
+                ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
@@ -322,6 +323,7 @@ void savePlotAsCsv(ScalarPlot const& plot) {
         }
         std::ofstream csv(out);
 
+        csv << "time0,";
         csv << "time,";
         std::vector<ScrollingBuffer::DecimatedValues> values;
         for (Scalar* signal : plot.signals) {
@@ -338,6 +340,7 @@ void savePlotAsCsv(ScalarPlot const& plot) {
             return;
         }
         for (size_t i = 0; i < values[0].time.size(); ++i) {
+            csv << values[0].time[i] - values[0].time[0] << ",";
             csv << values[0].time[i] << ",";
             for (auto& value : values) {
                 csv << value.y_min[i] << ",";
@@ -345,6 +348,5 @@ void savePlotAsCsv(ScalarPlot const& plot) {
             csv << "\n";
         }
         csv.close();
-        
     }
 }
