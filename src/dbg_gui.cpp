@@ -67,7 +67,6 @@ void DbgGui::sample(double timestamp) {
         }
     }
 
-
     const double sync_interval = 10e-3;
     static double next_sync_timestamp = sync_interval * m_simulation_speed;
     if (timestamp > next_sync_timestamp) {
@@ -128,7 +127,9 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
+    if (std::filesystem::exists("../Cousine-Regular.ttf")) {
+        io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
+    }
     setTheme();
 
     loadPreviousSessionSettings();

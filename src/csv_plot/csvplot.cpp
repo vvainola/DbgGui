@@ -86,7 +86,9 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
+    if (std::filesystem::exists("../Cousine-Regular.ttf")) {
+        io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
+    }
     setTheme();
     loadPreviousSessionSettings(*window);
 
@@ -329,6 +331,7 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
         }
     }
 
+    static size_t longest_name_length = 0;
     ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x);
     for (FileCsvData& file : files) {
         // Reload file if it has been rewritten
@@ -354,6 +357,7 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
         if (ImGui::TreeNode(file.displayed_name.c_str())) {
             for (CsvSignal& signal : file.signals) {
                 if (ImGui::Selectable(signal.name.c_str(), &signal.visible)) {
+                    longest_name_length = std::max(longest_name_length, signal.name.size());
                     ImPlot::SetNextAxesToFit();
                 }
             }
@@ -379,7 +383,9 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
                 } else {
                     x_data = signal.samples.time.data();
                 }
-                ImPlot::PlotLine((file.displayed_name + " | " + signal.name).c_str(),
+                std::stringstream ss;
+                ss << std::left << std::setw(longest_name_length) << signal.name << " | " << file.displayed_name;
+                ImPlot::PlotLine(ss.str().c_str(),
                                  x_data,
                                  signal.samples.data.data(),
                                  int(signal.samples.data.size() / 2),
