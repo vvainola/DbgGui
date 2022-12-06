@@ -334,6 +334,14 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
             files.push_back(*csv_data);
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) {
+        for (FileCsvData& file : files) {
+            for (CsvSignal& signal : file.signals) {
+                signal.visible = false;
+            }
+        }
+    }
 
     static size_t longest_name_length = 0;
     if (ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x)) {
