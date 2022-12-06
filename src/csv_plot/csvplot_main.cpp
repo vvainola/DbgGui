@@ -8,5 +8,9 @@ int main(int argc, char** argv) {
         std::cerr << "No csv file given";
         return -1;
     }
-    CsvPlot(std::string(argv[1]));
+    if (argc == 2) {
+        CsvPlot(std::string(argv[1]));
+    } else {
+        CsvPlot();
+    }
 }

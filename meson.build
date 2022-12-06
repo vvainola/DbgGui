@@ -37,11 +37,16 @@ imgui_src = files([
     'src/imgui/implot_internal.h',
     'src/imgui/implot_items.cpp',
     'src/imgui/implot_items.cpp',
+    'src/nativefiledialog/nfd_common.c',
+    'src/nativefiledialog/nfd_win.cpp',
 ])
+inc = []
+inc += include_directories('src/imgui', 'src/nativefiledialog/include', 'include')
 
 imgui_lib = static_library('imgui',
     sources : imgui_src,
-    dependencies : deps
+    dependencies : deps,
+    include_directories : inc,
 )
 
 src = [
@@ -50,15 +55,11 @@ src = [
     'src/dbg_gui_plots.cpp',
     'src/dbg_gui_windows.cpp',
     'src/dbg_gui.h',
-    'src/nativefiledialog/nfd_common.c',
-    'src/nativefiledialog/nfd_win.cpp',
     'src/symbols/arithmetic_symbol.cpp',
     'src/symbols/dbghelp_symbols_lookup.cpp',
     'src/symbols/symbol_helpers.cpp',
     'src/symbols/variant_symbol.cpp',
     ]
-inc = []
-inc += include_directories('src/imgui', 'src/nativefiledialog/include', 'include')
 
 lib_gui = static_library('dbg_gui',
     sources : src,
