@@ -353,7 +353,6 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
         // Reload file if it has been rewritten
         if (std::filesystem::last_write_time(file.name) != file.write_time
             && file.write_time != std::filesystem::file_time_type()) {
-            static int run_number = 0;
             int expected_line_cnt = int(file.signals[0].samples.size()) + 1;
             std::optional<FileCsvData> csv_data = parseCsvData(file.name, expected_line_cnt);
             if (csv_data) {
@@ -364,6 +363,7 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
                     }
                 }
                 file.write_time = std::filesystem::file_time_type();
+                static int run_number = 0;
                 run_number++;
                 file.displayed_name += " " + std::to_string(run_number);
                 files.push_back(*csv_data);
