@@ -16,6 +16,8 @@
 #include <iostream>
 #include <filesystem>
 
+inline constexpr unsigned MAX_NAME_LENGTH = 255;
+
 std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
@@ -369,7 +371,25 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
             }
         }
 
-        if (ImGui::TreeNode(file.displayed_name.c_str())) {
+        bool opened = ImGui::TreeNode(file.displayed_name.c_str());
+        // Make displayed name editable
+        if (ImGui::BeginPopupContextItem((file.displayed_name + "context_menu").c_str())) {
+            static std::string displayed_name_edit = file.displayed_name;
+            displayed_name_edit.reserve(MAX_NAME_LENGTH);
+            displayed_name_edit = file.displayed_name;
+            if (ImGui::InputText("Name##scalar_context_menu",
+                                 displayed_name_edit.data(),
+                                 MAX_NAME_LENGTH,
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                file.displayed_name = std::string(displayed_name_edit.data());
+                if (file.displayed_name.empty()) {
+                    file.displayed_name = file.name;
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
             for (CsvSignal& signal : file.signals) {
                 if (ImGui::Selectable(signal.name.c_str(), &signal.visible)) {
                     longest_name_length = std::max(longest_name_length, signal.name.size());
