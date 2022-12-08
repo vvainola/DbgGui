@@ -104,6 +104,21 @@ union BitField {
 };
 BitField bitfield;
 
+union BitField2 {
+    uint16_t u16;
+    struct {
+        uint16_t b0 : 1;
+        uint16_t b1 : 1;
+        uint16_t b2 : 3;
+        uint16_t b5 : 4;
+        uint16_t b9 : 1;
+        uint16_t b10 : 1;
+        uint16_t b11 : 2;
+        uint16_t b13 : 1;
+    } b;
+};
+BitField2 bitfield2;
+
 XY abc_to_xy(Vector_ABC const& in) {
     return XY{
         2.0 / 3.0 * in.a - 1.0 / 3.0 * in.b - 1.0 / 3.0 * in.c,

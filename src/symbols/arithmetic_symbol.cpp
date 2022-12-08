@@ -10,9 +10,15 @@ ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
                                    uint32_t size,
                                    std::optional<uint32_t> bitfield_idx)
     : m_address(address),
-      m_size(size),
-      m_bitfield_idx(bitfield_idx),
-      m_value(addressAsVariant(basic_type, address, size)) {
+      m_bitfield_idx(bitfield_idx) {
+    if (m_bitfield_idx) {
+        m_bf_size = size;
+        m_size = (size - 1 + *m_bitfield_idx) / 8 + 1;
+    } else {
+        m_size = size;
+    }
+    assert(m_size > 0);
+    m_value = addressAsVariant(basic_type, address, m_size);
 }
 
 void ArithmeticSymbol::write(double value) {
@@ -20,7 +26,7 @@ void ArithmeticSymbol::write(double value) {
         std::bitset<64> bits_to_write = static_cast<unsigned>(value);
         // Read old value, change the single bits and write it back.
         std::bitset<64> value_to_write = static_cast<unsigned>(getAddressValue());
-        for (unsigned i = 0; i < m_size; ++i) {
+        for (unsigned i = 0; i < m_bf_size; ++i) {
             value_to_write.set(*m_bitfield_idx + i, bits_to_write.test(i));
         }
         value = value_to_write.to_ulong();
@@ -42,8 +48,8 @@ double ArithmeticSymbol::read() const {
     if (m_bitfield_idx) {
         double bitfield_value = 0;
         std::bitset<64> value = static_cast<unsigned>(address_value);
-        for (unsigned i = 0; i < m_size; ++i) {
-            bitfield_value += pow(10, i) * value.test(*m_bitfield_idx + i);
+        for (unsigned i = 0; i < m_bf_size; ++i) {
+            bitfield_value += pow(2, i) * value.test(*m_bitfield_idx + i);
         }
         return bitfield_value;
     } else {
