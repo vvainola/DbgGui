@@ -26,11 +26,11 @@ using ValueSource = std::variant<
 
 class DbgGuiWrapper {
   public:
-    DbgGuiWrapper();
+    DbgGuiWrapper(double sampling_time);
     ~DbgGuiWrapper();
     void startUpdateLoop();
 
-    void sample(double timestamp);
+    void sample();
 
     bool isClosed();
     void close();
@@ -60,8 +60,9 @@ void DbgGui_addScalar_f64(double* src, const char* group, const char* name);
 void DbgGui_addVector_f32(float* x, float* y, const char* group, const char* name);
 void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* name);
 
+void DbgGui_create(double sampling_time);
 void DbgGui_startUpdateLoop(void);
-void DbgGui_sample(double timestamp);
+void DbgGui_sample();
 int DbgGui_isClosed();
 void DbgGui_close();
 #ifdef __cplusplus

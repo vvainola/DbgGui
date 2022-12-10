@@ -30,7 +30,8 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-DbgGui::DbgGui() {
+DbgGui::DbgGui(double sampling_time)
+    : m_sampling_time(sampling_time) {
 }
 
 DbgGui::~DbgGui() {
@@ -41,25 +42,24 @@ void DbgGui::startUpdateLoop() {
     m_gui_thread = std::jthread(&DbgGui::updateLoop, std::ref(*this));
 }
 
-void DbgGui::sample(double timestamp) {
+void DbgGui::sample() {
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
     }
 
     if (m_time_until_pause > 0) {
-        m_time_until_pause -= (timestamp - m_last_timestamp);
+        m_time_until_pause -= m_sampling_time;
         m_paused = m_time_until_pause <= 0;
         m_time_until_pause = std::max(m_time_until_pause, 0.0);
     }
 
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-        m_total_time += std::max(timestamp - m_last_timestamp, 0.0);
-        m_last_timestamp = timestamp;
+        m_timestamp += m_sampling_time;
         for (auto& signal : m_scalars) {
             if (signal.second->buffer != nullptr) {
                 double value = getSourceValue(signal.second->src);
-                signal.second->buffer->addPoint(m_total_time, value);
+                signal.second->buffer->addPoint(m_timestamp, value);
             }
             if (signal.second->m_pause_triggers.size() > 0) {
                 double value = getSourceValue(signal.second->src);
@@ -70,10 +70,10 @@ void DbgGui::sample(double timestamp) {
 
     const double sync_interval = 10e-3;
     static double next_sync_timestamp = sync_interval * m_simulation_speed;
-    if (m_total_time > next_sync_timestamp) {
+    if (m_timestamp > next_sync_timestamp) {
         next_sync_timestamp += sync_interval * m_simulation_speed;
         // Limit sync interval to 1 second in case simulation speed is set very high
-        next_sync_timestamp = std::min(m_total_time + 1, next_sync_timestamp);
+        next_sync_timestamp = std::min(m_timestamp + 1, next_sync_timestamp);
         auto now = std::chrono::system_clock::now();
         static auto last_real_timestamp = std::chrono::system_clock::now();
         auto real_elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_real_timestamp).count();
@@ -165,6 +165,7 @@ void DbgGui::updateLoop() {
             showSymbolsWindow();
             showScalarPlots();
             showVectorPlots();
+            showSpectrumPlots();
         }
         updateSavedSettings();
 

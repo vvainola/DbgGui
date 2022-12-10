@@ -5,16 +5,12 @@
 static std::unique_ptr<DbgGui> gui;
 
 void addScalarToGui(ValueSource src, const char* group, const char* name) {
-    if (!gui) {
-        gui = std::make_unique<DbgGui>();
-    }
+    assert(gui);
     gui->addScalar(src, group, name);
 }
 
 void addVectorToGui(ValueSource x, ValueSource y, const char* group, const char* name) {
-    if (!gui) {
-        gui = std::make_unique<DbgGui>();
-    }
+    assert(gui);
     gui->addVector(x, y, group, name);
 }
 
@@ -65,17 +61,18 @@ void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* n
     addVectorToGui(x, y, group, name);
 }
 
+void DbgGui_create(double sampling_time) {
+    gui = std::make_unique<DbgGui>(sampling_time);
+}
+
 void DbgGui_startUpdateLoop(void) {
-    if (!gui) {
-        gui = std::make_unique<DbgGui>();
-    }
+    assert(gui);
     gui->startUpdateLoop();
 }
 
-void DbgGui_sample(double timestamp) {
-    if (gui) {
-        gui->sample(timestamp);
-    }
+void DbgGui_sample() {
+    assert(gui);
+    gui->sample();
 }
 
 int DbgGui_isClosed() {
@@ -91,8 +88,8 @@ void DbgGui_close() {
 }
 #endif
 
-DbgGuiWrapper::DbgGuiWrapper() {
-    gui = std::make_unique<DbgGui>();
+DbgGuiWrapper::DbgGuiWrapper(double sampling_time) {
+    gui = std::make_unique<DbgGui>(sampling_time);
 }
 
 DbgGuiWrapper::~DbgGuiWrapper() {
@@ -103,8 +100,8 @@ void DbgGuiWrapper::startUpdateLoop() {
     gui->startUpdateLoop();
 }
 
-void DbgGuiWrapper::sample(double timestamp) {
-    gui->sample(timestamp);
+void DbgGuiWrapper::sample() {
+    gui->sample();
 }
 
 bool DbgGuiWrapper::isClosed() {

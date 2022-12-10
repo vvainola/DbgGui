@@ -12,10 +12,13 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <kissfft/kissfft.hh>
+#include <future>
 
 constexpr double PI = 3.1415926535897;
 
 void savePlotAsCsv(ScalarPlot const& plot);
+std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<double>> samples);
 
 constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
     std::array<XY<double>, 1000> points;
@@ -83,7 +86,7 @@ void DbgGui::showScalarPlots() {
             ImPlot::SetupAxisLinks(ImAxis_X1, &scalar_plot.x_axis_min, &scalar_plot.x_axis_max);
             // Allow adjusting settings while paused
             if (!m_paused) {
-                ImPlot::SetupAxisLimits(ImAxis_X1, m_total_time - scalar_plot.x_range, m_total_time, ImGuiCond_Always);
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - scalar_plot.x_range, m_timestamp, ImGuiCond_Always);
                 x_flags |= ImPlotAxisFlags_NoTickLabels;
             } else if (time_range_changed) {
                 double mid = 0.5 * (scalar_plot.x_axis_max + scalar_plot.x_axis_min);
@@ -222,7 +225,7 @@ void DbgGui::showVectorPlots() {
             if (!m_paused) {
                 time_offset = 0;
             }
-            double last_sample_time = m_total_time - time_offset;
+            double last_sample_time = m_timestamp - time_offset;
 
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;
@@ -310,6 +313,104 @@ void DbgGui::showVectorPlots() {
     }
 }
 
+void DbgGui::showSpectrumPlots() {
+    for (SpectrumPlot& plot : m_spectrum_plots) {
+        if (!plot.open) {
+            continue;
+        }
+        if (!ImGui::Begin(plot.name.c_str(), &plot.open)) {
+            ImGui::End();
+            continue;
+        }
+        double time_range_ms = plot.time_range * 1e3;
+        ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
+        double min = 0;
+        double max = 10000;
+        ImGui::SliderScalar("Time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms");
+        plot.time_range = time_range_ms * 1e-3;
+        std::vector<double> idx(plot.spectrum.size(), 0);
+        std::vector<double> amplitudes(plot.spectrum.size(), 0);
+        double amplitude_inv = 1.0 / plot.spectrum.size();
+        int mid = plot.spectrum.size() / 2;
+        double resolution = 1.0 / (m_sampling_time * plot.spectrum.size());
+        // Negative side
+        for (int i = 0; i < mid; ++i) {
+            idx[i] = (-mid + i) * resolution;
+            amplitudes[i] = std::abs(plot.spectrum[mid + i]) * amplitude_inv;
+        }
+        // Positive side
+        for (int i = 0; i < mid; ++i) {
+            idx[mid + i] = i * resolution;
+            amplitudes[mid + i] = std::abs(plot.spectrum[i]) * amplitude_inv;
+        }
+
+        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
+        if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
+            ImPlot::PlotStems("Drag signal to calculate spectrum", idx.data(), amplitudes.data(), int(amplitudes.size()));
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+                    size_t id = *(size_t*)payload->Data;
+                    Scalar* scalar = m_scalars[id].get();
+                    scalar->startBuffering();
+                    plot.scalar = m_scalars[id].get();
+                    plot.vector = nullptr;
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
+                    VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
+                    Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+                    plot.scalar = scalar;
+                    plot.vector = nullptr;
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
+                    size_t id = *(size_t*)payload->Data;
+                    Vector2D* vector = m_vectors[id].get();
+                    vector->x->startBuffering();
+                    vector->y->startBuffering();
+                    plot.vector = m_vectors[id].get();
+                    plot.scalar = nullptr;
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
+                    VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
+                    VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
+                    Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
+                    plot.vector = vector;
+                    plot.scalar = nullptr;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImPlot::EndPlot();
+        }
+        ImPlot::PopStyleVar();
+
+        if (plot.spectrum_calculation.valid() && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            plot.spectrum = plot.spectrum_calculation.get();
+
+        } else if (plot.vector && !plot.spectrum_calculation.valid()) {
+            ScrollingBuffer::DecimatedValues values_x = plot.vector->x->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
+            ScrollingBuffer::DecimatedValues values_y = plot.vector->y->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
+            size_t sample_cnt = std::min(values_x.y_min.size(), values_y.y_min.size());
+            std::vector<std::complex<double>> samples;
+            samples.reserve(sample_cnt);
+            for (size_t i = 0; i < sample_cnt; ++i) {
+                samples.push_back({values_x.y_min[i], values_y.y_min[i]});
+            }
+            plot.spectrum_calculation = std::async(calculateSpectrum, samples);
+        } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
+            ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
+            size_t sample_cnt = values.y_min.size();
+            std::vector<std::complex<double>> samples;
+            samples.reserve(sample_cnt);
+            for (size_t i = 0; i < sample_cnt; ++i) {
+                samples.push_back({values.y_min[i], 0});
+            }
+            plot.spectrum_calculation = std::async(calculateSpectrum, samples);
+        }
+
+        ImGui::End();
+    }
+}
+
 void savePlotAsCsv(ScalarPlot const& plot) {
     nfdchar_t* out_path = NULL;
     auto cwd = std::filesystem::current_path();
@@ -349,4 +450,38 @@ void savePlotAsCsv(ScalarPlot const& plot) {
         }
         csv.close();
     }
+}
+
+int window = 0;
+std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<double>> samples) {
+    size_t sample_cnt = pow(2, ceil(log2(samples.size())));
+    samples.resize(sample_cnt, 0);
+    kissfft<double> fft(sample_cnt, false);
+    std::vector<std::complex<double>> output(sample_cnt, 0);
+
+    // Apply hanning window
+    if (window == 1) {
+        for (size_t n = 0; n < sample_cnt; ++n) {
+            double amplitude_correction = 2.0;
+            samples[n] *= amplitude_correction * (0.5 - 0.5 * cos(2 * PI * n / sample_cnt));
+        }
+    }
+    if (window == 2) {
+        for (size_t n = 0; n < sample_cnt; ++n) {
+            double a0 = 0.21557895;
+            double a1 = 0.41663158;
+            double a2 = 0.277263158;
+            double a3 = 0.083578947;
+            double a4 = 0.006947368;
+            double amplitude_correction = 4.6432;
+            samples[n] *= amplitude_correction * (a0
+                        - a1 * cos(2 * PI * n / (sample_cnt - 1))
+                        + a2 * cos(4 * PI * n / (sample_cnt - 1))
+                        - a3 * cos(6 * PI * n / (sample_cnt - 1))
+                        + a4 * cos(8 * PI * n / (sample_cnt - 1)));
+        }
+    }
+
+    fft.transform(samples.data(), output.data());
+    return output;
 }

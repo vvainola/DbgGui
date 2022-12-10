@@ -5,6 +5,8 @@
 #include <mutex>
 #include <thread>
 #include <map>
+#include <complex>
+#include <future>
 #include <nlohmann/json.hpp>
 
 struct GLFWwindow;
@@ -106,13 +108,25 @@ struct VectorPlot {
     }
 };
 
+struct SpectrumPlot {
+    std::string name;
+
+    Scalar* scalar;
+    Vector2D* vector;
+    double time_range = 1;
+    bool open = true;
+    bool single_sided = true;
+    std::vector<std::complex<double>> spectrum;
+    std::future<std::vector<std::complex<double>>> spectrum_calculation;
+};
+
 class DbgGui {
   public:
-    DbgGui();
+    DbgGui(double sampling_time);
     ~DbgGui();
     void startUpdateLoop();
 
-    void sample(double timestamp);
+    void sample();
 
     bool isClosed();
     void close();
@@ -129,6 +143,7 @@ class DbgGui {
     void showCustomWindow();
     void showScalarPlots();
     void showVectorPlots();
+    void showSpectrumPlots();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
 
@@ -150,9 +165,10 @@ class DbgGui {
 
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
+    std::vector<SpectrumPlot> m_spectrum_plots;
 
-    double m_total_time = 0;
-    double m_last_timestamp = 0;
+    double m_sampling_time;
+    double m_timestamp = 0;
     double m_last_sleep_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;

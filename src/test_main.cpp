@@ -134,10 +134,10 @@ Vector_ABC xy_to_abc(XY in) {
 } // namespace g
 
 
-double t = 0;
+double timestamp = 0;
 int main(int, char**) {
     static float sfl;
-    DbgGuiWrapper gui;
+    DbgGuiWrapper gui(10e-6);
     gui.addScalar(&g::f64, "group 2", "g_f64");
     gui.addScalar(&g::f32, "group 1", "g_f32_2");
     gui.addScalar(&g::f32, "group 1", "g_f32_1");
@@ -150,16 +150,16 @@ int main(int, char**) {
     gui.startUpdateLoop();
 
     while (!gui.isClosed()) {
-        gui.sample(t);
-        t += 10e-6;
-        sfl = (float)t;
-        g::sine = sin(10. * 2 * PI * t);
-        g::abc.a = sin(10. * 2 * PI * t);
-        g::abc.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0);
-        g::abc.c = sin(10. * 2 * PI * t - 4.0 * PI / 3.0);
-        g::abc2.a = sin(10. * 2 * PI * t + g::abc2_angle);
-        g::abc2.b = sin(10. * 2 * PI * t - 2.0 * PI / 3.0 + g::abc2_angle);
-        g::abc2.c = sin(10. * 2 * PI * t - 4.0 * PI / 3.0 + g::abc2_angle);
+        gui.sample();
+        timestamp += 10e-6;
+        sfl = (float)timestamp;
+        g::sine = sin(10. * 2 * PI * timestamp);
+        g::abc.a = sin(10. * 2 * PI * timestamp);
+        g::abc.b = sin(10. * 2 * PI * timestamp - 2.0 * PI / 3.0);
+        g::abc.c = sin(10. * 2 * PI * timestamp - 4.0 * PI / 3.0);
+        g::abc2.a = sin(10. * 2 * PI * timestamp + g::abc2_angle);
+        g::abc2.b = sin(10. * 2 * PI * timestamp - 2.0 * PI / 3.0 + g::abc2_angle);
+        g::abc2.c = sin(10. * 2 * PI * timestamp - 4.0 * PI / 3.0 + g::abc2_angle);
         g::xy = g::abc_to_xy(g::abc);
         g::xy2 = g::abc_to_xy(g::abc2);
         g::booli = g::xy2.x > 0.5;

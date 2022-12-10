@@ -90,7 +90,7 @@ void DbgGui::showConfigurationWindow() {
         return;
     }
 
-    ImGui::Text("Time %.3f s", m_total_time);
+    ImGui::Text("Time %.3f s", m_timestamp);
     ImGui::SameLine();
     const char* start_stop_text = m_paused ? "Start" : "Pause";
     if (ImGui::Button(start_stop_text)) {
@@ -120,17 +120,17 @@ void DbgGui::showConfigurationWindow() {
         if (ImGui::Button("Scalar plot")) {
             ImGui::OpenPopup("Add scalar plot");
         }
+        static char plot_name[256] = "";
         if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            static char scalar_plot_name[256] = "";
             if (ImGui::InputText("Name",
-                                 scalar_plot_name,
-                                 IM_ARRAYSIZE(scalar_plot_name),
+                                 plot_name,
+                                 IM_ARRAYSIZE(plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_scalar_plots.push_back(ScalarPlot{.name = scalar_plot_name,
+                m_scalar_plots.push_back(ScalarPlot{.name = plot_name,
                                                     .y_axis_min = -1,
                                                     .y_axis_max = 1,
                                                     .x_range = 1});
-                strcpy_s(scalar_plot_name, "");
+                strcpy_s(plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -140,13 +140,27 @@ void DbgGui::showConfigurationWindow() {
             ImGui::OpenPopup("Add vector plot");
         }
         if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            static char vector_plot_name[256] = "";
             if (ImGui::InputText("Vector plot name",
-                                 vector_plot_name,
-                                 IM_ARRAYSIZE(vector_plot_name),
+                                 plot_name,
+                                 IM_ARRAYSIZE(plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_vector_plots.push_back(VectorPlot{.name = vector_plot_name});
-                strcpy_s(vector_plot_name, "");
+                m_vector_plots.push_back(VectorPlot{.name = plot_name});
+                strcpy_s(plot_name, "");
+                ImGui::CloseCurrentPopup();
+            };
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::Button("Spectrum plot")) {
+            ImGui::OpenPopup("Add spectrum plot");
+        }
+        if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::InputText("Spectrum plot name",
+                                 plot_name,
+                                 IM_ARRAYSIZE(plot_name),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_spectrum_plots.push_back(SpectrumPlot{.name = plot_name});
+                strcpy_s(plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
