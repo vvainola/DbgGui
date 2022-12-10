@@ -90,7 +90,7 @@ void DbgGui::showConfigurationWindow() {
         return;
     }
 
-    ImGui::Text("Time %.3f s", m_time);
+    ImGui::Text("Time %.3f s", m_total_time);
     ImGui::SameLine();
     const char* start_stop_text = m_paused ? "Start" : "Pause";
     if (ImGui::Button(start_stop_text)) {
