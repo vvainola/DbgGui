@@ -47,15 +47,15 @@ void DbgGui::sample(double timestamp) {
     }
 
     if (m_time_until_pause > 0) {
-        m_time_until_pause -= (timestamp - m_timestamp);
+        m_time_until_pause -= (timestamp - m_last_timestamp);
         m_paused = m_time_until_pause <= 0;
         m_time_until_pause = std::max(m_time_until_pause, 0.0);
     }
 
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-        m_time += std::max(timestamp - m_timestamp, 0.0);
-        m_timestamp = timestamp;
+        m_time += std::max(timestamp - m_last_timestamp, 0.0);
+        m_last_timestamp = timestamp;
         for (auto& signal : m_scalars) {
             if (signal.second->buffer != nullptr) {
                 double value = getSourceValue(signal.second->src);
