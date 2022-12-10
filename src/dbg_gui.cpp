@@ -54,12 +54,12 @@ void DbgGui::sample(double timestamp) {
 
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-        m_time += std::max(timestamp - m_last_timestamp, 0.0);
+        m_total_time += std::max(timestamp - m_last_timestamp, 0.0);
         m_last_timestamp = timestamp;
         for (auto& signal : m_scalars) {
             if (signal.second->buffer != nullptr) {
                 double value = getSourceValue(signal.second->src);
-                signal.second->buffer->addPoint(m_time, value);
+                signal.second->buffer->addPoint(m_total_time, value);
             }
             if (signal.second->m_pause_triggers.size() > 0) {
                 double value = getSourceValue(signal.second->src);
@@ -70,15 +70,15 @@ void DbgGui::sample(double timestamp) {
 
     const double sync_interval = 10e-3;
     static double next_sync_timestamp = sync_interval * m_simulation_speed;
-    if (m_time > next_sync_timestamp) {
+    if (m_total_time > next_sync_timestamp) {
         next_sync_timestamp += sync_interval * m_simulation_speed;
         // Limit sync interval to 1 second in case simulation speed is set very high
-        next_sync_timestamp = std::min(m_time + 1, next_sync_timestamp);
+        next_sync_timestamp = std::min(m_total_time + 1, next_sync_timestamp);
         auto now = std::chrono::system_clock::now();
-        static auto last_timestamp = std::chrono::system_clock::now();
-        auto real_elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_timestamp).count();
+        static auto last_real_timestamp = std::chrono::system_clock::now();
+        auto real_elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_real_timestamp).count();
         std::this_thread::sleep_for(std::chrono::milliseconds(int(sync_interval * 1000) - real_elapsed_time));
-        last_timestamp = std::chrono::system_clock::now();
+        last_real_timestamp = std::chrono::system_clock::now();
     }
 }
 
