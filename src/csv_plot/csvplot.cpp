@@ -21,11 +21,8 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
-void updateSavedSettings(GLFWwindow& window);
-void loadPreviousSessionSettings(GLFWwindow& window);
-void showScalarPlot(std::vector<FileCsvData>& files);
-std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int expected_line_cnt = -1);
-std::optional<FileCsvData> loadCsv();
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int expected_line_cnt = -1);
+std::optional<CsvFileData> loadCsv();
 
 void exit(std::string const& err) {
     std::cerr << err;
@@ -36,9 +33,9 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-CsvPlot::CsvPlot(std::vector<std::string> files) {
+CsvPlotter::CsvPlotter(std::vector<std::string> files) {
     for (std::string file : files) {
-        std::optional<FileCsvData> data = parseCsvData(file);
+        std::optional<CsvFileData> data = parseCsvData(file);
         if (data) {
             m_csv_data.push_back(*data);
         }
@@ -53,12 +50,12 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "CSV Plotter", NULL, NULL);
-    if (window == NULL)
+    m_window = glfwCreateWindow(1280, 720, "CSV Plotter", NULL, NULL);
+    if (m_window == NULL)
         std::abort();
-    glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1);
-    glfwSetWindowPos(window, 0, 0);
+    glfwSetWindowPos(m_window, 0, 0);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -86,17 +83,17 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
     ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
 
     // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     if (std::filesystem::exists("../Cousine-Regular.ttf")) {
         io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
     }
     setTheme();
-    loadPreviousSessionSettings(*window);
+    loadPreviousSessionSettings();
 
     //---------- Actual update loop ----------
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -106,13 +103,14 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
         ImPlot::ShowDemoWindow();
 
         //---------- Main windows ----------
-        showScalarPlot(m_csv_data);
-        updateSavedSettings(*window);
+        showSignalWindow();
+        showPlots();
+        updateSavedSettings();
 
         //---------- Rendering ----------
         ImGui::Render();
         int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glfwGetFramebufferSize(m_window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -127,7 +125,7 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
         }
-        glfwSwapBuffers(window);
+        glfwSwapBuffers(m_window);
     }
 
     // Cleanup
@@ -136,11 +134,11 @@ CsvPlot::CsvPlot(std::vector<std::string> files) {
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    glfwDestroyWindow(window);
+    glfwDestroyWindow(m_window);
     glfwTerminate();
 }
 
-void loadPreviousSessionSettings(GLFWwindow& window) {
+void CsvPlotter::loadPreviousSessionSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
     ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
 
@@ -150,8 +148,9 @@ void loadPreviousSessionSettings(GLFWwindow& window) {
             auto settings = nlohmann::json::parse(f);
             int xpos = std::max(0, int(settings["window"]["xpos"]));
             int ypos = std::max(0, int(settings["window"]["ypos"]));
-            glfwSetWindowPos(&window, xpos, ypos);
-            glfwSetWindowSize(&window, settings["window"]["width"], settings["window"]["height"]);
+            glfwSetWindowPos(m_window, xpos, ypos);
+            glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
+            m_plot_cnt = int(settings["window"]["plot_cnt"]);
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
@@ -159,7 +158,7 @@ void loadPreviousSessionSettings(GLFWwindow& window) {
     }
 }
 
-void updateSavedSettings(GLFWwindow& window) {
+void CsvPlotter::updateSavedSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
 
     size_t ini_settings_size = 0;
@@ -176,13 +175,14 @@ void updateSavedSettings(GLFWwindow& window) {
 
     nlohmann::json settings;
     int width, height;
-    glfwGetWindowSize(&window, &width, &height);
+    glfwGetWindowSize(m_window, &width, &height);
     int xpos, ypos;
-    glfwGetWindowPos(&window, &xpos, &ypos);
+    glfwGetWindowPos(m_window, &xpos, &ypos);
     settings["window"]["width"] = width;
     settings["window"]["height"] = height;
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
+    settings["window"]["plot_cnt"] = m_plot_cnt;
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
@@ -278,7 +278,7 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int expected_line_cnt) {
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int expected_line_cnt) {
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
@@ -305,6 +305,7 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
     }
 
     std::vector<CsvSignal> csv_signals;
+    csv_signals.reserve(signal_names.size());
     for (std::string signal_name : signal_names) {
         csv_signals.push_back(CsvSignal{
             .name = signal_name});
@@ -317,56 +318,63 @@ std::optional<FileCsvData> parseCsvData(std::string const& csv_filename, int exp
         }
     }
 
-    return FileCsvData{
+    return CsvFileData{
         .name = std::filesystem::relative(csv_filename).string(),
         .displayed_name = std::filesystem::relative(csv_filename).string(),
         .signals = csv_signals,
         .write_time = std::filesystem::last_write_time(csv_filename)};
 }
 
-void showScalarPlot(std::vector<FileCsvData>& files) {
-    ImGui::Begin("Plot##ScalarCsv");
-
-    static bool first_signal_as_x = true;
+void CsvPlotter::showSignalWindow() {
+    ImGui::Begin("Signals");
 
     ImGui::BeginChild("Signal selection", ImVec2(400, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
-        std::optional<FileCsvData> csv_data = loadCsv();
+        std::optional<CsvFileData> csv_data = loadCsv();
         if (csv_data) {
-            files.push_back(*csv_data);
+            m_csv_data.push_back(*csv_data);
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
-        for (FileCsvData& file : files) {
+        for (CsvFileData& file : m_csv_data) {
             for (CsvSignal& signal : file.signals) {
-                signal.visible = false;
+                signal.plot_idx = NOT_VISIBLE;
             }
         }
     }
+    if (ImGui::Button("Add plot")) {
+        m_plot_cnt++;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Remove plot")) {
+        m_plot_cnt--;
+        m_plot_cnt = std::max(m_plot_cnt, 1);
+    }
 
-    static size_t longest_name_length = 0;
-    if (ImGui::Selectable("Use first signal as x-axis", &first_signal_as_x)) {
+    if (ImGui::Selectable("Use first signal as x-axis", &m_first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
-    for (FileCsvData& file : files) {
+    for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten
         if (std::filesystem::last_write_time(file.name) != file.write_time
             && file.write_time != std::filesystem::file_time_type()) {
             int expected_line_cnt = int(file.signals[0].samples.size()) + 1;
-            std::optional<FileCsvData> csv_data = parseCsvData(file.name, expected_line_cnt);
+            std::optional<CsvFileData> csv_data = parseCsvData(file.name, expected_line_cnt);
             if (csv_data) {
                 if (csv_data->signals.size() == file.signals.size()) {
                     for (int i = 0; i < file.signals.size(); ++i) {
-                        csv_data->signals[i].visible = file.signals[i].visible;
-                        file.signals[i].visible = false;
+                        csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
+                        csv_data->signals[i].color = file.signals[i].color;
+                        file.signals[i].plot_idx = NOT_VISIBLE;
+                        file.signals[i].color = NO_COLOR;
                     }
                 }
                 file.write_time = std::filesystem::file_time_type();
                 static int run_number = 0;
                 run_number++;
                 file.displayed_name += " " + std::to_string(run_number);
-                files.push_back(*csv_data);
+                m_csv_data.push_back(*csv_data);
                 break;
             }
         }
@@ -391,49 +399,92 @@ void showScalarPlot(std::vector<FileCsvData>& files) {
 
         if (opened) {
             for (CsvSignal& signal : file.signals) {
-                if (ImGui::Selectable(signal.name.c_str(), &signal.visible)) {
-                    longest_name_length = std::max(longest_name_length, signal.name.size());
-                    ImPlot::SetNextAxesToFit();
+                bool selected = signal.plot_idx != NOT_VISIBLE;
+                if (ImGui::Selectable(signal.name.c_str(), &selected)) {
+                    signal.plot_idx = NOT_VISIBLE;
+                    
+                }
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    CsvSignal* p = &signal;
+                    ImGui::SetDragDropPayload("CSV", &p, sizeof(CsvSignal*));
+                    ImGui::Text("Drag to plot");
+                    ImGui::EndDragDropSource();
                 }
             }
             ImGui::TreePop();
         }
     }
     ImGui::EndChild();
-
-    ImGui::SameLine();
-    ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
-    if (ImPlot::BeginPlot("##DND1", ImVec2(-1, -1))) {
-        ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
-
-        for (FileCsvData& file : files) {
-            for (CsvSignal& signal : file.signals) {
-                if (!signal.visible) {
-                    continue;
-                }
-
-                double const* x_data;
-                if (first_signal_as_x) {
-                    x_data = file.signals[0].samples.data();
-                } else {
-                    x_data = ASCENDING_NUMBERS.data();
-                }
-                std::stringstream ss;
-                ss << std::left << std::setw(longest_name_length) << signal.name << " | " << file.displayed_name;
-                ImPlot::PlotLine(ss.str().c_str(),
-                                 x_data,
-                                 signal.samples.data(),
-                                 int(signal.samples.size()),
-                                 ImPlotLineFlags_None);
-            }
-        }
-        ImPlot::EndPlot();
-    }
-    ImPlot::PopStyleVar();
     ImGui::End();
 }
 
-std::optional<FileCsvData> loadCsv() {
+void CsvPlotter::showPlots() {
+    for (int plot_idx = 0; plot_idx < m_plot_cnt; ++plot_idx) {
+        ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
+        if (plot_idx == m_fit_plot_idx) {
+            ImPlot::SetNextAxesToFit();
+            m_fit_plot_idx = -1;
+        }
+
+        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
+        if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
+            ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
+            ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis_min, &m_x_axis_max);
+            ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
+                    CsvSignal* sig = *(CsvSignal**)payload->Data;
+                    sig->plot_idx = plot_idx;
+                    m_fit_plot_idx = plot_idx;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            size_t longest_name_length = 1;
+            for (CsvFileData& file : m_csv_data) {
+                for (CsvSignal& signal : file.signals) {
+                    if (signal.plot_idx == plot_idx) {
+                        longest_name_length = std::max(longest_name_length, signal.name.size());
+                    }
+                }
+            }
+
+            for (CsvFileData& file : m_csv_data) {
+                for (CsvSignal& signal : file.signals) {
+                    if (signal.plot_idx != plot_idx) {
+                        continue;
+                    }
+
+                    double const* x_data;
+                    if (m_first_signal_as_x) {
+                        x_data = file.signals[0].samples.data();
+                    } else {
+                        x_data = ASCENDING_NUMBERS.data();
+                    }
+                    std::stringstream ss;
+                    ss << std::left << std::setw(longest_name_length) << signal.name << " | " << file.displayed_name;
+                    // Store color so that it does not change if legend length changes
+                    if (signal.color.x == -1) {
+                        signal.color = ImPlot::NextColormapColor();
+                    }
+                    ImPlot::PushStyleColor(ImPlotCol_Line, signal.color);
+                    ImPlot::PlotLine(ss.str().c_str(),
+                                     x_data,
+                                     signal.samples.data(),
+                                     int(signal.samples.size()),
+                                     ImPlotLineFlags_None);
+                    ImPlot::PopStyleColor();
+                }
+            }
+            ImPlot::EndPlot();
+        }
+        ImPlot::PopStyleVar();
+        ImGui::End();
+    }
+}
+
+std::optional<CsvFileData> loadCsv() {
     nfdchar_t* out_path = NULL;
     auto cwd = std::filesystem::current_path();
     nfdresult_t result = NFD_OpenDialog("csv", cwd.string().c_str(), &out_path);

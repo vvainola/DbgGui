@@ -91,7 +91,7 @@ void DbgGui::updateLoop() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     // Create window with graphics context
-    m_window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    m_window = glfwCreateWindow(1280, 720, "DbgGui", NULL, NULL);
     if (m_window == NULL)
         std::abort();
     glfwMakeContextCurrent(m_window);

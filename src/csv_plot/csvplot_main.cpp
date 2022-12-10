@@ -8,5 +8,5 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         files.push_back(argv[i]);
     }
-    CsvPlot plotter(files);
+    CsvPlotter plotter(files);
 }
