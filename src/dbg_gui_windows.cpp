@@ -90,7 +90,7 @@ void DbgGui::showConfigurationWindow() {
         return;
     }
 
-    ImGui::Text("Time %.3f s", m_timestamp);
+    ImGui::Text("Time %.3f s", m_time);
     ImGui::SameLine();
     const char* start_stop_text = m_paused ? "Start" : "Pause";
     if (ImGui::Button(start_stop_text)) {
@@ -103,6 +103,14 @@ void DbgGui::showConfigurationWindow() {
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
     } 
+
+    if (ImGui::Button("Save state")) {
+        m_dbghelp_symbols.saveState();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load state")) {
+        m_dbghelp_symbols.loadState();
+    }
 
     if (ImGui::BeginPopup("##Add")) {
         // Always center this window when appearing

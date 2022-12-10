@@ -83,7 +83,7 @@ void DbgGui::showScalarPlots() {
             ImPlot::SetupAxisLinks(ImAxis_X1, &scalar_plot.x_axis_min, &scalar_plot.x_axis_max);
             // Allow adjusting settings while paused
             if (!m_paused) {
-                ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - scalar_plot.x_range, m_timestamp, ImGuiCond_Always);
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_time - scalar_plot.x_range, m_time, ImGuiCond_Always);
                 x_flags |= ImPlotAxisFlags_NoTickLabels;
             } else if (time_range_changed) {
                 double mid = 0.5 * (scalar_plot.x_axis_max + scalar_plot.x_axis_min);
@@ -222,7 +222,7 @@ void DbgGui::showVectorPlots() {
             if (!m_paused) {
                 time_offset = 0;
             }
-            double last_sample_time = m_timestamp - time_offset;
+            double last_sample_time = m_time - time_offset;
 
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;

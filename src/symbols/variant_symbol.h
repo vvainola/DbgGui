@@ -33,7 +33,9 @@ class VariantSymbol {
 
     /// <summary>Return the pointed symbol or nullptr if the symbol is not found. Only valid for "Pointer" type symbols.</summary>
     VariantSymbol* getPointedSymbol() const;
+    MemoryAddress getPointedAddress() const;
     void setPointedSymbol(VariantSymbol* symbol);
+    void setPointedAddress(MemoryAddress address);
 
     void write(double value);
     double read() const;
@@ -41,8 +43,6 @@ class VariantSymbol {
     std::string valueAsStr() const;
 
   private:
-    MemoryAddress pointedAddress() const;
-
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;
     std::string m_name;

@@ -151,7 +151,8 @@ class DbgGui {
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
 
-    double m_timestamp = 0;
+    double m_time = 0;
+    double m_last_timestamp = 0;
     double m_last_sleep_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;

@@ -12,13 +12,13 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <format>
 
 bool startsWith(std::string const& s, std::string const& w) {
     return s.rfind(w, 0) == 0;
 }
 
-BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
-    // Skip non-userspace symbols
+BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) { 
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagData)
         || startsWith(pSymInfo->Name, "_")
@@ -148,4 +148,46 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingRootSymbols(std::string 
         }
     }
     return matching_symbols;
+}
+
+void DbgHelpSymbols::saveState() {
+    //std::ofstream f("temp.txt");
+    m_saved_state.clear();
+    std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
+        VariantSymbol::Type type = sym->getType();
+        if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
+            //f << std::format("{} = {}\n", sym->getFullName(), sym->read());
+            m_saved_state.push_back({sym, sym->read()});
+        } else if (type == VariantSymbol::Type::Pointer) {
+            //f << std::format("{} = {}\n", sym->getFullName(), sym->getPointedAddress());
+            m_saved_state.push_back({sym, sym->getPointedAddress()});
+        }
+
+        for (auto const& child : sym->getChildren()) {
+            save_symbol_state(child.get());
+        }
+    };
+
+    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+        save_symbol_state(sym.get());
+    }
+}
+
+void DbgHelpSymbols::loadState() {
+    for (SavedSymbol& saved_symbol : m_saved_state) {
+        std::visit(
+            [=](auto&& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, MemoryAddress>) {
+                    if (saved_symbol.symbol->getPointedAddress() != value) {
+                        saved_symbol.symbol->setPointedAddress(value);
+                    }
+                } else {
+                    if (saved_symbol.symbol->read() != value) {
+                        saved_symbol.symbol->write(value);
+                    }
+                }
+            },
+            saved_symbol.value);
+    }
 }

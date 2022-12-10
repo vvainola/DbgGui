@@ -110,8 +110,8 @@ union BitField2 {
         uint16_t b0 : 1;
         uint16_t b1 : 1;
         uint16_t b2 : 3;
-        uint16_t b5 : 4;
-        uint16_t b9 : 1;
+        uint16_t b5 : 3;
+        uint16_t b8 : 2;
         uint16_t b10 : 1;
         uint16_t b11 : 2;
         uint16_t b13 : 1;
@@ -134,6 +134,7 @@ Vector_ABC xy_to_abc(XY in) {
 } // namespace g
 
 
+double t = 0;
 int main(int, char**) {
     static float sfl;
     DbgGuiWrapper gui;
@@ -148,7 +149,6 @@ int main(int, char**) {
     gui.addVector(&g::xy.x, &g::xy.y, "group 3", "xy1");
     gui.startUpdateLoop();
 
-    double t = 0;
     while (!gui.isClosed()) {
         gui.sample(t);
         t += 10e-6;

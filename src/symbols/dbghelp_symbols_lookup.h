@@ -20,6 +20,15 @@ class DbgHelpSymbols {
     /// <returns>Symbol if found, nullptr if not found</returns>
     VariantSymbol* getSymbol(std::string const& name) const;
 
+    void saveState();
+    void loadState();
+
   private:
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
+
+    struct SavedSymbol {
+        VariantSymbol* symbol;
+        std::variant<double, MemoryAddress> value;
+    };
+    std::vector<SavedSymbol> m_saved_state;
 };
