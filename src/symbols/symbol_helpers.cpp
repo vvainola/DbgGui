@@ -128,7 +128,6 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     }
 }
 
-// Copy the children from another symbol but adjust the addresses to match the new symbol
 void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     parent.children.reserve(from.children.size());
     for (size_t i = 0; i < from.children.size(); ++i) {
