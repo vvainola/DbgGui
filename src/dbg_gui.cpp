@@ -265,13 +265,18 @@ void DbgGui::loadPreviousSessionSettings() {
                 SpectrumPlot& plot = m_spectrum_plots.emplace_back();
                 plot.name = spec_plot_data["name"];
                 plot.time_range = spec_plot_data["time_range"];
+                plot.window = spec_plot_data["window"];
+                plot.x_axis_min = spec_plot_data["x_axis_min"];
+                plot.x_axis_max = spec_plot_data["x_axis_max"];
+                plot.y_axis_min = spec_plot_data["y_axis_min"];
+                plot.y_axis_max = spec_plot_data["y_axis_max"];
                 if (spec_plot_data.contains("id"))
                 {
                     size_t id = spec_plot_data["id"];
                     if (m_scalars.contains(id)) {
-                        plot.scalar = m_scalars[id].get();
+                        plot.addSignalToPlot(m_scalars[id].get());
                     } else if (m_vectors.contains(id)) {
-                        plot.vector = m_vectors[id].get();
+                        plot.addSignalToPlot(m_vectors[id].get());
                     }
                 }
             }
@@ -353,6 +358,11 @@ void DbgGui::updateSavedSettings() {
         }
         m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
+        m_settings["spec_plots"][spec_plot.name]["window"] = spec_plot.window;
+        m_settings["spec_plots"][spec_plot.name]["x_axis_min"] = spec_plot.x_axis_min;
+        m_settings["spec_plots"][spec_plot.name]["x_axis_max"] = spec_plot.x_axis_max;
+        m_settings["spec_plots"][spec_plot.name]["y_axis_min"] = spec_plot.y_axis_min;
+        m_settings["spec_plots"][spec_plot.name]["y_axis_max"] = spec_plot.y_axis_max;
         if (spec_plot.scalar) {
             m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
         } else if (spec_plot.vector) {

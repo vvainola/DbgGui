@@ -115,9 +115,37 @@ struct SpectrumPlot {
     Vector2D* vector;
     double time_range = 1;
     bool open = true;
-    bool single_sided = true;
-    std::vector<std::complex<double>> spectrum;
-    std::future<std::vector<std::complex<double>>> spectrum_calculation;
+    double y_axis_min = -0.1;
+    double y_axis_max = 1.1;
+    double x_axis_min = -1000;
+    double x_axis_max = 1000;
+
+    struct Spectrum {
+        std::vector<double> freq;
+        std::vector<double> mag;
+    };
+    Spectrum spectrum;
+    std::future<Spectrum> spectrum_calculation;
+
+    enum Window {
+        None,
+        Hanning,
+        FlatTop
+    };
+    Window window;
+
+    void addSignalToPlot(Vector2D* new_signal) {
+        new_signal->x->startBuffering();
+        new_signal->y->startBuffering();
+        vector = new_signal;
+        scalar = nullptr;
+    }
+
+    void addSignalToPlot(Scalar* new_signal) {
+        new_signal->startBuffering();
+        scalar = new_signal;
+        vector = nullptr;
+    }
 };
 
 class DbgGui {

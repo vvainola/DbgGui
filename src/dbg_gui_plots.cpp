@@ -18,7 +18,10 @@
 constexpr double PI = 3.1415926535897;
 
 void savePlotAsCsv(ScalarPlot const& plot);
-std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<double>> samples);
+SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
+                                         double sampling_time,
+                                         SpectrumPlot::Window window,
+                                         bool one_sided);
 
 constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
     std::array<XY<double>, 1000> points;
@@ -370,78 +373,45 @@ void DbgGui::showSpectrumPlots() {
         ImGui::SliderScalar("Time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms");
         plot.time_range = time_range_ms * 1e-3;
 
-        std::vector<double> idx;
-        std::vector<double> amplitudes;
-        double abs_max = 0;
-        double amplitude_inv = 1.0 / plot.spectrum.size();
-        for (std::complex<double> x : plot.spectrum) {
-            abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
-        }
-        int mid = int(plot.spectrum.size() / 2);
-        double resolution = 1.0 / (m_sampling_time * plot.spectrum.size());
-        double mag_coeff = plot.scalar ? 2 : 1;
-        if (plot.vector) {
-            // Negative side
-            for (int i = 0; i < mid; ++i) {
-                double mag = mag_coeff * std::abs(plot.spectrum[mid + i]) * amplitude_inv;
-                if (mag > abs_max * 2e-3) {
-                    idx.push_back((-mid + i) * resolution);
-                    amplitudes.push_back(mag);
-                }
-            }
-        }
-        // DC
-        if (plot.spectrum.size() > 0) {
-            idx.push_back(0);
-            amplitudes.push_back(std::abs(plot.spectrum[0]) * amplitude_inv);
-        }
-        // Positive side
-        for (int i = 1; i < mid; ++i) {
-            double mag = mag_coeff * std::abs(plot.spectrum[i]) * amplitude_inv;
-            if (mag > abs_max * 2e-3) {
-                idx.push_back(i * resolution);
-                amplitudes.push_back(mag);
-            }
-        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(80);
+        ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hanning\0Flat top\0\0");
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
+            // Connect link values
+            ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis_min, &plot.y_axis_max);
+            ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis_min, &plot.x_axis_max);
+
             std::string text = "Drag signal to calculate spectrum";
             if (plot.vector) {
                 text = plot.vector->name_and_group;
             } else if (plot.scalar) {
                 text = plot.scalar->name_and_group;
             }
-            ImPlot::PlotStems(text.c_str(), idx.data(), amplitudes.data(), int(amplitudes.size()));
+            ImPlot::PlotStems(text.c_str(), plot.spectrum.freq.data(), plot.spectrum.mag.data(), int(plot.spectrum.mag.size()));
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     size_t id = *(size_t*)payload->Data;
                     Scalar* scalar = m_scalars[id].get();
-                    scalar->startBuffering();
-                    plot.scalar = m_scalars[id].get();
-                    plot.vector = nullptr;
+                    plot.addSignalToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-                    plot.scalar = scalar;
-                    plot.vector = nullptr;
+                    plot.addSignalToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     size_t id = *(size_t*)payload->Data;
                     Vector2D* vector = m_vectors[id].get();
-                    vector->x->startBuffering();
-                    vector->y->startBuffering();
-                    plot.vector = m_vectors[id].get();
-                    plot.scalar = nullptr;
+                    plot.addSignalToPlot(vector);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
                     VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
                     Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
-                    plot.vector = vector;
-                    plot.scalar = nullptr;
+                    plot.addSignalToPlot(vector);
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -449,6 +419,7 @@ void DbgGui::showSpectrumPlots() {
         }
         ImPlot::PopStyleVar();
 
+        bool one_sided = plot.scalar != nullptr;
         if (plot.spectrum_calculation.valid() && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             plot.spectrum = plot.spectrum_calculation.get();
 
@@ -461,7 +432,12 @@ void DbgGui::showSpectrumPlots() {
             for (size_t i = 0; i < sample_cnt; ++i) {
                 samples.push_back({values_x.y_min[i], values_y.y_min[i]});
             }
-            plot.spectrum_calculation = std::async(calculateSpectrum, samples);
+            plot.spectrum_calculation = std::async(std::launch::async,
+                                                   calculateSpectrum,
+                                                   samples,
+                                                   m_sampling_time,
+                                                   plot.window,
+                                                   one_sided);
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
             ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
             size_t sample_cnt = values.y_min.size();
@@ -470,7 +446,12 @@ void DbgGui::showSpectrumPlots() {
             for (size_t i = 0; i < sample_cnt; ++i) {
                 samples.push_back({values.y_min[i], 0});
             }
-            plot.spectrum_calculation = std::async(calculateSpectrum, samples);
+            plot.spectrum_calculation = std::async(std::launch::async,
+                                                   calculateSpectrum,
+                                                   samples,
+                                                   m_sampling_time,
+                                                   plot.window,
+                                                   one_sided);
         }
 
         ImGui::End();
@@ -504,22 +485,29 @@ size_t reduceSampleCountForFFT(size_t n) {
     }
 }
 
-int window = 0;
-std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<double>> samples) {
+SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
+                                         double sampling_time,
+                                         SpectrumPlot::Window window,
+                                         bool one_sided) {
+    // Push one zero if odd number of samples so that 1 second sampling time does not get
+    // truncated down due to floating point inaccuracies when collecting samples (1 sample is missing)
+    if (samples.size() % 2 == 1) {
+        samples.push_back(0);
+    }
+
     size_t sample_cnt = reduceSampleCountForFFT(samples.size());
     samples.resize(sample_cnt, 0);
     kissfft<double> fft(sample_cnt, false);
-    std::vector<std::complex<double>> output(sample_cnt, 0);
+    std::vector<std::complex<double>> cplx_spec(sample_cnt, 0);
 
     // Apply hanning window
-
-    if (window == 1) {
+    if (window == SpectrumPlot::Window::Hanning) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double amplitude_correction = 2.0;
             samples[n] *= amplitude_correction * (0.5 - 0.5 * cos(2 * PI * n / sample_cnt));
         }
     }
-    if (window == 2) {
+    if (window == SpectrumPlot::Window::FlatTop) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double a0 = 0.21557895;
             double a1 = 0.41663158;
@@ -535,7 +523,40 @@ std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<dou
                            + a4 * cos(8 * PI * n / (sample_cnt - 1)));
         }
     }
+    fft.transform(samples.data(), cplx_spec.data());
 
-    fft.transform(samples.data(), output.data());
-    return output;
+    // Calculate magnitude spectrum with Hz on x-axis
+    SpectrumPlot::Spectrum spec;
+    double abs_max = 0;
+    double amplitude_inv = 1.0 / sample_cnt;
+    for (std::complex<double> x : cplx_spec) {
+        abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
+    }
+    int mid = int(cplx_spec.size() / 2);
+    double resolution = 1.0 / (sampling_time * cplx_spec.size());
+    double mag_coeff = one_sided ? 2 : 1;
+    if (!one_sided) {
+        // Negative side
+        for (int i = 0; i < mid; ++i) {
+            double mag = mag_coeff * std::abs(cplx_spec[mid + i]) * amplitude_inv;
+            if (mag > abs_max * 2e-3) {
+                spec.freq.push_back((-mid + i) * resolution);
+                spec.mag.push_back(mag);
+            }
+        }
+    }
+    // DC
+    spec.freq.push_back(0);
+    spec.mag.push_back(std::abs(cplx_spec[0]) * amplitude_inv);
+
+    // Positive side
+    for (int i = 1; i < mid; ++i) {
+        double mag = mag_coeff * std::abs(cplx_spec[i]) * amplitude_inv;
+        if (mag > abs_max * 2e-3) {
+            spec.freq.push_back(i * resolution);
+            spec.mag.push_back(mag);
+        }
+    }
+
+    return spec;
 }
