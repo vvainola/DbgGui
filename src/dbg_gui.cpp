@@ -236,6 +236,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.x_axis_min = 0;
                 plot.x_axis_max = scalar_plot_data["x_range"];
                 plot.autofit_y = scalar_plot_data["autofit_y"];
+                plot.show_tooltip = scalar_plot_data["show_tooltip"];
                 if (!plot.autofit_y) {
                     plot.y_axis_min = scalar_plot_data["y_min"];
                     plot.y_axis_max = scalar_plot_data["y_max"];
@@ -330,6 +331,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
             m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
             m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
+            m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
             // Update range only if autofit is not on because otherwise the file
             // could be continously rewritten when autofit range changes
             if (!scalar_plot.autofit_y) {

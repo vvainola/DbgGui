@@ -79,6 +79,8 @@ void DbgGui::showScalarPlots() {
         if (scalar_plot.autofit_y) {
             y_flags |= ImPlotAxisFlags_AutoFit;
         }
+        ImGui::SameLine();
+        ImGui::Checkbox("Show tooltip", &scalar_plot.show_tooltip);
 
         ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
@@ -105,7 +107,9 @@ void DbgGui::showScalarPlots() {
             ImPlot::SetupAxis(ImAxis_Y1, NULL, y_flags);
             scalar_plot.x_range = std::max(1e-6, scalar_plot.x_range);
 
+            size_t longest_name_length = 0;
             for (Scalar* signal : scalar_plot.signals) {
+                longest_name_length = std::max(longest_name_length, signal->name_and_group.size());
                 ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(scalar_plot.x_axis_min,
                                                                                            scalar_plot.x_axis_max,
                                                                                            1000,
@@ -167,6 +171,23 @@ void DbgGui::showScalarPlots() {
                 }
                 ImGui::EndDragDropTarget();
             }
+
+            if (scalar_plot.show_tooltip && ImPlot::IsPlotHovered()) {
+                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                ImGui::BeginTooltip();
+                for (Scalar* signal : scalar_plot.signals) {
+                    ScrollingBuffer::DecimatedValues value = signal->buffer->getValuesInRange(mouse.x,
+                                                                                               mouse.x,
+                                                                                               1,
+                                                                                               signal->scale,
+                                                                                               signal->offset);
+                    std::stringstream ss;
+                    ss << std::left << std::setw(longest_name_length) << signal->name_and_group << " : " << value.y_min[0];
+                    ImGui::Text(ss.str().c_str());
+                }
+                ImGui::EndTooltip();
+            }
+
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();

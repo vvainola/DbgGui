@@ -73,6 +73,7 @@ struct ScalarPlot {
     double x_axis_max;
     double x_range;
     bool autofit_y = true;
+    bool show_tooltip = false;
     bool open = true;
 
     void addSignalToPlot(Scalar* new_signal) {
