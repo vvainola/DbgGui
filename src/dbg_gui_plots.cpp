@@ -175,6 +175,47 @@ void DbgGui::showScalarPlots() {
     }
 }
 
+void savePlotAsCsv(ScalarPlot const& plot) {
+    nfdchar_t* out_path = NULL;
+    auto cwd = std::filesystem::current_path();
+    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+
+    if (result == NFD_OKAY) {
+        std::string out(out_path);
+        free(out_path);
+        if (!out.ends_with(".csv")) {
+            out.append(".csv");
+        }
+        std::ofstream csv(out);
+
+        csv << "time0,";
+        csv << "time,";
+        std::vector<ScrollingBuffer::DecimatedValues> values;
+        for (Scalar* signal : plot.signals) {
+            csv << signal->name_and_group << ",";
+            values.push_back(signal->buffer->getValuesInRange(plot.x_axis_min,
+                                                              plot.x_axis_max,
+                                                              INT_MAX,
+                                                              signal->scale,
+                                                              signal->offset));
+        }
+        csv << "\n";
+        if (values.size() == 0) {
+            csv.close();
+            return;
+        }
+        for (size_t i = 0; i < values[0].time.size(); ++i) {
+            csv << values[0].time[i] - values[0].time[0] << ",";
+            csv << values[0].time[i] << ",";
+            for (auto& value : values) {
+                csv << value.y_min[i] << ",";
+            }
+            csv << "\n";
+        }
+        csv.close();
+    }
+}
+
 void DbgGui::showVectorPlots() {
     for (VectorPlot& vector_plot : m_vector_plots) {
         if (!vector_plot.open) {
@@ -324,29 +365,54 @@ void DbgGui::showSpectrumPlots() {
         }
         double time_range_ms = plot.time_range * 1e3;
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
-        double min = 0;
+        double min = 1;
         double max = 10000;
         ImGui::SliderScalar("Time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms");
         plot.time_range = time_range_ms * 1e-3;
-        std::vector<double> idx(plot.spectrum.size(), 0);
-        std::vector<double> amplitudes(plot.spectrum.size(), 0);
+
+        std::vector<double> idx;
+        std::vector<double> amplitudes;
+        double abs_max = 0;
         double amplitude_inv = 1.0 / plot.spectrum.size();
-        int mid = plot.spectrum.size() / 2;
+        for (std::complex<double> x : plot.spectrum) {
+            abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
+        }
+        int mid = int(plot.spectrum.size() / 2);
         double resolution = 1.0 / (m_sampling_time * plot.spectrum.size());
-        // Negative side
-        for (int i = 0; i < mid; ++i) {
-            idx[i] = (-mid + i) * resolution;
-            amplitudes[i] = std::abs(plot.spectrum[mid + i]) * amplitude_inv;
+        double mag_coeff = plot.scalar ? 2 : 1;
+        if (plot.vector) {
+            // Negative side
+            for (int i = 0; i < mid; ++i) {
+                double mag = mag_coeff * std::abs(plot.spectrum[mid + i]) * amplitude_inv;
+                if (mag > abs_max * 2e-3) {
+                    idx.push_back((-mid + i) * resolution);
+                    amplitudes.push_back(mag);
+                }
+            }
+        }
+        // DC
+        if (plot.spectrum.size() > 0) {
+            idx.push_back(0);
+            amplitudes.push_back(std::abs(plot.spectrum[0]) * amplitude_inv);
         }
         // Positive side
-        for (int i = 0; i < mid; ++i) {
-            idx[mid + i] = i * resolution;
-            amplitudes[mid + i] = std::abs(plot.spectrum[i]) * amplitude_inv;
+        for (int i = 1; i < mid; ++i) {
+            double mag = mag_coeff * std::abs(plot.spectrum[i]) * amplitude_inv;
+            if (mag > abs_max * 2e-3) {
+                idx.push_back(i * resolution);
+                amplitudes.push_back(mag);
+            }
         }
 
-        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
+        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
-            ImPlot::PlotStems("Drag signal to calculate spectrum", idx.data(), amplitudes.data(), int(amplitudes.size()));
+            std::string text = "Drag signal to calculate spectrum";
+            if (plot.vector) {
+                text = plot.vector->name_and_group;
+            } else if (plot.scalar) {
+                text = plot.scalar->name_and_group;
+            }
+            ImPlot::PlotStems(text.c_str(), idx.data(), amplitudes.data(), int(amplitudes.size()));
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
@@ -411,55 +477,42 @@ void DbgGui::showSpectrumPlots() {
     }
 }
 
-void savePlotAsCsv(ScalarPlot const& plot) {
-    nfdchar_t* out_path = NULL;
-    auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+/// <summary>
+///  Reduce sample count to be a multiple of 2, 3 and 5 so that kf_bfly_generic does not need to be used since it is much slower
+/// </summary>
+/// <param name="n">Original sample count</param>
+/// <returns>Largest sample count that can be expressed as 2^a * 3^b * 5^c where a, b and c are integers</returns>
+size_t reduceSampleCountForFFT(size_t n) {
+    if (n == 0) {
+        n = 1;
+    }
 
-    if (result == NFD_OKAY) {
-        std::string out(out_path);
-        free(out_path);
-        if (!out.ends_with(".csv")) {
-            out.append(".csv");
-        }
-        std::ofstream csv(out);
-
-        csv << "time0,";
-        csv << "time,";
-        std::vector<ScrollingBuffer::DecimatedValues> values;
-        for (Scalar* signal : plot.signals) {
-            csv << signal->name_and_group << ",";
-            values.push_back(signal->buffer->getValuesInRange(plot.x_axis_min,
-                                                              plot.x_axis_max,
-                                                              INT_MAX,
-                                                              signal->scale,
-                                                              signal->offset));
-        }
-        csv << "\n";
-        if (values.size() == 0) {
-            csv.close();
-            return;
-        }
-        for (size_t i = 0; i < values[0].time.size(); ++i) {
-            csv << values[0].time[i] - values[0].time[0] << ",";
-            csv << values[0].time[i] << ",";
-            for (auto& value : values) {
-                csv << value.y_min[i] << ",";
-            }
-            csv << "\n";
-        }
-        csv.close();
+    size_t original_n = n;
+    while (n % 2 == 0) {
+        n = n / 2;
+    }
+    while (n % 3 == 0) {
+        n = n / 3;
+    }
+    while (n % 5 == 0) {
+        n = n / 5;
+    }
+    if (n == 1) {
+        return original_n;
+    } else {
+        return reduceSampleCountForFFT(original_n - 1);
     }
 }
 
 int window = 0;
 std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<double>> samples) {
-    size_t sample_cnt = pow(2, ceil(log2(samples.size())));
+    size_t sample_cnt = reduceSampleCountForFFT(samples.size());
     samples.resize(sample_cnt, 0);
     kissfft<double> fft(sample_cnt, false);
     std::vector<std::complex<double>> output(sample_cnt, 0);
 
     // Apply hanning window
+
     if (window == 1) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double amplitude_correction = 2.0;
@@ -474,11 +527,12 @@ std::vector<std::complex<double>> calculateSpectrum(std::vector<std::complex<dou
             double a3 = 0.083578947;
             double a4 = 0.006947368;
             double amplitude_correction = 4.6432;
-            samples[n] *= amplitude_correction * (a0
-                        - a1 * cos(2 * PI * n / (sample_cnt - 1))
-                        + a2 * cos(4 * PI * n / (sample_cnt - 1))
-                        - a3 * cos(6 * PI * n / (sample_cnt - 1))
-                        + a4 * cos(8 * PI * n / (sample_cnt - 1)));
+            samples[n] *= amplitude_correction
+                        * (a0
+                           - a1 * cos(2 * PI * n / (sample_cnt - 1))
+                           + a2 * cos(4 * PI * n / (sample_cnt - 1))
+                           - a3 * cos(6 * PI * n / (sample_cnt - 1))
+                           + a4 * cos(8 * PI * n / (sample_cnt - 1)));
         }
     }
 

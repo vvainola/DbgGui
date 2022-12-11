@@ -260,6 +260,21 @@ void DbgGui::loadPreviousSessionSettings() {
                     }
                 }
             }
+            
+            for (auto spec_plot_data : m_settings["spec_plots"]) {
+                SpectrumPlot& plot = m_spectrum_plots.emplace_back();
+                plot.name = spec_plot_data["name"];
+                plot.time_range = spec_plot_data["time_range"];
+                if (spec_plot_data.contains("id"))
+                {
+                    size_t id = spec_plot_data["id"];
+                    if (m_scalars.contains(id)) {
+                        plot.scalar = m_scalars[id].get();
+                    } else if (m_vectors.contains(id)) {
+                        plot.vector = m_vectors[id].get();
+                    }
+                }
+            }
 
             for (auto& scalar_data : m_settings["scalars"]) {
                 size_t id = scalar_data["id"];
@@ -328,6 +343,20 @@ void DbgGui::updateSavedSettings() {
             m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
             m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
             m_settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
+        }
+    }
+
+    for (SpectrumPlot& spec_plot : m_spectrum_plots) {
+        if (!spec_plot.open) {
+            m_settings["spec_plots"].erase(spec_plot.name);
+            continue;
+        }
+        m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
+        m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
+        if (spec_plot.scalar) {
+            m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
+        } else if (spec_plot.vector) {
+            m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.vector->id;
         }
     }
 
