@@ -45,6 +45,7 @@ void DbgGui::startUpdateLoop() {
 void DbgGui::sample() {
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     if (m_time_until_pause > 0) {

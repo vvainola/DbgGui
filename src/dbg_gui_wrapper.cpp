@@ -70,12 +70,12 @@ void DbgGui_startUpdateLoop(void) {
     gui->startUpdateLoop();
 }
 
-void DbgGui_sample() {
+void DbgGui_sample(void) {
     assert(gui);
     gui->sample();
 }
 
-int DbgGui_isClosed() {
+int DbgGui_isClosed(void) {
     if (gui) {
         return gui->isClosed();
     }
@@ -83,7 +83,7 @@ int DbgGui_isClosed() {
 
 #ifdef __cplusplus
 }
-void DbgGui_close() {
+void DbgGui_close(void) {
     gui = nullptr;
 }
 #endif

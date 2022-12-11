@@ -80,6 +80,7 @@ void DbgGui::showScalarPlots() {
             y_flags |= ImPlotAxisFlags_AutoFit;
         }
 
+        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Initial axes values from settings
@@ -169,6 +170,7 @@ void DbgGui::showScalarPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
+        ImPlot::PopStyleColor();
         ImGui::End();
 
         if (signal_to_remove) {
@@ -357,6 +359,32 @@ void DbgGui::showVectorPlots() {
     }
 }
 
+template <typename T>
+int closestSpectralBin(T vec_x, T vec_y, double x, double y) {
+    if (vec_x.size() == 0) {
+        return -1;
+    }
+    auto const it = std::lower_bound(vec_x.begin(), vec_x.end(), x);
+    if (it == vec_x.begin()) {
+        return 0;
+    } else if (it == vec_x.end()) {
+        return -1;
+    }
+
+    int idx = int(std::distance(vec_x.begin(), it));
+    bool y_close = std::abs(vec_y[idx] - y) / y < 0.1;
+    bool prev_y_close = std::abs(vec_y[idx - 1] - y) / y < 0.1;
+
+    double err_x = std::abs(vec_x[idx] - x);
+    double err_x_prev = std::abs(vec_x[idx - 1] - x);
+    if (err_x_prev < err_x && prev_y_close) {
+        return idx - 1;
+    } else if (y_close) {
+        return idx;
+    }
+    return -1;
+}
+
 void DbgGui::showSpectrumPlots() {
     for (SpectrumPlot& plot : m_spectrum_plots) {
         if (!plot.open) {
@@ -377,6 +405,7 @@ void DbgGui::showSpectrumPlots() {
         ImGui::PushItemWidth(80);
         ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
 
+        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Connect link values
@@ -415,9 +444,24 @@ void DbgGui::showSpectrumPlots() {
                 }
                 ImGui::EndDragDropTarget();
             }
+
+            if (ImPlot::IsPlotHovered()) {
+                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                int idx = closestSpectralBin(plot.spectrum.freq, plot.spectrum.mag, mouse.x, mouse.y);
+                if (idx != -1) {
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+                    ImPlot::PlotStems("", &plot.spectrum.freq[idx], &plot.spectrum.mag[idx], 1);
+                    ImGui::BeginTooltip();
+                    ImGui::Text(std::format("x : {:10f}", plot.spectrum.freq[idx]).c_str());
+                    ImGui::Text(std::format("y : {:10f}", plot.spectrum.mag[idx]).c_str());
+                    ImGui::EndTooltip();
+                }
+            }
+
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
+        ImPlot::PopStyleColor();
 
         bool one_sided = plot.scalar != nullptr;
         if (plot.spectrum_calculation.valid() && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -506,14 +550,12 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
             double amplitude_correction = 2.0;
             samples[n] *= amplitude_correction * (0.5 - 0.5 * cos(2 * PI * n / sample_cnt));
         }
-    }
-    else if (window == SpectrumPlot::Window::Hamming) {
+    } else if (window == SpectrumPlot::Window::Hamming) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double amplitude_correction = 1.8534;
             samples[n] *= amplitude_correction * (0.53836 - 0.46164 * cos(2 * PI * n / sample_cnt));
         }
-    }
-    else if (window == SpectrumPlot::Window::FlatTop) {
+    } else if (window == SpectrumPlot::Window::FlatTop) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double a0 = 0.21557895;
             double a1 = 0.41663158;

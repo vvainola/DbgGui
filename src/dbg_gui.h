@@ -111,8 +111,10 @@ struct VectorPlot {
 struct SpectrumPlot {
     std::string name;
 
+    // Source is either scalar or vector
     Scalar* scalar;
     Vector2D* vector;
+
     double time_range = 1;
     bool open = true;
     double y_axis_min = -0.1;
