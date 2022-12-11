@@ -80,6 +80,7 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
+    DbgGui_create(10e-6);
     DbgGui_addScalar_f64(&f64, "group 2", "g_f64");
     DbgGui_addScalar_f64(&f64, "group 2", "g_f64");
     DbgGui_addScalar_f32(&f32, "group 1", "g_f32_2");
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
 
     double t = 0;
     while (!DbgGui_isClosed()) {
-        DbgGui_sample(t);
+        DbgGui_sample();
         t += 10e-6;
         sine = sin(10. * 2 * PI * t);
     }
