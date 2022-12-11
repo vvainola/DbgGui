@@ -129,7 +129,8 @@ struct SpectrumPlot {
 
     enum Window {
         None,
-        Hanning,
+        Hann,
+        Hamming,
         FlatTop
     };
     Window window;

@@ -375,7 +375,7 @@ void DbgGui::showSpectrumPlots() {
 
         ImGui::SameLine();
         ImGui::PushItemWidth(80);
-        ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hanning\0Flat top\0\0");
+        ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
@@ -500,14 +500,20 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
     kissfft<double> fft(sample_cnt, false);
     std::vector<std::complex<double>> cplx_spec(sample_cnt, 0);
 
-    // Apply hanning window
-    if (window == SpectrumPlot::Window::Hanning) {
+    // Apply window
+    if (window == SpectrumPlot::Window::Hann) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double amplitude_correction = 2.0;
             samples[n] *= amplitude_correction * (0.5 - 0.5 * cos(2 * PI * n / sample_cnt));
         }
     }
-    if (window == SpectrumPlot::Window::FlatTop) {
+    else if (window == SpectrumPlot::Window::Hamming) {
+        for (size_t n = 0; n < sample_cnt; ++n) {
+            double amplitude_correction = 1.8534;
+            samples[n] *= amplitude_correction * (0.53836 - 0.46164 * cos(2 * PI * n / sample_cnt));
+        }
+    }
+    else if (window == SpectrumPlot::Window::FlatTop) {
         for (size_t n = 0; n < sample_cnt; ++n) {
             double a0 = 0.21557895;
             double a1 = 0.41663158;
