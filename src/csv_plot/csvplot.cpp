@@ -426,6 +426,7 @@ void CsvPlotter::showPlots() {
             m_fit_plot_idx = -1;
         }
 
+        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
@@ -480,6 +481,7 @@ void CsvPlotter::showPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
+        ImPlot::PopStyleColor();
         ImGui::End();
     }
 }
