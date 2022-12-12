@@ -7,6 +7,7 @@
 #include <map>
 #include <complex>
 #include <future>
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 struct GLFWwindow;
@@ -37,6 +38,7 @@ struct Scalar {
     std::string name_and_group;
     std::string alias;
     std::string alias_and_group;
+    ImVec4 color = {-1, -1, -1, -1};
     ValueSource src;
     std::unique_ptr<ScrollingBuffer> buffer;
     bool hide_from_scalars_window = false;
@@ -73,7 +75,7 @@ struct ScalarPlot {
     double x_axis_max;
     double x_range;
     bool autofit_y = true;
-    bool show_tooltip = false;
+    bool show_tooltip = true;
     bool open = true;
 
     void addSignalToPlot(Scalar* new_signal) {

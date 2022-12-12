@@ -132,6 +132,7 @@ void DbgGui::showScalarPlots() {
                                    values.y_max.data(),
                                    int(values.time.size()),
                                    ImPlotLineFlags_None);
+                signal->color = ImPlot::GetLastItemColor();
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
                     double current_value = getSourceValue(signal->src);
@@ -174,16 +175,21 @@ void DbgGui::showScalarPlots() {
 
             if (scalar_plot.show_tooltip && ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 255});
+                ImPlot::PlotInfLines("##", &mouse.x, 1);
+                ImPlot::PopStyleColor(1);
                 ImGui::BeginTooltip();
                 for (Scalar* signal : scalar_plot.signals) {
                     ScrollingBuffer::DecimatedValues value = signal->buffer->getValuesInRange(mouse.x,
-                                                                                               mouse.x,
-                                                                                               1,
-                                                                                               signal->scale,
-                                                                                               signal->offset);
+                                                                                              mouse.x,
+                                                                                              1,
+                                                                                              signal->scale,
+                                                                                              signal->offset);
                     std::stringstream ss;
                     ss << std::left << std::setw(longest_name_length) << signal->name_and_group << " : " << value.y_min[0];
+                    ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
                     ImGui::Text(ss.str().c_str());
+                    ImGui::PopStyleColor();
                 }
                 ImGui::EndTooltip();
             }

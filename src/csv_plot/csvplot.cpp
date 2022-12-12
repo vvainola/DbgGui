@@ -402,7 +402,6 @@ void CsvPlotter::showSignalWindow() {
                 bool selected = signal.plot_idx != NOT_VISIBLE;
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
-                    
                 }
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     CsvSignal* p = &signal;
@@ -443,39 +442,62 @@ void CsvPlotter::showPlots() {
             }
 
             size_t longest_name_length = 1;
+            struct FileAndSignal {
+                CsvFileData* file;
+                CsvSignal* signal;
+            };
+            std::vector<FileAndSignal> signals;
             for (CsvFileData& file : m_csv_data) {
                 for (CsvSignal& signal : file.signals) {
                     if (signal.plot_idx == plot_idx) {
                         longest_name_length = std::max(longest_name_length, signal.name.size());
+                        signals.push_back(FileAndSignal{
+                            .file = &file,
+                            .signal = &signal});
                     }
                 }
             }
 
-            for (CsvFileData& file : m_csv_data) {
-                for (CsvSignal& signal : file.signals) {
-                    if (signal.plot_idx != plot_idx) {
-                        continue;
-                    }
+            for (FileAndSignal& sig : signals) {
+                double const* x_data;
+                if (m_first_signal_as_x) {
+                    x_data = sig.file->signals[0].samples.data();
+                } else {
+                    x_data = ASCENDING_NUMBERS.data();
+                }
+                std::stringstream ss;
+                ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
+                // Store color so that it does not change if legend length changes
+                if (sig.signal->color.x == -1) {
+                    sig.signal->color = ImPlot::NextColormapColor();
+                }
+                ImPlot::PushStyleColor(ImPlotCol_Line, sig.signal->color);
+                ImPlot::PlotLine(ss.str().c_str(),
+                                 x_data,
+                                 sig.signal->samples.data(),
+                                 int(sig.signal->samples.size()),
+                                 ImPlotLineFlags_None);
+                ImPlot::PopStyleColor();
 
-                    double const* x_data;
-                    if (m_first_signal_as_x) {
-                        x_data = file.signals[0].samples.data();
-                    } else {
-                        x_data = ASCENDING_NUMBERS.data();
-                    }
-                    std::stringstream ss;
-                    ss << std::left << std::setw(longest_name_length) << signal.name << " | " << file.displayed_name;
-                    // Store color so that it does not change if legend length changes
-                    if (signal.color.x == -1) {
-                        signal.color = ImPlot::NextColormapColor();
-                    }
-                    ImPlot::PushStyleColor(ImPlotCol_Line, signal.color);
-                    ImPlot::PlotLine(ss.str().c_str(),
-                                     x_data,
-                                     signal.samples.data(),
-                                     int(signal.samples.size()),
-                                     ImPlotLineFlags_None);
+                if (ImPlot::IsPlotHovered()) {
+                    ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                    ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 255});
+                    ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
+                    ImGui::BeginTooltip();
+                    int idx = 0;
+                    for (int i = 0; i < int(sig.signal->samples.size()); ++i) {
+                        if (x_data[i] > mouse.x) {
+                            idx = i;
+                            break;
+                        }
+                    }
+                    ss.str("");
+                    ss << std::left << std::setw(longest_name_length) << sig.signal->name << " : " << sig.signal->samples[idx];
+                    ImGui::PushStyleColor(ImGuiCol_Text, sig.signal->color);
+                    ImGui::Text(ss.str().c_str());
+                    ImGui::PopStyleColor();
+                    ImGui::EndTooltip();
                 }
             }
             ImPlot::EndPlot();
