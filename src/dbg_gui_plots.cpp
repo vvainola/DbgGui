@@ -107,9 +107,7 @@ void DbgGui::showScalarPlots() {
             ImPlot::SetupAxis(ImAxis_Y1, NULL, y_flags);
             scalar_plot.x_range = std::max(1e-6, scalar_plot.x_range);
 
-            size_t longest_name_length = 0;
             for (Scalar* signal : scalar_plot.signals) {
-                longest_name_length = std::max(longest_name_length, signal->name_and_group.size());
                 ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(scalar_plot.x_axis_min,
                                                                                            scalar_plot.x_axis_max,
                                                                                            1000,
@@ -188,7 +186,7 @@ void DbgGui::showScalarPlots() {
                                                                                               signal->scale,
                                                                                               signal->offset);
                     std::stringstream ss;
-                    ss << std::left << std::setw(longest_name_length) << signal->name_and_group << " : " << value.y_min[0];
+                    ss << signal->alias_and_group << " : " << value.y_min[0];
                     ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();

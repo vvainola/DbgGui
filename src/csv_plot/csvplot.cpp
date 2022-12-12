@@ -479,21 +479,26 @@ void CsvPlotter::showPlots() {
                                  ImPlotLineFlags_None);
                 ImPlot::PopStyleColor();
 
-                if (ImPlot::IsPlotHovered()) {
+                if (ImPlot::IsPlotHovered() && sig.signal->samples.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                     ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 255});
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
                     int idx = 0;
-                    for (int i = 0; i < int(sig.signal->samples.size()); ++i) {
-                        if (x_data[i] > mouse.x) {
-                            idx = i;
-                            break;
+                    int last_idx = int(sig.signal->samples.size()) - 1;
+                    if (mouse.x > x_data[last_idx]) {
+                        idx = last_idx;
+                    } else {
+                        for (int i = 0; i <= last_idx; ++i) {
+                            if (x_data[i] > mouse.x) {
+                                idx = i;
+                                break;
+                            }
                         }
                     }
                     ss.str("");
-                    ss << std::left << std::setw(longest_name_length) << sig.signal->name << " : " << sig.signal->samples[idx];
+                    ss << sig.signal->name << " : " << sig.signal->samples[idx];
                     ImGui::PushStyleColor(ImGuiCol_Text, sig.signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
