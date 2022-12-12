@@ -132,6 +132,8 @@ void DbgGui::showScalarPlots() {
                                    values.y_max.data(),
                                    int(values.time.size()),
                                    ImPlotLineFlags_None);
+                // Same signal may be in multiple plots with different color so always
+                // update color for tooltip
                 signal->color = ImPlot::GetLastItemColor();
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
