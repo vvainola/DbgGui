@@ -481,7 +481,7 @@ void CsvPlotter::showPlots() {
 
                 if (ImPlot::IsPlotHovered() && sig.signal->samples.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                    ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 255});
+                    ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
