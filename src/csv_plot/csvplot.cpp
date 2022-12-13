@@ -151,6 +151,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
+            m_link_axis = settings["window"]["link_axis"];
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
@@ -183,6 +184,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
     settings["window"]["plot_cnt"] = m_plot_cnt;
+    settings["window"]["link_axis"] = m_link_axis;
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
@@ -352,9 +354,12 @@ void CsvPlotter::showSignalWindow() {
         m_plot_cnt = std::max(m_plot_cnt, 1);
     }
 
-    if (ImGui::Selectable("Use first signal as x-axis", &m_first_signal_as_x)) {
+    if (ImGui::Checkbox("Use first signal as x-axis", &m_first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Link x-axis", &m_link_axis);
+
     for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten
         if (std::filesystem::last_write_time(file.name) != file.write_time
@@ -429,8 +434,10 @@ void CsvPlotter::showPlots() {
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
-            ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis_min, &m_x_axis_max);
-            ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+            if (m_link_axis) {
+                ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis_min, &m_x_axis_max);
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+            }
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {

@@ -172,7 +172,7 @@ void DbgGui::showScalarPlots() {
                 }
                 ImGui::EndDragDropTarget();
             }
-             
+
             if (scalar_plot.show_tooltip && ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                 ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
