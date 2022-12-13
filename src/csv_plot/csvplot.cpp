@@ -265,18 +265,13 @@ void setTheme() {
     style.TabRounding = 0.0f;
 }
 
-template <typename Out>
-void split(const std::string& s, char delim, Out result) {
+std::vector<std::string> split(const std::string& s, char delim) {
+    std::vector<std::string> elems;
     std::istringstream iss(s);
     std::string item;
     while (std::getline(iss, item, delim)) {
-        *result++ = item;
+        elems.push_back(item);
     }
-}
-
-std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> elems;
-    split(s, delim, std::back_inserter(elems));
     return elems;
 }
 
@@ -296,12 +291,47 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
         return std::nullopt;
     }
 
-    if (lines[0].ends_with(',')) {
-        lines[0].pop_back();
+    // Try detect delimiter from the end of file as that part likely doesn't contain extra information
+    char delimiter = '\0';
+    size_t element_count = 0;
+    size_t last_line = 0;
+    for (size_t i = lines.size() - 1; i > 0; --i) {
+        if (!lines[i].empty()) {
+            last_line = i;
+            std::vector<std::string> values_comma = split(lines[i], ',');
+            std::vector<std::string> values_semicolon = split(lines[i], ';');
+            std::vector<std::string> values_tab = split(lines[i], '\t');
+            if (values_comma.size() > values_semicolon.size() && values_comma.size() > values_tab.size()) {
+                delimiter = ',';
+                element_count = values_comma.size();
+            }
+            else if (values_semicolon.size() > values_comma.size() && values_semicolon.size() > values_tab.size()) {
+                delimiter = ';';
+                element_count = values_semicolon.size();
+            }
+            else if (values_tab.size() > values_comma.size() && values_tab.size() > values_semicolon.size()) {
+                delimiter = '\t';
+                element_count = values_tab.size();
+            }
+            break;
+        }
     }
-    std::vector<std::string> signal_names = split(lines[0], ',');
+    if (delimiter == '\0') {
+        std::cerr << "Unable to detect delimiter from last line of the file " << csv_filename << std::endl;
+        exit(1);
+    }
 
-    size_t sample_cnt = lines.size() - 1;
+    // Find first line where header begins
+    size_t first_line = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (split(lines[i], delimiter).size() == element_count) 
+        {
+            first_line = i;
+            break;
+        }
+    }
+    std::vector<std::string> signal_names = split(lines[first_line], delimiter);
+    size_t sample_cnt = last_line - first_line;
     for (size_t i = ASCENDING_NUMBERS.size(); i < sample_cnt; ++i) {
         ASCENDING_NUMBERS.push_back(double(i));
     }
@@ -314,8 +344,8 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
         csv_signals.back().samples.reserve(sample_cnt);
     }
     for (size_t i = 0; i < sample_cnt; ++i) {
-        std::vector<std::string> values = split(lines[i + 1], ',');
-        for (size_t j = 0; j < signal_names.size(); ++j) {
+        std::vector<std::string> values = split(lines[first_line + i + 1], delimiter);
+        for (size_t j = 0; j < values.size(); ++j) {
             csv_signals[j].samples.push_back(std::stod(values[j]));
         }
     }
