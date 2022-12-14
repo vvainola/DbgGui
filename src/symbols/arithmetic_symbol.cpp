@@ -7,18 +7,16 @@ ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32
 
 ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
                                    MemoryAddress address,
-                                   uint32_t size,
+                                   uint32_t size_in_bytes,
                                    std::optional<uint32_t> bitfield_idx)
     : m_address(address),
       m_bitfield_idx(bitfield_idx) {
     if (m_bitfield_idx) {
-        m_bf_size = size;
-        m_size = (size - 1 + *m_bitfield_idx) / 8 + 1;
-    } else {
-        m_size = size;
+        m_bf_size = size_in_bytes;
+        size_in_bytes = (size_in_bytes - 1 + *m_bitfield_idx) / 8 + 1;
     }
-    assert(m_size > 0);
-    m_value = addressAsVariant(basic_type, address, m_size);
+    assert(size_in_bytes > 0);
+    m_value = addressAsVariant(basic_type, address, size_in_bytes);
 }
 
 void ArithmeticSymbol::write(double value) {
@@ -82,9 +80,9 @@ ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32
             return (uint8_t*)address;
         else if (size == 2)
             return (uint16_t*)address;
-        else if (size == 4)
+        else if (size <= 4)
             return (uint32_t*)address;
-        else if (size == 8)
+        else if (size <= 8)
             return (uint64_t*)address;
         break;
     case btFloat:

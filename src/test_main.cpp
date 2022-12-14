@@ -81,6 +81,15 @@ enum EnumWithNeg {
 };
 EnumWithNeg enum_with_neg = first;
 
+union BitField3 {
+    uint32_t u32;
+    struct {
+        uint32_t b0 : 7;
+        uint32_t b9 : 17;
+    } b;
+};
+BitField3 bitfield3;
+
 union BitField {
     uint16_t u16;
     struct {

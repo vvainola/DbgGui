@@ -37,7 +37,6 @@ class ArithmeticSymbol {
     double getAddressValue() const;
 
     MemoryAddress m_address;
-    uint32_t m_size;
     std::optional<uint32_t> m_bitfield_idx;
     uint32_t m_bf_size = 0;
     ValueSource m_value;
