@@ -52,13 +52,13 @@ void DbgGui::showScalarPlots() {
             ImGui::OpenPopup("##Menu");
         }
         if (ImGui::BeginPopup("##Menu")) {
+            if (ImGui::Button("Save as csv")) {
+                savePlotAsCsv(scalar_plot);
+                ImGui::CloseCurrentPopup();
+            }
             if (ImGui::Button("Remove all")) {
                 scalar_plot.signals.clear();
                 m_settings["scalar_plots"][scalar_plot.name]["signals"].clear();
-                ImGui::CloseCurrentPopup();
-            }
-            if (ImGui::Button("Save as csv")) {
-                savePlotAsCsv(scalar_plot);
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -342,9 +342,6 @@ void DbgGui::showVectorPlots() {
 
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->name_and_group.c_str())) {
-                    if (ImGui::Button("Remove")) {
-                        signal_to_remove = signal;
-                    };
 
                     if (signal == vector_plot.reference_frame_vector) {
                         if (ImGui::Button("Remove reference frame")) {
@@ -355,6 +352,9 @@ void DbgGui::showVectorPlots() {
                             vector_plot.reference_frame_vector = signal;
                         };
                     }
+                    if (ImGui::Button("Remove")) {
+                        signal_to_remove = signal;
+                    };
 
                     ImPlot::EndLegendPopup();
                 }
