@@ -35,6 +35,41 @@ static std::string getSourceValueStr(ValueSource src) {
         src);
 }
 
+int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
+    ImGuiKey* pressed_key = (ImGuiKey*)data->UserData;
+    if (*pressed_key == ImGuiKey_None) {
+        return 0;
+    }
+    // Minus is handled separately because its name is "Minus" instead of "-"
+    std::string key_name;
+    if (*pressed_key == ImGuiKey_Minus) {
+        key_name = "-";
+    } else {
+        key_name = ImGui::GetKeyName(*pressed_key);
+    }
+    // Clear text edit and set cursor after first character
+    strcpy_s(data->Buf, 20, key_name.c_str());
+    data->BufTextLen = 1;
+    data->BufDirty = 1;
+    data->CursorPos = 1;
+    data->SelectionStart = 1;
+    data->SelectionEnd = 1;
+    *pressed_key = ImGuiKey_None;
+    return 0;
+}
+
+std::optional<ImGuiKey> pressedNumber() {
+    for (ImGuiKey key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
+        if (ImGui::IsKeyPressed(key)) {
+            return key;
+        }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
+        return ImGuiKey_Minus;
+    }
+    return std::nullopt;
+}
+
 void addInputScalar(ValueSource const& signal_src, std::string const& label) {
     if (std::get_if<ReadWriteFnCustomStr>(&signal_src)) {
         ImGui::Text(getSourceValueStr(signal_src).c_str());
@@ -44,13 +79,24 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label) {
     ImGuiInputTextFlags edit_flags = ImGuiInputTextFlags_EnterReturnsTrue
                                    | ImGuiInputTextFlags_AutoSelectAll
                                    | ImGuiInputTextFlags_CharsScientific
-                                   | ImGuiInputTextFlags_CharsDecimal;
+                                   | ImGuiInputTextFlags_CharsDecimal
+                                   | ImGuiInputTextFlags_CallbackAlways;
     char value[20];
     strcpy_s(value, numberAsStr(getSourceValue(signal_src)).c_str());
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags)) {
+    static ImGuiKey pressed_number = ImGuiKey_None;
+    if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
         setSourceValue(signal_src, std::stod(value));
     };
+    // When number is pressed and item is not already edited, move keyboard focus, write the pressed number and set cursor
+    // after the number. This way input can be immediately edited by just typing numbers
+    std::optional<ImGuiKey> number_pressed = pressedNumber();
+    if (ImGui::IsItemFocused() && !ImGui::IsItemActive() && number_pressed) {
+        ImGui::SetKeyboardFocusHere(-1);
+        // The pressed number is global between all input fields so the value is set here for next frame and the cursor
+        // editing callback will reset it
+        pressed_number = *number_pressed;
+    }
 }
 
 void addScalarContextMenu(Scalar* scalar) {
@@ -99,10 +145,10 @@ void DbgGui::showConfigurationWindow() {
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue);
-    
+
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
-    } 
+    }
 
     if (ImGui::Button("Save state")) {
         m_dbghelp_symbols.saveState();
@@ -218,7 +264,7 @@ void DbgGui::showScalarWindow() {
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##" + scalar->name_and_group);
+                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group);
                 }
                 ImGui::TreePop();
             }
@@ -334,7 +380,7 @@ void DbgGui::showCustomWindow() {
 
             // Show value
             ImGui::TableNextColumn();
-            addInputScalar(scalar->src, "##" + scalar->name_and_group);
+            addInputScalar(scalar->src, "##custom_" + scalar->name_and_group);
         }
         ImGui::EndTable();
     }
@@ -471,7 +517,7 @@ void DbgGui::showSymbolsWindow() {
                     // Add value
                     ImGui::TableNextColumn();
                     if (arithmetic_or_enum) {
-                        addInputScalar(sym->getValueSource(), "##" + sym->getFullName());
+                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName());
                     } else {
                         ImGui::Text(sym->valueAsStr().c_str());
                     }
