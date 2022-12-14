@@ -385,7 +385,7 @@ void DbgGui::showCustomWindow() {
         ImGui::EndTable();
     }
 
-    ImGui::InvisibleButton("##canvas", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
+    ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
 
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
