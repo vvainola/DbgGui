@@ -180,6 +180,7 @@ class DbgGui {
     void showSpectrumPlots();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
+    void synchronizeSpeed();
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);

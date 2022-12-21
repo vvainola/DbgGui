@@ -42,6 +42,44 @@ void DbgGui::startUpdateLoop() {
     m_gui_thread = std::jthread(&DbgGui::updateLoop, std::ref(*this));
 }
 
+void DbgGui::synchronizeSpeed() {
+    using namespace std::chrono;
+    static double sync_interval = 30e-3;
+    static double next_sync_timestamp = sync_interval * m_simulation_speed;
+    static auto last_real_timestamp = std::chrono::system_clock::now();
+    static double last_timestamp = m_timestamp;
+    static std::future<void> tick;
+
+    if (m_timestamp > next_sync_timestamp) {
+        // Wait until next tick
+        if (tick.valid()) {
+            tick.wait();
+        }
+        tick = std::async(std::launch::async,
+                          []() {
+                              std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                          });
+
+        next_sync_timestamp = m_timestamp + sync_interval * m_simulation_speed;
+        // Limit sync interval to 1 second in case simulation speed is set very high
+        next_sync_timestamp = std::min(m_timestamp + 1, next_sync_timestamp);
+
+        auto now = std::chrono::system_clock::now();
+        auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
+        real_time_us = std::max(real_time_us, 1ll);
+        double real_time_s = real_time_us * 1e-6;
+        last_real_timestamp = now;
+
+        // Adjust the sync interval for more accurate synchronization
+        double simulation_speed = (m_timestamp - last_timestamp) / real_time_s;
+        double sync_interval_ki = 1e-2;
+        sync_interval += sync_interval_ki * (m_simulation_speed - simulation_speed);
+        sync_interval = std::clamp(sync_interval, 1e-3, 100e-3);
+
+        last_timestamp = m_timestamp;
+    }
+}
+
 void DbgGui::sample() {
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
@@ -69,18 +107,7 @@ void DbgGui::sample() {
         }
     }
 
-    const double sync_interval = 10e-3;
-    static double next_sync_timestamp = sync_interval * m_simulation_speed;
-    if (m_timestamp > next_sync_timestamp) {
-        next_sync_timestamp += sync_interval * m_simulation_speed;
-        // Limit sync interval to 1 second in case simulation speed is set very high
-        next_sync_timestamp = std::min(m_timestamp + 1, next_sync_timestamp);
-        auto now = std::chrono::system_clock::now();
-        static auto last_real_timestamp = std::chrono::system_clock::now();
-        auto real_elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_real_timestamp).count();
-        std::this_thread::sleep_for(std::chrono::milliseconds(int(sync_interval * 1000) - real_elapsed_time));
-        last_real_timestamp = std::chrono::system_clock::now();
-    }
+    synchronizeSpeed();
 }
 
 void DbgGui::updateLoop() {
@@ -217,7 +244,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
-                if (sym) {
+                if (sym && (sym->getType() == VariantSymbol::Type::Arithmetic || sym->getType() == VariantSymbol::Type::Enum)) {
                     addScalarSymbol(sym, symbol["group"]);
                 }
             }
@@ -262,7 +289,7 @@ void DbgGui::loadPreviousSessionSettings() {
                     }
                 }
             }
-            
+
             for (auto spec_plot_data : m_settings["spec_plots"]) {
                 SpectrumPlot& plot = m_spectrum_plots.emplace_back();
                 plot.name = spec_plot_data["name"];
@@ -272,8 +299,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.x_axis_max = spec_plot_data["x_axis_max"];
                 plot.y_axis_min = spec_plot_data["y_axis_min"];
                 plot.y_axis_max = spec_plot_data["y_axis_max"];
-                if (spec_plot_data.contains("id"))
-                {
+                if (spec_plot_data.contains("id")) {
                     size_t id = spec_plot_data["id"];
                     if (m_scalars.contains(id)) {
                         plot.addSignalToPlot(m_scalars[id].get());

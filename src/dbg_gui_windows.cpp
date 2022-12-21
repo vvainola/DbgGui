@@ -7,6 +7,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
+#include <format>
 
 template <typename T>
 std::string numberAsStr(T number) {
