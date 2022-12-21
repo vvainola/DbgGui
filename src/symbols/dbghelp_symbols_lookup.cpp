@@ -53,7 +53,9 @@ DbgHelpSymbols::DbgHelpSymbols() {
         _ASSERTE(!"Invalid symbols?");
     }
 
-    // Process symbol info
+    // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
+    // children can be copied from reference symbol if children have been added to that type of symbol already
+    // before. The tree structure for each type has to be then looked up only once.
     std::vector<std::unique_ptr<RawSymbol>> raw_symbols;
     raw_symbols.reserve(symbols.size());
     m_root_symbols.reserve(symbols.size());
