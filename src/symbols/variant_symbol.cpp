@@ -49,14 +49,16 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
     case SymTagArrayType: {
         m_type = Type::Array;
-        m_children.reserve(symbol->array_element_count);
-        RawSymbol* first_element = symbol->children[0].get();
-        MemoryAddress original_address = m_address;
-        for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
-            m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
-            m_address += first_element->info.Size;
+        if (symbol->array_element_count > 0) {
+            m_children.reserve(symbol->array_element_count);
+            RawSymbol* first_element = symbol->children[0].get();
+            MemoryAddress original_address = m_address;
+            for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
+                m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
+                m_address += first_element->info.Size;
+            }
+            m_address = original_address;
         }
-        m_address = original_address;
         break;
     }
     case SymTagUDT:
