@@ -437,6 +437,7 @@ void CsvPlotter::showSignalWindow() {
                 bool selected = signal.plot_idx != NOT_VISIBLE;
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
+                    signal.color = NO_COLOR;
                 }
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     CsvSignal* p = &signal;
