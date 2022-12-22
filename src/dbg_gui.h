@@ -204,7 +204,7 @@ class DbgGui {
 
     double m_sampling_time;
     double m_timestamp = 0;
-    double m_last_sleep_timestamp = 0;
+    double m_next_sync_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;

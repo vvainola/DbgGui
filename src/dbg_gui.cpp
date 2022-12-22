@@ -45,12 +45,11 @@ void DbgGui::startUpdateLoop() {
 void DbgGui::synchronizeSpeed() {
     using namespace std::chrono;
     static double sync_interval = 30e-3;
-    static double next_sync_timestamp = sync_interval * m_simulation_speed;
     static auto last_real_timestamp = std::chrono::system_clock::now();
     static double last_timestamp = m_timestamp;
     static std::future<void> tick;
 
-    if (m_timestamp > next_sync_timestamp) {
+    if (m_timestamp > m_next_sync_timestamp) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
@@ -60,9 +59,9 @@ void DbgGui::synchronizeSpeed() {
                               std::this_thread::sleep_for(std::chrono::milliseconds(30));
                           });
 
-        next_sync_timestamp = m_timestamp + sync_interval * m_simulation_speed;
+        m_next_sync_timestamp = m_timestamp + sync_interval * m_simulation_speed;
         // Limit sync interval to 1 second in case simulation speed is set very high
-        next_sync_timestamp = std::min(m_timestamp + 1, next_sync_timestamp);
+        m_next_sync_timestamp = std::min(m_timestamp + 1, m_next_sync_timestamp);
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
@@ -84,6 +83,10 @@ void DbgGui::sample() {
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Set sync time to 0 so that if speed is changed while paused, it will
+        // be effective immediately. Otherwise simulation could run for e.g. 10ms
+        // before new speed is taken into use
+        m_next_sync_timestamp = 0;
     }
 
     if (m_time_until_pause > 0) {
