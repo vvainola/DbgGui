@@ -1,4 +1,5 @@
 #include "dbg_gui_wrapper.h"
+#include "zero_crossing_freq_est.h"
 #include <thread>
 
 struct Vector_ABC {
@@ -143,7 +144,14 @@ Vector_ABC xy_to_abc(XY in) {
 } // namespace g
 
 
+double test_freq = 50;
+ZeroCrossingFreqEst freq_est{
+    .dead_time = 1e-3f,
+    .sampling_period = 500e-6f};
+
 double timestamp = 0;
+
+void t_500us();
 int main(int, char**) {
     static float sfl;
     DbgGuiWrapper gui(10e-6);
@@ -162,17 +170,28 @@ int main(int, char**) {
         gui.sample();
         timestamp += 10e-6;
         sfl = (float)timestamp;
-        g::sine = sin(10. * 2 * PI * timestamp);
-        g::abc.a = sin(10. * 2 * PI * timestamp);
-        g::abc.b = sin(10. * 2 * PI * timestamp - 2.0 * PI / 3.0);
-        g::abc.c = sin(10. * 2 * PI * timestamp - 4.0 * PI / 3.0);
-        g::abc2.a = sin(10. * 2 * PI * timestamp + g::abc2_angle);
-        g::abc2.b = sin(10. * 2 * PI * timestamp - 2.0 * PI / 3.0 + g::abc2_angle);
-        g::abc2.c = sin(10. * 2 * PI * timestamp - 4.0 * PI / 3.0 + g::abc2_angle);
+        g::sine = sin(test_freq * 2 * PI * timestamp);
+        g::abc.a = sin(test_freq * 2 * PI * timestamp);
+        g::abc.b = sin(test_freq * 2 * PI * timestamp - 2.0 * PI / 3.0);
+        g::abc.c = sin(test_freq * 2 * PI * timestamp - 4.0 * PI / 3.0);
+        g::abc2.a = sin(test_freq * 2 * PI * timestamp + g::abc2_angle);
+        g::abc2.b = sin(test_freq * 2 * PI * timestamp - 2.0 * PI / 3.0 + g::abc2_angle);
+        g::abc2.c = sin(test_freq * 2 * PI * timestamp - 4.0 * PI / 3.0 + g::abc2_angle);
         g::xy = g::abc_to_xy(g::abc);
         g::xy2 = g::abc_to_xy(g::abc2);
         g::booli = g::xy2.x > 0.5;
+        t_500us();
     }
 
     return 0;
+}
+
+void t_500us() {
+    static int n = 50;
+    if (n <= 0) {
+        n = 50;
+        
+        estimateFreq(&freq_est, (float)g::abc.a);
+    } 
+    n--;
 }
