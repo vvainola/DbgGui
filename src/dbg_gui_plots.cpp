@@ -66,10 +66,12 @@ void DbgGui::showScalarPlots() {
 
         // Time range slider
         ImGui::SameLine();
-        float time_range = static_cast<float>(scalar_plot.x_range * 1000);
+        float time_range = static_cast<float>((scalar_plot.x_axis_max - scalar_plot.x_axis_min) * 1000);
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
         bool time_range_changed = ImGui::SliderFloat("Time range", &time_range, 1, 1000, "%.1f ms");
-        scalar_plot.x_range = time_range * 1e-3f;
+        if (time_range_changed) {
+            scalar_plot.x_range = time_range * 1e-3f;
+        }
 
         // Auto fit button
         ImGui::SameLine();
@@ -100,8 +102,6 @@ void DbgGui::showScalarPlots() {
                                         mid - scalar_plot.x_range / 2.0,
                                         mid + scalar_plot.x_range / 2.0,
                                         ImGuiCond_Always);
-            } else {
-                scalar_plot.x_range = scalar_plot.x_axis_max - scalar_plot.x_axis_min;
             }
             ImPlot::SetupAxis(ImAxis_X1, NULL, x_flags);
             ImPlot::SetupAxis(ImAxis_Y1, NULL, y_flags);
