@@ -1,5 +1,6 @@
 #include "dbg_gui_wrapper.h"
 #include "zero_crossing_freq_est.h"
+#include "moving_average.h"
 #include <thread>
 
 struct Vector_ABC {
@@ -144,12 +145,14 @@ Vector_ABC xy_to_abc(XY in) {
 } // namespace g
 
 
-double test_freq = 50;
+double test_freq = 50.3;
 ZeroCrossingFreqEst freq_est{
     .dead_time = 1e-3f,
     .sampling_period = 500e-6f};
 
 double timestamp = 0;
+MovingAverage<2000> movavg;
+double theta;
 
 void t_500us();
 int main(int, char**) {
@@ -166,17 +169,21 @@ int main(int, char**) {
     gui.addVector(&g::xy.x, &g::xy.y, "group 3", "xy1");
     gui.startUpdateLoop();
 
+    movavg.init(0, 2000 / test_freq);
+
     while (!gui.isClosed()) {
         gui.sample();
         timestamp += 10e-6;
         sfl = (float)timestamp;
-        g::sine = sin(test_freq * 2 * PI * timestamp);
-        g::abc.a = sin(test_freq * 2 * PI * timestamp);
-        g::abc.b = sin(test_freq * 2 * PI * timestamp - 2.0 * PI / 3.0);
-        g::abc.c = sin(test_freq * 2 * PI * timestamp - 4.0 * PI / 3.0);
-        g::abc2.a = sin(test_freq * 2 * PI * timestamp + g::abc2_angle);
-        g::abc2.b = sin(test_freq * 2 * PI * timestamp - 2.0 * PI / 3.0 + g::abc2_angle);
-        g::abc2.c = sin(test_freq * 2 * PI * timestamp - 4.0 * PI / 3.0 + g::abc2_angle);
+        theta += 2 * PI * test_freq * 10e-6;
+        theta = fmod(theta, 2 * PI);
+        g::sine = sin(theta);
+        g::abc.a = sin(theta);
+        g::abc.b = sin(theta - 2.0 * PI / 3.0);
+        g::abc.c = sin(theta - 4.0 * PI / 3.0);
+        g::abc2.a = sin(theta + g::abc2_angle);
+        g::abc2.b = sin(theta - 2.0 * PI / 3.0 + g::abc2_angle);
+        g::abc2.c = sin(theta - 4.0 * PI / 3.0 + g::abc2_angle);
         g::xy = g::abc_to_xy(g::abc);
         g::xy2 = g::abc_to_xy(g::abc2);
         g::booli = g::xy2.x > 0.5;
@@ -192,6 +199,8 @@ void t_500us() {
         n = 50;
         
         estimateFreq(&freq_est, (float)g::abc.a);
+        movavg.step((float)(g::xy.x));
+        movavg.setLength(2000 / freq_est.out_estimated_freq);
     } 
     n--;
 }
