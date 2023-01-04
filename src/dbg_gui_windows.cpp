@@ -234,6 +234,15 @@ void DbgGui::showScalarWindow() {
 
         for (auto it = m_scalar_groups.begin(); it != m_scalar_groups.end(); it++) {
             std::vector<Scalar*> const& scalars = it->second;
+            // Do not show group if there are no visible items in it (it only contains scalars of vector signals)
+            bool show_group = false;
+            for (Scalar* scalar : scalars) {
+                show_group |= !scalar->hide_from_scalars_window;
+            }
+            if (!show_group) {
+                continue;
+            }
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             if (ImGui::TreeNode(it->first.c_str())) {
