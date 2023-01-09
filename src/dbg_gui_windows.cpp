@@ -166,17 +166,17 @@ void DbgGui::showConfigurationWindow() {
         if (ImGui::Button("Scalar plot")) {
             ImGui::OpenPopup("Add scalar plot");
         }
-        static char plot_name[256] = "";
+        static char window_or_plot_name[256] = "";
         if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             if (ImGui::InputText("Name",
-                                 plot_name,
-                                 IM_ARRAYSIZE(plot_name),
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_scalar_plots.push_back(ScalarPlot{.name = plot_name,
+                m_scalar_plots.push_back(ScalarPlot{.name = window_or_plot_name,
                                                     .y_axis_min = -1,
                                                     .y_axis_max = 1,
                                                     .x_range = 1});
-                strcpy_s(plot_name, "");
+                strcpy_s(window_or_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -187,11 +187,11 @@ void DbgGui::showConfigurationWindow() {
         }
         if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             if (ImGui::InputText("Vector plot name",
-                                 plot_name,
-                                 IM_ARRAYSIZE(plot_name),
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_vector_plots.push_back(VectorPlot{.name = plot_name});
-                strcpy_s(plot_name, "");
+                m_vector_plots.push_back(VectorPlot{.name = window_or_plot_name});
+                strcpy_s(window_or_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -202,11 +202,26 @@ void DbgGui::showConfigurationWindow() {
         }
         if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             if (ImGui::InputText("Spectrum plot name",
-                                 plot_name,
-                                 IM_ARRAYSIZE(plot_name),
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_spectrum_plots.push_back(SpectrumPlot{.name = plot_name});
-                strcpy_s(plot_name, "");
+                m_spectrum_plots.push_back(SpectrumPlot{.name = window_or_plot_name});
+                strcpy_s(window_or_plot_name, "");
+                ImGui::CloseCurrentPopup();
+            };
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::Button("Custom window")) {
+            ImGui::OpenPopup("Add custom window");
+        }
+        if (ImGui::BeginPopupModal("Add custom window", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::InputText("Custom window name",
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_custom_windows.push_back(CustomWindow{.name = window_or_plot_name});
+                strcpy_s(window_or_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -357,63 +372,73 @@ void DbgGui::showVectorWindow() {
 }
 
 void DbgGui::showCustomWindow() {
-    if (!ImGui::Begin("Custom")) {
+    for (CustomWindow& custom_window : m_custom_windows) {
+        if (!custom_window.open) {
+            continue;
+        }
+
+        if (!ImGui::Begin(custom_window.name.c_str(), &custom_window.open)) {
+            ImGui::End();
+            return;
+        }
+        Scalar* signal_to_remove = nullptr;
+
+        if (ImGui::BeginTable("custom_table",
+                              2,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable)) {
+            const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
+            for (Scalar* scalar : custom_window.scalars) {
+                ImGui::TableNextColumn();
+                // Show name. Text is used instead of selectable because the
+                // keyboard navigation in the table does not work properly
+                // and up/down changes columns
+                ImGui::Text(scalar->alias_and_group.c_str());
+                // Make text drag-and-droppable
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                    ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
+                    ImGui::Text("Drag to plot");
+                    ImGui::EndDragDropSource();
+                }
+                // Hide symbol on delete
+                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                    signal_to_remove = scalar;
+                }
+                addScalarContextMenu(scalar);
+
+                // Show value
+                ImGui::TableNextColumn();
+                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group);
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
+
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+                size_t id = *(size_t*)payload->Data;
+                Scalar* scalar = m_scalars[id].get();
+                custom_window.scalars.push_back(scalar);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
+                VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
+                Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+                custom_window.scalars.push_back(scalar);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (signal_to_remove) {
+            remove(custom_window.scalars, signal_to_remove);
+            size_t signals_removed = m_settings["custom_windows"][custom_window.name]["signals"].erase(signal_to_remove->group + " " + signal_to_remove->name);
+            assert(signals_removed > 0);
+        }
+
         ImGui::End();
-        return;
-    }
-    Scalar* signal_to_remove = nullptr;
-    if (ImGui::BeginTable("custom_table",
-                          2,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable)) {
-        const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
-        for (Scalar* scalar : m_custom_window_scalars) {
-            ImGui::TableNextColumn();
-            // Show name. Text is used instead of selectable because the
-            // keyboard navigation in the table does not work properly
-            // and up/down changes columns
-            ImGui::Text(scalar->alias_and_group.c_str());
-            // Make text drag-and-droppable
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
-                ImGui::Text("Drag to plot");
-                ImGui::EndDragDropSource();
-            }
-            // Hide symbol on delete
-            if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                signal_to_remove = scalar;
-                m_settings["custom_window_signals"].erase(scalar->name_and_group);
-            }
-            addScalarContextMenu(scalar);
-
-            // Show value
-            ImGui::TableNextColumn();
-            addInputScalar(scalar->src, "##custom_" + scalar->name_and_group);
-        }
-        ImGui::EndTable();
     }
 
-    ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
-
-    if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            size_t id = *(size_t*)payload->Data;
-            Scalar* scalar = m_scalars[id].get();
-            m_custom_window_scalars.push_back(scalar);
-        }
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
-            VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
-            Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-            m_custom_window_scalars.push_back(scalar);
-        }
-        ImGui::EndDragDropTarget();
-    }
-    if (signal_to_remove) {
-        remove(m_custom_window_scalars, signal_to_remove);
-    }
-
-    ImGui::End();
 }
 
 void DbgGui::showSymbolsWindow() {

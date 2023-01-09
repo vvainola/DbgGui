@@ -210,7 +210,8 @@ void DbgGui::showScalarPlots() {
 
         if (signal_to_remove) {
             remove(scalar_plot.signals, signal_to_remove);
-            m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            size_t signals_removed = m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            assert(signals_removed > 0);
         }
     }
 }
@@ -389,7 +390,8 @@ void DbgGui::showVectorPlots() {
 
         if (signal_to_remove) {
             remove(vector_plot.signals, signal_to_remove);
-            m_settings["vector_plots"][vector_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            size_t signals_removed = m_settings["vector_plots"][vector_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            assert(signals_removed > 0);
         }
     }
 }

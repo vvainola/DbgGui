@@ -154,6 +154,12 @@ struct SpectrumPlot {
     }
 };
 
+struct CustomWindow {
+    std::string name;
+    std::vector<Scalar*> scalars;
+    bool open = true;
+};
+
 class DbgGui {
   public:
     DbgGui(double sampling_time);
@@ -196,8 +202,8 @@ class DbgGui {
 
     std::map<size_t, std::unique_ptr<Vector2D>> m_vectors;
     std::map<std::string, std::vector<Vector2D*>> m_vector_groups;
-    std::vector<Scalar*> m_custom_window_scalars;
 
+    std::vector<CustomWindow> m_custom_windows;
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
@@ -215,7 +221,6 @@ class DbgGui {
     std::mutex m_sampling_mutex;
 
     nlohmann::json m_settings;
-    
 };
 
 template <typename T>

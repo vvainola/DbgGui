@@ -325,9 +325,14 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-            for (size_t id : m_settings["custom_window_signals"]) {
-                if (m_scalars.contains(id)) {
-                    m_custom_window_scalars.push_back(m_scalars[id].get());
+
+            for (auto custom_window_data : m_settings["custom_windows"]) {
+                CustomWindow& custom_window = m_custom_windows.emplace_back();
+                custom_window.name = custom_window_data["name"];
+                for (size_t id : custom_window_data["signals"]) {
+                    if (m_scalars.contains(id)) {
+                        custom_window.scalars.push_back(m_scalars[id].get());
+                    }
                 }
             }
 
@@ -402,9 +407,16 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (Scalar* scalar : m_custom_window_scalars) {
-        // use group first in key so that the signals are sorted alphabetically by group
-        m_settings["custom_window_signals"][scalar->group + " " + scalar->name] = scalar->id;
+    for (CustomWindow& custom_window : m_custom_windows) {
+        if (!custom_window.open) {
+            m_settings["custom_windows"].erase(custom_window.name);
+            continue;
+        }
+        m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
+        for (Scalar* scalar : custom_window.scalars) {
+            // use group first in key so that the signals are sorted alphabetically by group
+            m_settings["custom_windows"][custom_window.name]["signals"][scalar->group + " " + scalar->name] = scalar->id;
+        }
     }
 
     for (auto& scalar : m_scalars) {
