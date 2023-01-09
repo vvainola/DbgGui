@@ -427,6 +427,29 @@ void DbgGui::showCustomWindow() {
                 Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                 custom_window.scalars.push_back(scalar);
             }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
+                char* symbol_name = (char*)payload->Data;
+                VariantSymbol* dragged_symbol = m_dbghelp_symbols.getSymbol(symbol_name);
+                if (dragged_symbol) {
+                    // Add children recursively
+                    std::function<void(VariantSymbol*)> add_children = [&](VariantSymbol* sym) {
+                        bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
+                                               || sym->getType() == VariantSymbol::Type::Enum;
+                        if (arithmetic_or_enum) {
+                            Scalar* scalar = addScalarSymbol(sym, m_group_to_add_symbols);
+                            custom_window.scalars.push_back(scalar);
+                        }
+
+                        for (auto& child : sym->getChildren()) {
+                            // Don't add insane amount of signals e.g. sampling buffers
+                            if (child->getChildren().size() < 100) {
+                              add_children(child.get());
+                            }
+                        }
+                    };
+                    add_children(dragged_symbol);
+                }
+            }
             ImGui::EndDragDropTarget();
         }
 
@@ -438,7 +461,6 @@ void DbgGui::showCustomWindow() {
 
         ImGui::End();
     }
-
 }
 
 void DbgGui::showSymbolsWindow() {
@@ -481,6 +503,14 @@ void DbgGui::showSymbolsWindow() {
                 std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
                 if (children.size() > 0) {
                     bool open = ImGui::TreeNodeEx(sym->getName().c_str());
+                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                        static char symbol_name_buffer[MAX_NAME_LENGTH];
+                        strcpy_s(symbol_name_buffer, symbol->getFullName().data());
+                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
+                        ImGui::Text("Drag to custom window to add all children");
+                        ImGui::EndDragDropSource();
+                    }
+
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
