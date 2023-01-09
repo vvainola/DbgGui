@@ -22,6 +22,8 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagData)
         || startsWith(pSymInfo->Name, "_")
+        || startsWith(pSymInfo->Name, "IID_")
+        || startsWith(pSymInfo->Name, "CLSID_")
         || startsWith(pSymInfo->Name, "std::")) {
         return TRUE;
     }
