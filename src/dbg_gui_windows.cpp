@@ -519,8 +519,7 @@ void DbgGui::showSymbolsWindow() {
 
                     // Add symbol to scalar window on double click
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
-                        if (arithmetic_or_enum)
-                            addScalarSymbol(sym, m_group_to_add_symbols);
+                        addScalarSymbol(sym, m_group_to_add_symbols);
                     }
 
                     // Add value
