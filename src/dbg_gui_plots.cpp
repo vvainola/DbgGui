@@ -145,6 +145,7 @@ void DbgGui::showScalarPlots() {
                 if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
                     double current_value = getSourceValue(signal->src);
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
+                    ImGui::Text(signal->name_and_group.c_str());
                     ImGui::InputDouble("Value", &current_value, 0, 0, "%.3f");
                     if (ImGui::IsItemEdited() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
                         setSourceValue(signal->src, current_value);
