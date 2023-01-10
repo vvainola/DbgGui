@@ -443,7 +443,7 @@ void DbgGui::showCustomWindow() {
                         for (auto& child : sym->getChildren()) {
                             // Don't add insane amount of signals e.g. sampling buffers
                             if (child->getChildren().size() < 100) {
-                              add_children(child.get());
+                                add_children(child.get());
                             }
                         }
                     };
@@ -494,18 +494,18 @@ void DbgGui::showSymbolsWindow() {
         }
         ImGui::TableNextColumn();
         ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
-        for (int i = 0; i < m_symbol_search_results.size(); ++i) {
-            VariantSymbol* symbol = m_symbol_search_results[i];
-
+        for (VariantSymbol* symbol : m_symbol_search_results) {
+            // Recursive lambda for displaying children in the table
             std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
                 if (children.size() > 0) {
+                    // Object/array
                     bool open = ImGui::TreeNodeEx(sym->getName().c_str());
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strcpy_s(symbol_name_buffer, symbol->getFullName().data());
+                        strcpy_s(symbol_name_buffer, sym->getFullName().data());
                         ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
                         ImGui::Text("Drag to custom window to add all children");
                         ImGui::EndDragDropSource();
@@ -520,6 +520,7 @@ void DbgGui::showSymbolsWindow() {
                         ImGui::TreePop();
                     }
                 } else if (sym->getType() == VariantSymbol::Type::Pointer) {
+                    // Pointer
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
                     VariantSymbol* pointed_symbol = sym->getPointedSymbol();
                     if (!pointed_symbol) {
@@ -535,6 +536,7 @@ void DbgGui::showSymbolsWindow() {
                         ImGui::TreePop();
                     }
                 } else {
+                    // Rest
                     static bool selected_symbol_idx = 0;
                     static VariantSymbol* selected_symbols[2] = {nullptr, nullptr};
                     bool selected = (sym == selected_symbols[0]) || (sym == selected_symbols[1]);
