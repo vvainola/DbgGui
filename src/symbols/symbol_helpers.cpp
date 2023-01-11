@@ -121,7 +121,7 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     pSymbol->MaxNameLen = MAX_SYM_NAME;
 
     if (SymFromIndex(current_process, parent.info.ModBase, index, pSymbol)) {
-        return std::make_unique<RawSymbol>(pSymbol, &parent);
+        return std::make_unique<RawSymbol>(pSymbol);
     } else {
         printLastError();
         return nullptr;
@@ -132,7 +132,7 @@ void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     parent.children.reserve(from.children.size());
     for (size_t i = 0; i < from.children.size(); ++i) {
         std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
-            std::make_unique<RawSymbol>(*from.children[i], parent));
+            std::make_unique<RawSymbol>(*from.children[i]));
 
         // Recursively copy children of children
         copyChildrenFromSymbol(*from.children[i], *new_child);
@@ -158,7 +158,7 @@ void addFirstChildToArray(RawSymbol& parent) {
     base.Size = element_size;
 
     // Add only first child because the rest can be added later by just adjusting memory address
-    std::unique_ptr<RawSymbol>& first_child = parent.children.emplace_back(std::make_unique<RawSymbol>(base, &parent));
+    std::unique_ptr<RawSymbol>& first_child = parent.children.emplace_back(std::make_unique<RawSymbol>(base));
     addChildrenToSymbol(*first_child);
 }
 
@@ -210,7 +210,7 @@ void addChildrenToSymbol(RawSymbol& parent) {
                 child->offset_to_parent = offset_to_parent;
 
                 // Skip standard library objects for children of children
-                if (child->full_name.find("std::") == std::string::npos) {
+                if (child->info.Name.find("std::") == std::string::npos) {
                     addChildrenToSymbol(*child);
                     parent.children.push_back(std::move(child));
                 }

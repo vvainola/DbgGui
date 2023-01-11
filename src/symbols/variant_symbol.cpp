@@ -19,9 +19,9 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
         m_name = parent->getName() + idx;
     } else if (parent) {
-        m_name = symbol->name;
+        m_name = symbol->info.Name;
     } else {
-        m_name = symbol->name;
+        m_name = symbol->info.Name;
     }
 
     switch (symbol->tag) {
@@ -43,7 +43,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         m_type = Type::Enum;
         // Children of enum contain the enum values as strings.
         for (auto& child : symbol->children) {
-            m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->info.Value), child->name));
+            m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->info.Value), child->info.Name));
         }
         break;
     }
