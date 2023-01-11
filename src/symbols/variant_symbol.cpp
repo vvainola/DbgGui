@@ -18,8 +18,6 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     if (parent && parent->getType() == Type::Array) {
         std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
         m_name = parent->getName() + idx;
-    } else if (parent) {
-        m_name = symbol->info.Name;
     } else {
         m_name = symbol->info.Name;
     }
