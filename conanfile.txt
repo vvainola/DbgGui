@@ -2,9 +2,7 @@
 nlohmann_json/3.10.5
 magic_enum/0.7.3
 kissfft/131.1.0
-imgui/cci.20220621+1.88.docking
 glfw/3.3.8
-implot/0.14
 
 [generators]
 pkg_config
