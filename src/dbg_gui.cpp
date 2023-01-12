@@ -244,6 +244,7 @@ void DbgGui::loadPreviousSessionSettings() {
             int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
+            m_sample_all = m_settings["sample_all"];
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
@@ -325,7 +326,6 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             }
 
-
             for (auto custom_window_data : m_settings["custom_windows"]) {
                 CustomWindow& custom_window = m_custom_windows.emplace_back();
                 custom_window.name = custom_window_data["name"];
@@ -355,6 +355,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
+    m_settings["sample_all"] = m_sample_all;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
@@ -496,6 +497,9 @@ size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::
         return id;
     }
     ptr->id = id;
+    if (m_sample_all) {
+        ptr->startBuffering();
+    }
     m_scalar_groups[ptr->group].push_back(ptr.get());
     // Sort items within the inserted group
     auto& inserted_group = m_scalar_groups[ptr->group];

@@ -212,6 +212,7 @@ class DbgGui {
     double m_timestamp = 0;
     double m_next_sync_timestamp = 0;
 
+    bool m_sample_all = false;
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
     float m_simulation_speed = 1;

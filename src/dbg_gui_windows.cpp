@@ -142,6 +142,9 @@ void DbgGui::showConfigurationWindow() {
     if (ImGui::Button(start_stop_text)) {
         m_paused = !m_paused;
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Sample all", &m_sample_all);
+
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue);
