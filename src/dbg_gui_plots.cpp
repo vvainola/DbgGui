@@ -116,7 +116,7 @@ void DbgGui::showScalarPlots() {
                 // Fatter line with custom settings
                 bool custom_scale_or_offset = signal->scale != 1 || signal->offset != 0;
                 if (custom_scale_or_offset) {
-                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 3);
+                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2);
                 }
                 ImPlot::PlotLine(signal->alias_and_group.c_str(),
                                  values.time.data(),
