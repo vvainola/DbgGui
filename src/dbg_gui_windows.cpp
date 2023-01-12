@@ -382,7 +382,7 @@ void DbgGui::showCustomWindow() {
 
         if (!ImGui::Begin(custom_window.name.c_str(), &custom_window.open)) {
             ImGui::End();
-            return;
+            continue;
         }
         Scalar* signal_to_remove = nullptr;
 
