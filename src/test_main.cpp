@@ -92,6 +92,12 @@ union BitField3 {
 };
 BitField3 bitfield3;
 
+struct struct_with_arrays {
+    double x[4];
+    double y[4];
+};
+struct_with_arrays swa;
+
 union BitField {
     uint16_t u16;
     struct {

@@ -130,6 +130,7 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
 
 void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     parent.children.reserve(from.children.size());
+    parent.array_element_count = from.array_element_count;
     for (size_t i = 0; i < from.children.size(); ++i) {
         std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
             std::make_unique<RawSymbol>(*from.children[i]));
