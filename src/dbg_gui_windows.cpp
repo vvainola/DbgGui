@@ -103,8 +103,7 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label, dou
 void addScalarContextMenu(Scalar* scalar) {
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = getSourceValue(scalar->src);
-        ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f");
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+        if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue)) {
             scalar->addTrigger(pause_level);
             ImGui::CloseCurrentPopup();
         }

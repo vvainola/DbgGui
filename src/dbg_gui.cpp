@@ -180,6 +180,8 @@ void DbgGui::updateLoop() {
         //---------- Hotkeys ----------
         if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) && !ImGui::IsAnyItemActive()) {
+            m_paused = !m_paused;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
             m_simulation_speed *= 2.;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
