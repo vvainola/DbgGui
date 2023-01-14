@@ -330,17 +330,37 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
             break;
         }
     }
+
     std::vector<std::string> signal_names = split(lines[first_line], delimiter);
     size_t sample_cnt = last_line - first_line;
     for (size_t i = ASCENDING_NUMBERS.size(); i < sample_cnt; ++i) {
         ASCENDING_NUMBERS.push_back(double(i));
     }
 
+    // Count number of instances with same name
+    std::map<std::string, int> signal_name_count;
+    for (std::string const& signal_name : signal_names) {
+        if (signal_name_count.contains(signal_name)) {
+            ++signal_name_count[signal_name];
+        } else {
+            signal_name_count[signal_name] = 1;
+        }
+    }
+
     std::vector<CsvSignal> csv_signals;
     csv_signals.reserve(signal_names.size());
-    for (std::string signal_name : signal_names) {
-        csv_signals.push_back(CsvSignal{
-            .name = signal_name});
+    std::map<std::string, int> signal_name_counter;
+    for (std::string const& signal_name : signal_names) {
+        // Add counter to name if same name is included multiple times
+        bool has_duplicate_names = signal_name_count[signal_name] > 1;
+        if (has_duplicate_names) {
+            csv_signals.push_back(CsvSignal {
+                .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])
+            });
+            ++signal_name_counter[signal_name];
+        } else {
+            csv_signals.push_back(CsvSignal{.name = signal_name});
+        }
         csv_signals.back().samples.reserve(sample_cnt);
     }
     for (size_t i = 0; i < sample_cnt; ++i) {
