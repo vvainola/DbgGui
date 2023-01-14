@@ -71,7 +71,7 @@ std::optional<ImGuiKey> pressedNumber() {
     return std::nullopt;
 }
 
-void addInputScalar(ValueSource const& signal_src, std::string const& label) {
+void addInputScalar(ValueSource const& signal_src, std::string const& label, double scale = 1, double offset = 0) {
     if (std::get_if<ReadWriteFnCustomStr>(&signal_src)) {
         ImGui::Text(getSourceValueStr(signal_src).c_str());
         ImGui::SameLine();
@@ -81,8 +81,9 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label) {
                                    | ImGuiInputTextFlags_AutoSelectAll
                                    | ImGuiInputTextFlags_CharsScientific
                                    | ImGuiInputTextFlags_CallbackAlways;
+    double scaled_value = getSourceValue(signal_src) * scale + offset;
     char value[20];
-    strcpy_s(value, numberAsStr(getSourceValue(signal_src)).c_str());
+    strcpy_s(value, numberAsStr(scaled_value).c_str());
     ImGui::SetNextItemWidth(-FLT_MIN);
     static ImGuiKey pressed_number = ImGuiKey_None;
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
@@ -107,6 +108,9 @@ void addScalarContextMenu(Scalar* scalar) {
             scalar->addTrigger(pause_level);
             ImGui::CloseCurrentPopup();
         }
+        ImGui::InputDouble("Scale", &scalar->scale, 0, 0, "%.10f");
+        ImGui::InputDouble("Offset", &scalar->offset, 0, 0, "%.10f");
+
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(scalar->alias.c_str());
             ImGui::CloseCurrentPopup();
@@ -274,7 +278,12 @@ void DbgGui::showScalarWindow() {
                     // Show name. Text is used instead of selectable because the
                     // keyboard navigation in the table does not work properly
                     // and up/down changes columns
-                    ImGui::Text(scalar->alias.c_str());
+                    bool custom_scale_or_offset = scalar->scale != 1 || scalar->offset != 0;
+                    if (custom_scale_or_offset) {
+                        ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
+                    } else {
+                        ImGui::Text(scalar->alias.c_str());
+                    }
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
@@ -291,7 +300,7 @@ void DbgGui::showScalarWindow() {
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group);
+                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->scale, scalar->offset);
                 }
                 ImGui::TreePop();
             }
@@ -397,7 +406,12 @@ void DbgGui::showCustomWindow() {
                 // Show name. Text is used instead of selectable because the
                 // keyboard navigation in the table does not work properly
                 // and up/down changes columns
-                ImGui::Text(scalar->alias_and_group.c_str());
+                bool custom_scale_or_offset = scalar->scale != 1 || scalar->offset != 0;
+                if (custom_scale_or_offset) {
+                    ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
+                } else {
+                    ImGui::Text(scalar->alias_and_group.c_str());
+                }
                 // Make text drag-and-droppable
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                     ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
@@ -412,7 +426,7 @@ void DbgGui::showCustomWindow() {
 
                 // Show value
                 ImGui::TableNextColumn();
-                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group);
+                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group, scalar->scale, scalar->offset);
             }
             ImGui::EndTable();
         }

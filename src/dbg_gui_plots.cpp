@@ -158,9 +158,9 @@ void DbgGui::showScalarPlots() {
                         ImGui::CloseCurrentPopup();
                     }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%.3f");
+                    ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%.10f");
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%.3f");
+                    ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%.10f");
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     };

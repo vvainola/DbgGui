@@ -13,6 +13,7 @@
 struct GLFWwindow;
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
+inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 
 template <typename T>
 struct XY {

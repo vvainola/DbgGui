@@ -68,5 +68,3 @@ void DbgGui_close(void);
 #ifdef __cplusplus
 }
 #endif
-
-
