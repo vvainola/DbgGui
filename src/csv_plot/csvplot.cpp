@@ -21,7 +21,7 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int expected_line_cnt = -1);
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename);
 std::optional<CsvFileData> loadCsv();
 
 void exit(std::string const& err) {
@@ -275,7 +275,7 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int expected_line_cnt) {
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename) {
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
@@ -284,9 +284,7 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
     std::stringstream buffer;
     buffer << csv.rdbuf();
     std::vector<std::string> lines = split(buffer.str(), '\n');
-    if (expected_line_cnt > 0 && lines.size() != expected_line_cnt) {
-        return std::nullopt;
-    } else if (lines.size() == 0) {
+    if (lines.size() == 0) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return std::nullopt;
     }
@@ -304,12 +302,10 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
             if (values_comma.size() > values_semicolon.size() && values_comma.size() > values_tab.size()) {
                 delimiter = ',';
                 element_count = values_comma.size();
-            }
-            else if (values_semicolon.size() > values_comma.size() && values_semicolon.size() > values_tab.size()) {
+            } else if (values_semicolon.size() > values_comma.size() && values_semicolon.size() > values_tab.size()) {
                 delimiter = ';';
                 element_count = values_semicolon.size();
-            }
-            else if (values_tab.size() > values_comma.size() && values_tab.size() > values_semicolon.size()) {
+            } else if (values_tab.size() > values_comma.size() && values_tab.size() > values_semicolon.size()) {
                 delimiter = '\t';
                 element_count = values_tab.size();
             }
@@ -324,8 +320,7 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
     // Find first line where header begins
     size_t first_line = 0;
     for (size_t i = 0; i < lines.size(); ++i) {
-        if (split(lines[i], delimiter).size() == element_count) 
-        {
+        if (split(lines[i], delimiter).size() == element_count) {
             first_line = i;
             break;
         }
@@ -354,9 +349,8 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, int exp
         // Add counter to name if same name is included multiple times
         bool has_duplicate_names = signal_name_count[signal_name] > 1;
         if (has_duplicate_names) {
-            csv_signals.push_back(CsvSignal {
-                .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])
-            });
+            csv_signals.push_back(CsvSignal{
+                .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])});
             ++signal_name_counter[signal_name];
         } else {
             csv_signals.push_back(CsvSignal{.name = signal_name});
@@ -411,11 +405,16 @@ void CsvPlotter::showSignalWindow() {
     ImGui::Checkbox("Link x-axis", &m_link_axis);
 
     for (CsvFileData& file : m_csv_data) {
-        // Reload file if it has been rewritten
-        if (std::filesystem::last_write_time(file.name) != file.write_time
+        // Reload file if it has been rewritten. Wait that file has not been modified in the last second
+        // in case it is still being written
+        auto last_write_time = std::filesystem::last_write_time(file.name);
+        auto write_time_plus_1s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(1);
+        auto now = std::chrono::system_clock::now();
+
+        if (last_write_time != file.write_time 
+            && now > write_time_plus_1s
             && file.write_time != std::filesystem::file_time_type()) {
-            int expected_line_cnt = int(file.signals[0].samples.size()) + 1;
-            std::optional<CsvFileData> csv_data = parseCsvData(file.name, expected_line_cnt);
+            std::optional<CsvFileData> csv_data = parseCsvData(file.name);
             if (csv_data) {
                 if (csv_data->signals.size() == file.signals.size()) {
                     for (int i = 0; i < file.signals.size(); ++i) {
@@ -425,6 +424,7 @@ void CsvPlotter::showSignalWindow() {
                         file.signals[i].color = NO_COLOR;
                     }
                 }
+                // Set write time to default so that the file gets reloaded again for the latest dataset
                 file.write_time = std::filesystem::file_time_type();
                 static int run_number = 0;
                 run_number++;
