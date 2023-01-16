@@ -52,7 +52,11 @@ struct ScrollingBuffer {
         return mid;
     }
 
-    DecimatedValues getValuesInRange(double x_min, double x_max, int n_points, double scale = 1, double offset = 0) {
+    DecimatedValues getValuesInRange(double x_min,
+                                     double x_max,
+                                     int n_points,
+                                     double scale = 1,
+                                     double offset = 0) {
         DecimatedValues decimated_values;
         x_max = std::min(time[current_idx - 1], x_max);
         int32_t start_idx = current_idx - 1;

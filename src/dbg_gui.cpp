@@ -100,11 +100,11 @@ void DbgGui::sample() {
         m_timestamp += m_sampling_time;
         for (auto& signal : m_scalars) {
             if (signal.second->buffer != nullptr) {
-                double value = getSourceValue(signal.second->src);
-                signal.second->buffer->addPoint(m_timestamp, value);
+                // Sampling is done with unscaled value and the signal is scaled when retrieving samples
+                signal.second->buffer->addPoint(m_timestamp, signal.second->getValue());
             }
             if (signal.second->m_pause_triggers.size() > 0) {
-                double value = getSourceValue(signal.second->src);
+                double value = signal.second->getScaledValue();
                 m_paused = m_paused || signal.second->checkTriggers(value);
             }
         }
@@ -609,7 +609,7 @@ void setTheme() {
 }
 
 void Scalar::addTrigger(double pause_level) {
-    double current_value = getSourceValue(src);
+    double current_value = getScaledValue();
     m_pause_triggers.push_back(Trigger{
         .initial_value = current_value,
         .previous_sample = current_value,

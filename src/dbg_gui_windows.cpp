@@ -10,7 +10,7 @@
 #include <format>
 
 template <typename T>
-std::string numberAsStr(T number) {
+inline std::string numberAsStr(T number) {
     if constexpr (std::is_same_v<double, T> || std::is_same_v<float, T>) {
         // Remove trailing zeros
         std::stringstream ss;
@@ -21,7 +21,7 @@ std::string numberAsStr(T number) {
     }
 }
 
-static std::string getSourceValueStr(ValueSource src) {
+inline static std::string getSourceValueStr(ValueSource src) {
     return std::visit(
         [=](auto&& src) {
             using T = std::decay_t<decltype(src)>;
@@ -102,7 +102,7 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label, dou
 
 void addScalarContextMenu(Scalar* scalar) {
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
-        double pause_level = getSourceValue(scalar->src);
+        double pause_level = scalar->getScaledValue();
         if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue)) {
             scalar->addTrigger(pause_level);
             ImGui::CloseCurrentPopup();
@@ -115,7 +115,7 @@ void addScalarContextMenu(Scalar* scalar) {
             ImGui::CloseCurrentPopup();
         }
         if (ImGui::Button("Copy name and value")) {
-            ImGui::SetClipboardText((scalar->alias + " " + getSourceValueStr(scalar->src)).c_str());
+            ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
             ImGui::CloseCurrentPopup();
         }
 
@@ -359,8 +359,7 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    std::string value = getSourceValueStr(signal->x->src);
-                    ImGui::Text(value.c_str());
+                    ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
 
                     // Show y-value
                     ImGui::TableNextColumn();
@@ -371,8 +370,7 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    value = getSourceValueStr(signal->y->src);
-                    ImGui::Text(value.c_str());
+                    ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
                 }
                 ImGui::TreePop();
             }

@@ -143,12 +143,12 @@ void DbgGui::showScalarPlots() {
                 signal->color = ImPlot::GetLastItemColor();
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
-                    double current_value = getSourceValue(signal->src);
+                    double current_value = signal->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::Text(signal->name_and_group.c_str());
                     ImGui::InputDouble("Value", &current_value, 0, 0, "%.3f");
                     if (ImGui::IsItemEdited() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        setSourceValue(signal->src, current_value);
+                        signal->setScaledValue(current_value);
                         ImGui::CloseCurrentPopup();
                     }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
@@ -521,7 +521,11 @@ void DbgGui::showSpectrumPlots() {
                                                    plot.window,
                                                    one_sided);
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
+            ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range,
+                                                                                            m_timestamp,
+                                                                                            INT_MAX,
+                                                                                            plot.scalar->scale,
+                                                                                            plot.scalar->offset);
             size_t sample_cnt = values.y_min.size();
             std::vector<std::complex<double>> samples;
             samples.reserve(sample_cnt);
