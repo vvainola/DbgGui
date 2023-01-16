@@ -227,6 +227,7 @@ class DbgGui {
     void showSymbolsWindow();
     void showVectorWindow();
     void showCustomWindow();
+    void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showScalarPlots();
     void showVectorPlots();
     void showSpectrumPlots();

@@ -378,6 +378,45 @@ void DbgGui::showVectorWindow() {
     ImGui::End();
 }
 
+void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+            size_t id = *(size_t*)payload->Data;
+            Scalar* scalar = getScalar(id);
+            custom_window.scalars.push_back(scalar);
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
+            VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
+            Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+            custom_window.scalars.push_back(scalar);
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
+            char* symbol_name = (char*)payload->Data;
+            VariantSymbol* dragged_symbol = m_dbghelp_symbols.getSymbol(symbol_name);
+            if (dragged_symbol) {
+                // Add children recursively
+                std::function<void(VariantSymbol*)> add_children = [&](VariantSymbol* sym) {
+                    bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
+                                           || sym->getType() == VariantSymbol::Type::Enum;
+                    if (arithmetic_or_enum) {
+                        Scalar* scalar = addScalarSymbol(sym, m_group_to_add_symbols);
+                        custom_window.scalars.push_back(scalar);
+                    }
+
+                    for (auto& child : sym->getChildren()) {
+                        // Don't add insane amount of signals e.g. sampling buffers
+                        if (child->getChildren().size() < 100) {
+                            add_children(child.get());
+                        }
+                    }
+                };
+                add_children(dragged_symbol);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+}
+
 void DbgGui::showCustomWindow() {
     for (CustomWindow& custom_window : m_custom_windows) {
         if (!custom_window.open) {
@@ -407,6 +446,7 @@ void DbgGui::showCustomWindow() {
                 } else {
                     ImGui::Text(scalar->alias_and_group.c_str());
                 }
+                addCustomWindowDragAndDrop(custom_window);
                 // Make text drag-and-droppable
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                     ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
@@ -427,43 +467,7 @@ void DbgGui::showCustomWindow() {
         }
 
         ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
-
-        if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                size_t id = *(size_t*)payload->Data;
-                Scalar* scalar = getScalar(id);
-                custom_window.scalars.push_back(scalar);
-            }
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
-                VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
-                Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-                custom_window.scalars.push_back(scalar);
-            }
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
-                char* symbol_name = (char*)payload->Data;
-                VariantSymbol* dragged_symbol = m_dbghelp_symbols.getSymbol(symbol_name);
-                if (dragged_symbol) {
-                    // Add children recursively
-                    std::function<void(VariantSymbol*)> add_children = [&](VariantSymbol* sym) {
-                        bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
-                                               || sym->getType() == VariantSymbol::Type::Enum;
-                        if (arithmetic_or_enum) {
-                            Scalar* scalar = addScalarSymbol(sym, m_group_to_add_symbols);
-                            custom_window.scalars.push_back(scalar);
-                        }
-
-                        for (auto& child : sym->getChildren()) {
-                            // Don't add insane amount of signals e.g. sampling buffers
-                            if (child->getChildren().size() < 100) {
-                                add_children(child.get());
-                            }
-                        }
-                    };
-                    add_children(dragged_symbol);
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
+        addCustomWindowDragAndDrop(custom_window);
 
         if (signal_to_remove) {
             remove(custom_window.scalars, signal_to_remove);
