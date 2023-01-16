@@ -99,13 +99,13 @@ void DbgGui::sample() {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
         m_timestamp += m_sampling_time;
         for (auto& signal : m_scalars) {
-            if (signal.second->buffer != nullptr) {
+            if (signal->buffer != nullptr) {
                 // Sampling is done with unscaled value and the signal is scaled when retrieving samples
-                signal.second->buffer->addPoint(m_timestamp, signal.second->getValue());
+                signal->buffer->addPoint(m_timestamp, signal->getValue());
             }
-            if (signal.second->m_pause_triggers.size() > 0) {
-                double value = signal.second->getScaledValue();
-                m_paused = m_paused || signal.second->checkTriggers(value);
+            if (signal->m_pause_triggers.size() > 0) {
+                double value = signal->getScaledValue();
+                m_paused = m_paused || signal->checkTriggers(value);
             }
         }
     }
@@ -246,7 +246,6 @@ void DbgGui::loadPreviousSessionSettings() {
             int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
-            m_sample_all = m_settings["sample_all"];
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
@@ -277,8 +276,8 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.x_range = scalar_plot_data["x_range"];
 
                 for (size_t id : scalar_plot_data["signals"]) {
-                    if (m_scalars.contains(id)) {
-                        Scalar* scalar = m_scalars[id].get();
+                    Scalar* scalar = getScalar(id);
+                    if (scalar) {
                         plot.addSignalToPlot(scalar);
                     }
                 }
@@ -289,8 +288,8 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.name = vector_plot_data["name"];
                 plot.time_range = vector_plot_data["time_range"];
                 for (size_t id : vector_plot_data["signals"]) {
-                    if (m_vectors.contains(id)) {
-                        Vector2D* vec = m_vectors[id].get();
+                    Vector2D* vec = getVector(id);
+                    if (vec) {
                         plot.addSignalToPlot(vec);
                     }
                 }
@@ -307,18 +306,20 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.y_axis_max = spec_plot_data["y_axis_max"];
                 if (spec_plot_data.contains("id")) {
                     size_t id = spec_plot_data["id"];
-                    if (m_scalars.contains(id)) {
-                        plot.addSignalToPlot(m_scalars[id].get());
-                    } else if (m_vectors.contains(id)) {
-                        plot.addSignalToPlot(m_vectors[id].get());
+                    Scalar* scalar = getScalar(id);
+                    Vector2D* vector = getVector(id);
+                    if (scalar) {
+                        plot.addSignalToPlot(scalar);
+                    } else if (vector) {
+                        plot.addSignalToPlot(vector);
                     }
                 }
             }
 
             for (auto& scalar_data : m_settings["scalars"]) {
                 size_t id = scalar_data["id"];
-                if (m_scalars.contains(id)) {
-                    Scalar* scalar = m_scalars[id].get();
+                Scalar* scalar = getScalar(id);
+                if (scalar) {
                     scalar->scale = scalar_data["scale"];
                     scalar->offset = scalar_data["offset"];
                     if (scalar_data.contains("alias")) {
@@ -332,8 +333,9 @@ void DbgGui::loadPreviousSessionSettings() {
                 CustomWindow& custom_window = m_custom_windows.emplace_back();
                 custom_window.name = custom_window_data["name"];
                 for (size_t id : custom_window_data["signals"]) {
-                    if (m_scalars.contains(id)) {
-                        custom_window.scalars.push_back(m_scalars[id].get());
+                    Scalar* scalar = getScalar(id);
+                    if (scalar) {
+                        custom_window.scalars.push_back(scalar);
                     }
                 }
             }
@@ -357,7 +359,6 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
-    m_settings["sample_all"] = m_sample_all;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
@@ -423,11 +424,11 @@ void DbgGui::updateSavedSettings() {
     }
 
     for (auto& scalar : m_scalars) {
-        if (!scalar.second->hide_from_scalars_window) {
-            m_settings["scalars"][scalar.second->name_and_group]["id"] = scalar.second->id;
-            m_settings["scalars"][scalar.second->name_and_group]["scale"] = scalar.second->scale;
-            m_settings["scalars"][scalar.second->name_and_group]["offset"] = scalar.second->offset;
-            m_settings["scalars"][scalar.second->name_and_group]["alias"] = scalar.second->alias;
+        if (!scalar->hide_from_scalars_window) {
+            m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
+            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->scale;
+            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->offset;
+            m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
         }
     }
 
@@ -451,16 +452,14 @@ void DbgGui::updateSavedSettings() {
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
-    size_t id = addScalar(sym->getValueSource(), group, sym->getFullName());
-    Scalar* scalar = m_scalars[id].get();
+    Scalar* scalar = addScalar(sym->getValueSource(), group, sym->getFullName());
     m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
     m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
     return scalar;
 }
 
 Vector2D* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
-    size_t id = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName());
-    Vector2D* vector = m_vectors[id].get();
+    Vector2D* vector = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName());
     m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
     m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
     m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
@@ -482,56 +481,57 @@ void DbgGui::close() {
     }
 }
 
-size_t DbgGui::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {
-    std::unique_ptr<Scalar> ptr = std::make_unique<Scalar>();
-    ptr->src = src;
+Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name) {
     if (group.empty()) {
-        ptr->group = "debug";
+        group = "debug";
     } else {
-        ptr->group = group;
+        group = group;
     }
-    ptr->name = name;
-    ptr->alias = ptr->name;
-    ptr->name_and_group = name + " (" + ptr->group + ")";
-    ptr->alias_and_group = ptr->name_and_group;
-    size_t id = hasher(ptr->name_and_group);
-    if (m_scalars.contains(id)) {
-        return id;
+    size_t id = hasher(name + " (" + group + ")");
+    Scalar* existing_scalar = getScalar(id);
+    if (existing_scalar != nullptr) {
+        return existing_scalar;
     }
-    ptr->id = id;
-    if (m_sample_all) {
-        ptr->startBuffering();
-    }
-    m_scalar_groups[ptr->group].push_back(ptr.get());
+    auto& new_scalar = m_scalars.emplace_back(std::make_unique<Scalar>());
+    new_scalar->src = src;
+    new_scalar->name = name;
+    new_scalar->group = group;
+    new_scalar->alias = new_scalar->name;
+    new_scalar->name_and_group = name + " (" + new_scalar->group + ")";
+    new_scalar->alias_and_group = new_scalar->name_and_group;
+    new_scalar->id = id;
+    m_scalar_groups[new_scalar->group].push_back(new_scalar.get());
     // Sort items within the inserted group
-    auto& inserted_group = m_scalar_groups[ptr->group];
+    auto& inserted_group = m_scalar_groups[new_scalar->group];
     std::sort(inserted_group.begin(), inserted_group.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
-    m_scalars[ptr->id] = std::move(ptr);
-    return id;
+    return new_scalar.get();
 }
 
-size_t DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name) {
-    std::unique_ptr<Vector2D> ptr = std::make_unique<Vector2D>();
-    ptr->name = name;
-    ptr->group = group;
-    ptr->name_and_group = name + " (" + group + ")";
-    size_t id = hasher(ptr->name_and_group);
-    if (m_vectors.contains(id)) {
-        return id;
+Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name) {
+    if (group.empty()) {
+        group = "debug";
+    } else {
+        group = group;
     }
-    ptr->id = id;
-    size_t id_x = addScalar(x, group, name + ".x");
-    size_t id_y = addScalar(y, group, name + ".y");
-    ptr->x = m_scalars[id_x].get();
-    ptr->x->hide_from_scalars_window = true;
-    ptr->y = m_scalars[id_y].get();
-    ptr->y->hide_from_scalars_window = true;
-    m_vector_groups[group].push_back(ptr.get());
+    size_t id = hasher(name + " (" + group + ")");
+    Vector2D* existing_vector = getVector(id);
+    if (existing_vector != nullptr) {
+        return existing_vector;
+    }
+    auto& new_vector = m_vectors.emplace_back(std::make_unique<Vector2D>());
+    new_vector->name = name;
+    new_vector->group = group;
+    new_vector->name_and_group = name + " (" + group + ")";
+    new_vector->id = id;
+    new_vector->x = addScalar(x, group, name + ".x");
+    new_vector->x->hide_from_scalars_window = true;
+    new_vector->y = addScalar(y, group, name + ".y");
+    new_vector->y->hide_from_scalars_window = true;
+    m_vector_groups[group].push_back(new_vector.get());
     // Sort items within the inserted group
     auto& inserted_group = m_vector_groups[group];
     std::sort(inserted_group.begin(), inserted_group.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
-    m_vectors[ptr->id] = std::move(ptr);
-    return id;
+    return new_vector.get();
 }
 
 void setTheme() {

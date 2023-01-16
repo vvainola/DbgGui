@@ -54,7 +54,7 @@ struct ScrollingBuffer {
 
     DecimatedValues getValuesInRange(double x_min,
                                      double x_max,
-                                     int n_points,
+                                     int32_t n_points,
                                      double scale = 1,
                                      double offset = 0) {
         DecimatedValues decimated_values;
@@ -80,9 +80,10 @@ struct ScrollingBuffer {
 
         int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
 
-        decimated_values.time.reserve(end_idx - start_idx);
-        decimated_values.y_min.reserve(end_idx - start_idx);
-        decimated_values.y_max.reserve(end_idx - start_idx);
+        // Add bit extra capacity for blanks at the end.
+        decimated_values.time.reserve(std::min(end_idx - start_idx, n_points + 5));
+        decimated_values.y_min.reserve(std::min(end_idx - start_idx, n_points + 5));
+        decimated_values.y_max.reserve(std::min(end_idx - start_idx, n_points + 5));
 
         double current_min = INFINITY;
         double current_max = -INFINITY;

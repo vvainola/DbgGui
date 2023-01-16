@@ -70,7 +70,7 @@ void DbgGui::showScalarPlots() {
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
         bool time_range_changed = ImGui::SliderFloat("Time range", &time_range, 1, 1000, "%.1f ms");
         if (time_range_changed) {
-            scalar_plot.x_range = time_range * 1e-3f;
+            scalar_plot.x_range = time_range * 1e-3;
         }
 
         // Auto fit button
@@ -171,7 +171,7 @@ void DbgGui::showScalarPlots() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     size_t id = *(size_t*)payload->Data;
-                    Scalar* signal = m_scalars[id].get();
+                    Scalar* signal = getScalar(id);
                     scalar_plot.addSignalToPlot(signal);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
@@ -313,8 +313,8 @@ void DbgGui::showVectorPlots() {
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;
             if (vector_plot.reference_frame_vector) {
-                ScrollingBuffer::DecimatedValues values_x = vector_plot.reference_frame_vector->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
-                ScrollingBuffer::DecimatedValues values_y = vector_plot.reference_frame_vector->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
+                ScrollingBuffer::DecimatedValues values_x = vector_plot.reference_frame_vector->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
+                ScrollingBuffer::DecimatedValues values_y = vector_plot.reference_frame_vector->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
                 frame_rotation_vectors.reserve(values_x.time.size());
                 for (size_t i = 0; i < values_x.y_max.size(); ++i) {
                     double angle = -atan2(values_y.y_min[i], values_x.y_min[i]);
@@ -324,8 +324,8 @@ void DbgGui::showVectorPlots() {
 
             // Plot vectors
             for (Vector2D* signal : vector_plot.signals) {
-                ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
-                ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, INT_MAX);
+                ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
+                ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
                 // Rotate samples
                 if (frame_rotation_vectors.size() > 0) {
                     for (size_t i = 0; i < values_x.y_max.size(); ++i) {
@@ -373,7 +373,7 @@ void DbgGui::showVectorPlots() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     size_t id = *(size_t*)payload->Data;
-                    Vector2D* signal = m_vectors[id].get();
+                    Vector2D* signal = getVector(id);
                     vector_plot.addSignalToPlot(signal);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
@@ -461,7 +461,7 @@ void DbgGui::showSpectrumPlots() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     size_t id = *(size_t*)payload->Data;
-                    Scalar* scalar = m_scalars[id].get();
+                    Scalar* scalar = getScalar(id);
                     plot.addSignalToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
@@ -471,7 +471,7 @@ void DbgGui::showSpectrumPlots() {
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     size_t id = *(size_t*)payload->Data;
-                    Vector2D* vector = m_vectors[id].get();
+                    Vector2D* vector = getVector(id);
                     plot.addSignalToPlot(vector);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
@@ -506,8 +506,8 @@ void DbgGui::showSpectrumPlots() {
             plot.spectrum = plot.spectrum_calculation.get();
 
         } else if (plot.vector && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues values_x = plot.vector->x->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
-            ScrollingBuffer::DecimatedValues values_y = plot.vector->y->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, INT_MAX);
+            ScrollingBuffer::DecimatedValues values_x = plot.vector->x->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, ALL_SAMPLES);
+            ScrollingBuffer::DecimatedValues values_y = plot.vector->y->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, ALL_SAMPLES);
             size_t sample_cnt = std::min(values_x.y_min.size(), values_y.y_min.size());
             std::vector<std::complex<double>> samples;
             samples.reserve(sample_cnt);

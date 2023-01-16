@@ -13,6 +13,7 @@
 struct GLFWwindow;
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
+inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 
 template <typename T>
@@ -216,8 +217,8 @@ class DbgGui {
     bool isClosed();
     void close();
 
-    size_t addScalar(ValueSource const& src, std::string const& group, std::string const& name);
-    size_t addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name);
+    Scalar* addScalar(ValueSource const& src, std::string group, std::string const& name);
+    Vector2D* addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name);
 
   private:
     void updateLoop();
@@ -242,10 +243,26 @@ class DbgGui {
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
 
-    std::map<size_t, std::unique_ptr<Scalar>> m_scalars;
+    Scalar* getScalar(size_t id) {
+        for (auto& scalar : m_scalars) {
+            if (scalar->id == id) {
+                return scalar.get();
+            }
+        }
+        return nullptr;
+    }
+    std::vector<std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
 
-    std::map<size_t, std::unique_ptr<Vector2D>> m_vectors;
+    Vector2D* getVector(size_t id) {
+        for (auto& vector : m_vectors) {
+            if (vector->id == id) {
+                return vector.get();
+            }
+        }
+        return nullptr;
+    }
+    std::vector<std::unique_ptr<Vector2D>> m_vectors;
     std::map<std::string, std::vector<Vector2D*>> m_vector_groups;
 
     std::vector<CustomWindow> m_custom_windows;
@@ -257,7 +274,6 @@ class DbgGui {
     double m_timestamp = 0;
     double m_next_sync_timestamp = 0;
 
-    bool m_sample_all = false;
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
     float m_simulation_speed = 1;

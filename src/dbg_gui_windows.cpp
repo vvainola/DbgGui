@@ -145,8 +145,6 @@ void DbgGui::showConfigurationWindow() {
     if (ImGui::Button(start_stop_text)) {
         m_paused = !m_paused;
     }
-    ImGui::SameLine();
-    ImGui::Checkbox("Sample all", &m_sample_all);
 
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-5f, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
@@ -433,7 +431,7 @@ void DbgGui::showCustomWindow() {
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                 size_t id = *(size_t*)payload->Data;
-                Scalar* scalar = m_scalars[id].get();
+                Scalar* scalar = getScalar(id);
                 custom_window.scalars.push_back(scalar);
             }
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {

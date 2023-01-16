@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdlib>
+
 struct ZeroCrossingFreqEst {
     float dead_time;
     float sampling_period;
