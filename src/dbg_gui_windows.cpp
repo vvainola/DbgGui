@@ -265,6 +265,10 @@ void DbgGui::showScalarWindow() {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             if (ImGui::TreeNode(it->first.c_str())) {
+                bool delete_entire_group = false;
+                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                    delete_entire_group = true;
+                }
                 for (int row = 0; row < scalars.size(); row++) {
                     Scalar* scalar = scalars[row];
                     if (scalar->hide_from_scalars_window) {
@@ -288,7 +292,8 @@ void DbgGui::showScalarWindow() {
                         ImGui::EndDragDropSource();
                     }
                     // Hide symbol on delete. It will be removed for real on next start
-                    if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                    if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete))
+                        || delete_entire_group) {
                         m_settings["scalar_symbols"].erase(scalar->name_and_group);
                         m_settings["scalars"].erase(scalar->name_and_group);
                         scalar->hide_from_scalars_window = true;
