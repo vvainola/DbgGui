@@ -92,8 +92,11 @@ void DbgGui::showScalarPlots() {
             // Connect link values
             ImPlot::SetupAxisLinks(ImAxis_Y1, &scalar_plot.y_axis_min, &scalar_plot.y_axis_max);
             ImPlot::SetupAxisLinks(ImAxis_X1, &scalar_plot.x_axis_min, &scalar_plot.x_axis_max);
-            // Allow adjusting settings while paused
-            if (!m_paused) {
+            // Autofit x-axis if running or the latest samples after pausing have not been drawn and x-axis fit to those
+            // The x-axis can only be freely moved while paused.
+            bool running = !m_paused;
+            if (running || (scalar_plot.last_frame_timestamp < m_timestamp)) {
+                scalar_plot.last_frame_timestamp = m_timestamp;
                 ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - scalar_plot.x_range, m_timestamp, ImGuiCond_Always);
                 x_flags |= ImPlotAxisFlags_NoTickLabels;
             } else if (time_range_changed) {

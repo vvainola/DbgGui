@@ -120,6 +120,7 @@ struct ScalarPlot {
     double x_axis_min;
     double x_axis_max;
     double x_range;
+    double last_frame_timestamp;
     bool autofit_y = true;
     bool show_tooltip = true;
     bool open = true;
