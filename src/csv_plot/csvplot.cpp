@@ -152,6 +152,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
             m_link_axis = settings["window"]["link_axis"];
+            m_fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
@@ -185,6 +186,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["ypos"] = ypos;
     settings["window"]["plot_cnt"] = m_plot_cnt;
     settings["window"]["link_axis"] = m_link_axis;
+    settings["window"]["fit_on_drag_and_drop"] = m_fit_after_drag_and_drop;
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
@@ -374,7 +376,7 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename) {
 void CsvPlotter::showSignalWindow() {
     ImGui::Begin("Signals");
 
-    ImGui::BeginChild("Signal selection", ImVec2(400, ImGui::GetContentRegionAvail().y));
+    ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
         std::optional<CsvFileData> csv_data = loadCsv();
         if (csv_data) {
@@ -403,6 +405,7 @@ void CsvPlotter::showSignalWindow() {
     }
     ImGui::SameLine();
     ImGui::Checkbox("Link x-axis", &m_link_axis);
+    ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
 
     for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten. Wait that file has not been modified in the last second
@@ -494,7 +497,9 @@ void CsvPlotter::showPlots() {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
                     CsvSignal* sig = *(CsvSignal**)payload->Data;
                     sig->plot_idx = plot_idx;
-                    m_fit_plot_idx = plot_idx;
+                    if (m_fit_after_drag_and_drop) {
+                        m_fit_plot_idx = plot_idx;
+                    }
                 }
                 ImGui::EndDragDropTarget();
             }

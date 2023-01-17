@@ -38,6 +38,7 @@ class CsvPlotter {
     int m_fit_plot_idx = -1;
     bool m_first_signal_as_x = true;
     bool m_link_axis = true;
+    bool m_fit_after_drag_and_drop = true;
     double m_x_axis_min;
     double m_x_axis_max;
 };
