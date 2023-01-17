@@ -240,7 +240,7 @@ void savePlotAsCsv(ScalarPlot const& plot) {
             csv << signal->name_and_group << ",";
             values.push_back(signal->buffer->getValuesInRange(plot.x_axis_min,
                                                               plot.x_axis_max,
-                                                              INT_MAX,
+                                                              ALL_SAMPLES,
                                                               signal->scale,
                                                               signal->offset));
         }
@@ -526,7 +526,7 @@ void DbgGui::showSpectrumPlots() {
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
             ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range,
                                                                                             m_timestamp,
-                                                                                            INT_MAX,
+                                                                                            ALL_SAMPLES,
                                                                                             plot.scalar->scale,
                                                                                             plot.scalar->offset);
             size_t sample_cnt = values.y_min.size();
