@@ -394,6 +394,7 @@ void CsvPlotter::showSignalWindow() {
         for (CsvFileData& file : m_csv_data) {
             for (CsvSignal& signal : file.signals) {
                 signal.plot_idx = NOT_VISIBLE;
+                signal.color = NO_COLOR;
             }
         }
     }
@@ -527,6 +528,18 @@ void CsvPlotter::showPlots() {
                 }
             }
 
+            // Reset plot colors if there are no signals in it
+            if (signals.size() == 0) {
+                ImVec4 last_color = ImPlot::GetColormapColor(ImPlot::GetColormapSize() - 1);
+                ImVec4 next_color = ImPlot::NextColormapColor();
+                while (next_color.x != last_color.x
+                       || next_color.y != last_color.y
+                       || next_color.z != last_color.z
+                       || next_color.w != last_color.w) {
+                    next_color = ImPlot::NextColormapColor();
+                }
+            }
+
             for (FileAndSignal& sig : signals) {
                 double const* x_data;
                 if (m_first_signal_as_x) {
@@ -548,6 +561,7 @@ void CsvPlotter::showPlots() {
                                  ImPlotLineFlags_None);
                 ImPlot::PopStyleColor();
 
+                // Tooltip
                 if (ImPlot::IsPlotHovered() && sig.signal->samples.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                     ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
