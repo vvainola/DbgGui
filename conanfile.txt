@@ -3,6 +3,7 @@ nlohmann_json/3.10.5
 magic_enum/0.7.3
 kissfft/131.1.0
 glfw/3.3.8
+cxxopts/3.0.0
 
 [generators]
 pkg_config

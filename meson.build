@@ -16,6 +16,7 @@ deps = [
     dependency('magic_enum'),
     dependency('glfw3'),
     dependency('kissfft-float'),
+    dependency('cxxopts'),
     cpp.find_library('dbghelp'),
 ]
 

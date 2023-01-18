@@ -21,7 +21,7 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename);
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, std::map<std::string, int> name_and_plot_idx);
 std::optional<CsvFileData> loadCsv();
 
 void exit(std::string const& err) {
@@ -33,9 +33,10 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-CsvPlotter::CsvPlotter(std::vector<std::string> files) {
+CsvPlotter::CsvPlotter(std::vector<std::string> files,
+                       std::map<std::string, int> name_and_plot_idx) {
     for (std::string file : files) {
-        std::optional<CsvFileData> data = parseCsvData(file);
+        std::optional<CsvFileData> data = parseCsvData(file, name_and_plot_idx);
         if (data) {
             m_csv_data.push_back(*data);
         }
@@ -277,7 +278,8 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename) {
+std::optional<CsvFileData> parseCsvData(std::string const& csv_filename,
+                                        std::map<std::string, int> name_and_plot_idx = {}) {
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
@@ -357,6 +359,10 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename) {
         } else {
             csv_signals.push_back(CsvSignal{.name = signal_name});
         }
+        // Add signal to plot automatically if name was given from cmd line
+        if (name_and_plot_idx.contains(signal_name)) {
+            csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
+        }
         csv_signals.back().samples.reserve(sample_cnt);
     }
     for (size_t i = 0; i < sample_cnt; ++i) {
@@ -414,7 +420,7 @@ void CsvPlotter::showSignalWindow() {
         auto write_time_plus_1s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(1);
         auto now = std::chrono::system_clock::now();
 
-        if (last_write_time != file.write_time 
+        if (last_write_time != file.write_time
             && now > write_time_plus_1s
             && file.write_time != std::filesystem::file_time_type()) {
             std::optional<CsvFileData> csv_data = parseCsvData(file.name);

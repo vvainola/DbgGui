@@ -2,6 +2,7 @@
 #include <string>
 #include <filesystem>
 #include <imgui.h>
+#include <map>
 
 inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
@@ -23,7 +24,8 @@ struct CsvFileData {
 struct GLFWwindow;
 class CsvPlotter {
   public:
-    CsvPlotter(std::vector<std::string> files);
+    CsvPlotter(std::vector<std::string> files,
+               std::map<std::string, int> name_and_plot_idx);
 
   private:
     void showSignalWindow();
