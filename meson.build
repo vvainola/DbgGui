@@ -1,4 +1,4 @@
-project('test_project', ['cpp', 'c'], 
+project('DbgGui', ['cpp', 'c'], 
     default_options : [
         'b_vscrt=md',
         'cpp_std=c++latest',
