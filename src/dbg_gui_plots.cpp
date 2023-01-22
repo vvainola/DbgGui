@@ -150,21 +150,21 @@ void DbgGui::showScalarPlots() {
                     double current_value = signal->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::Text(signal->name_and_group.c_str());
-                    ImGui::InputDouble("Value", &current_value, 0, 0, "%.3f");
+                    ImGui::InputDouble("Value", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemEdited() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
                         signal->setScaledValue(current_value);
                         ImGui::CloseCurrentPopup();
                     }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%.3f");
+                    ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
                         signal->addTrigger(current_value);
                         ImGui::CloseCurrentPopup();
                     }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%.10f");
+                    ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%g");
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%.10f");
+                    ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%g");
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     };
