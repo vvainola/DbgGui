@@ -16,6 +16,7 @@
 #include <future>
 
 constexpr double PI = 3.1415926535897;
+constexpr int SCALAR_PLOT_POINT_COUNT = 2000;
 
 void savePlotAsCsv(ScalarPlot const& plot);
 SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
@@ -113,7 +114,7 @@ void DbgGui::showScalarPlots() {
             for (Scalar* signal : scalar_plot.signals) {
                 ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(scalar_plot.x_axis_min,
                                                                                            scalar_plot.x_axis_max,
-                                                                                           1000,
+                                                                                           SCALAR_PLOT_POINT_COUNT,
                                                                                            signal->scale,
                                                                                            signal->offset);
                 // Fatter line with custom settings
