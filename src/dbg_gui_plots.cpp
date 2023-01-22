@@ -326,8 +326,18 @@ void DbgGui::showVectorPlots() {
 
             // Plot vectors
             for (Vector2D* signal : vector_plot.signals) {
-                ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
-                ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
+                ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(
+                    last_sample_time - vector_plot.time_range,
+                    last_sample_time,
+                    ALL_SAMPLES,
+                    signal->x->scale,
+                    signal->x->offset);
+                ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(
+                    last_sample_time - vector_plot.time_range,
+                    last_sample_time,
+                    ALL_SAMPLES,
+                    signal->y->scale,
+                    signal->y->offset);
                 // Rotate samples
                 if (frame_rotation_vectors.size() > 0) {
                     for (size_t i = 0; i < values_x.y_max.size(); ++i) {

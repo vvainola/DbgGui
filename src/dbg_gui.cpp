@@ -424,7 +424,7 @@ void DbgGui::updateSavedSettings() {
     }
 
     for (auto& scalar : m_scalars) {
-        if (!scalar->hide_from_scalars_window) {
+        if (!scalar->deleted) {
             m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
             m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->scale;
             m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->offset;

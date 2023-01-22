@@ -72,6 +72,7 @@ struct Scalar {
     ValueSource src;
     std::unique_ptr<ScrollingBuffer> buffer;
     bool hide_from_scalars_window = false;
+    bool deleted = false;
     double scale = 1;
     double offset = 0;
 

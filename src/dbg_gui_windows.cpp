@@ -290,6 +290,7 @@ void DbgGui::showScalarWindow() {
                         m_settings["scalar_symbols"].erase(scalar->name_and_group);
                         m_settings["scalars"].erase(scalar->name_and_group);
                         scalar->hide_from_scalars_window = true;
+                        scalar->deleted = true;
                     }
                     addScalarContextMenu(scalar);
 
@@ -355,7 +356,13 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
+                    bool custom_x_scale_or_offset = signal->x->scale != 1 || signal->x->offset != 0;
+                    if (custom_x_scale_or_offset) {
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->x->getValue()).c_str());
+                    } else {
+                        ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
+                    }
+                    addScalarContextMenu(signal->x);
 
                     // Show y-value
                     ImGui::TableNextColumn();
@@ -366,7 +373,13 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
+                    bool custom_y_scale_or_offset = signal->y->scale != 1 || signal->y->offset != 0;
+                    if (custom_y_scale_or_offset) {
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->y->getValue()).c_str());
+                    } else {
+                        ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
+                    }
+                    addScalarContextMenu(signal->y);
                 }
                 ImGui::TreePop();
             }
