@@ -24,6 +24,11 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
         || startsWith(pSymInfo->Name, "_")
         || startsWith(pSymInfo->Name, "IID_")
         || startsWith(pSymInfo->Name, "CLSID_")
+        || startsWith(pSymInfo->Name, "LIBID_")
+        || startsWith(pSymInfo->Name, "FONT_ATLAS_")
+        || startsWith(pSymInfo->Name, "nlohmann::")
+        || startsWith(pSymInfo->Name, "Concurrency::")
+        || startsWith(pSymInfo->Name, "ImPlot::")
         || startsWith(pSymInfo->Name, "std::")) {
         return TRUE;
     }
