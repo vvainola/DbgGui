@@ -11,14 +11,7 @@
 
 template <typename T>
 inline std::string numberAsStr(T number) {
-    if constexpr (std::is_same_v<double, T> || std::is_same_v<float, T>) {
-        // Remove trailing zeros
-        std::stringstream ss;
-        ss << number;
-        return ss.str();
-    } else {
-        return std::to_string(number);
-    }
+    return std::format("{:g}", number);
 }
 
 inline static std::string getSourceValueStr(ValueSource src) {

@@ -1,8 +1,8 @@
 #include "variant_symbol.h"
 #include "symbol_helpers.h"
 #include <cassert>
-#include <sstream>
 #include <numeric>
+#include <format>
 
 VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                              RawSymbol* symbol,
@@ -161,9 +161,7 @@ ValueSource VariantSymbol::getValueSource() {
 std::string VariantSymbol::valueAsStr() const {
     switch (m_type) {
     case Type::Arithmetic: {
-        std::stringstream ss; // Remove trailing zeros.
-        ss << m_arithmetic_symbol->read();
-        return ss.str();
+        return std::format("{:g}", m_arithmetic_symbol->read());
     }
     case Type::Pointer: {
         if (getPointedAddress() == NULL) {
