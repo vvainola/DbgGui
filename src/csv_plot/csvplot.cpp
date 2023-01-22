@@ -266,6 +266,9 @@ void setTheme() {
     style.PopupRounding = 0.0f;
     style.ScrollbarRounding = 0.0f;
     style.TabRounding = 0.0f;
+
+    auto& implot_style = ImPlot::GetStyle();
+    implot_style.Colors[ImPlotCol_LegendBg] = ImVec4(0, 0, 0, 0);
 }
 
 std::vector<std::string> split(const std::string& s, char delim) {
@@ -491,7 +494,6 @@ void CsvPlotter::showPlots() {
             m_fit_plot_idx = -1;
         }
 
-        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
@@ -591,7 +593,6 @@ void CsvPlotter::showPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
-        ImPlot::PopStyleColor();
         ImGui::End();
     }
 }

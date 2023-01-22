@@ -606,6 +606,9 @@ void setTheme() {
     style.PopupRounding = 0.0f;
     style.ScrollbarRounding = 0.0f;
     style.TabRounding = 0.0f;
+
+    auto& implot_style = ImPlot::GetStyle();
+    implot_style.Colors[ImPlotCol_LegendBg] = ImVec4(0, 0, 0, 0);
 }
 
 void Scalar::addTrigger(double pause_level) {

@@ -85,7 +85,6 @@ void DbgGui::showScalarPlots() {
         ImGui::SameLine();
         ImGui::Checkbox("Show tooltip", &scalar_plot.show_tooltip);
 
-        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Initial axes values from settings
@@ -210,7 +209,6 @@ void DbgGui::showScalarPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
-        ImPlot::PopStyleColor();
         ImGui::End();
 
         if (signal_to_remove) {
@@ -447,7 +445,6 @@ void DbgGui::showSpectrumPlots() {
         ImGui::PushItemWidth(80);
         ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
 
-        ImPlot::PushStyleColor(ImPlotCol_LegendBg, {0, 0, 0, 0});
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Connect link values
@@ -503,7 +500,6 @@ void DbgGui::showSpectrumPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
-        ImPlot::PopStyleColor();
 
         bool one_sided = plot.scalar != nullptr;
         if (plot.spectrum_calculation.valid() && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
