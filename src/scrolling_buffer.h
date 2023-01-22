@@ -103,11 +103,9 @@ struct ScrollingBuffer {
             counter--;
         }
         // Update leftover so that blanks are not left at the end
-        if (counter > 0) {
-            decimated_values.time.push_back(time[end_idx]);
-            decimated_values.y_min.push_back(scale * current_min + offset);
-            decimated_values.y_max.push_back(scale * current_max + offset);
-        }
+        decimated_values.time.push_back(time[end_idx]);
+        decimated_values.y_min.push_back(scale * current_min + offset);
+        decimated_values.y_max.push_back(scale * current_max + offset);
         return decimated_values;
     }
 };
