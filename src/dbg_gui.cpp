@@ -159,8 +159,8 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    if (std::filesystem::exists("../Cousine-Regular.ttf")) {
-        io.Fonts->AddFontFromFileTTF("../Cousine-Regular.ttf", 13.0f);
+    if (std::filesystem::exists(COUSINE_REGULAR_FONT)) {
+        io.Fonts->AddFontFromFileTTF(COUSINE_REGULAR_FONT, 13.0f);
     }
     setTheme();
 

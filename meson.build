@@ -6,7 +6,11 @@ project('DbgGui', ['cpp', 'c'],
     ]
 )
 
-add_project_arguments('-DNOMINMAX', language : ['c', 'cpp'])
+source_root = meson.source_root()
+add_project_arguments([
+        '-DNOMINMAX',
+        f'-DCOUSINE_REGULAR_FONT="@source_root@\\Cousine-Regular.ttf"'.replace('\\', '/')
+    ], language : ['c', 'cpp'])
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
