@@ -11,7 +11,7 @@
 
 template <typename T>
 inline std::string numberAsStr(T number) {
-    return std::format("{:g}", number);
+    return std::format("{:g}", double(number));
 }
 
 inline static std::string getSourceValueStr(ValueSource src) {
