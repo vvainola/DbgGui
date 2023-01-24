@@ -147,14 +147,6 @@ void DbgGui::showConfigurationWindow() {
         ImGui::OpenPopup("##Add");
     }
 
-    if (ImGui::Button("Save state")) {
-        m_dbghelp_symbols.saveState();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Load state")) {
-        m_dbghelp_symbols.loadState();
-    }
-
     if (ImGui::BeginPopup("##Add")) {
         // Always center this window when appearing
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -225,10 +217,7 @@ void DbgGui::showConfigurationWindow() {
         }
         ImGui::EndPopup();
     }
-
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                1000.0f / ImGui::GetIO().Framerate,
-                ImGui::GetIO().Framerate);
+    ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
     ImGui::End();
 }
 

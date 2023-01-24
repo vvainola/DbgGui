@@ -246,6 +246,7 @@ void DbgGui::loadPreviousSessionSettings() {
             int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
+            m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
@@ -359,6 +360,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
+    m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {

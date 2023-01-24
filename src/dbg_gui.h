@@ -281,6 +281,10 @@ class DbgGui {
     std::atomic<bool> m_paused = true;
     float m_simulation_speed = 1;
     double m_time_until_pause = 0;
+    
+    struct OptionalSettings {
+        bool x_tick_labels = true;
+    } m_options;
 
     std::jthread m_gui_thread;
     std::mutex m_sampling_mutex;
