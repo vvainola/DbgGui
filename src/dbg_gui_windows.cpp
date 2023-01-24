@@ -221,7 +221,10 @@ void DbgGui::showConfigurationWindow() {
         }
         ImGui::EndPopup();
     }
-    ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
+    if (ImGui::TreeNode("Options")) {
+        ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
+        ImGui::TreePop();
+    }
     ImGui::End();
 }
 
