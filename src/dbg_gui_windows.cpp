@@ -142,6 +142,10 @@ void DbgGui::showConfigurationWindow() {
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-4f, 10, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
     ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+    double pause_time = 0;
+    if (ImGui::InputScalar("Pause at", ImGuiDataType_Double, &pause_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
+        m_time_until_pause = std::max(pause_time - m_timestamp, 0.0);
+    }
 
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
