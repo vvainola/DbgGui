@@ -518,13 +518,23 @@ void DbgGui::showSpectrumPlots() {
             plot.spectrum = plot.spectrum_calculation.get();
 
         } else if (plot.vector && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues values_x = plot.vector->x->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, ALL_SAMPLES);
-            ScrollingBuffer::DecimatedValues values_y = plot.vector->y->buffer->getValuesInRange(m_timestamp - plot.time_range, m_timestamp, ALL_SAMPLES);
-            size_t sample_cnt = std::min(values_x.y_min.size(), values_y.y_min.size());
+            ScrollingBuffer::DecimatedValues samples_x = plot.vector->x->buffer->getValuesInRange(
+                m_timestamp - plot.time_range,
+                m_timestamp,
+                ALL_SAMPLES,
+                plot.vector->x->scale,
+                plot.vector->x->offset);
+            ScrollingBuffer::DecimatedValues samples_y = plot.vector->y->buffer->getValuesInRange(
+                m_timestamp - plot.time_range,
+                m_timestamp,
+                ALL_SAMPLES,
+                plot.vector->y->scale,
+                plot.vector->y->offset);
+            size_t sample_cnt = std::min(samples_x.y_min.size(), samples_y.y_min.size());
             std::vector<std::complex<double>> samples;
             samples.reserve(sample_cnt);
             for (size_t i = 0; i < sample_cnt; ++i) {
-                samples.push_back({values_x.y_min[i], values_y.y_min[i]});
+                samples.push_back({samples_x.y_min[i], samples_y.y_min[i]});
             }
             plot.spectrum_calculation = std::async(std::launch::async,
                                                    calculateSpectrum,
