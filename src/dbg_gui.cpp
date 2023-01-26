@@ -306,6 +306,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 SpectrumPlot& plot = m_spectrum_plots.emplace_back();
                 plot.name = spec_plot_data["name"];
                 plot.time_range = spec_plot_data["time_range"];
+                plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
                 plot.window = spec_plot_data["window"];
                 plot.x_axis_min = spec_plot_data["x_axis_min"];
                 plot.x_axis_max = spec_plot_data["x_axis_max"];
@@ -407,6 +408,7 @@ void DbgGui::updateSavedSettings() {
         }
         m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
+        m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
         m_settings["spec_plots"][spec_plot.name]["window"] = spec_plot.window;
         m_settings["spec_plots"][spec_plot.name]["x_axis_min"] = spec_plot.x_axis_min;
         m_settings["spec_plots"][spec_plot.name]["x_axis_max"] = spec_plot.x_axis_max;

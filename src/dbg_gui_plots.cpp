@@ -454,6 +454,9 @@ void DbgGui::showSpectrumPlots() {
         plot.time_range = time_range_ms * 1e-3;
 
         ImGui::SameLine();
+        ImGui::Checkbox("Logarithmic y-axis", &plot.logarithmic_y_axis);
+
+        ImGui::SameLine();
         ImGui::PushItemWidth(80);
         ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
 
@@ -462,6 +465,14 @@ void DbgGui::showSpectrumPlots() {
             // Connect link values
             ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis_min, &plot.y_axis_max);
             ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis_min, &plot.x_axis_max);
+            if (plot.logarithmic_y_axis) {
+                ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+                if (plot.y_axis_min < 0) {
+                    plot.y_axis_min = std::max(1e-6, plot.y_axis_min);
+                    plot.y_axis_max = std::max(plot.y_axis_min + 1, plot.y_axis_max);
+                    ImPlot::SetupAxisLimits(ImAxis_Y1, plot.y_axis_min, plot.y_axis_max, ImPlotCond_Always);
+                }
+            }
 
             std::string text = "Drag signal to calculate spectrum";
             if (plot.vector) {
@@ -641,9 +652,14 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
     SpectrumPlot::Spectrum spec;
     double abs_max = 0;
     double amplitude_inv = 1.0 / sample_cnt;
+    // Very small bins are left out from FFT result because it breaks the autozoom with
+    // double click since there are zero or very small amplitude bins that get included
+    // into the plot and the plot always gets always zoomed -sampling_freq/2 to sampling_freq/2
     for (std::complex<double> x : cplx_spec) {
         abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
     }
+    double mag_min = abs_max * 2e-3;
+
     int mid = int(cplx_spec.size() / 2);
     double resolution = 1.0 / (sampling_time * cplx_spec.size());
     double mag_coeff = one_sided ? 2 : 1;
@@ -651,7 +667,7 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
         // Negative side
         for (int i = 0; i < mid; ++i) {
             double mag = mag_coeff * std::abs(cplx_spec[mid + i]) * amplitude_inv;
-            if (mag > abs_max * 2e-3) {
+            if (mag > mag_min) {
                 spec.freq.push_back((-mid + i) * resolution);
                 spec.mag.push_back(mag);
             }
@@ -664,7 +680,7 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
     // Positive side
     for (int i = 1; i < mid; ++i) {
         double mag = mag_coeff * std::abs(cplx_spec[i]) * amplitude_inv;
-        if (mag > abs_max * 2e-3) {
+        if (mag > mag_min) {
             spec.freq.push_back(i * resolution);
             spec.mag.push_back(mag);
         }

@@ -168,6 +168,7 @@ struct SpectrumPlot {
 
     double time_range = 1;
     bool open = true;
+    bool logarithmic_y_axis = false;
     double y_axis_min = -0.1;
     double y_axis_max = 1.1;
     double x_axis_min = -1000;
