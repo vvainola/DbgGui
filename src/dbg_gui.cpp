@@ -253,6 +253,7 @@ void DbgGui::loadPreviousSessionSettings() {
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
             m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];
+            m_options.pause_on_close = m_settings["options"]["pause_on_close"];
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
@@ -368,6 +369,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
     m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
+    m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
@@ -482,6 +484,13 @@ bool DbgGui::isClosed() {
 }
 
 void DbgGui::close() {
+    if (m_window && m_options.pause_on_close) {
+        m_paused = true;
+        while (m_paused) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
     if (m_window) {
         glfwSetWindowShouldClose(m_window, 1);
     }

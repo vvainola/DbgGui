@@ -223,6 +223,7 @@ void DbgGui::showConfigurationWindow() {
     }
     if (ImGui::TreeNode("Options")) {
         ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
+        ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
         ImGui::TreePop();
     }
     ImGui::End();

@@ -286,6 +286,7 @@ class DbgGui {
     
     struct OptionalSettings {
         bool x_tick_labels = true;
+        bool pause_on_close = false;
     } m_options;
 
     std::jthread m_gui_thread;
