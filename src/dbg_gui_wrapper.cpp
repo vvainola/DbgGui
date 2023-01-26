@@ -1,3 +1,4 @@
+#include "..\include\dbg_gui_wrapper.h"
 #include "dbg_gui_wrapper.h"
 #include "dbg_gui.h"
 #include <memory>
@@ -5,13 +6,15 @@
 static std::unique_ptr<DbgGui> gui;
 
 void addScalarToGui(ValueSource src, const char* group, const char* name) {
-    assert(gui);
-    gui->addScalar(src, group, name);
+    if (gui) {
+        gui->addScalar(src, group, name);
+    }
 }
 
 void addVectorToGui(ValueSource x, ValueSource y, const char* group, const char* name) {
-    assert(gui);
-    gui->addVector(x, y, group, name);
+    if (gui) {
+        gui->addVector(x, y, group, name);
+    }
 }
 
 void DbgGui_addScalar_u8(uint8_t* src, const char* group, const char* name) {
@@ -66,13 +69,21 @@ void DbgGui_create(double sampling_time) {
 }
 
 void DbgGui_startUpdateLoop(void) {
-    assert(gui);
-    gui->startUpdateLoop();
+    if (gui) {
+        gui->startUpdateLoop();
+    }
 }
 
 void DbgGui_sample(void) {
-    assert(gui);
-    gui->sample();
+    if (gui) {
+        gui->sample();
+    }
+}
+
+void DbgGui_sampleWithTimestamp(double timestamp) {
+    if (gui) {
+        gui->sampleWithTimestamp(timestamp);
+    }
 }
 
 int DbgGui_isClosed(void) {
@@ -97,15 +108,29 @@ DbgGuiWrapper::~DbgGuiWrapper() {
 }
 
 void DbgGuiWrapper::startUpdateLoop() {
-    gui->startUpdateLoop();
+    if (gui) {
+        gui->startUpdateLoop();
+    }
 }
 
 void DbgGuiWrapper::sample() {
-    gui->sample();
+    if (gui) {
+        gui->sample();
+    }
+}
+
+void DbgGuiWrapper::sampleWithTimestamp(double timestamp) {
+    if (gui) {
+        gui->sampleWithTimestamp(timestamp);
+    }
 }
 
 bool DbgGuiWrapper::isClosed() {
-    return gui->isClosed();
+    if (gui) {
+        return gui->isClosed();
+    } else {
+        return false;
+    }
 }
 
 void DbgGuiWrapper::close() {
@@ -113,9 +138,13 @@ void DbgGuiWrapper::close() {
 }
 
 void DbgGuiWrapper::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {
-    gui->addScalar(src, group, name);
+    if (gui) {
+        gui->addScalar(src, group, name);
+    }
 }
 
 void DbgGuiWrapper::addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name) {
-    gui->addVector(x, y, group, name);
+    if (gui) {
+        gui->addVector(x, y, group, name);
+    }
 }

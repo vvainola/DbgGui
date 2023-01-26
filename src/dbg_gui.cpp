@@ -32,6 +32,7 @@ static void glfw_error_callback(int error, const char* description) {
 
 DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time) {
+    assert(sampling_time > 0);
 }
 
 DbgGui::~DbgGui() {
@@ -80,6 +81,12 @@ void DbgGui::synchronizeSpeed() {
 }
 
 void DbgGui::sample() {
+    m_timestamp += m_sampling_time;
+    sampleWithTimestamp(m_timestamp);
+}
+
+void DbgGui::sampleWithTimestamp(double timestamp) {
+    m_timestamp = timestamp;
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -97,7 +104,6 @@ void DbgGui::sample() {
 
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-        m_timestamp += m_sampling_time;
         for (auto& signal : m_scalars) {
             if (signal->buffer != nullptr) {
                 // Sampling is done with unscaled value and the signal is scaled when retrieving samples

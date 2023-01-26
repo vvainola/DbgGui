@@ -31,6 +31,7 @@ class DbgGuiWrapper {
     void startUpdateLoop();
 
     void sample();
+    void sampleWithTimestamp(double timestamp);
 
     bool isClosed();
     void close();
@@ -63,6 +64,7 @@ void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* n
 void DbgGui_create(double sampling_time);
 void DbgGui_startUpdateLoop(void);
 void DbgGui_sample(void);
+void DbgGui_sampleWithTimestamp(double timestamp);
 int DbgGui_isClosed(void);
 void DbgGui_close(void);
 #ifdef __cplusplus

@@ -215,6 +215,7 @@ class DbgGui {
     void startUpdateLoop();
 
     void sample();
+    void sampleWithTimestamp(double timestamp);
 
     bool isClosed();
     void close();
