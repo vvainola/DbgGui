@@ -7,7 +7,7 @@ AlignConsecutiveAssignments: false
 NamespaceIndentation : None
 AllowAllArgumentsOnNextLine : true
 UseTab : Never
-UseCRLF : true
+UseCRLF : false
 DeriveLineEnding : true
 PointerAlignment : Left
 #IndentAccessModifiers : false
