@@ -439,9 +439,9 @@ void CsvPlotter::showSignalWindow() {
                 }
                 // Set write time to default so that the file gets reloaded again for the latest dataset
                 file.write_time = std::filesystem::file_time_type();
-                static int run_number = 0;
-                run_number++;
-                file.displayed_name += " " + std::to_string(run_number);
+                file.run_number++;
+                csv_data->run_number = file.run_number;
+                file.displayed_name += " " + std::to_string(file.run_number);
                 m_csv_data.push_back(*csv_data);
                 break;
             }

@@ -19,6 +19,7 @@ struct CsvFileData {
     std::string displayed_name;
     std::vector<CsvSignal> signals;
     std::filesystem::file_time_type write_time;
+    int run_number = 0;
 };
 
 struct GLFWwindow;
