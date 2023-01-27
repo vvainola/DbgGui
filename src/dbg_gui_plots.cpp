@@ -82,11 +82,8 @@ void DbgGui::showScalarPlots() {
         // Auto fit button
         ImGui::SameLine();
         ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
-        ImPlotAxisFlags y_flags = ImPlotAxisFlags_None;
+        ImPlotAxisFlags y_flags = scalar_plot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
         ImGui::Checkbox("Autofit", &scalar_plot.autofit_y);
-        if (scalar_plot.autofit_y) {
-            y_flags |= ImPlotAxisFlags_AutoFit;
-        }
         ImGui::SameLine();
         ImGui::Checkbox("Show tooltip", &scalar_plot.show_tooltip);
 
