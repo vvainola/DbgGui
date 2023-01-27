@@ -22,7 +22,7 @@ std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
 std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, std::map<std::string, int> name_and_plot_idx);
-std::optional<CsvFileData> loadCsv();
+std::vector<CsvFileData> openCsvFromFileDialog();
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
@@ -391,9 +391,9 @@ void CsvPlotter::showSignalWindow() {
 
     ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
-        std::optional<CsvFileData> csv_data = loadCsv();
-        if (csv_data) {
-            m_csv_data.push_back(*csv_data);
+        std::vector<CsvFileData> csv_datas = openCsvFromFileDialog();
+        for (CsvFileData& csv_data : csv_datas) {
+            m_csv_data.push_back(csv_data);
         }
     }
     ImGui::SameLine();
@@ -609,14 +609,23 @@ void CsvPlotter::showPlots() {
     }
 }
 
-std::optional<CsvFileData> loadCsv() {
-    nfdchar_t* out_path = NULL;
+std::vector<CsvFileData> openCsvFromFileDialog() {
+    nfdpathset_t path_set;
+    std::vector<CsvFileData> csv_datas;
     auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_OpenDialog("csv", cwd.string().c_str(), &out_path);
-
+    nfdresult_t result = NFD_OpenDialogMultiple("csv", cwd.string().c_str(), &path_set);
     if (result == NFD_OKAY) {
-        std::string out(out_path);
-        return parseCsvData(out_path);
+        for (int i = 0; i < path_set.count; ++i) {
+            std::string out(NFD_PathSet_GetPath(&path_set, i));
+            auto csv_data = parseCsvData(out);
+            if (csv_data) {
+                csv_datas.push_back(*csv_data);
+            }
+        }
+        NFD_PathSet_Free(&path_set);
+    } else if (result == NFD_ERROR) {
+        std::cerr << NFD_GetError() << std::endl;
+    
     }
-    return std::nullopt;
+    return csv_datas;
 }
