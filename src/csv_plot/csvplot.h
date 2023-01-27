@@ -20,6 +20,13 @@ struct CsvFileData {
     std::vector<CsvSignal> signals;
     std::filesystem::file_time_type write_time;
     int run_number = 0;
+
+    bool operator==(CsvFileData const& other) {
+        return name == other.name
+            && displayed_name == other.displayed_name
+            && write_time == other.write_time
+            && run_number == other.run_number;
+    }
 };
 
 struct GLFWwindow;

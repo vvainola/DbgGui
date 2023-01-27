@@ -24,6 +24,11 @@ void setTheme();
 std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, std::map<std::string, int> name_and_plot_idx);
 std::optional<CsvFileData> loadCsv();
 
+template <typename T>
+inline void remove(std::vector<T>& v, const T& item) {
+    v.erase(std::remove(v.begin(), v.end(), item), v.end());
+}
+
 void exit(std::string const& err) {
     std::cerr << err;
     exit(-1);
@@ -100,8 +105,8 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-        //ImGui::ShowDemoWindow();
-        //ImPlot::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
+        // ImPlot::ShowDemoWindow();
 
         //---------- Main windows ----------
         showSignalWindow();
@@ -320,8 +325,7 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename,
         }
     }
     if (delimiter == '\0') {
-        std::cerr << "Unable to detect delimiter from last line of the file " << csv_filename << std::endl;
-        exit(1);
+        exit(std::format("Unable to detect delimiter from last line of the file \"{}\"\n", csv_filename));
     }
 
     // Find first line where header begins
@@ -417,6 +421,7 @@ void CsvPlotter::showSignalWindow() {
     ImGui::Checkbox("Link x-axis", &m_link_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
 
+    CsvFileData* file_to_remove = nullptr;
     for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten. Wait that file has not been modified in the last second
         // in case it is still being written
@@ -462,6 +467,9 @@ void CsvPlotter::showSignalWindow() {
                     file.displayed_name = file.name;
                 }
             }
+            if (ImGui::Button("Remove")) {
+                file_to_remove = &file;
+            }
             ImGui::EndPopup();
         }
 
@@ -484,6 +492,10 @@ void CsvPlotter::showSignalWindow() {
     }
     ImGui::EndChild();
     ImGui::End();
+
+    if (file_to_remove) {
+        remove(m_csv_data, *file_to_remove);
+    }
 }
 
 void CsvPlotter::showPlots() {
