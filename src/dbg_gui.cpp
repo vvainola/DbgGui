@@ -180,8 +180,8 @@ void DbgGui::updateLoop() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-        ImGui::ShowDemoWindow();
-        ImPlot::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
+        // ImPlot::ShowDemoWindow();
 
         //---------- Hotkeys ----------
         if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsAnyItemActive()) {
@@ -254,6 +254,8 @@ void DbgGui::loadPreviousSessionSettings() {
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
             m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];
             m_options.pause_on_close = m_settings["options"]["pause_on_close"];
+            m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];
+            m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];
 
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
@@ -273,13 +275,13 @@ void DbgGui::loadPreviousSessionSettings() {
             for (auto scalar_plot_data : m_settings["scalar_plots"]) {
                 ScalarPlot& plot = m_scalar_plots.emplace_back();
                 plot.name = scalar_plot_data["name"];
-                plot.x_axis_min = 0;
-                plot.x_axis_max = scalar_plot_data["x_range"];
+                plot.x_axis.min = 0;
+                plot.x_axis.max = scalar_plot_data["x_range"];
                 plot.autofit_y = scalar_plot_data["autofit_y"];
                 plot.show_tooltip = scalar_plot_data["show_tooltip"];
                 if (!plot.autofit_y) {
-                    plot.y_axis_min = scalar_plot_data["y_min"];
-                    plot.y_axis_max = scalar_plot_data["y_max"];
+                    plot.y_axis.min = scalar_plot_data["y_min"];
+                    plot.y_axis.max = scalar_plot_data["y_max"];
                 }
                 plot.x_range = scalar_plot_data["x_range"];
 
@@ -370,6 +372,8 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["ypos"] = ypos;
     m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
+    m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
+    m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
@@ -384,8 +388,8 @@ void DbgGui::updateSavedSettings() {
             // Update range only if autofit is not on because otherwise the file
             // could be continously rewritten when autofit range changes
             if (!scalar_plot.autofit_y) {
-                m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis_min;
-                m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis_max;
+                m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
+                m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
             }
             m_settings["scalar_plots"][scalar_plot.name]["signals"][signal->name_and_group] = signal->id;
         }

@@ -22,6 +22,11 @@ struct XY {
     T y;
 };
 
+struct MinMax {
+    double min;
+    double max;
+};
+
 inline double getSourceValue(ValueSource src) {
     return std::visit(
         [=](auto&& src) {
@@ -116,11 +121,9 @@ struct Vector2D {
 struct ScalarPlot {
     std::string name;
     std::vector<Scalar*> signals;
-    double y_axis_min;
-    double y_axis_max;
-    double x_axis_min;
-    double x_axis_max;
-    double x_range;
+    MinMax y_axis = {-1, 1};
+    MinMax x_axis = {0, 1};
+    double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp;
     bool autofit_y = true;
     bool show_tooltip = true;
@@ -258,6 +261,9 @@ class DbgGui {
     }
     std::vector<std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
+    MinMax m_linked_scalar_x_axis_limits = {0, 1};
+    double m_linked_scalar_x_axis_range = 1;
+    
 
     Vector2D* getVector(size_t id) {
         for (auto& vector : m_vectors) {
@@ -287,6 +293,7 @@ class DbgGui {
     struct OptionalSettings {
         bool x_tick_labels = true;
         bool pause_on_close = false;
+        bool link_scalar_x_axis = false;
     } m_options;
 
     std::jthread m_gui_thread;

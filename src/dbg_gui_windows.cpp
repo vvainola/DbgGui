@@ -166,8 +166,8 @@ void DbgGui::showConfigurationWindow() {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_scalar_plots.push_back(ScalarPlot{.name = window_or_plot_name,
-                                                    .y_axis_min = -1,
-                                                    .y_axis_max = 1,
+                                                    .y_axis = {-1, 1},
+                                                    .x_axis = {0, 1},
                                                     .x_range = 1});
                 strcpy_s(window_or_plot_name, "");
                 ImGui::CloseCurrentPopup();
@@ -222,6 +222,7 @@ void DbgGui::showConfigurationWindow() {
         ImGui::EndPopup();
     }
     if (ImGui::TreeNode("Options")) {
+        ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
         ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
         ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
         ImGui::TreePop();

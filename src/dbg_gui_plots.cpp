@@ -65,13 +65,18 @@ void DbgGui::showScalarPlots() {
             ImGui::EndPopup();
         }
 
+        // Selection between common x-axis or separate
+        MinMax& x_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
+        MinMax& y_limits = scalar_plot.y_axis;
+        double& x_range = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_range : scalar_plot.x_range;
+
         // Time range slider
         ImGui::SameLine();
-        float time_range = static_cast<float>((scalar_plot.x_axis_max - scalar_plot.x_axis_min) * 1000);
+        float time_range = static_cast<float>((x_limits.max - x_limits.min) * 1000);
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
         bool time_range_changed = ImGui::SliderFloat("Time range", &time_range, 1, 1000, "%.1f ms");
         if (time_range_changed) {
-            scalar_plot.x_range = time_range * 1e-3;
+            x_range = time_range * 1e-3;
         }
 
         // Auto fit button
@@ -88,33 +93,33 @@ void DbgGui::showScalarPlots() {
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Initial axes values from settings
-            ImPlot::SetupAxisLimits(ImAxis_Y1, scalar_plot.y_axis_min, scalar_plot.y_axis_max, ImGuiCond_Once);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, y_limits.min, y_limits.max, ImGuiCond_Once);
             // Connect link values
-            ImPlot::SetupAxisLinks(ImAxis_Y1, &scalar_plot.y_axis_min, &scalar_plot.y_axis_max);
-            ImPlot::SetupAxisLinks(ImAxis_X1, &scalar_plot.x_axis_min, &scalar_plot.x_axis_max);
+            ImPlot::SetupAxisLinks(ImAxis_Y1, &y_limits.min, &y_limits.max);
+            ImPlot::SetupAxisLinks(ImAxis_X1, &x_limits.min, &x_limits.max);
             // Autofit x-axis if running or the latest samples after pausing have not been drawn and x-axis fit to those
             // The x-axis can only be freely moved while paused.
             bool running = !m_paused;
             if (running || (scalar_plot.last_frame_timestamp < m_timestamp)) {
                 scalar_plot.last_frame_timestamp = m_timestamp;
-                ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - scalar_plot.x_range, m_timestamp, ImGuiCond_Always);
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - x_range, m_timestamp, ImGuiCond_Always);
                 if (!m_options.x_tick_labels) {
                     x_flags |= ImPlotAxisFlags_NoTickLabels;
                 }
             } else if (time_range_changed) {
-                double mid = 0.5 * (scalar_plot.x_axis_max + scalar_plot.x_axis_min);
+                double mid = 0.5 * (x_limits.max + x_limits.min);
                 ImPlot::SetupAxisLimits(ImAxis_X1,
-                                        mid - scalar_plot.x_range / 2.0,
-                                        mid + scalar_plot.x_range / 2.0,
+                                        mid - x_range / 2.0,
+                                        mid + x_range / 2.0,
                                         ImGuiCond_Always);
             }
             ImPlot::SetupAxis(ImAxis_X1, NULL, x_flags);
             ImPlot::SetupAxis(ImAxis_Y1, NULL, y_flags);
-            scalar_plot.x_range = std::max(1e-6, scalar_plot.x_range);
+            x_range = std::max(1e-6, x_range);
 
             for (Scalar* signal : scalar_plot.signals) {
-                ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(scalar_plot.x_axis_min,
-                                                                                           scalar_plot.x_axis_max,
+                ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(x_limits.min,
+                                                                                           x_limits.max,
                                                                                            SCALAR_PLOT_POINT_COUNT,
                                                                                            signal->scale,
                                                                                            signal->offset);
@@ -239,8 +244,8 @@ void savePlotAsCsv(ScalarPlot const& plot) {
         std::vector<ScrollingBuffer::DecimatedValues> values;
         for (Scalar* signal : plot.signals) {
             csv << signal->name_and_group << ",";
-            values.push_back(signal->buffer->getValuesInRange(plot.x_axis_min,
-                                                              plot.x_axis_max,
+            values.push_back(signal->buffer->getValuesInRange(plot.x_axis.min,
+                                                              plot.x_axis.max,
                                                               ALL_SAMPLES,
                                                               signal->scale,
                                                               signal->offset));

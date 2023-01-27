@@ -100,8 +100,8 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-        ImGui::ShowDemoWindow();
-        ImPlot::ShowDemoWindow();
+        //ImGui::ShowDemoWindow();
+        //ImPlot::ShowDemoWindow();
 
         //---------- Main windows ----------
         showSignalWindow();
