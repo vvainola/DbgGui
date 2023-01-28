@@ -25,19 +25,19 @@ class ArithmeticSymbol {
     ArithmeticSymbol(BasicType basic_type,
                      MemoryAddress address,
                      uint32_t size,
-                     std::optional<uint32_t> bitfield_idx);
+                     int bitfield_idx = NO_VALUE);
 
     void write(double read);
     double read() const;
 
     ValueSource getValueSource() { return m_value; }
-    bool isBitfield() const { return bool(m_bitfield_idx); };
+    bool isBitfield() const { return m_bitfield_idx >= 0; };
 
   private:
     double getAddressValue() const;
 
     MemoryAddress m_address;
-    std::optional<uint32_t> m_bitfield_idx;
+    int m_bitfield_idx;
     uint32_t m_bf_size = 0;
     ValueSource m_value;
 };

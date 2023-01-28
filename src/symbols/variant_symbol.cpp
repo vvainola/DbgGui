@@ -29,7 +29,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     case SymTagBaseType: {
         m_type = Type::Arithmetic;
         BasicType basic_type = getBaseType(*symbol);
-        std::optional<DWORD> bitfield_position = std::nullopt;
+        int bitfield_position = NO_VALUE;
         if (basic_type == BasicType::btUInt
             || basic_type == BasicType::btInt
             || basic_type == BasicType::btBool) {
@@ -39,7 +39,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         break;
     }
     case SymTagEnumerator: {
-        m_arithmetic_symbol.emplace(getBaseType(*symbol), m_address, symbol->info.Size, std::nullopt);
+        m_arithmetic_symbol.emplace(getBaseType(*symbol), m_address, symbol->info.Size);
         m_type = Type::Enum;
         // Children of enum contain the enum values as strings.
         for (auto& child : symbol->children) {

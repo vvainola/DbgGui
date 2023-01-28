@@ -8,6 +8,7 @@
 #include <vector>
 
 using MemoryAddress = uint64_t;
+inline constexpr int NO_VALUE = -1;
 
 struct SymbolInfo {
     SymbolInfo(SYMBOL_INFO* symbol)

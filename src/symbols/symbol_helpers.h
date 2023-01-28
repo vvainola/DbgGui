@@ -5,7 +5,7 @@
 
 void printLastError();
 
-std::optional<DWORD> getBitPosition(RawSymbol const& sym);
+int getBitPosition(RawSymbol const& sym);
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
 BasicType getBaseType(RawSymbol const& sym);
 

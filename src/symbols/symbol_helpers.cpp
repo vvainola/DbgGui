@@ -59,10 +59,10 @@ double getVariantEnumValue(VARIANT const& variant) {
     }
 }
 
-std::optional<DWORD> getBitPosition(RawSymbol const& sym) {
-    DWORD position = 0;
+int getBitPosition(RawSymbol const& sym) {
+    int position = NO_VALUE;
     if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.Index, TI_GET_BITPOSITION, &position)) {
-        return std::nullopt;
+        return NO_VALUE;
     }
     return position;
 }
