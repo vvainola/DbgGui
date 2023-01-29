@@ -58,7 +58,8 @@ void DbgGui::showScalarPlots() {
         }
         Scalar* signal_to_remove = nullptr;
 
-        if (!ImGui::Begin(scalar_plot.name.c_str(), &scalar_plot.open)) {
+        scalar_plot.focused = ImGui::Begin(scalar_plot.name.c_str(), &scalar_plot.open);
+        if (!scalar_plot.focused) {
             ImGui::End();
             continue;
         }
@@ -284,7 +285,8 @@ void DbgGui::showVectorPlots() {
         if (!vector_plot.open) {
             continue;
         }
-        if (!ImGui::Begin(vector_plot.name.c_str(), &vector_plot.open)) {
+        vector_plot.focused = ImGui::Begin(vector_plot.name.c_str(), &vector_plot.open);
+        if (!vector_plot.focused) {
             ImGui::End();
             continue;
         }
@@ -459,7 +461,9 @@ void DbgGui::showSpectrumPlots() {
         if (!plot.open) {
             continue;
         }
-        if (!ImGui::Begin(plot.name.c_str(), &plot.open)) {
+        
+        plot.focused = ImGui::Begin(plot.name.c_str(), &plot.open); 
+        if (!plot.focused) {
             ImGui::End();
             continue;
         }

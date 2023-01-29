@@ -147,7 +147,8 @@ void addScalarContextMenu(Scalar* scalar) {
 }
 
 void DbgGui::showConfigurationWindow() {
-    if (!ImGui::Begin("Configuration")) {
+    m_configuration_window_focus.focused = ImGui::Begin("Configuration");
+    if (!m_configuration_window_focus.focused) {
         ImGui::End();
         return;
     }
@@ -259,7 +260,8 @@ void DbgGui::showConfigurationWindow() {
 }
 
 void DbgGui::showScalarWindow() {
-    if (!ImGui::Begin("Scalars")) {
+    m_scalar_window_focus.focused = ImGui::Begin("Scalars");
+    if (!m_scalar_window_focus.focused) {
         ImGui::End();
         return;
     }
@@ -333,7 +335,8 @@ void DbgGui::showScalarWindow() {
 }
 
 void DbgGui::showVectorWindow() {
-    if (!ImGui::Begin("Vectors")) {
+    m_vector_window_focus.focused = ImGui::Begin("Vectors");
+    if (!m_vector_window_focus.focused) {
         ImGui::End();
         return;
     }
@@ -460,7 +463,8 @@ void DbgGui::showCustomWindow() {
             continue;
         }
 
-        if (!ImGui::Begin(custom_window.name.c_str(), &custom_window.open)) {
+        custom_window.focused = ImGui::Begin(custom_window.name.c_str(), &custom_window.open);
+        if (!custom_window.focused) {
             ImGui::End();
             continue;
         }

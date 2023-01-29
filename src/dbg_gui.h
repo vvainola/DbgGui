@@ -45,6 +45,11 @@ struct XY {
     T y;
 };
 
+struct Focus {
+    bool focused = false;
+    bool initial_focus = false;
+};
+
 struct MinMax {
     double min;
     double max;
@@ -141,7 +146,7 @@ struct Vector2D {
     bool hide_from_vector_window = false;
 };
 
-struct ScalarPlot {
+struct ScalarPlot : Focus {
     std::string name;
     std::vector<Scalar*> signals;
     MinMax y_axis = {-1, 1};
@@ -165,7 +170,7 @@ struct ScalarPlot {
     }
 };
 
-struct VectorPlot {
+struct VectorPlot : Focus {
     std::string name;
     std::vector<Vector2D*> signals;
     Vector2D* reference_frame_vector;
@@ -185,7 +190,7 @@ struct VectorPlot {
     }
 };
 
-struct SpectrumPlot {
+struct SpectrumPlot : Focus {
     std::string name;
 
     // Source is either scalar or vector
@@ -229,7 +234,7 @@ struct SpectrumPlot {
     }
 };
 
-struct CustomWindow {
+struct CustomWindow : Focus {
     std::string name;
     std::vector<Scalar*> scalars;
     bool open = true;
@@ -263,6 +268,7 @@ class DbgGui {
     void showSpectrumPlots();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
+    void setInitialFocus();
     void synchronizeSpeed();
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
@@ -286,7 +292,6 @@ class DbgGui {
     std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
     double m_linked_scalar_x_axis_range = 1;
-    
 
     Vector2D* getVector(size_t id) {
         for (auto& vector : m_vectors) {
@@ -303,6 +308,9 @@ class DbgGui {
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
+    Focus m_vector_window_focus;
+    Focus m_scalar_window_focus;
+    Focus m_configuration_window_focus;
 
     double m_sampling_time;
     double m_timestamp = 0;
@@ -312,7 +320,7 @@ class DbgGui {
     std::atomic<bool> m_paused = true;
     float m_simulation_speed = 1;
     double m_time_until_pause = 0;
-    
+
     struct OptionalSettings {
         bool x_tick_labels = true;
         bool pause_on_close = false;

@@ -222,6 +222,7 @@ void DbgGui::updateLoop() {
             showSpectrumPlots();
         }
         updateSavedSettings();
+        setInitialFocus();
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -272,6 +273,10 @@ void DbgGui::loadPreviousSessionSettings() {
             m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];
             m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];
 
+            m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];
+            m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];
+            m_configuration_window_focus.focused = m_settings["initial_focus"]["configuration"];
+
             for (auto symbol : m_settings["scalar_symbols"]) {
                 VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
                 if (sym && (sym->getType() == VariantSymbol::Type::Arithmetic || sym->getType() == VariantSymbol::Type::Enum)) {
@@ -306,6 +311,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(scalar);
                     }
                 }
+                plot.initial_focus = scalar_plot_data["initial_focus"];
             }
 
             for (auto vector_plot_data : m_settings["vector_plots"]) {
@@ -318,6 +324,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(vec);
                     }
                 }
+                plot.initial_focus = vector_plot_data["initial_focus"];
             }
 
             for (auto spec_plot_data : m_settings["spec_plots"]) {
@@ -340,6 +347,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(vector);
                     }
                 }
+                plot.initial_focus = spec_plot_data["initial_focus"];
             }
 
             for (auto& scalar_data : m_settings["scalars"]) {
@@ -364,6 +372,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         custom_window.scalars.push_back(scalar);
                     }
                 }
+                custom_window.initial_focus = custom_window_data["initial_focus"];
             }
 
             std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
@@ -389,17 +398,21 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
+    m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
+    m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
+    m_settings["initial_focus"]["configuration"] = m_configuration_window_focus.focused;
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
             m_settings["scalar_plots"].erase(scalar_plot.name);
             continue;
         }
+        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focused;
+        m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
+        m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
+        m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
+        m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
         for (Scalar* signal : scalar_plot.signals) {
-            m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
-            m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
-            m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
-            m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
             // Update range only if autofit is not on because otherwise the file
             // could be continously rewritten when autofit range changes
             if (!scalar_plot.autofit_y) {
@@ -415,9 +428,10 @@ void DbgGui::updateSavedSettings() {
             m_settings["vector_plots"].erase(vector_plot.name);
             continue;
         }
+        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focused;
+        m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
+        m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
         for (Vector2D* signal : vector_plot.signals) {
-            m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
-            m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
             m_settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
         }
     }
@@ -427,6 +441,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["spec_plots"].erase(spec_plot.name);
             continue;
         }
+        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focused;
         m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
         m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
@@ -447,6 +462,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["custom_windows"].erase(custom_window.name);
             continue;
         }
+        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focused;
         m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
         for (Scalar* scalar : custom_window.scalars) {
             // use group first in key so that the signals are sorted alphabetically by group
@@ -479,6 +495,67 @@ void DbgGui::updateSavedSettings() {
         }
         ImGui::SaveIniSettingsToDisk((settings_dir + "imgui.ini").c_str());
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_settings;
+    }
+}
+
+void DbgGui::setInitialFocus() {
+    // Set same tabs active as in previous session on 2nd frame because the windows do not yet exists when previous session
+    // settings are loaded and window focus cannot be set on first frame.
+    // Related github issues
+    // https://github.com/ocornut/imgui/issues/5005 How to set active docked window?
+    // https://github.com/ocornut/imgui/issues/5289 ImGui::SetWindowFocus does nothing the first frame after a window has been created 
+    static int i = 0;
+    if (i < 1) {
+        ++i;
+        return;
+    } else if (i > 1) {
+        return;
+    }
+    ++i;
+
+    if (m_configuration_window_focus.initial_focus) {
+        ImGui::Begin("Configuration");
+        ImGui::SetWindowFocus("Configuration");
+        ImGui::End();
+    }
+    if (m_scalar_window_focus.initial_focus) {
+        ImGui::Begin("Scalars");
+        ImGui::SetWindowFocus("Scalars");
+        ImGui::End();
+    }
+    if (m_vector_window_focus.initial_focus) {
+        ImGui::Begin("Vectors");
+        ImGui::SetWindowFocus("Vectors");
+        ImGui::End();
+    }
+
+    for (ScalarPlot& scalar_plot : m_scalar_plots) {
+        ImGui::Begin(scalar_plot.name.c_str());
+        if (scalar_plot.initial_focus) {
+            ImGui::SetWindowFocus(scalar_plot.name.c_str());
+        }
+        ImGui::End();
+    }
+    for (VectorPlot& vector_plot : m_vector_plots) {
+        ImGui::Begin(vector_plot.name.c_str());
+        if (vector_plot.initial_focus) {
+            ImGui::SetWindowFocus(vector_plot.name.c_str());
+        }
+        ImGui::End();
+    }
+    for (SpectrumPlot& spec_plot : m_spectrum_plots) {
+        ImGui::Begin(spec_plot.name.c_str());
+        if (spec_plot.initial_focus) {
+            ImGui::SetWindowFocus(spec_plot.name.c_str());
+        }
+        ImGui::End();
+    }
+    for (CustomWindow& custom_window : m_custom_windows) {
+        ImGui::Begin(custom_window.name.c_str());
+        if (custom_window.initial_focus) {
+            ImGui::SetWindowFocus(custom_window.name.c_str());
+        }
+        ImGui::End();
     }
 }
 
