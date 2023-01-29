@@ -484,14 +484,14 @@ void DbgGui::showSpectrumPlots() {
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
             // Connect link values
-            ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis_min, &plot.y_axis_max);
-            ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis_min, &plot.x_axis_max);
+            ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis.min, &plot.y_axis.max);
+            ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis.min, &plot.x_axis.max);
             if (plot.logarithmic_y_axis) {
                 ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-                if (plot.y_axis_min < 0) {
-                    plot.y_axis_min = std::max(1e-6, plot.y_axis_min);
-                    plot.y_axis_max = std::max(plot.y_axis_min + 1, plot.y_axis_max);
-                    ImPlot::SetupAxisLimits(ImAxis_Y1, plot.y_axis_min, plot.y_axis_max, ImPlotCond_Always);
+                if (plot.y_axis.min < 0) {
+                    plot.y_axis.min = std::max(1e-6, plot.y_axis.min);
+                    plot.y_axis.max = std::max(plot.y_axis.min + 1, plot.y_axis.max);
+                    ImPlot::SetupAxisLimits(ImAxis_Y1, plot.y_axis.min, plot.y_axis.max, ImPlotCond_Always);
                 }
             }
 

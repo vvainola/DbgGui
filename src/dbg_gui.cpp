@@ -333,10 +333,10 @@ void DbgGui::loadPreviousSessionSettings() {
                 plot.time_range = spec_plot_data["time_range"];
                 plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
                 plot.window = spec_plot_data["window"];
-                plot.x_axis_min = spec_plot_data["x_axis_min"];
-                plot.x_axis_max = spec_plot_data["x_axis_max"];
-                plot.y_axis_min = spec_plot_data["y_axis_min"];
-                plot.y_axis_max = spec_plot_data["y_axis_max"];
+                plot.x_axis.min = spec_plot_data["x_axis_min"];
+                plot.x_axis.max = spec_plot_data["x_axis_max"];
+                plot.y_axis.min = spec_plot_data["y_axis_min"];
+                plot.y_axis.max = spec_plot_data["y_axis_max"];
                 if (spec_plot_data.contains("id")) {
                     size_t id = spec_plot_data["id"];
                     Scalar* scalar = getScalar(id);
@@ -446,10 +446,10 @@ void DbgGui::updateSavedSettings() {
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
         m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
         m_settings["spec_plots"][spec_plot.name]["window"] = spec_plot.window;
-        m_settings["spec_plots"][spec_plot.name]["x_axis_min"] = spec_plot.x_axis_min;
-        m_settings["spec_plots"][spec_plot.name]["x_axis_max"] = spec_plot.x_axis_max;
-        m_settings["spec_plots"][spec_plot.name]["y_axis_min"] = spec_plot.y_axis_min;
-        m_settings["spec_plots"][spec_plot.name]["y_axis_max"] = spec_plot.y_axis_max;
+        m_settings["spec_plots"][spec_plot.name]["x_axis_min"] = spec_plot.x_axis.min;
+        m_settings["spec_plots"][spec_plot.name]["x_axis_max"] = spec_plot.x_axis.max;
+        m_settings["spec_plots"][spec_plot.name]["y_axis_min"] = spec_plot.y_axis.min;
+        m_settings["spec_plots"][spec_plot.name]["y_axis_max"] = spec_plot.y_axis.max;
         if (spec_plot.scalar) {
             m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
         } else if (spec_plot.vector) {
@@ -503,7 +503,7 @@ void DbgGui::setInitialFocus() {
     // settings are loaded and window focus cannot be set on first frame.
     // Related github issues
     // https://github.com/ocornut/imgui/issues/5005 How to set active docked window?
-    // https://github.com/ocornut/imgui/issues/5289 ImGui::SetWindowFocus does nothing the first frame after a window has been created 
+    // https://github.com/ocornut/imgui/issues/5289 ImGui::SetWindowFocus does nothing the first frame after a window has been created
     static int i = 0;
     if (i < 1) {
         ++i;

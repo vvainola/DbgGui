@@ -200,10 +200,8 @@ struct SpectrumPlot : Focus {
     double time_range = 1;
     bool open = true;
     bool logarithmic_y_axis = false;
-    double y_axis_min = -0.1;
-    double y_axis_max = 1.1;
-    double x_axis_min = -1000;
-    double x_axis_max = 1000;
+    MinMax y_axis = {-0.1, 1.1};
+    MinMax x_axis = {-1000, 1000};
 
     struct Spectrum {
         std::vector<double> freq;
