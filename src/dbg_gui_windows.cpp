@@ -373,6 +373,8 @@ void DbgGui::showVectorWindow() {
                         m_settings["vector_symbols"].erase(signal->name_and_group);
                         m_settings["scalars"].erase(signal->x->name_and_group);
                         m_settings["scalars"].erase(signal->y->name_and_group);
+                        signal->x->deleted = true;
+                        signal->y->deleted = true;
                         signal->hide_from_vector_window = true;
                     }
 
