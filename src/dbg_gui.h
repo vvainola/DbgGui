@@ -1,6 +1,6 @@
 #pragma once
 
-#include "symbols/dbghelp_symbols_lookup.h"
+#include "dbghelp_symbols_lookup.h"
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include <mutex>

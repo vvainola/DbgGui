@@ -55,23 +55,28 @@ imgui_lib = static_library('imgui',
     include_directories : inc,
 )
 
-src = [
-    'src/dbg_gui_wrapper.cpp',
-    'src/dbg_gui.cpp',
-    'src/dbg_gui_plots.cpp',
-    'src/dbg_gui_windows.cpp',
-    'src/dbg_gui.h',
-    'src/symbols/arithmetic_symbol.cpp',
-    'src/symbols/dbghelp_symbols_lookup.cpp',
-    'src/symbols/raw_symbol.cpp',
-    'src/symbols/symbol_helpers.cpp',
-    'src/symbols/variant_symbol.cpp',
-    ]
+lib_symbols = static_library('symbols',
+    sources : [
+        'src/symbols/arithmetic_symbol.cpp',
+        'src/symbols/dbghelp_symbols_lookup.cpp',
+        'src/symbols/raw_symbol.cpp',
+        'src/symbols/symbol_helpers.cpp',
+        'src/symbols/variant_symbol.cpp',
+    ],
+    dependencies : deps,
+    include_directories : 'include'
+)
 
 lib_gui = static_library('dbg_gui',
-    sources : src,
+    sources : [
+        'src/dbg_gui_wrapper.cpp',
+        'src/dbg_gui.cpp',
+        'src/dbg_gui_plots.cpp',
+        'src/dbg_gui_windows.cpp',
+        'src/dbg_gui.h',
+    ],
     include_directories : inc,
-    link_with : imgui_lib,
+    link_with : [lib_symbols, imgui_lib],
     dependencies : deps
 )
 
@@ -84,7 +89,7 @@ cpp_gui = executable('test_gui_cpp',
 c_gui = executable('test_gui_c',
     sources : 'src/test_main.c',
     include_directories : 'include',
-    link_with : lib_gui
+    link_with : lib_gui,
 )
 
 csv_plotter = executable('csv_plotter',
@@ -95,4 +100,14 @@ csv_plotter = executable('csv_plotter',
     include_directories : inc + ['src'],
     link_with : imgui_lib,
     dependencies : deps,
+)
+
+lib_dbghelp_symbols_dep = declare_dependency(
+    link_with : lib_symbols,
+    include_directories : 'include'
+)
+
+lib_gui_dep = declare_dependency(
+    link_with : [lib_gui, lib_symbols],
+    include_directories : 'include'
 )
