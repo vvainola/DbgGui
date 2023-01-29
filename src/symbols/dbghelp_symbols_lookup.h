@@ -1,11 +1,12 @@
 #pragma once
 
-#include "variant_symbol.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class VariantSymbol;
 
 class DbgHelpSymbols {
   public:
