@@ -8,6 +8,7 @@
 #include "dbg_gui.h"
 #include "imgui.h"
 #include <format>
+#include <iostream>
 
 template <typename T>
 inline std::string numberAsStr(T number) {
@@ -153,6 +154,14 @@ void DbgGui::showConfigurationWindow() {
 
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
+    }
+
+    if (ImGui::Button("Save snapshot")) {
+        m_dbghelp_symbols.saveSnapshot("snapshot.json");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load snapshot")) {
+        m_dbghelp_symbols.loadSnapshot("snapshot.json");
     }
 
     if (ImGui::BeginPopup("##Add")) {

@@ -13,12 +13,11 @@
 #include <fstream>
 #include <algorithm>
 #include <format>
+#include <iostream>
+#include <filesystem>
+#include <nlohmann/json.hpp>
 
-bool startsWith(std::string const& s, std::string const& w) {
-    return s.rfind(w, 0) == 0;
-}
-
-BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) { 
+BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagData)
         || startsWith(pSymInfo->Name, "_")
@@ -38,58 +37,15 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     return TRUE;
 }
 
-DbgHelpSymbols::DbgHelpSymbols() {
-    // Symbols are not loaded until a reference is made requiring the symbols be loaded.
-    // This is the fastest, most efficient way to use the symbol handler.
-    SymSetOptions(SYMOPT_DEFERRED_LOADS);
-
-    HANDLE current_process = GetCurrentProcess();
-    SymInitialize(current_process, NULL, TRUE);
-
-    // Collect symbol infos into vector
-    std::vector<SymbolInfo> symbols;
-    if (SymEnumSymbols(current_process, // Process handle from SymInitialize.
-                       0,               // Base address of module.
-                       "*!*",           // Name of symbols to match.
-                       storeSymbols,    // Symbol handler procedure.
-                       &symbols))       // User context.
-    {
-        // SymEnumSymbols succeeded
-    } else {
-        printLastError();
-        _ASSERTE(!"Invalid symbols?");
+DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_json) {
+    bool load_ok = loadSymbolsFromJson(symbol_json);
+    if (!load_ok) {
+        loadSymbolsFromPdb(symbol_json, omit_names_from_json);
     }
-
-    // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
-    // children can be copied from reference symbol if children have been added to that type of symbol already
-    // before. The tree structure for each type has to be then looked up only once.
-    std::vector<std::unique_ptr<RawSymbol>> raw_symbols;
-    raw_symbols.reserve(symbols.size());
-    m_root_symbols.reserve(symbols.size());
-    for (SymbolInfo const& symbol : symbols) {
-        if (symbol.Address == 0) {
-            continue;
-        }
-
-        std::unique_ptr<RawSymbol>& raw_symbol = raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
-        addChildrenToSymbol(*raw_symbol);
-        m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
-    }
-
     // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
     std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
         return l->getAddress() < r->getAddress();
     });
-}
-
-std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> elems;
-    std::istringstream iss(s);
-    std::string item;
-    while (std::getline(iss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
 }
 
 VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
@@ -154,17 +110,92 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingRootSymbols(std::string 
     return matching_symbols;
 }
 
-void DbgHelpSymbols::saveState() {
-    //std::ofstream f("temp.txt");
-    m_saved_state.clear();
+bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
+    if (!std::filesystem::exists(json)) {
+        return false;
+    }
+
+    try {
+        nlohmann::ordered_json symbols_json = nlohmann::ordered_json::parse(std::ifstream(json));
+        if (symbols_json["md5"] != getCurrentModuleInfo().md5_hash) {
+            return false;
+        }
+
+        m_root_symbols.reserve(symbols_json.size());
+        for (nlohmann::ordered_json const& symbol_data : symbols_json["symbols"]) {
+            RawSymbol raw_symbol = symbol_data;
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
+        }
+    } catch (nlohmann::json::exception err) {
+        std::cerr << err.what();
+        m_root_symbols.clear();
+        return false;
+    }
+
+    return true;
+}
+
+void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool omit_names_from_json) {
+    // Symbols are not loaded until a reference is made requiring the symbols be loaded.
+    // This is the fastest, most efficient way to use the symbol handler.
+    SymSetOptions(SYMOPT_DEFERRED_LOADS);
+
+    HANDLE current_process = GetCurrentProcess();
+    SymInitialize(current_process, NULL, TRUE);
+
+    // Collect symbol infos into vector
+    std::vector<SymbolInfo> symbols;
+    if (SymEnumSymbols(current_process, // Process handle from SymInitialize.
+                       0,               // Base address of module.
+                       "*!*",           // Name of symbols to match.
+                       storeSymbols,    // Symbol handler procedure.
+                       &symbols))       // User context.
+    {
+        // SymEnumSymbols succeeded
+    } else {
+        printLastError();
+        _ASSERTE(!"Invalid symbols?");
+    }
+
+    // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
+    // children can be copied from reference symbol if children have been added to that type of symbol already
+    // before. The tree structure for each type has to be then looked up only once.
+    std::vector<std::unique_ptr<RawSymbol>> raw_symbols;
+    raw_symbols.reserve(symbols.size());
+    m_root_symbols.reserve(symbols.size());
+    for (SymbolInfo const& symbol : symbols) {
+        if (symbol.Address == 0) {
+            continue;
+        }
+
+        std::unique_ptr<RawSymbol>& raw_symbol = raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
+        addChildrenToSymbol(*raw_symbol);
+        m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
+    }
+    if (!json_to_save.empty()) {
+        saveSymbolsToFile(json_to_save, raw_symbols, omit_names_from_json);
+    }
+}
+
+void DbgHelpSymbols::saveSnapshot(std::string const& json) {
+    nlohmann::json snapshot;
+    auto module_info = getCurrentModuleInfo();
+    snapshot["md5"] = module_info.md5_hash;
+
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
         VariantSymbol::Type type = sym->getType();
+        MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
-            //f << std::format("{} = {}\n", sym->getFullName(), sym->read());
-            m_saved_state.push_back({sym, sym->read()});
+            snapshot["state"][std::to_string(address_offset)] = sym->read();
         } else if (type == VariantSymbol::Type::Pointer) {
-            //f << std::format("{} = {}\n", sym->getFullName(), sym->getPointedAddress());
-            m_saved_state.push_back({sym, sym->getPointedAddress()});
+            MemoryAddress pointed_address = sym->getPointedAddress();
+            MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
+            // Set pointer only if it points to something else within this module
+            bool pointed_address_ok = pointed_address_offset < module_info.size
+                                   || (pointed_address == NULL);
+            if (pointed_address_ok) {
+                snapshot["state"][std::to_string(address_offset)] = std::max(0ull, pointed_address_offset);
+            }
         }
 
         for (auto const& child : sym->getChildren()) {
@@ -175,23 +206,48 @@ void DbgHelpSymbols::saveState() {
     for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
         save_symbol_state(sym.get());
     }
+
+    std::ofstream(json) << std::setw(4) << snapshot;
 }
 
-void DbgHelpSymbols::loadState() {
-    for (SavedSymbol& saved_symbol : m_saved_state) {
-        std::visit(
-            [=](auto&& value) {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, MemoryAddress>) {
-                    if (saved_symbol.symbol->getPointedAddress() != value) {
-                        saved_symbol.symbol->setPointedAddress(value);
-                    }
-                } else {
-                    if (saved_symbol.symbol->read() != value) {
-                        saved_symbol.symbol->write(value);
-                    }
-                }
-            },
-            saved_symbol.value);
+void DbgHelpSymbols::loadSnapshot(std::string const& json) {
+    auto module_info = getCurrentModuleInfo();
+    nlohmann::json snapshot = nlohmann::json::parse(std::ifstream(json));
+    if (module_info.md5_hash != snapshot["md5"]) {
+        std::cerr << "Snapshot has been made with different binary" << std::endl;
+        return;
+    }
+    auto& state = snapshot["state"];
+
+    std::function<void(VariantSymbol*)> load_symbol_state = [&](VariantSymbol* sym) {
+        VariantSymbol::Type type = sym->getType();
+        std::string address_offset = std::to_string(sym->getAddress() - module_info.base_address);
+        if (!state.contains(address_offset)) {
+            // Do nothing
+        } else if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
+            double new_value = state[address_offset];
+            double current_value = sym->read();
+            if (new_value != current_value) {
+                sym->write(new_value);
+            }
+        } else if (type == VariantSymbol::Type::Pointer) {
+            MemoryAddress current_pointed_address = sym->getPointedAddress();
+            MemoryAddress new_pointed_address_offset = state[address_offset];
+            MemoryAddress new_pointed_address = new_pointed_address_offset + module_info.base_address;
+            // Change pointer only if it is different
+            if (new_pointed_address_offset == NULL && current_pointed_address != NULL) {
+                sym->setPointedAddress(NULL);
+            } else if (current_pointed_address != new_pointed_address) {
+                sym->setPointedAddress(new_pointed_address);
+            }
+        }
+
+        for (auto const& child : sym->getChildren()) {
+            load_symbol_state(child.get());
+        }
+    };
+
+    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+        load_symbol_state(sym.get());
     }
 }

@@ -3,26 +3,30 @@
 #include <iostream>
 #include <cassert>
 #include <map>
+#include <Psapi.h>
+#include <fstream>
+#include <format>
+#include <filesystem>
 
 static HANDLE current_process = GetCurrentProcess();
 
 void printLastError() {
     // Printing all errors causes mostly noise with "element not found" (symbols are not found for that module?)
-    // DWORD error = GetLastError();
-    // if (error) {
-    //     LPSTR messageBuffer = nullptr;
-    //     size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-    //                                  NULL,
-    //                                  error,
-    //                                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-    //                                  (LPSTR)&messageBuffer,
-    //                                  0,
-    //                                  NULL);
+    DWORD error = GetLastError();
+    if (error) {
+        LPSTR messageBuffer = nullptr;
+        size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                     NULL,
+                                     error,
+                                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                     (LPSTR)&messageBuffer,
+                                     0,
+                                     NULL);
 
-    //     std::string message(messageBuffer, size);
-    //     LocalFree(messageBuffer);
-    //     std::cout << message;
-    // }
+        std::string message(messageBuffer, size);
+        LocalFree(messageBuffer);
+        std::cerr << message;
+    }
 }
 
 double getVariantEnumValue(VARIANT const& variant) {
@@ -70,12 +74,12 @@ int getBitPosition(RawSymbol const& sym) {
 DataKind getDataKind(RawSymbol const& sym) {
     DataKind data_kind = DataKind::DataIsUnknown;
     if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.Index, TI_GET_DATAKIND, &data_kind)) {
-        printLastError();
+        // printLastError();
     }
     return data_kind;
 }
 
-BasicType getBaseType(RawSymbol const& sym) {
+BasicType getBasicType(RawSymbol const& sym) {
     assert(sym.tag == SymTagBaseType || sym.tag == SymTagEnumerator);
     BasicType base_type = BasicType::btNoType;
     if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.TypeIndex, TI_GET_BASETYPE, &base_type)) {
@@ -88,7 +92,7 @@ BasicType getBaseType(RawSymbol const& sym) {
 SymTagEnum getSymbolTag(SymbolInfo const& sym) {
     SymTagEnum tag = SymTagEnum::SymTagNull;
     if (!SymGetTypeInfo(current_process, sym.ModBase, sym.TypeIndex, TI_GET_SYMTAG, &tag)) {
-        printLastError();
+        // printLastError();
     }
     return tag;
 }
@@ -108,7 +112,7 @@ std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
     if (SymFromAddr(current_process, address, &dwDisplacement, pSymbol)) {
         return std::make_unique<RawSymbol>(pSymbol);
     } else {
-        printLastError();
+        // printLastError();
         return nullptr;
     }
 }
@@ -123,7 +127,7 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     if (SymFromIndex(current_process, parent.info.ModBase, index, pSymbol)) {
         return std::make_unique<RawSymbol>(pSymbol);
     } else {
-        printLastError();
+        // printLastError();
         return nullptr;
     }
 }
@@ -226,4 +230,39 @@ std::string getUndecoratedSymbolName(std::string const& name) {
     char buffer[MAX_SYM_NAME * sizeof(TCHAR)];
     UnDecorateSymbolName(name.data(), buffer, MAX_SYM_NAME, UNDNAME_NAME_ONLY);
     return std::string(buffer);
+}
+
+ModuleInfo getCurrentModuleInfo() {
+    char path[MAX_PATH];
+    HMODULE handle = NULL;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)&getCurrentModuleInfo,
+                           &handle)) {
+        printLastError();
+        std::abort();
+    }
+    MODULEINFO module_info;
+    if (!GetModuleInformation(GetCurrentProcess(), handle, &module_info, sizeof(module_info))) {
+        printLastError();
+        std::abort();
+    }
+    if (!GetModuleFileName(handle, path, sizeof(path))) {
+        printLastError();
+        std::abort();
+    }
+    std::string md5_hash;
+    if (std::system(std::format("certutil -hashfile {} MD5 > md5.txt", path).c_str()) == 0) {
+        std::string certutil_out = (std::stringstream() << std::ifstream("md5.txt").rdbuf()).str();
+        md5_hash = split(certutil_out, '\n')[1];
+        std::filesystem::remove("md5.txt");
+    }
+
+    return ModuleInfo{
+        .base_address = (MemoryAddress)handle,
+        .size = module_info.SizeOfImage,
+        .md5_hash = md5_hash};
+}
+
+std::string readFile(std::string const& filename) {
+    return (std::stringstream() << std::ifstream(filename).rdbuf()).str();
 }

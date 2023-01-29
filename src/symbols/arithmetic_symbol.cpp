@@ -1,5 +1,4 @@
 #include "arithmetic_symbol.h"
-#include "symbol_helpers.h"
 #include <bitset>
 #include <cassert>
 
@@ -18,6 +17,7 @@ ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
     assert(size_in_bytes > 0);
     m_value = addressAsVariant(basic_type, address, size_in_bytes);
 }
+
 
 void ArithmeticSymbol::write(double value) {
     if (m_bitfield_idx >= 0) {

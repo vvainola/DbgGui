@@ -2,6 +2,7 @@ project('DbgGui', ['cpp', 'c'],
     default_options : [
         'b_vscrt=md',
         'cpp_std=c++latest',
+        'c_std=c17',
         'warning_level=3'
     ]
 )
@@ -62,6 +63,7 @@ src = [
     'src/dbg_gui.h',
     'src/symbols/arithmetic_symbol.cpp',
     'src/symbols/dbghelp_symbols_lookup.cpp',
+    'src/symbols/raw_symbol.cpp',
     'src/symbols/symbol_helpers.cpp',
     'src/symbols/variant_symbol.cpp',
     ]
