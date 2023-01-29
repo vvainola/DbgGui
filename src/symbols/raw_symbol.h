@@ -83,6 +83,6 @@ struct RawSymbol {
 
 void to_json(nlohmann::ordered_json& j, RawSymbol const& sym);
 void from_json(nlohmann::ordered_json const& j, RawSymbol& sym);
-void saveSymbolsToFile(std::string const& filename,
+void saveSymbolsToJson(std::string const& filename,
                        std::vector<std::unique_ptr<RawSymbol>>& symbols,
                        bool omit_names);

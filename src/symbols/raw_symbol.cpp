@@ -44,13 +44,13 @@ RawSymbol::RawSymbol(SymbolInfo const& symbol)
 }
 
 void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
-    field["size"] = sym.info.Size;
+    field["name"] = sym.info.Name;
     if (sym.info.Address > 0) {
         field["address"] = sym.info.Address - sym.info.ModBase;
     } else {
         field["address"] = 0;
     }
-    field["name"] = sym.info.Name;
+    field["size"] = sym.info.Size;
     field["tag"] = sym.tag;
     field["offset_to_parent"] = sym.offset_to_parent;
     field["array_element_count"] = sym.array_element_count;
@@ -80,7 +80,7 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     }
 }
 
-void saveSymbolsToFile(std::string const& filename, std::vector<std::unique_ptr<RawSymbol>>& symbols, bool omit_names) {
+void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<RawSymbol>>& symbols, bool omit_names) {
     ModuleInfo module_info = getCurrentModuleInfo();
     nlohmann::ordered_json symbols_json;
     symbols_json["md5"] = module_info.md5_hash;
@@ -99,8 +99,8 @@ void from_json(nlohmann::ordered_json const& field, RawSymbol& sym) {
     static ModuleInfo module_info = getCurrentModuleInfo();
 
     sym.info.Name = field["name"];
-    sym.info.Size = field["size"];
     sym.info.Address = module_info.base_address + field["address"];
+    sym.info.Size = field["size"];
     sym.info.Value = field["value"];
 
     sym.tag = field["tag"];

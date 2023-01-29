@@ -195,7 +195,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }
     if (!json_to_save.empty()) {
-        saveSymbolsToFile(json_to_save, raw_symbols, omit_names_from_json);
+        saveSymbolsToJson(json_to_save, raw_symbols, omit_names_from_json);
     }
 }
 
