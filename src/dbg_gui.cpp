@@ -499,19 +499,16 @@ void DbgGui::updateSavedSettings() {
 }
 
 void DbgGui::setInitialFocus() {
-    // Set same tabs active as in previous session on 2nd frame because the windows do not yet exists when previous session
-    // settings are loaded and window focus cannot be set on first frame.
+    // Set same tabs active as in previous session because the windows do not yet exists when previous session
+    // settings are loaded and focus cannot be set immediately on first creation
     // Related github issues
     // https://github.com/ocornut/imgui/issues/5005 How to set active docked window?
     // https://github.com/ocornut/imgui/issues/5289 ImGui::SetWindowFocus does nothing the first frame after a window has been created
-    static int i = 0;
-    if (i < 1) {
-        ++i;
-        return;
-    } else if (i > 1) {
+    static bool first_time = true;
+    if (!first_time) {
         return;
     }
-    ++i;
+    first_time = false;
 
     if (m_configuration_window_focus.initial_focus) {
         ImGui::Begin("Configuration");
