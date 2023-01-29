@@ -80,7 +80,11 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label, dou
     ImGui::SetNextItemWidth(-FLT_MIN);
     static ImGuiKey pressed_number = ImGuiKey_None;
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
-        setSourceValue(signal_src, (std::stod(value) - offset) / scale);
+        try {
+            setSourceValue(signal_src, (std::stod(value) - offset) / scale);
+        } catch (std::exception const& err) {
+            std::cerr << err.what() << std::endl;
+        }
     };
     // When number is pressed and item is not already edited, move keyboard focus, write the pressed number and set cursor
     // after the number. This way input can be immediately edited by just typing numbers
