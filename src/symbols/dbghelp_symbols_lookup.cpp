@@ -208,7 +208,8 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
         VariantSymbol::Type type = sym->getType();
         MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
-            snapshot["state"][std::to_string(address_offset)] = sym->read();
+            snapshot["state"][std::to_string(address_offset)]["value"] = sym->read();
+            snapshot["state"][std::to_string(address_offset)]["name"] = sym->getFullName();
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
             MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
@@ -216,7 +217,8 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
             bool pointed_address_ok = pointed_address_offset < module_info.size
                                    || (pointed_address == NULL);
             if (pointed_address_ok) {
-                snapshot["state"][std::to_string(address_offset)] = std::max(0ull, pointed_address_offset);
+                snapshot["state"][std::to_string(address_offset)]["value"] = std::max(0ull, pointed_address_offset);
+                snapshot["state"][std::to_string(address_offset)]["name"] = sym->getFullName();
             }
         }
 
@@ -247,14 +249,14 @@ void DbgHelpSymbols::loadSnapshot(std::string const& json) {
         if (!state.contains(address_offset)) {
             // Do nothing
         } else if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
-            double new_value = state[address_offset];
+            double new_value = state[address_offset]["value"];
             double current_value = sym->read();
             if (new_value != current_value) {
                 sym->write(new_value);
             }
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress current_pointed_address = sym->getPointedAddress();
-            MemoryAddress new_pointed_address_offset = state[address_offset];
+            MemoryAddress new_pointed_address_offset = state[address_offset]["value"];
             MemoryAddress new_pointed_address = new_pointed_address_offset + module_info.base_address;
             // Change pointer only if it is different
             if (new_pointed_address_offset == NULL && current_pointed_address != NULL) {
