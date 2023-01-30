@@ -113,9 +113,9 @@ void DbgGui::showScalarPlots() {
             // Autofit x-axis if running or the latest samples after pausing have not been drawn and x-axis fit to those
             // The x-axis can only be freely moved while paused.
             bool running = !m_paused;
-            if (running || (scalar_plot.last_frame_timestamp < m_timestamp)) {
-                scalar_plot.last_frame_timestamp = m_timestamp;
-                ImPlot::SetupAxisLimits(ImAxis_X1, m_timestamp - x_range, m_timestamp, ImGuiCond_Always);
+            if (running || (scalar_plot.last_frame_timestamp < m_plot_timestamp)) {
+                scalar_plot.last_frame_timestamp = m_plot_timestamp;
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_plot_timestamp - x_range, m_plot_timestamp, ImGuiCond_Always);
                 if (!m_options.x_tick_labels) {
                     x_flags |= ImPlotAxisFlags_NoTickLabels;
                 }
@@ -131,7 +131,7 @@ void DbgGui::showScalarPlots() {
             x_range = std::max(1e-6, x_range);
 
             for (Scalar* signal : scalar_plot.signals) {
-                ScrollingBuffer::DecimatedValues values = signal->buffer->getValuesInRange(x_limits.min,
+                ScrollingBuffer::DecimatedValues values = signal->plot_buffer->getValuesInRange(x_limits.min,
                                                                                            x_limits.max,
                                                                                            SCALAR_PLOT_POINT_COUNT,
                                                                                            signal->scale,
@@ -212,7 +212,7 @@ void DbgGui::showScalarPlots() {
                 ImPlot::PopStyleColor(1);
                 ImGui::BeginTooltip();
                 for (Scalar* signal : scalar_plot.signals) {
-                    ScrollingBuffer::DecimatedValues value = signal->buffer->getValuesInRange(mouse.x,
+                    ScrollingBuffer::DecimatedValues value = signal->plot_buffer->getValuesInRange(mouse.x,
                                                                                               mouse.x,
                                                                                               1,
                                                                                               signal->scale,
@@ -257,7 +257,7 @@ void savePlotAsCsv(ScalarPlot const& plot) {
         std::vector<ScrollingBuffer::DecimatedValues> values;
         for (Scalar* signal : plot.signals) {
             csv << signal->name_and_group << ",";
-            values.push_back(signal->buffer->getValuesInRange(plot.x_axis.min,
+            values.push_back(signal->plot_buffer->getValuesInRange(plot.x_axis.min,
                                                               plot.x_axis.max,
                                                               ALL_SAMPLES,
                                                               signal->scale,
@@ -331,13 +331,13 @@ void DbgGui::showVectorPlots() {
             if (!m_paused) {
                 time_offset = 0;
             }
-            double last_sample_time = m_timestamp - time_offset;
+            double last_sample_time = m_plot_timestamp - time_offset;
 
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;
             if (vector_plot.reference_frame_vector) {
-                ScrollingBuffer::DecimatedValues values_x = vector_plot.reference_frame_vector->x->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
-                ScrollingBuffer::DecimatedValues values_y = vector_plot.reference_frame_vector->y->buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
+                ScrollingBuffer::DecimatedValues values_x = vector_plot.reference_frame_vector->x->plot_buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
+                ScrollingBuffer::DecimatedValues values_y = vector_plot.reference_frame_vector->y->plot_buffer->getValuesInRange(last_sample_time - vector_plot.time_range, last_sample_time, ALL_SAMPLES);
                 frame_rotation_vectors.reserve(values_x.time.size());
                 for (size_t i = 0; i < values_x.y_max.size(); ++i) {
                     double angle = -atan2(values_y.y_min[i], values_x.y_min[i]);
@@ -347,13 +347,13 @@ void DbgGui::showVectorPlots() {
 
             // Plot vectors
             for (Vector2D* signal : vector_plot.signals) {
-                ScrollingBuffer::DecimatedValues values_x = signal->x->buffer->getValuesInRange(
+                ScrollingBuffer::DecimatedValues values_x = signal->x->plot_buffer->getValuesInRange(
                     last_sample_time - vector_plot.time_range,
                     last_sample_time,
                     ALL_SAMPLES,
                     signal->x->scale,
                     signal->x->offset);
-                ScrollingBuffer::DecimatedValues values_y = signal->y->buffer->getValuesInRange(
+                ScrollingBuffer::DecimatedValues values_y = signal->y->plot_buffer->getValuesInRange(
                     last_sample_time - vector_plot.time_range,
                     last_sample_time,
                     ALL_SAMPLES,
@@ -550,15 +550,15 @@ void DbgGui::showSpectrumPlots() {
             plot.spectrum = plot.spectrum_calculation.get();
 
         } else if (plot.vector && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues samples_x = plot.vector->x->buffer->getValuesInRange(
-                m_timestamp - plot.time_range,
-                m_timestamp,
+            ScrollingBuffer::DecimatedValues samples_x = plot.vector->x->plot_buffer->getValuesInRange(
+                m_plot_timestamp - plot.time_range,
+                m_plot_timestamp,
                 ALL_SAMPLES,
                 plot.vector->x->scale,
                 plot.vector->x->offset);
-            ScrollingBuffer::DecimatedValues samples_y = plot.vector->y->buffer->getValuesInRange(
-                m_timestamp - plot.time_range,
-                m_timestamp,
+            ScrollingBuffer::DecimatedValues samples_y = plot.vector->y->plot_buffer->getValuesInRange(
+                m_plot_timestamp - plot.time_range,
+                m_plot_timestamp,
                 ALL_SAMPLES,
                 plot.vector->y->scale,
                 plot.vector->y->offset);
@@ -575,8 +575,8 @@ void DbgGui::showSpectrumPlots() {
                                                    plot.window,
                                                    one_sided);
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues values = plot.scalar->buffer->getValuesInRange(m_timestamp - plot.time_range,
-                                                                                            m_timestamp,
+            ScrollingBuffer::DecimatedValues values = plot.scalar->plot_buffer->getValuesInRange(m_plot_timestamp - plot.time_range,
+                                                                                            m_plot_timestamp,
                                                                                             ALL_SAMPLES,
                                                                                             plot.scalar->scale,
                                                                                             plot.scalar->offset);

@@ -103,15 +103,32 @@ struct Scalar {
     std::string alias_and_group;
     ImVec4 color = {-1, -1, -1, -1};
     ValueSource src;
-    std::unique_ptr<ScrollingBuffer> buffer;
+    std::unique_ptr<ScrollingBuffer> plot_buffer;
+    std::vector<XY<double>> sampling_buffer;
     bool hide_from_scalars_window = false;
     bool deleted = false;
     double scale = 1;
     double offset = 0;
 
+    void sample(double timestamp) {
+        if (plot_buffer != nullptr) {
+            // Sampling is done with unscaled value and the signal is scaled when retrieving samples
+            sampling_buffer.push_back({.x = timestamp, .y = getValue()});
+        }
+    }
+
+    void emptySamplingBuffer() {
+        if (plot_buffer != nullptr) {
+            for (auto const& sample : sampling_buffer) {
+                plot_buffer->addPoint(sample.x, sample.y);
+            }
+            sampling_buffer.clear();
+        }
+    }
+
     void startBuffering() {
-        if (buffer == nullptr) {
-            buffer = std::make_unique<ScrollingBuffer>(int32_t(1e6));
+        if (plot_buffer == nullptr) {
+            plot_buffer = std::make_unique<ScrollingBuffer>(int32_t(1e6));
         }
     }
 
@@ -311,7 +328,8 @@ class DbgGui {
     Focus m_configuration_window_focus;
 
     double m_sampling_time;
-    double m_timestamp = 0;
+    double m_plot_timestamp = 0;
+    double m_sample_timestamp = 0;
     double m_next_sync_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;

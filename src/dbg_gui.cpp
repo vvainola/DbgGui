@@ -62,10 +62,10 @@ void DbgGui::synchronizeSpeed() {
     using namespace std::chrono;
     static double sync_interval = 30e-3;
     static auto last_real_timestamp = std::chrono::system_clock::now();
-    static double last_timestamp = m_timestamp;
+    static double last_timestamp = m_sample_timestamp;
     static std::future<void> tick;
 
-    if (m_timestamp > m_next_sync_timestamp) {
+    if (m_sample_timestamp > m_next_sync_timestamp) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
@@ -75,9 +75,9 @@ void DbgGui::synchronizeSpeed() {
                               std::this_thread::sleep_for(std::chrono::milliseconds(30));
                           });
 
-        m_next_sync_timestamp = m_timestamp + sync_interval * m_simulation_speed;
+        m_next_sync_timestamp = m_sample_timestamp + sync_interval * m_simulation_speed;
         // Limit sync interval to 1 second in case simulation speed is set very high
-        m_next_sync_timestamp = std::min(m_timestamp + 1, m_next_sync_timestamp);
+        m_next_sync_timestamp = std::min(m_sample_timestamp + 1, m_next_sync_timestamp);
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
@@ -86,22 +86,22 @@ void DbgGui::synchronizeSpeed() {
         last_real_timestamp = now;
 
         // Adjust the sync interval for more accurate synchronization
-        double simulation_speed = (m_timestamp - last_timestamp) / real_time_s;
+        double simulation_speed = (m_sample_timestamp - last_timestamp) / real_time_s;
         double sync_interval_ki = 1e-2;
         sync_interval += sync_interval_ki * (m_simulation_speed - simulation_speed);
         sync_interval = std::clamp(sync_interval, 1e-3, 100e-3);
 
-        last_timestamp = m_timestamp;
+        last_timestamp = m_sample_timestamp;
     }
 }
 
 void DbgGui::sample() {
-    m_timestamp += m_sampling_time;
-    sampleWithTimestamp(m_timestamp);
+    m_sample_timestamp += m_sampling_time;
+    sampleWithTimestamp(m_sample_timestamp);
 }
 
 void DbgGui::sampleWithTimestamp(double timestamp) {
-    m_timestamp = timestamp;
+    m_sample_timestamp = timestamp;
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -120,10 +120,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
         for (auto& signal : m_scalars) {
-            if (signal->buffer != nullptr) {
-                // Sampling is done with unscaled value and the signal is scaled when retrieving samples
-                signal->buffer->addPoint(m_timestamp, signal->getValue());
-            }
+            signal->sample(m_sample_timestamp);
             if (signal->m_pause_triggers.size() > 0) {
                 double value = signal->getScaledValue();
                 m_paused = m_paused || signal->checkTriggers(value);
@@ -212,15 +209,19 @@ void DbgGui::updateLoop() {
         //---------- Main windows ----------
         {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            showConfigurationWindow();
-            showScalarWindow();
-            showVectorWindow();
-            showCustomWindow();
-            showSymbolsWindow();
-            showScalarPlots();
-            showVectorPlots();
-            showSpectrumPlots();
+            m_plot_timestamp = m_sample_timestamp;
+            for (auto& signal : m_scalars) {
+                signal->emptySamplingBuffer();
+            }
         }
+        showConfigurationWindow();
+        showScalarWindow();
+        showVectorWindow();
+        showCustomWindow();
+        showSymbolsWindow();
+        showScalarPlots();
+        showVectorPlots();
+        showSpectrumPlots();
         updateSavedSettings();
         setInitialFocus();
 

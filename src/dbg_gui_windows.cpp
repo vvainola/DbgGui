@@ -153,7 +153,7 @@ void DbgGui::showConfigurationWindow() {
         return;
     }
 
-    ImGui::Text("Time %.3f s", m_timestamp);
+    ImGui::Text("Time %.3f s", m_plot_timestamp);
     ImGui::SameLine();
     const char* start_stop_text = m_paused ? "Start" : "Pause";
     if (ImGui::Button(start_stop_text)) {
@@ -165,7 +165,7 @@ void DbgGui::showConfigurationWindow() {
     ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
     double pause_time = 0;
     if (ImGui::InputScalar("Pause at", ImGuiDataType_Double, &pause_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
-        m_time_until_pause = std::max(pause_time - m_timestamp, 0.0);
+        m_time_until_pause = std::max(pause_time - m_plot_timestamp, 0.0);
     }
 
     if (ImGui::Button("Add..")) {
