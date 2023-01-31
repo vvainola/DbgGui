@@ -84,6 +84,10 @@ void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<
     nlohmann::ordered_json symbols_json;
     symbols_json["md5"] = module_info.md5_hash;
     for (int i = 0; auto& sym : symbols) {
+        if (sym->info.ModBase != module_info.base_address) {
+            return;
+        }
+
         if (omit_names) {
             sym->info.Name = std::format("_{}", std::to_string(i));
         }
