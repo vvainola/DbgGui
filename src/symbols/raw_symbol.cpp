@@ -56,7 +56,7 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     field["array_element_count"] = sym.array_element_count;
     field["basic_type"] = BasicType::btNoType;
     field["bitfield_position"] = NO_VALUE;
-    field["value"] = NO_VALUE;
+    field["value"] = sym.info.Value;
     if (sym.tag == SymTagBaseType) {
         BasicType basic_type = getBasicType(sym);
         field["basic_type"] = basic_type;
@@ -68,7 +68,6 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     } else if (sym.tag == SymTagEnumerator) {
         BasicType base_type = getBasicType(sym);
         field["basic_type"] = base_type;
-        field["value"] = sym.info.Value;
     }
 
     for (int i = 0; auto& child : sym.children) {
