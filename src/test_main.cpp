@@ -96,6 +96,7 @@ float* p_null = nullptr;
 C array[50];
 C array2[45];
 D d;
+double inf_value = INFINITY;
 
 enum EnumWithNeg {
     first = -1,

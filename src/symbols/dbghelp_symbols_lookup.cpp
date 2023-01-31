@@ -206,19 +206,26 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
 
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
         VariantSymbol::Type type = sym->getType();
-        MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
+        std::string address_offset = std::to_string(sym->getAddress() - module_info.base_address);
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
-            snapshot["state"][std::to_string(address_offset)]["value"] = sym->read();
-            snapshot["state"][std::to_string(address_offset)]["name"] = sym->getFullName();
+            double value = sym->read();
+            bool value_ok = !isnan(value) && !isinf(value);
+            if (value_ok) {
+                snapshot["state"][address_offset]["value"] = sym->read();
+                snapshot["state"][address_offset]["name"] = sym->getFullName();
+            }
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
             MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
             // Set pointer only if it points to something else within this module
-            bool pointed_address_ok = pointed_address_offset < module_info.size
-                                   || (pointed_address == NULL);
+            bool pointed_address_ok = pointed_address_offset < module_info.size;
+            if (pointed_address == NULL) {
+                snapshot["state"][address_offset]["value"] = 0;
+                snapshot["state"][address_offset]["name"] = sym->getFullName();
+            }
             if (pointed_address_ok) {
-                snapshot["state"][std::to_string(address_offset)]["value"] = std::max(0ull, pointed_address_offset);
-                snapshot["state"][std::to_string(address_offset)]["name"] = sym->getFullName();
+                snapshot["state"][address_offset]["value"] = pointed_address_offset;
+                snapshot["state"][address_offset]["name"] = sym->getFullName();
             }
         }
 
@@ -261,7 +268,8 @@ void DbgHelpSymbols::loadSnapshot(std::string const& json) {
             // Change pointer only if it is different
             if (new_pointed_address_offset == NULL && current_pointed_address != NULL) {
                 sym->setPointedAddress(NULL);
-            } else if (current_pointed_address != new_pointed_address) {
+            } else if (current_pointed_address != new_pointed_address
+                       && new_pointed_address_offset != NULL) {
                 sym->setPointedAddress(new_pointed_address);
             }
         }
