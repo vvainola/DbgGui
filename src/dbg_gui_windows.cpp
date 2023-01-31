@@ -177,7 +177,12 @@ void DbgGui::showConfigurationWindow() {
     }
     ImGui::SameLine();
     if (ImGui::Button("Load snapshot")) {
+        // Pause during snapshot loading so that the execution continues from point when
+        // load button was pressed
+        bool paused = m_paused;
+        m_paused = true;
         m_dbghelp_symbols.loadSnapshot("snapshot.json");
+        m_paused = paused;
     }
 
     if (ImGui::BeginPopup("##Add")) {
