@@ -25,7 +25,7 @@
 #include "raw_symbol.h"
 #include "symbol_helpers.h"
 #include <fstream>
-
+#include <format>
 #include <functional>
 
 RawSymbol::RawSymbol(SymbolInfo const& symbol)
@@ -71,8 +71,8 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     }
 
     for (int i = 0; auto& child : sym.children) {
-        if (sym.info.Name == "_") {
-            child->info.Name = "_";
+        if (sym.info.Name[0] == '_') {
+            child->info.Name = std::format("_{}", std::to_string(i));
         }
         to_json(field["children"][std::to_string(i)], *child);
         ++i;
@@ -85,7 +85,7 @@ void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<
     symbols_json["md5"] = module_info.md5_hash;
     for (int i = 0; auto& sym : symbols) {
         if (omit_names) {
-            sym->info.Name = "_";
+            sym->info.Name = std::format("_{}", std::to_string(i));
         }
         symbols_json["symbols"][std::to_string(i)] = *sym;
         ++i;

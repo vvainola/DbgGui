@@ -206,13 +206,13 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
 
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
         VariantSymbol::Type type = sym->getType();
-        std::string address_offset = std::to_string(sym->getAddress() - module_info.base_address);
+        MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
+        std::string key = std::format("{} {}", sym->getFullName(), address_offset);
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
             double value = sym->read();
             bool value_ok = !isnan(value) && !isinf(value);
             if (value_ok) {
-                snapshot["state"][address_offset]["value"] = sym->read();
-                snapshot["state"][address_offset]["name"] = sym->getFullName();
+                snapshot["state"][key] = sym->read();
             }
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
@@ -220,12 +220,10 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
             // Set pointer only if it points to something else within this module
             bool pointed_address_ok = pointed_address_offset < module_info.size;
             if (pointed_address == NULL) {
-                snapshot["state"][address_offset]["value"] = 0;
-                snapshot["state"][address_offset]["name"] = sym->getFullName();
+                snapshot["state"][key] = 0;
             }
             if (pointed_address_ok) {
-                snapshot["state"][address_offset]["value"] = pointed_address_offset;
-                snapshot["state"][address_offset]["name"] = sym->getFullName();
+                snapshot["state"][key] = pointed_address_offset;
             }
         }
 
@@ -252,18 +250,19 @@ void DbgHelpSymbols::loadSnapshot(std::string const& json) {
 
     std::function<void(VariantSymbol*)> load_symbol_state = [&](VariantSymbol* sym) {
         VariantSymbol::Type type = sym->getType();
-        std::string address_offset = std::to_string(sym->getAddress() - module_info.base_address);
-        if (!state.contains(address_offset)) {
+        MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
+        std::string key = std::format("{} {}", sym->getFullName(), address_offset);
+        if (!state.contains(key)) {
             // Do nothing
         } else if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
-            double new_value = state[address_offset]["value"];
+            double new_value = state[key];
             double current_value = sym->read();
             if (new_value != current_value) {
                 sym->write(new_value);
             }
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress current_pointed_address = sym->getPointedAddress();
-            MemoryAddress new_pointed_address_offset = state[address_offset]["value"];
+            MemoryAddress new_pointed_address_offset = state[key];
             MemoryAddress new_pointed_address = new_pointed_address_offset + module_info.base_address;
             // Change pointer only if it is different
             if (new_pointed_address_offset == NULL && current_pointed_address != NULL) {
