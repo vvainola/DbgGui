@@ -43,6 +43,28 @@ RawSymbol::RawSymbol(SymbolInfo const& symbol)
     }
 }
 
+RawSymbol::RawSymbol(nlohmann::ordered_json const& field) {
+    static ModuleInfo module_info = getCurrentModuleInfo();
+
+    info.Name = field["name"];
+    info.Address = module_info.base_address + field["address"];
+    info.Size = field["size"];
+    info.Value = field["value"];
+
+    tag = field["tag"];
+    offset_to_parent = field["offset_to_parent"];
+    array_element_count = field["array_element_count"];
+    basic_type = field["basic_type"];
+    bitfield_position = field["bitfield_position"];
+    basic_type = field["basic_type"];
+
+    if (field.contains("children")) {
+        for (nlohmann::ordered_json const& child_data : field["children"]) {
+            children.push_back(std::make_unique<RawSymbol>(child_data));
+        }
+    }
+}
+
 void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     field["name"] = sym.info.Name;
     if (sym.info.Address > 0) {
@@ -96,27 +118,4 @@ void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<
     }
 
     std::ofstream(filename) << std::setw(4) << symbols_json;
-}
-
-void from_json(nlohmann::ordered_json const& field, RawSymbol& sym) {
-    static ModuleInfo module_info = getCurrentModuleInfo();
-
-    sym.info.Name = field["name"];
-    sym.info.Address = module_info.base_address + field["address"];
-    sym.info.Size = field["size"];
-    sym.info.Value = field["value"];
-
-    sym.tag = field["tag"];
-    sym.offset_to_parent = field["offset_to_parent"];
-    sym.array_element_count = field["array_element_count"];
-    sym.basic_type = field["basic_type"];
-    sym.bitfield_position = field["bitfield_position"];
-    sym.basic_type = field["basic_type"];
-
-    if (field.contains("children")) {
-        for (nlohmann::ordered_json const& child_data : field["children"]) {
-            auto& child = sym.children.emplace_back(std::make_unique<RawSymbol>());
-            from_json(child_data, *child);
-        }
-    }
 }

@@ -58,8 +58,8 @@ struct SymbolInfo {
 
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
 struct RawSymbol {
-    RawSymbol() {}
     RawSymbol(SymbolInfo const& symbol);
+    RawSymbol(nlohmann::ordered_json const& j);
 
     // Copy from another symbol
     RawSymbol(RawSymbol const& other)
@@ -82,7 +82,6 @@ struct RawSymbol {
 };
 
 void to_json(nlohmann::ordered_json& j, RawSymbol const& sym);
-void from_json(nlohmann::ordered_json const& j, RawSymbol& sym);
 void saveSymbolsToJson(std::string const& filename,
                        std::vector<std::unique_ptr<RawSymbol>>& symbols,
                        bool omit_names);
