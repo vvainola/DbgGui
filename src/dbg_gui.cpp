@@ -485,8 +485,8 @@ void DbgGui::updateSavedSettings() {
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
     static nlohmann::json m_settings_saved = m_settings;
     static std::string m_ini_settings_saved = ini_settings;
-    if (m_settings != m_settings_saved
-        || ini_settings != m_ini_settings_saved) {
+    bool closing = glfwWindowShouldClose(m_window);
+    if (!closing && (m_settings != m_settings_saved || ini_settings != m_ini_settings_saved)) {
         m_ini_settings_saved = ini_settings;
         m_settings_saved = m_settings;
 
