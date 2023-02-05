@@ -334,6 +334,7 @@ class DbgGui {
 
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
+    bool m_initial_focus_set = false;
     float m_simulation_speed = 1;
     double m_time_until_pause = 0;
 
@@ -347,6 +348,8 @@ class DbgGui {
     std::mutex m_sampling_mutex;
 
     nlohmann::json m_settings;
+    nlohmann::json m_settings_saved;
+    std::string m_ini_settings_saved;
 };
 
 template <typename T>

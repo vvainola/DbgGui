@@ -261,10 +261,12 @@ void DbgGui::updateLoop() {
 void DbgGui::loadPreviousSessionSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
     ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
+    m_ini_settings_saved = ImGui::SaveIniSettingsToMemory(nullptr);
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         try {
             m_settings = nlohmann::json::parse(f);
+            m_settings_saved = m_settings;
             int xpos = std::max(0, int(m_settings["window"]["xpos"]));
             int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
@@ -480,13 +482,13 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    size_t ini_settings_size = 0;
-    std::string ini_settings = ImGui::SaveIniSettingsToMemory(&ini_settings_size);
+    std::string ini_settings = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
-    static nlohmann::json m_settings_saved = m_settings;
-    static std::string m_ini_settings_saved = ini_settings;
     bool closing = glfwWindowShouldClose(m_window);
-    if (!closing && (m_settings != m_settings_saved || ini_settings != m_ini_settings_saved)) {
+    bool settings_changed = (m_settings != m_settings_saved || ini_settings != m_ini_settings_saved);
+    if (!closing
+        && m_initial_focus_set
+        && settings_changed) {
         m_ini_settings_saved = ini_settings;
         m_settings_saved = m_settings;
 
@@ -505,11 +507,10 @@ void DbgGui::setInitialFocus() {
     // Related github issues
     // https://github.com/ocornut/imgui/issues/5005 How to set active docked window?
     // https://github.com/ocornut/imgui/issues/5289 ImGui::SetWindowFocus does nothing the first frame after a window has been created
-    static bool first_time = true;
-    if (!first_time) {
+    if (m_initial_focus_set) {
         return;
     }
-    first_time = false;
+    m_initial_focus_set = true;
 
     if (m_configuration_window_focus.initial_focus) {
         ImGui::Begin("Configuration");
