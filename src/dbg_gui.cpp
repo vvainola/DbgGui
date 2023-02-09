@@ -102,6 +102,11 @@ void DbgGui::sample() {
 
 void DbgGui::sampleWithTimestamp(double timestamp) {
     m_sample_timestamp = timestamp;
+    // No point sampling if window has been closed
+    if (isClosed()) {
+        return;
+    }
+
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
