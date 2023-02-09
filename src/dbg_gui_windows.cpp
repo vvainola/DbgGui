@@ -57,6 +57,9 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
     } else {
         key_name = ImGui::GetKeyName(*pressed_key);
     }
+    if (key_name.starts_with("Keypad")) {
+        key_name = key_name[6];
+    }
     // Clear text edit and set cursor after first character
     strcpy_s(data->Buf, 20, key_name.c_str());
     data->BufTextLen = 1;
@@ -74,7 +77,12 @@ std::optional<ImGuiKey> pressedNumber() {
             return key;
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
+    for (ImGuiKey key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
+        if (ImGui::IsKeyPressed(key)) {
+            return key;
+        }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
         return ImGuiKey_Minus;
     }
     return std::nullopt;
@@ -162,7 +170,14 @@ void DbgGui::showConfigurationWindow() {
 
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-4f, 10, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+    if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
+        ImGui::SetKeyboardFocusHere();
+    }
     ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+
+    if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
+        ImGui::SetKeyboardFocusHere();
+    }
     double pause_time = 0;
     if (ImGui::InputScalar("Pause at", ImGuiDataType_Double, &pause_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
         m_time_until_pause = std::max(pause_time - m_plot_timestamp, 0.0);

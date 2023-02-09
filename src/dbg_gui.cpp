@@ -205,9 +205,9 @@ void DbgGui::updateLoop() {
             m_paused = !m_paused;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd) && !ImGui::IsAnyItemActive()) {
             m_simulation_speed *= 2.;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract) && !ImGui::IsAnyItemActive()) {
             m_simulation_speed /= 2.;
         }
 
