@@ -132,10 +132,10 @@ void DbgGui::showScalarPlots() {
 
             for (Scalar* signal : scalar_plot.signals) {
                 ScrollingBuffer::DecimatedValues values = signal->plot_buffer->getValuesInRange(x_limits.min,
-                                                                                           x_limits.max,
-                                                                                           SCALAR_PLOT_POINT_COUNT,
-                                                                                           signal->scale,
-                                                                                           signal->offset);
+                                                                                                x_limits.max,
+                                                                                                SCALAR_PLOT_POINT_COUNT,
+                                                                                                signal->scale,
+                                                                                                signal->offset);
                 // Fatter line with custom settings
                 bool custom_scale_or_offset = signal->scale != 1 || signal->offset != 0;
                 if (custom_scale_or_offset) {
@@ -213,10 +213,10 @@ void DbgGui::showScalarPlots() {
                 ImGui::BeginTooltip();
                 for (Scalar* signal : scalar_plot.signals) {
                     ScrollingBuffer::DecimatedValues value = signal->plot_buffer->getValuesInRange(mouse.x,
-                                                                                              mouse.x,
-                                                                                              1,
-                                                                                              signal->scale,
-                                                                                              signal->offset);
+                                                                                                   mouse.x,
+                                                                                                   1,
+                                                                                                   signal->scale,
+                                                                                                   signal->offset);
                     std::stringstream ss;
                     ss << signal->alias_and_group << " : " << value.y_min[0];
                     ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
@@ -258,10 +258,10 @@ void savePlotAsCsv(ScalarPlot const& plot) {
         for (Scalar* signal : plot.signals) {
             csv << signal->name_and_group << ",";
             values.push_back(signal->plot_buffer->getValuesInRange(plot.x_axis.min,
-                                                              plot.x_axis.max,
-                                                              ALL_SAMPLES,
-                                                              signal->scale,
-                                                              signal->offset));
+                                                                   plot.x_axis.max,
+                                                                   ALL_SAMPLES,
+                                                                   signal->scale,
+                                                                   signal->offset));
         }
         csv << "\n";
         if (values.size() == 0) {
@@ -461,8 +461,8 @@ void DbgGui::showSpectrumPlots() {
         if (!plot.open) {
             continue;
         }
-        
-        plot.focused = ImGui::Begin(plot.name.c_str(), &plot.open); 
+
+        plot.focused = ImGui::Begin(plot.name.c_str(), &plot.open);
         if (!plot.focused) {
             ImGui::End();
             continue;
@@ -576,10 +576,10 @@ void DbgGui::showSpectrumPlots() {
                                                    one_sided);
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
             ScrollingBuffer::DecimatedValues values = plot.scalar->plot_buffer->getValuesInRange(m_plot_timestamp - plot.time_range,
-                                                                                            m_plot_timestamp,
-                                                                                            ALL_SAMPLES,
-                                                                                            plot.scalar->scale,
-                                                                                            plot.scalar->offset);
+                                                                                                 m_plot_timestamp,
+                                                                                                 ALL_SAMPLES,
+                                                                                                 plot.scalar->scale,
+                                                                                                 plot.scalar->offset);
             size_t sample_cnt = values.y_min.size();
             std::vector<std::complex<double>> samples;
             samples.reserve(sample_cnt);

@@ -71,7 +71,7 @@ struct ScrollingBuffer {
                 return mid;
             }
         }
-        return mid;
+        return end;
     }
 
     DecimatedValues getValuesInRange(double x_min,
@@ -98,7 +98,7 @@ struct ScrollingBuffer {
             start_idx = binarySearch(x_min, start_idx, end_idx);
             end_idx = binarySearch(x_max, start_idx, end_idx);
         }
-        end_idx = std::max(end_idx, start_idx + 2);
+        end_idx = std::max(end_idx, start_idx);
 
         int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
 
