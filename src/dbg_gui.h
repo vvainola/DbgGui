@@ -267,8 +267,8 @@ class DbgGui {
     bool isClosed();
     void close();
 
-    Scalar* addScalar(ValueSource const& src, std::string group, std::string const& name);
-    Vector2D* addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name);
+    Scalar* addScalar(ValueSource const& src, std::string group, std::string const& name, double scale = 1.0, double offset = 0.0);
+    Vector2D* addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name, double scale = 1.0, double offset = 0.0);
 
   private:
     void updateLoop();

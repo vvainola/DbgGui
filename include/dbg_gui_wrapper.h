@@ -45,22 +45,8 @@ using ValueSource = std::variant<
     double*,
     ReadWriteFn,
     ReadWriteFnCustomStr>;
-
-class DbgGuiWrapper {
-  public:
-    DbgGuiWrapper(double sampling_time);
-    ~DbgGuiWrapper();
-    void startUpdateLoop();
-
-    void sample();
-    void sampleWithTimestamp(double timestamp);
-
-    bool isClosed();
-    void close();
-
-    void addScalar(ValueSource const& src, std::string const& group, std::string const& name);
-    void addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name);
-};
+void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
+void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 #endif
 
 // C-api

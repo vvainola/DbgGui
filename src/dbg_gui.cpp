@@ -362,7 +362,9 @@ void DbgGui::loadPreviousSessionSettings() {
                 size_t id = scalar_data["id"];
                 Scalar* scalar = getScalar(id);
                 if (scalar) {
-                    scalar->scale = scalar_data["scale"];
+                    if (scalar_data["scale"] != 0) {
+                        scalar->scale = scalar_data["scale"];
+                    }
                     scalar->offset = scalar_data["offset"];
                     if (scalar_data.contains("alias")) {
                         scalar->alias = scalar_data["alias"];
@@ -600,7 +602,7 @@ void DbgGui::close() {
     }
 }
 
-Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name) {
+Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name, double scale, double offset) {
     if (group.empty()) {
         group = "debug";
     } else {
@@ -619,6 +621,8 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->name_and_group = name + " (" + new_scalar->group + ")";
     new_scalar->alias_and_group = new_scalar->name_and_group;
     new_scalar->id = id;
+    new_scalar->scale = scale;
+    new_scalar->offset = offset;
     m_scalar_groups[new_scalar->group].push_back(new_scalar.get());
     // Sort items within the inserted group
     auto& inserted_group = m_scalar_groups[new_scalar->group];
@@ -626,7 +630,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     return new_scalar.get();
 }
 
-Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name) {
+Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name, double scale, double offset) {
     if (group.empty()) {
         group = "debug";
     } else {
@@ -646,6 +650,10 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     new_vector->x->hide_from_scalars_window = true;
     new_vector->y = addScalar(y, group, name + ".y");
     new_vector->y->hide_from_scalars_window = true;
+    new_vector->x->scale = scale;
+    new_vector->x->offset = offset;
+    new_vector->y->scale = scale;
+    new_vector->y->offset = offset;
     m_vector_groups[group].push_back(new_vector.get());
     // Sort items within the inserted group
     auto& inserted_group = m_vector_groups[group];

@@ -27,63 +27,63 @@
 
 static std::unique_ptr<DbgGui> gui;
 
-void addScalarToGui(ValueSource src, const char* group, const char* name) {
+void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale, double offset) {
     if (gui) {
-        gui->addScalar(src, group, name);
+        gui->addScalar(src, group, name, scale, offset);
     }
 }
 
-void addVectorToGui(ValueSource x, ValueSource y, const char* group, const char* name) {
+void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale, double offset) {
     if (gui) {
-        gui->addVector(x, y, group, name);
+        gui->addVector(x, y, group, name, scale, offset);
     }
 }
 
 void DbgGui_addScalar_u8(uint8_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_u16(uint16_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 void DbgGui_addScalar_u32(uint32_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_u64(uint64_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_i8(int8_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_i16(int16_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_i32(int32_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_i64(int64_t* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_f32(float* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addScalar_f64(double* src, const char* group, const char* name) {
-    addScalarToGui(src, group, name);
+    DbgGui_addScalar(src, group, name);
 }
 
 void DbgGui_addVector_f32(float* x, float* y, const char* group, const char* name) {
-    addVectorToGui(x, y, group, name);
+    DbgGui_addVector(x, y, group, name);
 }
 
 void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* name) {
-    addVectorToGui(x, y, group, name);
+    DbgGui_addVector(x, y, group, name);
 }
 
 void DbgGui_create(double sampling_time) {
@@ -120,53 +120,3 @@ void DbgGui_close(void) {
     gui = nullptr;
 }
 #endif
-
-DbgGuiWrapper::DbgGuiWrapper(double sampling_time) {
-    gui = std::make_unique<DbgGui>(sampling_time);
-}
-
-DbgGuiWrapper::~DbgGuiWrapper() {
-    gui = nullptr;
-}
-
-void DbgGuiWrapper::startUpdateLoop() {
-    if (gui) {
-        gui->startUpdateLoop();
-    }
-}
-
-void DbgGuiWrapper::sample() {
-    if (gui) {
-        gui->sample();
-    }
-}
-
-void DbgGuiWrapper::sampleWithTimestamp(double timestamp) {
-    if (gui) {
-        gui->sampleWithTimestamp(timestamp);
-    }
-}
-
-bool DbgGuiWrapper::isClosed() {
-    if (gui) {
-        return gui->isClosed();
-    } else {
-        return false;
-    }
-}
-
-void DbgGuiWrapper::close() {
-    gui = nullptr;
-}
-
-void DbgGuiWrapper::addScalar(ValueSource const& src, std::string const& group, std::string const& name) {
-    if (gui) {
-        gui->addScalar(src, group, name);
-    }
-}
-
-void DbgGuiWrapper::addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name) {
-    if (gui) {
-        gui->addVector(x, y, group, name);
-    }
-}

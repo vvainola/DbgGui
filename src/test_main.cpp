@@ -186,22 +186,22 @@ double theta;
 void t_500us();
 int main(int, char**) {
     static float sfl;
-    DbgGuiWrapper gui(10e-6);
-    gui.addScalar(&g::f64, "group 2", "g_f64");
-    gui.addScalar(&g::f32, "group 1", "g_f32_2");
-    gui.addScalar(&g::f32, "group 1", "g_f32_1");
-    gui.addScalar(&g::u32, "group 2", "g_u32_1");
-    gui.addScalar(&g::f64, "group 2", "g_a64");
-    gui.addScalar(&g::sine, "group 2", "sine");
-    gui.addVector(&g::xy.x, &g::xy.y, "group 4", "xy1");
-    gui.addVector(&g::xy2.x, &g::xy2.y, "group 3", "xy2");
-    gui.addVector(&g::xy.x, &g::xy.y, "group 3", "xy1");
-    gui.startUpdateLoop();
+    DbgGui_create(10e-6);
+    DbgGui_addScalar(&g::f64, "group 2", "g_f64");
+    DbgGui_addScalar(&g::f32, "group 1", "g_f32_2");
+    DbgGui_addScalar(&g::f32, "group 1", "g_f32_1");
+    DbgGui_addScalar(&g::u32, "group 2", "g_u32_1");
+    DbgGui_addScalar(&g::f64, "group 2", "g_a64");
+    DbgGui_addScalar(&g::sine, "group 2", "sine", 10);
+    DbgGui_addVector(&g::xy.x, &g::xy.y, "group 4", "xy1");
+    DbgGui_addVector(&g::xy2.x, &g::xy2.y, "group 3", "xy2");
+    DbgGui_addVector(&g::xy.x, &g::xy.y, "group 3", "xy1");
+    DbgGui_startUpdateLoop();
 
     movavg.init(0, 2000 / test_freq);
 
-    while (!gui.isClosed()) {
-        gui.sample();
+    while (!DbgGui_isClosed()) {
+        DbgGui_sample();
         timestamp += 10e-6;
         sfl = (float)timestamp;
         theta += 2 * PI * test_freq * 10e-6;
