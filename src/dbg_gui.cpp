@@ -201,13 +201,13 @@ void DbgGui::updateLoop() {
         // ImPlot::ShowDemoWindow();
 
         //---------- Hotkeys ----------
-        if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsAnyItemActive()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
             m_paused = !m_paused;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd) && !ImGui::IsAnyItemActive()) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
             m_simulation_speed *= 2.;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract) && !ImGui::IsAnyItemActive()) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
             m_simulation_speed /= 2.;
         }
 

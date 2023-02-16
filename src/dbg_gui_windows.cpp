@@ -82,7 +82,7 @@ std::optional<ImGuiKey> pressedNumber() {
             return key;
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
         return ImGuiKey_Minus;
     }
     return std::nullopt;
