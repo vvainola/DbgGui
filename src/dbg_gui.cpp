@@ -76,8 +76,8 @@ void DbgGui::synchronizeSpeed() {
                           });
 
         m_next_sync_timestamp = m_sample_timestamp + sync_interval * m_simulation_speed;
-        // Limit sync interval to 1 second in case simulation speed is set very high
-        m_next_sync_timestamp = std::min(m_sample_timestamp + 1, m_next_sync_timestamp);
+        // Limit sync interval to 0.1 second in case simulation speed is set very high
+        m_next_sync_timestamp = std::min(m_sample_timestamp + 0.1, m_next_sync_timestamp);
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
