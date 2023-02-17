@@ -169,11 +169,6 @@ void DbgGui::showScalarPlots() {
                     double current_value = signal->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::Text(signal->name_and_group.c_str());
-                    ImGui::InputDouble("Value", &current_value, 0, 0, "%g");
-                    if (ImGui::IsItemEdited() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        signal->setScaledValue(current_value);
-                        ImGui::CloseCurrentPopup();
-                    }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
