@@ -196,6 +196,8 @@ void DbgGui::showConfigurationWindow() {
         // load button was pressed
         bool paused = m_paused;
         m_paused = true;
+        // Wait until main thread goes to pause state
+        while (m_next_sync_timestamp > 0) {}
         m_dbghelp_symbols.loadSnapshot("snapshot.json");
         m_paused = paused;
     }
