@@ -168,6 +168,14 @@ void DbgGui::showConfigurationWindow() {
         m_paused = !m_paused;
     }
 
+    // Step button for pausing after next sample
+    ImGui::SameLine();
+    if (ImGui::Button("Step") 
+        || ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_Space)) {
+        m_pause_at_time = std::numeric_limits<double>::epsilon();
+        m_paused = false;
+    }
+
     ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
     ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-4f, 10, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
     if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
