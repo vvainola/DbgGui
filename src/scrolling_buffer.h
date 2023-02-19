@@ -112,7 +112,7 @@ struct ScrollingBuffer {
         int64_t counter = 0;
         for (int32_t i = start_idx; i <= end_idx; i++) {
             if (counter < 0) {
-                decimated_values.time.push_back(time[i]);
+                decimated_values.time.push_back(time[i - 1]);
                 decimated_values.y_min.push_back(scale * current_min + offset);
                 decimated_values.y_max.push_back(scale * current_max + offset);
 
