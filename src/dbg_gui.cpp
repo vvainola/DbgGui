@@ -116,10 +116,9 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         m_next_sync_timestamp = 0;
     }
 
-    if (m_time_until_pause > 0) {
-        m_time_until_pause -= m_sampling_time;
-        m_paused = m_time_until_pause <= 0;
-        m_time_until_pause = std::max(m_time_until_pause, 0.0);
+    if (m_pause_at_time > 0 && m_sample_timestamp >= m_pause_at_time) {
+        m_pause_at_time = 0;
+        m_paused = true;
     }
 
     {

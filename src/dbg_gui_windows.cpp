@@ -173,15 +173,15 @@ void DbgGui::showConfigurationWindow() {
     if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
         ImGui::SetKeyboardFocusHere();
     }
-    ImGui::InputScalar("Pause after", ImGuiDataType_Double, &m_time_until_pause, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+    double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
+    if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
+        m_pause_at_time = m_sample_timestamp + pause_after;
+    }
 
     if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
         ImGui::SetKeyboardFocusHere();
     }
-    double pause_time = 0;
-    if (ImGui::InputScalar("Pause at", ImGuiDataType_Double, &pause_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
-        m_time_until_pause = std::max(pause_time - m_plot_timestamp, 0.0);
-    }
+    ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
 
     if (ImGui::Button("Add..")) {
         ImGui::OpenPopup("##Add");
