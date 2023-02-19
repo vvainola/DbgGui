@@ -107,6 +107,17 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         return;
     }
 
+    { // Sample signals
+        std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+        for (auto& signal : m_scalars) {
+            signal->sample(m_sample_timestamp);
+            if (signal->m_pause_triggers.size() > 0) {
+                double value = signal->getScaledValue();
+                m_paused = m_paused || signal->checkTriggers(value);
+            }
+        }
+    }
+
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -119,17 +130,6 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     if (m_pause_at_time > 0 && m_sample_timestamp >= m_pause_at_time) {
         m_pause_at_time = 0;
         m_paused = true;
-    }
-
-    {
-        std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-        for (auto& signal : m_scalars) {
-            signal->sample(m_sample_timestamp);
-            if (signal->m_pause_triggers.size() > 0) {
-                double value = signal->getScaledValue();
-                m_paused = m_paused || signal->checkTriggers(value);
-            }
-        }
     }
 
     synchronizeSpeed();
