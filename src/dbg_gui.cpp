@@ -601,6 +601,15 @@ void DbgGui::close() {
     }
 }
 
+Scalar* DbgGui::addSymbol(std::string const& src, std::string group, std::string const& name, double scale, double offset) {
+    VariantSymbol* sym = m_dbghelp_symbols.getSymbol(src);
+    if (sym) {
+        Scalar* ptr = addScalar(sym->getValueSource(), group, name, scale, offset);
+        return ptr;
+    }
+    return nullptr;
+}
+
 Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name, double scale, double offset) {
     if (group.empty()) {
         group = "debug";

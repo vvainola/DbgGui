@@ -27,6 +27,13 @@
 
 static std::unique_ptr<DbgGui> gui;
 
+void DbgGui_addSymbol(std::string const& src, std::string const& group, std::string const& name, double scale, double offset) {
+    if (gui) {
+        Scalar* sym = gui->addSymbol(src, group, name, scale, offset);
+        assert(sym != nullptr);
+    }
+}
+
 void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale, double offset) {
     if (gui) {
         gui->addScalar(src, group, name, scale, offset);

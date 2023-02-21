@@ -45,8 +45,10 @@ using ValueSource = std::variant<
     double*,
     ReadWriteFn,
     ReadWriteFnCustomStr>;
+
 void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
+void DbgGui_addSymbol(std::string const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 #endif
 
 // C-api
