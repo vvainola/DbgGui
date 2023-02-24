@@ -318,7 +318,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(scalar);
                     }
                 }
-                plot.initial_focus = scalar_plot_data["initial_focus"];
+                plot.focus.initial_focus = scalar_plot_data["initial_focus"];
             }
 
             for (auto vector_plot_data : m_settings["vector_plots"]) {
@@ -331,7 +331,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(vec);
                     }
                 }
-                plot.initial_focus = vector_plot_data["initial_focus"];
+                plot.focus.initial_focus = vector_plot_data["initial_focus"];
             }
 
             for (auto spec_plot_data : m_settings["spec_plots"]) {
@@ -354,7 +354,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addSignalToPlot(vector);
                     }
                 }
-                plot.initial_focus = spec_plot_data["initial_focus"];
+                plot.focus.initial_focus = spec_plot_data["initial_focus"];
             }
 
             for (auto& scalar_data : m_settings["scalars"]) {
@@ -381,7 +381,7 @@ void DbgGui::loadPreviousSessionSettings() {
                         custom_window.scalars.push_back(scalar);
                     }
                 }
-                custom_window.initial_focus = custom_window_data["initial_focus"];
+                custom_window.focus.initial_focus = custom_window_data["initial_focus"];
             }
 
             std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
@@ -416,7 +416,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["scalar_plots"].erase(scalar_plot.name);
             continue;
         }
-        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focused;
+        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focus.focused;
         m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
         m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
         m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
@@ -437,7 +437,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["vector_plots"].erase(vector_plot.name);
             continue;
         }
-        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focused;
+        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
         m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
         m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
         for (Vector2D* signal : vector_plot.signals) {
@@ -450,7 +450,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["spec_plots"].erase(spec_plot.name);
             continue;
         }
-        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focused;
+        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focus.focused;
         m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
         m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
@@ -471,7 +471,7 @@ void DbgGui::updateSavedSettings() {
             m_settings["custom_windows"].erase(custom_window.name);
             continue;
         }
-        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focused;
+        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
         m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
         for (Scalar* scalar : custom_window.scalars) {
             // use group first in key so that the signals are sorted alphabetically by group
@@ -536,28 +536,28 @@ void DbgGui::setInitialFocus() {
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         ImGui::Begin(scalar_plot.name.c_str());
-        if (scalar_plot.initial_focus) {
+        if (scalar_plot.focus.initial_focus) {
             ImGui::SetWindowFocus(scalar_plot.name.c_str());
         }
         ImGui::End();
     }
     for (VectorPlot& vector_plot : m_vector_plots) {
         ImGui::Begin(vector_plot.name.c_str());
-        if (vector_plot.initial_focus) {
+        if (vector_plot.focus.initial_focus) {
             ImGui::SetWindowFocus(vector_plot.name.c_str());
         }
         ImGui::End();
     }
     for (SpectrumPlot& spec_plot : m_spectrum_plots) {
         ImGui::Begin(spec_plot.name.c_str());
-        if (spec_plot.initial_focus) {
+        if (spec_plot.focus.initial_focus) {
             ImGui::SetWindowFocus(spec_plot.name.c_str());
         }
         ImGui::End();
     }
     for (CustomWindow& custom_window : m_custom_windows) {
         ImGui::Begin(custom_window.name.c_str());
-        if (custom_window.initial_focus) {
+        if (custom_window.focus.initial_focus) {
             ImGui::SetWindowFocus(custom_window.name.c_str());
         }
         ImGui::End();

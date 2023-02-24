@@ -163,8 +163,9 @@ struct Vector2D {
     bool hide_from_vector_window = false;
 };
 
-struct ScalarPlot : Focus {
+struct ScalarPlot {
     std::string name;
+    Focus focus;
     std::vector<Scalar*> signals;
     MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
@@ -187,8 +188,9 @@ struct ScalarPlot : Focus {
     }
 };
 
-struct VectorPlot : Focus {
+struct VectorPlot {
     std::string name;
+    Focus focus;
     std::vector<Vector2D*> signals;
     Vector2D* reference_frame_vector;
     float time_range = 20e-3f;
@@ -207,8 +209,9 @@ struct VectorPlot : Focus {
     }
 };
 
-struct SpectrumPlot : Focus {
+struct SpectrumPlot {
     std::string name;
+    Focus focus;
 
     // Source is either scalar or vector
     Scalar* scalar;
@@ -249,8 +252,9 @@ struct SpectrumPlot : Focus {
     }
 };
 
-struct CustomWindow : Focus {
+struct CustomWindow {
     std::string name;
+    Focus focus;
     std::vector<Scalar*> scalars;
     bool open = true;
 };
