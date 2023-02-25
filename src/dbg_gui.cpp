@@ -236,8 +236,14 @@ void DbgGui::updateLoop() {
         showScalarPlots();
         showVectorPlots();
         showSpectrumPlots();
-        updateSavedSettings();
         setInitialFocus();
+
+        { 
+            // Lock is needed while updating settings because signals may have been marked as
+            // deleted and they must not be sampled while deleting them for real
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            updateSavedSettings();
+        }
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -431,14 +437,20 @@ void DbgGui::updateSavedSettings() {
         m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
         m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
         m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
-        for (Scalar* signal : scalar_plot.signals) {
-            // Update range only if autofit is not on because otherwise the file
-            // could be continously rewritten when autofit range changes
-            if (!scalar_plot.autofit_y) {
-                m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
-                m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
+        for (int i = scalar_plot.signals.size() - 1; i >= 0; --i) {
+            Scalar* scalar = scalar_plot.signals[i];
+            if (scalar->deleted) {
+                m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(scalar->name_and_group);
+                remove(scalar_plot.signals, scalar);
+            } else {
+                // Update range only if autofit is not on because otherwise the file
+                // could be continously rewritten when autofit range changes
+                if (!scalar_plot.autofit_y) {
+                    m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
+                    m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
+                }
+                m_settings["scalar_plots"][scalar_plot.name]["signals"][scalar->name_and_group] = scalar->id;
             }
-            m_settings["scalar_plots"][scalar_plot.name]["signals"][signal->name_and_group] = signal->id;
         }
     }
 
@@ -450,8 +462,14 @@ void DbgGui::updateSavedSettings() {
         m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
         m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
         m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
-        for (Vector2D* signal : vector_plot.signals) {
-            m_settings["vector_plots"][vector_plot.name]["signals"][signal->name_and_group] = signal->id;
+        for (int i = vector_plot.signals.size() - 1; i >= 0; --i) {
+            Vector2D* vector = vector_plot.signals[i];
+            if (vector->deleted) {
+                m_settings["vector_plots"][vector_plot.name]["signals"].erase(vector->name_and_group);
+                remove(vector_plot.signals, vector);
+            } else {
+                m_settings["vector_plots"][vector_plot.name]["signals"][vector->name_and_group] = vector->id;
+            }
         }
     }
 
@@ -470,9 +488,17 @@ void DbgGui::updateSavedSettings() {
         m_settings["spec_plots"][spec_plot.name]["y_axis_min"] = spec_plot.y_axis.min;
         m_settings["spec_plots"][spec_plot.name]["y_axis_max"] = spec_plot.y_axis.max;
         if (spec_plot.scalar) {
-            m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
+            if (spec_plot.scalar->deleted) {
+                spec_plot.scalar = nullptr;
+            } else {
+                m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
+            }
         } else if (spec_plot.vector) {
-            m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.vector->id;
+            if (spec_plot.vector->deleted) {
+                spec_plot.vector = nullptr;
+            } else {
+                m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.vector->id;
+            }
         }
     }
 
@@ -483,14 +509,63 @@ void DbgGui::updateSavedSettings() {
         }
         m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
         m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
-        for (Scalar* scalar : custom_window.scalars) {
-            // use group first in key so that the signals are sorted alphabetically by group
-            m_settings["custom_windows"][custom_window.name]["signals"][scalar->group + " " + scalar->name] = scalar->id;
+        for (int i = custom_window.scalars.size() - 1; i >= 0; --i) {
+            Scalar* scalar = custom_window.scalars[i];
+            if (scalar->deleted) {
+                remove(custom_window.scalars, scalar);
+                m_settings["custom_windows"][custom_window.name]["signals"].erase(scalar->group + " " + scalar->name);
+            } else {
+                // use group first in key so that the signals are sorted alphabetically by group
+                m_settings["custom_windows"][custom_window.name]["signals"][scalar->group + " " + scalar->name] = scalar->id;
+            }
         }
     }
 
-    for (auto& scalar : m_scalars) {
-        if (!scalar->deleted) {
+    // Remove deleted scalars from scalar groups
+    for (auto& scalar_group : m_scalar_groups) {
+        std::function<void(SignalGroup<Scalar>&)> remove_scalar_group_deleted_signals = [&](SignalGroup<Scalar>& group) {
+            std::vector<Scalar*>& scalars = group.signals;
+            for (int i = scalars.size() - 1; i >= 0; --i) {
+                auto scalar = scalars[i];
+                if (scalar->deleted) {
+                    remove(scalars, scalar);
+                }
+            }
+            for (auto& subgroup : group.subgroups) {
+                remove_scalar_group_deleted_signals(subgroup.second);
+            }
+        };
+        remove_scalar_group_deleted_signals(scalar_group.second);
+    }
+
+    // Remove deleted vectors from vector groups
+    for (auto& vector_group : m_vector_groups) {
+        auto& vectors = vector_group.second;
+        for (int i = vectors.size() - 1; i >= 0; --i) {
+            auto vector = vectors[i];
+            if (vector->deleted) {
+                remove(vectors, vector);
+            }
+        }
+    }
+
+    for (int i = m_vectors.size() - 1; i >= 0; --i) {
+        auto& vector = m_vectors[i];
+        if (vector->deleted) {
+            m_settings["vector_symbols"].erase(vector->name_and_group);
+            vector->x->deleted = true;
+            vector->y->deleted = true;
+            remove(m_vectors, vector);
+        }
+    }
+
+    for (int i = m_scalars.size() - 1; i >= 0; --i) {
+        auto& scalar = m_scalars[i];
+        if (scalar->deleted) {
+            m_settings["scalars"].erase(scalar->name_and_group);
+            m_settings["scalar_symbols"].erase(scalar->name_and_group);
+            remove(m_scalars, scalar);
+        } else {
             m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
             m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->scale;
             m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->offset;

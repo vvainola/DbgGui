@@ -160,7 +160,7 @@ struct Vector2D {
     std::string name_and_group;
     Scalar* x;
     Scalar* y;
-    bool hide_from_vector_window = false;
+    bool deleted = false;
 };
 
 struct ScalarPlot {

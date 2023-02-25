@@ -303,7 +303,7 @@ void DbgGui::showScalarWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
-        std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_group) {
+        std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
             // Do not show group if there are no visible items in it (it only contains scalars of vector signals)
             bool show_group = false;
@@ -318,8 +318,9 @@ void DbgGui::showScalarWindow() {
 
             // Show values inside the group
             if (ImGui::TreeNode(group.name.c_str())) {
-                bool delete_entire_group = delete_group
-                                        || ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete);
+                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                    delete_entire_group = true;
+                }
 
                 // Show subgroups first
                 for (auto& subgroup : group.subgroups) {
@@ -349,12 +350,8 @@ void DbgGui::showScalarWindow() {
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
-                    // Hide symbol on delete. It will be removed for real on next start
-                    if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete))
-                        || delete_entire_group) {
-                        m_settings["scalar_symbols"].erase(scalar->name_and_group);
-                        m_settings["scalars"].erase(scalar->name_and_group);
-                        scalar->hide_from_scalars_window = true;
+                    // Mark signal as deleted
+                    if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
                     addScalarContextMenu(scalar);
@@ -364,11 +361,19 @@ void DbgGui::showScalarWindow() {
                     addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->scale, scalar->offset);
                 }
 
-                if (delete_entire_group) {
-                    group.subgroups.clear();
-                }
-
                 ImGui::TreePop();
+            }
+
+            // If group is marked as deleted, all signals in it and all its subgroups must also be marked as deleted
+            // even if this group is not open
+            if (delete_entire_group) {
+                for (Scalar* scalar : scalars) {
+                    scalar->deleted = true;
+                }
+                for (auto& subgroup : group.subgroups) {
+                    show_scalar_group(subgroup.second, delete_entire_group);
+                }
+                group.subgroups.clear();
             }
         };
 
@@ -395,14 +400,14 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
         for (auto it = m_vector_groups.begin(); it != m_vector_groups.end(); it++) {
             std::vector<Vector2D*> const& vectors = it->second;
+            if (vectors.size() == 0) {
+                continue;
+            }
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             if (ImGui::TreeNode(it->first.c_str())) {
-                for (int row = 0; row < vectors.size(); row++) {
-                    Vector2D* signal = vectors[row];
-                    if (signal->hide_from_vector_window) {
-                        continue;
-                    }
+                for (Vector2D* signal : vectors) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     // Show name
@@ -414,14 +419,9 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
 
-                    // Hide symbol on delete. It will be removed for real on next start
+                    // Mark signal as deleted
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                        m_settings["vector_symbols"].erase(signal->name_and_group);
-                        m_settings["scalars"].erase(signal->x->name_and_group);
-                        m_settings["scalars"].erase(signal->y->name_and_group);
-                        signal->x->deleted = true;
-                        signal->y->deleted = true;
-                        signal->hide_from_vector_window = true;
+                        signal->deleted = true;
                     }
 
                     // Show x-value
