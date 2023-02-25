@@ -41,6 +41,16 @@ void setTheme();
 
 std::hash<std::string> hasher;
 
+inline std::vector<std::string> split(const std::string& s, char delim) {
+    std::vector<std::string> elems;
+    std::istringstream iss(s);
+    std::string item;
+    while (std::getline(iss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
@@ -631,10 +641,18 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->id = id;
     new_scalar->scale = scale;
     new_scalar->offset = offset;
-    m_scalar_groups[new_scalar->group].push_back(new_scalar.get());
+    std::vector<std::string> groups = split(new_scalar->group, '|');
+    SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
+    added_group->name = groups[0];
+    for (int i = 1; i < groups.size(); ++i) {
+        added_group = &added_group->subgroups[groups[i]];
+        added_group->name = groups[i];
+    }
+
+    added_group->signals.push_back(new_scalar.get());
     // Sort items within the inserted group
     auto& inserted_group = m_scalar_groups[new_scalar->group];
-    std::sort(inserted_group.begin(), inserted_group.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
+    std::sort(inserted_group.signals.begin(), inserted_group.signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
     return new_scalar.get();
 }
 

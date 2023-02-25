@@ -259,6 +259,13 @@ struct CustomWindow {
     bool open = true;
 };
 
+template<typename T>
+struct SignalGroup {
+    std::string name;
+    std::vector<T*> signals;
+    std::map<std::string, SignalGroup<T>> subgroups;
+};
+
 class DbgGui {
   public:
     DbgGui(double sampling_time);
@@ -309,7 +316,7 @@ class DbgGui {
         return nullptr;
     }
     std::vector<std::unique_ptr<Scalar>> m_scalars;
-    std::map<std::string, std::vector<Scalar*>> m_scalar_groups;
+    std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
     double m_linked_scalar_x_axis_range = 1;
 

@@ -170,7 +170,7 @@ void DbgGui::showConfigurationWindow() {
 
     // Step button for pausing after next sample
     ImGui::SameLine();
-    if (ImGui::Button("Step") 
+    if (ImGui::Button("Step")
         || ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_Space)) {
         m_pause_at_time = std::numeric_limits<double>::epsilon();
         m_paused = false;
@@ -205,7 +205,8 @@ void DbgGui::showConfigurationWindow() {
         bool paused = m_paused;
         m_paused = true;
         // Wait until main thread goes to pause state
-        while (m_next_sync_timestamp > 0) {}
+        while (m_next_sync_timestamp > 0) {
+        }
         m_dbghelp_symbols.loadSnapshot("snapshot.json");
         m_paused = paused;
     }
@@ -302,31 +303,37 @@ void DbgGui::showScalarWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
-        for (auto it = m_scalar_groups.begin(); it != m_scalar_groups.end(); it++) {
-            std::vector<Scalar*> const& scalars = it->second;
+        std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_group) {
+            std::vector<Scalar*> const& scalars = group.signals;
             // Do not show group if there are no visible items in it (it only contains scalars of vector signals)
             bool show_group = false;
             for (Scalar* scalar : scalars) {
                 show_group |= !scalar->hide_from_scalars_window;
             }
-            if (!show_group) {
-                continue;
+            if (!show_group && group.subgroups.size() == 0) {
+                return;
             }
-
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            if (ImGui::TreeNode(it->first.c_str())) {
-                bool delete_entire_group = false;
-                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                    delete_entire_group = true;
+
+            // Show values inside the group
+            if (ImGui::TreeNode(group.name.c_str())) {
+                bool delete_entire_group = delete_group
+                                        || ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete);
+
+                // Show subgroups first
+                for (auto& subgroup : group.subgroups) {
+                    show_scalar_group(subgroup.second, delete_entire_group);
                 }
-                for (int row = 0; row < scalars.size(); row++) {
-                    Scalar* scalar = scalars[row];
+
+                // Show each scalar
+                for (Scalar* scalar : scalars) {
                     if (scalar->hide_from_scalars_window) {
                         continue;
                     }
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
+
                     // Show name. Text is used instead of selectable because the
                     // keyboard navigation in the table does not work properly
                     // and up/down changes columns
@@ -356,8 +363,17 @@ void DbgGui::showScalarWindow() {
                     ImGui::TableNextColumn();
                     addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->scale, scalar->offset);
                 }
+
+                if (delete_entire_group) {
+                    group.subgroups.clear();
+                }
+
                 ImGui::TreePop();
             }
+        };
+
+        for (auto it = m_scalar_groups.begin(); it != m_scalar_groups.end(); it++) {
+            show_scalar_group(it->second, false);
         }
         ImGui::EndTable();
     }

@@ -197,6 +197,10 @@ int main(int, char**) {
     DbgGui_addVector(&g::xy2.x, &g::xy2.y, "group 3", "xy2");
     DbgGui_addVector(&g::xy.x, &g::xy.y, "group 3", "xy1");
     DbgGui_addSymbol("g::xy.x", "group 1", "g::xy.x", 0.1);
+    DbgGui_addScalar(&g::xy.x, "group 1|abc|xyz", "g::xy.x", 0.1);
+    DbgGui_addScalar(&g::xy.x, "group 1|abc", "a", 0.1);
+    DbgGui_addScalar(&g::xy.x, "group 1|abc", "b", 0.1);
+    DbgGui_addScalar(&g::xy.x, "group 1|abc|xyz", "c", 0.1);
     DbgGui_startUpdateLoop();
 
     movavg.init(0, 2000 / test_freq);
