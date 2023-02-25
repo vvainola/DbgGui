@@ -111,11 +111,12 @@ void DbgGui::sample() {
 }
 
 void DbgGui::sampleWithTimestamp(double timestamp) {
-    m_sample_timestamp = timestamp;
     // No point sampling if window has been closed
     if (isClosed()) {
         return;
     }
+    m_sample_timestamp += std::max(timestamp - m_prev_sample_timestamp, 0.0);
+    m_prev_sample_timestamp = timestamp;
 
     { // Sample signals
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
@@ -128,6 +129,11 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         }
     }
 
+    if (m_pause_at_time > 0 && m_sample_timestamp >= m_pause_at_time) {
+        m_pause_at_time = 0;
+        m_paused = true;
+    }
+
     // Wait in infinitely loop while paused
     while (m_paused || !m_initialized) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -135,11 +141,6 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         // be effective immediately. Otherwise simulation could run for e.g. 10ms
         // before new speed is taken into use
         m_next_sync_timestamp = 0;
-    }
-
-    if (m_pause_at_time > 0 && m_sample_timestamp >= m_pause_at_time) {
-        m_pause_at_time = 0;
-        m_paused = true;
     }
 
     synchronizeSpeed();
@@ -238,7 +239,7 @@ void DbgGui::updateLoop() {
         showSpectrumPlots();
         setInitialFocus();
 
-        { 
+        {
             // Lock is needed while updating settings because signals may have been marked as
             // deleted and they must not be sampled while deleting them for real
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
