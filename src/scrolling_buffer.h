@@ -59,6 +59,7 @@ struct ScrollingBuffer {
     }
 
     int32_t binarySearch(double t, int32_t start, int32_t end) {
+        int32_t original_start = start;
         int32_t mid = std::midpoint(start, end);
         while (start <= end) {
             mid = std::midpoint(start, end);
@@ -71,7 +72,7 @@ struct ScrollingBuffer {
                 return mid;
             }
         }
-        return end;
+        return std::max(original_start, end);
     }
 
     DecimatedValues getValuesInRange(double x_min,
