@@ -57,7 +57,7 @@ static void glfw_error_callback(int error, const char* description) {
 
 DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time) {
-    assert(sampling_time > 0);
+    assert(sampling_time >= 0);
 }
 
 DbgGui::~DbgGui() {
