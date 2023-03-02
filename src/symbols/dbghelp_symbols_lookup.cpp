@@ -88,6 +88,11 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
                 return p->getName() == array_name;
             });
             if (it != container->end()) {
+                // Avoid overindexing
+                if ((*it)->getChildren().size() <= idx) {
+                    return nullptr;
+                }
+
                 if (i == split_name.size() - 1) {
                     // Last section -> return pointer to member
                     return (*it)->getChildren()[idx].get();
