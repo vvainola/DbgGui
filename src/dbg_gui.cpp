@@ -106,8 +106,7 @@ void DbgGui::synchronizeSpeed() {
 }
 
 void DbgGui::sample() {
-    m_sample_timestamp += m_sampling_time;
-    sampleWithTimestamp(m_sample_timestamp);
+    sampleWithTimestamp(m_sample_timestamp + m_sampling_time);
 }
 
 void DbgGui::sampleWithTimestamp(double timestamp) {
