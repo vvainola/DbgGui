@@ -430,30 +430,29 @@ void DbgGui::showVectorPlots() {
     }
 }
 
-template <typename T>
-int closestSpectralBin(T vec_x, T vec_y, double x, double y) {
+int closestSpectralBin(std::vector<double> const& vec_x, std::vector<double> const& vec_y, double x, double y) {
     if (vec_x.size() == 0) {
         return -1;
     }
-    auto const it = std::lower_bound(vec_x.begin(), vec_x.end(), x);
-    if (it == vec_x.begin()) {
+    auto const it_lower = std::lower_bound(vec_x.begin(), vec_x.end(), x * 0.97);
+    auto const it_upper = std::upper_bound(vec_x.begin(), vec_x.end(), x * 1.03);
+    if (it_lower == vec_x.begin()) {
         return 0;
-    } else if (it == vec_x.end()) {
-        return -1;
+    } else if (it_upper == vec_x.end()) {
+        return vec_x.size() - 1;
     }
 
-    int idx = int(std::distance(vec_x.begin(), it));
-    bool y_close = std::abs(vec_y[idx] - y) / y < 0.1;
-    bool prev_y_close = std::abs(vec_y[idx - 1] - y) / y < 0.1;
-
-    double err_x = std::abs(vec_x[idx] - x);
-    double err_x_prev = std::abs(vec_x[idx - 1] - x);
-    if (err_x_prev < err_x && prev_y_close) {
-        return idx - 1;
-    } else if (y_close) {
-        return idx;
+    int closest_idx = -1;
+    double y_err_min = INFINITY;
+    for (auto it = it_lower; it < it_upper; ++it) {
+        int idx = int(std::distance(vec_x.begin(), it));
+        double y_err = std::abs(vec_y[idx] - y);
+        if (y_err < y_err_min) {
+            closest_idx = idx;
+            y_err_min = y_err;
+        }
     }
-    return -1;
+    return closest_idx;
 }
 
 void DbgGui::showSpectrumPlots() {
