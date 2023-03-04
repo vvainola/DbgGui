@@ -499,6 +499,9 @@ void DbgGui::showSpectrumPlots() {
                 text = plot.vector->name_and_group;
             } else if (plot.scalar) {
                 text = plot.scalar->name_and_group;
+            } else {
+                plot.spectrum.freq.clear();
+                plot.spectrum.mag.clear();
             }
             ImPlot::PlotStems(text.c_str(), plot.spectrum.freq.data(), plot.spectrum.mag.data(), int(plot.spectrum.mag.size()));
 

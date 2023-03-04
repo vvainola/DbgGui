@@ -429,6 +429,16 @@ void DbgGui::updateSavedSettings() {
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
     m_settings["initial_focus"]["configuration"] = m_configuration_window_focus.focused;
 
+    // If vector is deleted, mark the scalars as also deleted but don't delete them for real
+    // yet before they are removed from all other structures
+    for (int i = m_vectors.size() - 1; i >= 0; --i) {
+        auto& vector = m_vectors[i];
+        if (vector->deleted) {
+            vector->x->deleted = true;
+            vector->y->deleted = true;
+        }
+    }
+
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
             m_settings["scalar_plots"].erase(scalar_plot.name);
@@ -555,15 +565,14 @@ void DbgGui::updateSavedSettings() {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
             m_settings["vector_symbols"].erase(vector->name_and_group);
-            vector->x->deleted = true;
-            vector->y->deleted = true;
             remove(m_vectors, vector);
         }
     }
 
     for (int i = m_scalars.size() - 1; i >= 0; --i) {
-        auto& scalar = m_scalars[i];
+        std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (scalar->deleted) {
+            m_sampler.stopSampling(scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
             remove(m_scalars, scalar);

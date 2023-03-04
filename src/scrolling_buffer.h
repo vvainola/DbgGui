@@ -132,6 +132,12 @@ class ScrollingBuffer {
         startSampling(vector->x);
         startSampling(vector->y);
     }
+    void stopSampling(Scalar* scalar) {
+        if (m_scalar_buffers.contains(scalar)) {
+            m_scalar_buffers.erase(scalar);
+            m_scalar_buffers_temp.erase(scalar);
+        }
+    }
 
     std::pair<int32_t, int32_t> getTimeIndices(double start_time, double end_time) {
         end_time = std::min(m_time[m_idx - 1], end_time);
