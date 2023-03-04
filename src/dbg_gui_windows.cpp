@@ -426,7 +426,7 @@ void DbgGui::showVectorWindow() {
 
                     // Show x-value
                     ImGui::TableNextColumn();
-                    ImGui::Selectable("##x");
+                    ImGui::Selectable(std::format("##{}x", signal->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
                         ImGui::SetDragDropPayload("SCALAR_ID", &signal->x->id, sizeof(size_t));
                         ImGui::Text("Drag to plot");
@@ -443,7 +443,7 @@ void DbgGui::showVectorWindow() {
 
                     // Show y-value
                     ImGui::TableNextColumn();
-                    ImGui::Selectable("##y");
+                    ImGui::Selectable(std::format("##{}y", signal->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
                         ImGui::SetDragDropPayload("SCALAR_ID", &signal->y->id, sizeof(size_t));
                         ImGui::Text("Drag to plot");
