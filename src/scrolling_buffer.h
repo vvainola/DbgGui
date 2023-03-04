@@ -22,84 +22,65 @@
 
 #pragma once
 
-#include <numeric>
-#include <vector>
-#include <cmath>
+#include "data_structures.h"
 
 // utility structure for realtime plot
-struct ScrollingBuffer {
-    int32_t current_idx = 0;
-    int32_t buffer_size;
+class ScrollingBuffer {
+  public:
+    ScrollingBuffer(int32_t buffer_size = int32_t(1e6))
+        : m_buffer_size(buffer_size),
+          m_time(2 * buffer_size) {}
 
-    std::vector<double> time;
-    std::vector<double> data;
+    void sample(double time) {
+        m_time_temp.push_back(time);
+        for (auto& [scalar, buffer] : m_scalar_buffers_temp) {
+            buffer.push_back(scalar->getValue());
+        }
+    }
+
+    void emptyTempBuffers() {
+        // Empty time buffer first and collect indices to which the time samples are added
+        std::vector<int32_t> indices;
+        for (size_t i = 0; i < m_time_temp.size(); ++i) {
+            double time = m_time_temp[i];
+            m_time[m_idx] = time;
+            m_time[m_idx + m_buffer_size] = time;
+            indices.push_back(m_idx);
+
+            m_idx = (m_idx + 1) % m_buffer_size;
+            if (m_idx == 0) {
+                m_full_buffer_looped = true;
+            }
+        }
+        m_time_temp.clear();
+
+        // Empty temp scalar buffer to same indices
+        for (auto& [scalar, buffer] : m_scalar_buffers) {
+            auto& temp_buffer = m_scalar_buffers_temp[scalar];
+            for (size_t i = 0; i < temp_buffer.size(); ++i) {
+                size_t idx = indices[i];
+                double value = temp_buffer[i];
+                buffer[idx] = value;
+                buffer[idx + m_buffer_size] = value;
+            }
+            temp_buffer.clear();
+        }
+    }
+
     struct DecimatedValues {
         std::vector<double> time;
         std::vector<double> y_min;
         std::vector<double> y_max;
     };
-    bool full_buffer_looped = false;
-
-    ScrollingBuffer(int32_t max_size)
-        : buffer_size(max_size),
-          time(buffer_size * 2),
-          data(buffer_size * 2) {
-    }
-
-    void addPoint(double x, double y) {
-        // y += 0.1 * (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) - 0.5);
-        time[current_idx] = x;
-        time[current_idx + buffer_size] = x;
-        data[current_idx] = y;
-        data[current_idx + buffer_size] = y;
-        current_idx = (current_idx + 1) % buffer_size;
-        if (current_idx == 0) {
-            full_buffer_looped = true;
-        }
-    }
-
-    int32_t binarySearch(double t, int32_t start, int32_t end) {
-        int32_t original_start = start;
-        int32_t mid = std::midpoint(start, end);
-        while (start <= end) {
-            mid = std::midpoint(start, end);
-            double val = time[mid];
-            if (val < t) {
-                start = mid + 1;
-            } else if (val > t) {
-                end = mid - 1;
-            } else {
-                return mid;
-            }
-        }
-        return std::max(original_start, end);
-    }
-
-    DecimatedValues getValuesInRange(double x_min,
-                                     double x_max,
-                                     int32_t n_points,
-                                     double scale = 1,
-                                     double offset = 0) {
+    DecimatedValues getValuesInRange(Scalar* scalar, int32_t start_idx, int32_t end_idx, int32_t n_points, double scale = 1, double offset = 0) {
         DecimatedValues decimated_values;
-        x_max = std::min(time[current_idx - 1], x_max);
-        int32_t start_idx = current_idx - 1;
-        int32_t end_idx = current_idx - 1 + buffer_size;
-        if (!full_buffer_looped) {
+        if (start_idx < 0 || end_idx < 0) {
             // Nothing sampled yet
-            if (current_idx == 0) {
-                decimated_values.time.push_back(0);
-                decimated_values.y_min.push_back(0);
-                decimated_values.y_max.push_back(0);
-                return decimated_values;
-            }
-            x_min = std::max(0.0, x_min);
-            start_idx = binarySearch(x_min, 0, current_idx - 1);
-            end_idx = binarySearch(x_max, start_idx, current_idx - 1);
-        } else {
-            start_idx = binarySearch(x_min, start_idx, end_idx);
-            end_idx = binarySearch(x_max, start_idx, end_idx);
+            decimated_values.time.push_back(0);
+            decimated_values.y_min.push_back(0);
+            decimated_values.y_max.push_back(0);
+            return decimated_values;
         }
-        end_idx = std::max(end_idx, start_idx);
 
         int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
 
@@ -108,12 +89,14 @@ struct ScrollingBuffer {
         decimated_values.y_min.reserve(std::min(end_idx - start_idx, n_points + 5));
         decimated_values.y_max.reserve(std::min(end_idx - start_idx, n_points + 5));
 
+        auto const& data = m_scalar_buffers[scalar];
+
         double current_min = INFINITY;
         double current_max = -INFINITY;
         int64_t counter = 0;
         for (int32_t i = start_idx; i <= end_idx; i++) {
             if (counter < 0) {
-                decimated_values.time.push_back(time[i - 1]);
+                decimated_values.time.push_back(m_time[i - 1]);
                 decimated_values.y_min.push_back(scale * current_min + offset);
                 decimated_values.y_max.push_back(scale * current_max + offset);
 
@@ -126,9 +109,72 @@ struct ScrollingBuffer {
             counter--;
         }
         // Update leftover so that blanks are not left at the end
-        decimated_values.time.push_back(time[end_idx]);
+        decimated_values.time.push_back(m_time[end_idx]);
         decimated_values.y_min.push_back(scale * current_min + offset);
         decimated_values.y_max.push_back(scale * current_max + offset);
         return decimated_values;
     }
+
+    DecimatedValues getValuesInRange(Scalar* scalar, std::pair<int32_t, int32_t> times, int32_t n_points, double scale = 1, double offset = 0) {
+        return getValuesInRange(scalar, times.first, times.second, n_points, scale, offset);
+    }
+
+    void startSampling(Scalar* scalar) {
+        if (m_scalar_buffers.contains(scalar)) {
+            return;
+        } else {
+            m_scalar_buffers[scalar] = std::vector<double>(2 * m_buffer_size);
+            m_scalar_buffers_temp[scalar] = {};
+        }
+    }
+    void startSampling(Vector2D* vector) {
+        startSampling(vector->x);
+        startSampling(vector->y);
+    }
+
+    std::pair<int32_t, int32_t> getTimeIndices(double start_time, double end_time) {
+        end_time = std::min(m_time[m_idx - 1], end_time);
+        int32_t start_idx = m_idx - 1;
+        int32_t end_idx = m_idx - 1 + m_buffer_size;
+        if (!m_full_buffer_looped) {
+            // Nothing sampled yet
+            if (m_idx == 0) {
+                return {-1, -1};
+            }
+            start_time = std::max(0.0, start_time);
+            start_idx = binarySearch(start_time, 0, m_idx - 1);
+            end_idx = binarySearch(end_time, start_idx, m_idx - 1);
+        } else {
+            start_idx = binarySearch(start_time, start_idx, end_idx);
+            end_idx = binarySearch(end_time, start_idx, end_idx);
+        }
+        end_idx = std::max(end_idx, start_idx);
+        return {start_idx, end_idx};
+    }
+
+  private:
+    int32_t binarySearch(double t, int32_t start, int32_t end) {
+        int32_t original_start = start;
+        int32_t mid = std::midpoint(start, end);
+        while (start <= end) {
+            mid = std::midpoint(start, end);
+            double val = m_time[mid];
+            if (val < t) {
+                start = mid + 1;
+            } else if (val > t) {
+                end = mid - 1;
+            } else {
+                return mid;
+            }
+        }
+        return std::max(original_start, end);
+    }
+
+    int32_t m_idx = 0;
+    int32_t m_buffer_size = int32_t(1e6);
+    std::vector<double> m_time;
+    std::unordered_map<Scalar*, std::vector<double>> m_scalar_buffers;
+    std::vector<double> m_time_temp;
+    std::unordered_map<Scalar*, std::vector<double>> m_scalar_buffers_temp;
+    bool m_full_buffer_looped = false;
 };

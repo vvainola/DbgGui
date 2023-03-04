@@ -119,8 +119,8 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
 
     { // Sample signals
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+        m_sampler.sample(m_sample_timestamp);
         for (auto& signal : m_scalars) {
-            signal->sample(m_sample_timestamp);
             if (signal->m_pause_triggers.size() > 0) {
                 double value = signal->getScaledValue();
                 m_paused = m_paused || signal->checkTriggers(value);
@@ -224,9 +224,7 @@ void DbgGui::updateLoop() {
         {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_plot_timestamp = m_sample_timestamp;
-            for (auto& signal : m_scalars) {
-                signal->emptySamplingBuffer();
-            }
+            m_sampler.emptyTempBuffers();
         }
         showConfigurationWindow();
         showScalarWindow();
@@ -331,6 +329,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 for (size_t id : scalar_plot_data["signals"]) {
                     Scalar* scalar = getScalar(id);
                     if (scalar) {
+                        m_sampler.startSampling(scalar);
                         plot.addSignalToPlot(scalar);
                     }
                 }
@@ -344,6 +343,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 for (size_t id : vector_plot_data["signals"]) {
                     Vector2D* vec = getVector(id);
                     if (vec) {
+                        m_sampler.startSampling(vec);
                         plot.addSignalToPlot(vec);
                     }
                 }
@@ -365,8 +365,10 @@ void DbgGui::loadPreviousSessionSettings() {
                     Scalar* scalar = getScalar(id);
                     Vector2D* vector = getVector(id);
                     if (scalar) {
+                        m_sampler.startSampling(scalar);
                         plot.addSignalToPlot(scalar);
                     } else if (vector) {
+                        m_sampler.startSampling(vector);
                         plot.addSignalToPlot(vector);
                     }
                 }
