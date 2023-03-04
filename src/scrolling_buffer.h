@@ -123,7 +123,8 @@ class ScrollingBuffer {
         if (m_scalar_buffers.contains(scalar)) {
             return;
         } else {
-            m_scalar_buffers[scalar] = std::vector<double>(2 * m_buffer_size);
+            // Initialize buffer with NAN so that the non-existing samples are not plotted
+            m_scalar_buffers[scalar] = std::vector<double>(2 * m_buffer_size, NAN);
             m_scalar_buffers_temp[scalar] = {};
         }
     }
