@@ -413,10 +413,20 @@ void DbgGui::loadPreviousSessionSettings() {
 }
 
 void DbgGui::updateSavedSettings() {
+    if (m_options.clear_saved_settings) {
+        m_options.clear_saved_settings = false;
+        m_settings.clear();
+        m_settings_saved.clear();
+    }
+
     int width, height;
     glfwGetWindowSize(m_window, &width, &height);
     int xpos, ypos;
     glfwGetWindowPos(m_window, &xpos, &ypos);
+    if (width == 0 || height == 0) {
+        return;
+    }
+
     m_settings["window"]["width"] = width;
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
@@ -431,7 +441,7 @@ void DbgGui::updateSavedSettings() {
 
     // If vector is deleted, mark the scalars as also deleted but don't delete them for real
     // yet before they are removed from all other structures
-    for (int i = m_vectors.size() - 1; i >= 0; --i) {
+    for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
             vector->x->deleted = true;
@@ -449,18 +459,18 @@ void DbgGui::updateSavedSettings() {
         m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
         m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
         m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
-        for (int i = scalar_plot.signals.size() - 1; i >= 0; --i) {
+        // Update range only if autofit is not on because otherwise the file
+        // could be continously rewritten when autofit range changes
+        if (!scalar_plot.autofit_y) {
+            m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
+            m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
+        }
+        for (int i = int(scalar_plot.signals.size() - 1); i >= 0; --i) {
             Scalar* scalar = scalar_plot.signals[i];
             if (scalar->deleted) {
                 m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(scalar->name_and_group);
                 remove(scalar_plot.signals, scalar);
             } else {
-                // Update range only if autofit is not on because otherwise the file
-                // could be continously rewritten when autofit range changes
-                if (!scalar_plot.autofit_y) {
-                    m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
-                    m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
-                }
                 m_settings["scalar_plots"][scalar_plot.name]["signals"][scalar->name_and_group] = scalar->id;
             }
         }
@@ -474,7 +484,7 @@ void DbgGui::updateSavedSettings() {
         m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
         m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
         m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
-        for (int i = vector_plot.signals.size() - 1; i >= 0; --i) {
+        for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.signals[i];
             if (vector->deleted) {
                 m_settings["vector_plots"][vector_plot.name]["signals"].erase(vector->name_and_group);
@@ -521,7 +531,7 @@ void DbgGui::updateSavedSettings() {
         }
         m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
         m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
-        for (int i = custom_window.scalars.size() - 1; i >= 0; --i) {
+        for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
                 remove(custom_window.scalars, scalar);
@@ -537,7 +547,7 @@ void DbgGui::updateSavedSettings() {
     for (auto& scalar_group : m_scalar_groups) {
         std::function<void(SignalGroup<Scalar>&)> remove_scalar_group_deleted_signals = [&](SignalGroup<Scalar>& group) {
             std::vector<Scalar*>& scalars = group.signals;
-            for (int i = scalars.size() - 1; i >= 0; --i) {
+            for (int i = int(scalars.size() - 1); i >= 0; --i) {
                 auto scalar = scalars[i];
                 if (scalar->deleted) {
                     remove(scalars, scalar);
@@ -553,7 +563,7 @@ void DbgGui::updateSavedSettings() {
     // Remove deleted vectors from vector groups
     for (auto& vector_group : m_vector_groups) {
         auto& vectors = vector_group.second;
-        for (int i = vectors.size() - 1; i >= 0; --i) {
+        for (int i = int(vectors.size() - 1); i >= 0; --i) {
             auto vector = vectors[i];
             if (vector->deleted) {
                 remove(vectors, vector);
@@ -561,7 +571,7 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (int i = m_vectors.size() - 1; i >= 0; --i) {
+    for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
             m_settings["vector_symbols"].erase(vector->name_and_group);
@@ -569,7 +579,7 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (int i = m_scalars.size() - 1; i >= 0; --i) {
+    for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (scalar->deleted) {
             m_sampler.stopSampling(scalar.get());

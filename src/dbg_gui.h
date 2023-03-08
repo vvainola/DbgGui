@@ -128,6 +128,7 @@ class DbgGui {
         bool x_tick_labels = true;
         bool pause_on_close = false;
         bool link_scalar_x_axis = false;
+        bool clear_saved_settings = false;
     } m_options;
 
     std::jthread m_gui_thread;

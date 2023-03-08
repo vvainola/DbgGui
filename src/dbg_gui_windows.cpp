@@ -285,6 +285,9 @@ void DbgGui::showConfigurationWindow() {
         ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
         ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
         ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
+        if (ImGui::Button("Clear saved settings")) {
+            m_options.clear_saved_settings = true;
+        }
         ImGui::TreePop();
     }
     ImGui::End();
