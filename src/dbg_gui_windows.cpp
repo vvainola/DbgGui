@@ -438,7 +438,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::SameLine();
                     bool custom_x_scale_or_offset = signal->x->scale != 1 || signal->x->offset != 0;
                     if (custom_x_scale_or_offset) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->x->getValue()).c_str());
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->x->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
                     }
@@ -455,7 +455,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::SameLine();
                     bool custom_y_scale_or_offset = signal->y->scale != 1 || signal->y->offset != 0;
                     if (custom_y_scale_or_offset) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->y->getValue()).c_str());
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->y->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
                     }
