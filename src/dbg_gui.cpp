@@ -21,7 +21,6 @@
 // SOFTWARE.
 
 #define _CRT_SECURE_NO_WARNINGS
-#define JSON_DIAGNOSTICS 1
 
 #include "dbg_gui.h"
 #include "imgui.h"
