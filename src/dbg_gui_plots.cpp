@@ -300,7 +300,7 @@ void DbgGui::showVectorPlots() {
         static float time_offset = 0;
         float time_offset_ms = time_offset * 1e3f;
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-        ImGui::SliderFloat("Offset", &time_offset_ms, 0, 100, "%.0f ms");
+        ImGui::SliderFloat("Offset", &time_offset_ms, 0, 500, "%.0f ms");
         time_offset = time_offset_ms * 1e-3f;
 
         static ImPlotAxisFlags flags = ImPlotAxisFlags_None;
