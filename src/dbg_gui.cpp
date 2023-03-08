@@ -399,10 +399,8 @@ void DbgGui::loadPreviousSessionSettings() {
                     scalar->scale = scalar_data["scale"];
                 }
                 scalar->offset = scalar_data["offset"];
-                if (scalar_data.contains("alias")) {
-                    scalar->alias = scalar_data["alias"];
-                    scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
-                }
+                scalar->alias = scalar_data["alias"];
+                scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
             }
         })
 
