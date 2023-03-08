@@ -35,8 +35,6 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
-#include <stdio.h>
-#include <type_traits>
 
 #define TRY(expression)                       \
     try {                                     \
@@ -45,9 +43,14 @@
         std::cerr << err.what() << std::endl; \
     }
 
-void setTheme();
+uint64_t hash(const std::string& str) {
+    uint64_t hash = 5381;
+    for (size_t i = 0; i < str.size(); ++i)
+        hash = 33 * hash + (uint64_t)str[i];
+    return hash;
+}
 
-std::hash<std::string> hasher;
+void setTheme();
 
 inline std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> elems;
@@ -732,7 +735,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     } else {
         group = group;
     }
-    size_t id = hasher(name + " (" + group + ")");
+    size_t id = hash(name + " (" + group + ")");
     Scalar* existing_scalar = getScalar(id);
     if (existing_scalar != nullptr) {
         return existing_scalar;
@@ -768,7 +771,7 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     } else {
         group = group;
     }
-    size_t id = hasher(name + " (" + group + ")");
+    size_t id = hash(name + " (" + group + ")");
     Vector2D* existing_vector = getVector(id);
     if (existing_vector != nullptr) {
         return existing_vector;
