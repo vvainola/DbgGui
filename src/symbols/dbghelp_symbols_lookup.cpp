@@ -38,6 +38,7 @@
 #include <iostream>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+#include <regex>
 
 BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     if (pSymInfo->TypeIndex == 0
@@ -70,35 +71,48 @@ DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_jso
     });
 }
 
+// For name[2][3][4] return {2, 3, 4}
+std::vector<size_t> getArrayIndices(std::string const& symbol_name) {
+    std::regex re("\\[(.*?)\\]");
+    std::smatch match;
+    std::vector<size_t> indices;
+    std::string::const_iterator search_start(symbol_name.cbegin());
+    while (std::regex_search(search_start, symbol_name.cend(), match, re)) {
+        size_t idx = std::stoull(match[1]);
+        indices.push_back(idx);
+        search_start = match.suffix().first;
+    }
+    return indices;
+}
+
 VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
     std::vector<std::string> split_name = split(name, '.');
     std::vector<std::unique_ptr<VariantSymbol>> const* container = &m_root_symbols;
     for (size_t i = 0; i < split_name.size(); ++i) {
+        bool last_section = (i == split_name.size() - 1);
         std::string const& member_name = split_name[i];
         bool is_array = member_name.ends_with(']');
         if (is_array) {
-            auto left_bracket = member_name.rfind('[');
-            // Leave out brackets from [xx]
-            size_t idx_char_cnt = (member_name.size() - 1) - (left_bracket + 1);
-            size_t idx = std::stoull(member_name.substr(left_bracket + 1, idx_char_cnt));
-            // Pick name from name[xx] so leave out 2 characters to omit the brackets
-            std::string array_name = member_name.substr(0, (member_name.size()) - idx_char_cnt - 2);
+            auto left_bracket = member_name.find('[');
+            // Pick "name" from "name[xx]"
+            std::string array_name = member_name.substr(0, left_bracket);
             // Try find member
             auto it = std::find_if(container->begin(), container->end(), [&](std::unique_ptr<VariantSymbol> const& p) {
                 return p->getName() == array_name;
             });
             if (it != container->end()) {
-                // Avoid overindexing
-                if ((*it)->getChildren().size() <= idx) {
-                    return nullptr;
+                VariantSymbol* sym = it->get();
+                for (size_t idx : getArrayIndices(member_name)) {
+                    if (idx < sym->getChildren().size()) {
+                        sym = sym->getChildren()[idx].get();
+                    } else {
+                        return nullptr;
+                    }
                 }
-
-                if (i == split_name.size() - 1) {
-                    // Last section -> return pointer to member
-                    return (*it)->getChildren()[idx].get();
+                if (last_section) {
+                    return sym;
                 } else {
-                    // Try find next part of name from children
-                    container = &(*it)->getChildren()[idx]->getChildren();
+                    container = &sym->getChildren();
                 }
             } else {
                 return nullptr;
@@ -109,7 +123,7 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
                 return p->getName() == member_name;
             });
             if (it != container->end()) {
-                if (i == split_name.size() - 1) {
+                if (last_section) {
                     // Last section -> return pointer to member
                     return it->get();
                 } else {

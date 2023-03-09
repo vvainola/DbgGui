@@ -78,6 +78,7 @@ struct C {
     B b;
     float m_c = 0;
     B m_d[3];
+    B m_e[3][3];
 };
 
 struct D : public C {
@@ -92,6 +93,8 @@ int const* const p_int = &p_struct->a.m_a;
 float const* const p_float = &p_struct->m_c;
 double const* const p_double = &p_struct->b.m_b;
 float* p_null = nullptr;
+
+double arr_3[2][3][4];
 
 C array[50];
 C array2[45];
