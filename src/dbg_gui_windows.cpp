@@ -154,6 +154,17 @@ void addScalarContextMenu(Scalar* scalar) {
     }
 }
 
+void addSymbolContextMenu(VariantSymbol& sym) {
+    std::string full_name = sym.getFullName();
+    if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
+        if (ImGui::Button("Copy name")) {
+            ImGui::SetClipboardText(full_name.c_str());
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void DbgGui::showConfigurationWindow() {
     m_configuration_window_focus.focused = ImGui::Begin("Configuration");
     if (!m_configuration_window_focus.focused) {
@@ -618,6 +629,7 @@ void DbgGui::showSymbolsWindow() {
                         ImGui::Text("Drag to custom window to add all children");
                         ImGui::EndDragDropSource();
                     }
+                    addSymbolContextMenu(*sym);
 
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
@@ -635,6 +647,7 @@ void DbgGui::showSymbolsWindow() {
                         flags |= ImGuiTreeNodeFlags_Leaf;
                     }
                     bool open = ImGui::TreeNodeEx(sym->getName().c_str(), flags);
+                    addSymbolContextMenu(*sym);
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
@@ -686,6 +699,7 @@ void DbgGui::showSymbolsWindow() {
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
                         addScalarSymbol(sym, m_group_to_add_symbols);
                     }
+                    addSymbolContextMenu(*sym);
 
                     // Add value
                     ImGui::TableNextColumn();
