@@ -38,7 +38,6 @@
 #include <iostream>
 #include <filesystem>
 #include <nlohmann/json.hpp>
-#include <regex>
 
 BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     if (pSymInfo->TypeIndex == 0
@@ -72,18 +71,23 @@ DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_jso
 }
 
 // For name[2][3][4] return {2, 3, 4}
-std::vector<size_t> getArrayIndices(std::string const& symbol_name) {
-    std::regex re("\\[(.*?)\\]");
-    std::smatch match;
+std::vector<size_t> getArrayIndices(std::string const& s) {
     std::vector<size_t> indices;
-    std::string::const_iterator search_start(symbol_name.cbegin());
-    while (std::regex_search(search_start, symbol_name.cend(), match, re)) {
-        if (match[1].str().size() == 0) {
-            return {};
+    size_t start_idx = s.find('['); // find the first '[' character
+    while (start_idx != std::string::npos) {
+        size_t end_idx = s.find(']', start_idx); // find the corresponding ']' character
+        if (end_idx == std::string::npos) {
+            return {}; // error: no matching ']' found
         }
-        size_t idx = std::stoull(match[1]);
-        indices.push_back(idx);
-        search_start = match.suffix().first;
+        std::string idx_str = s.substr(start_idx + 1, end_idx - start_idx - 1); // extract the index string
+        int index;
+        try {
+            index = stoi(idx_str); // convert the index string to an integer
+        } catch (...) {
+            return {}; // error: index is not a valid integer
+        }
+        indices.push_back(index);
+        start_idx = s.find('[', end_idx); // find the next '[' character
     }
     return indices;
 }
