@@ -78,6 +78,9 @@ std::vector<size_t> getArrayIndices(std::string const& symbol_name) {
     std::vector<size_t> indices;
     std::string::const_iterator search_start(symbol_name.cbegin());
     while (std::regex_search(search_start, symbol_name.cend(), match, re)) {
+        if (match[1].str().size() == 0) {
+            return {};
+        }
         size_t idx = std::stoull(match[1]);
         indices.push_back(idx);
         search_start = match.suffix().first;
@@ -138,13 +141,27 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
     return nullptr;
 }
 
-std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingRootSymbols(std::string const& name) const {
+std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string const& name) const {
+    std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
+    std::string name_to_search = name;
+
+    // Search only members of a symbol if the name contains "."
+    if (name.contains(".")) {
+        size_t idx = name.rfind('.');
+        std::string parent_name = name.substr(0, idx);
+        VariantSymbol* parent = getSymbol(parent_name);
+        if (parent) {
+            symbols_to_search = &parent->getChildren();
+            name_to_search = name.substr(idx + 1, name.size());
+        }
+    }
+
     std::vector<VariantSymbol*> matching_symbols;
-    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+    for (std::unique_ptr<VariantSymbol> const& sym : *symbols_to_search) {
         // Exact match is shown first
-        if (name == sym->getName()) {
+        if (name_to_search == sym->getName()) {
             matching_symbols.insert(matching_symbols.begin(), sym.get());
-        } else if (fts::fuzzy_match_simple(name.c_str(), sym->getName().c_str())) {
+        } else if (fts::fuzzy_match_simple(name_to_search.c_str(), sym->getName().c_str())) {
             matching_symbols.push_back(sym.get());
         }
     }

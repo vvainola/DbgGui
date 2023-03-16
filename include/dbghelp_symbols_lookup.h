@@ -43,10 +43,11 @@ class DbgHelpSymbols {
     DbgHelpSymbols(std::string symbol_json = "", bool omit_names_from_json = false);
 
     /// @brief Fuzzy search for all matching symbol names in the global namespace. Exact match is 
-    /// always the first element. Members of symbols are not searched.
+    /// always the first element. Members of a symbol are searched if the parent name is an exact
+    /// match
     /// @param search_string Full or partial part of symbol name
     /// @return Matching symbols
-    std::vector<VariantSymbol*> findMatchingRootSymbols(std::string const& search_string) const;
+    std::vector<VariantSymbol*> findMatchingSymbols(std::string const& search_string) const;
 
     /// @brief Search for symbol that has exactly the given name.
     /// @return Symbol if found, nullptr if not found
