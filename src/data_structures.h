@@ -87,7 +87,7 @@ struct Trigger {
 };
 
 struct Scalar {
-    size_t id;
+    uint64_t id;
     std::string name;
     std::string group;
     std::string name_and_group;
@@ -122,7 +122,7 @@ struct Scalar {
 };
 
 struct Vector2D {
-    size_t id;
+    uint64_t id;
     std::string group;
     std::string name;
     std::string name_and_group;

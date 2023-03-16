@@ -349,7 +349,7 @@ void DbgGui::showScalarWindow() {
                     }
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -417,7 +417,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::Text(signal->name.c_str());
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("VECTOR_ID", &signal->id, sizeof(size_t));
+                        ImGui::SetDragDropPayload("VECTOR_ID", &signal->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -431,7 +431,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}x", signal->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->x->id, sizeof(size_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->x->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -448,7 +448,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}y", signal->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->y->id, sizeof(size_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->y->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -472,7 +472,7 @@ void DbgGui::showVectorWindow() {
 void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            size_t id = *(size_t*)payload->Data;
+            uint64_t id = *(uint64_t*)payload->Data;
             Scalar* scalar = getScalar(id);
             custom_window.scalars.push_back(scalar);
         }
@@ -541,7 +541,7 @@ void DbgGui::showCustomWindow() {
                 addCustomWindowDragAndDrop(custom_window);
                 // Make text drag-and-droppable
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(size_t));
+                    ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
                     ImGui::Text("Drag to plot");
                     ImGui::EndDragDropSource();
                 }

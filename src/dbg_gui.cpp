@@ -338,7 +338,7 @@ void DbgGui::loadPreviousSessionSettings() {
             }
             plot.x_range = scalar_plot_data["x_range"];
 
-            for (size_t id : scalar_plot_data["signals"]) {
+            for (uint64_t id : scalar_plot_data["signals"]) {
                 Scalar* scalar = getScalar(id);
                 if (scalar) {
                     m_sampler.startSampling(scalar);
@@ -353,7 +353,7 @@ void DbgGui::loadPreviousSessionSettings() {
             VectorPlot& plot = m_vector_plots.emplace_back();
             plot.name = vector_plot_data["name"];
             plot.time_range = vector_plot_data["time_range"];
-            for (size_t id : vector_plot_data["signals"]) {
+            for (uint64_t id : vector_plot_data["signals"]) {
                 Vector2D* vec = getVector(id);
                 if (vec) {
                     m_sampler.startSampling(vec);
@@ -375,7 +375,7 @@ void DbgGui::loadPreviousSessionSettings() {
             plot.y_axis.min = spec_plot_data["y_axis_min"];
             plot.y_axis.max = spec_plot_data["y_axis_max"];
             if (spec_plot_data.contains("id")) {
-                size_t id = spec_plot_data["id"];
+                uint64_t id = spec_plot_data["id"];
                 Scalar* scalar = getScalar(id);
                 Vector2D* vector = getVector(id);
                 if (scalar) {
@@ -391,7 +391,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         TRY(for (auto& scalar_data
                  : m_settings["scalars"]) {
-            size_t id = scalar_data["id"];
+            uint64_t id = scalar_data["id"];
             Scalar* scalar = getScalar(id);
             if (scalar) {
                 if (scalar_data["scale"] != 0) {
@@ -407,7 +407,7 @@ void DbgGui::loadPreviousSessionSettings() {
                  : m_settings["custom_windows"]) {
             CustomWindow& custom_window = m_custom_windows.emplace_back();
             custom_window.name = custom_window_data["name"];
-            for (size_t id : custom_window_data["signals"]) {
+            for (uint64_t id : custom_window_data["signals"]) {
                 Scalar* scalar = getScalar(id);
                 if (scalar) {
                     custom_window.scalars.push_back(scalar);
@@ -732,7 +732,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     } else {
         group = group;
     }
-    size_t id = hash(name + " (" + group + ")");
+    uint64_t id = hash(name + " (" + group + ")");
     Scalar* existing_scalar = getScalar(id);
     if (existing_scalar != nullptr) {
         return existing_scalar;
@@ -768,7 +768,7 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     } else {
         group = group;
     }
-    size_t id = hash(name + " (" + group + ")");
+    uint64_t id = hash(name + " (" + group + ")");
     Vector2D* existing_vector = getVector(id);
     if (existing_vector != nullptr) {
         return existing_vector;

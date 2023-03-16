@@ -188,7 +188,7 @@ void DbgGui::showScalarPlots() {
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    size_t id = *(size_t*)payload->Data;
+                    uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
                     scalar_plot.addSignalToPlot(scalar);
@@ -403,7 +403,7 @@ void DbgGui::showVectorPlots() {
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                    size_t id = *(size_t*)payload->Data;
+                    uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
                     m_sampler.startSampling(vector);
                     vector_plot.addSignalToPlot(vector);
@@ -507,7 +507,7 @@ void DbgGui::showSpectrumPlots() {
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    size_t id = *(size_t*)payload->Data;
+                    uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
                     plot.addSignalToPlot(scalar);
@@ -519,7 +519,7 @@ void DbgGui::showSpectrumPlots() {
                     plot.addSignalToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                    size_t id = *(size_t*)payload->Data;
+                    uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
                     m_sampler.startSampling(vector);
                     plot.addSignalToPlot(vector);

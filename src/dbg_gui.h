@@ -79,7 +79,7 @@ class DbgGui {
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
 
-    Scalar* getScalar(size_t id) {
+    Scalar* getScalar(uint64_t id) {
         for (auto& scalar : m_scalars) {
             if (scalar->id == id) {
                 return scalar.get();
@@ -93,7 +93,7 @@ class DbgGui {
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
     double m_linked_scalar_x_axis_range = 1;
 
-    Vector2D* getVector(size_t id) {
+    Vector2D* getVector(uint64_t id) {
         for (auto& vector : m_vectors) {
             if (vector->id == id) {
                 return vector.get();
