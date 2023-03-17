@@ -394,7 +394,8 @@ void DbgGui::loadPreviousSessionSettings() {
             uint64_t id = scalar_data["id"];
             Scalar* scalar = getScalar(id);
             if (scalar) {
-                if (scalar_data["scale"] != 0) {
+                bool manually_added_custom_scale = scalar->scale != 1;
+                if (!manually_added_custom_scale) {
                     scalar->scale = scalar_data["scale"];
                 }
                 scalar->offset = scalar_data["offset"];
