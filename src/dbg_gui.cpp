@@ -425,13 +425,26 @@ void DbgGui::loadPreviousSessionSettings() {
 void DbgGui::updateSavedSettings() {
     if (m_options.clear_saved_settings) {
         m_options.clear_saved_settings = false;
-        nlohmann::json tmp = m_settings;
         m_settings.clear();
         m_settings_saved.clear();
-        // Symbols are not erased, needs proper fix to go through all signals and
-        // check if they are a symbol that exists
-        m_settings["scalar_symbols"] = tmp["scalar_symbols"];
-        m_settings["vector_symbols"] = tmp["vector_symbols"];
+        // Restore symbols
+        for (auto const& scalar : m_scalars) {
+            VariantSymbol* scalar_sym = m_dbghelp_symbols.getSymbol(scalar->name);
+            if (scalar_sym) {
+                m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
+                m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
+            }
+        }
+        for (auto const& vector : m_vectors) {
+            VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
+            VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+            if (x && y) {
+                m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
+                m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
+                m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
+                m_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
+            }
+        }
     }
 
     int width, height;
