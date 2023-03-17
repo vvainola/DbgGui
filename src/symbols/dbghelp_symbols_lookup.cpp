@@ -151,7 +151,7 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
 
     // Search only members of a symbol if the name contains "."
     size_t idx = name.rfind('.');
-    if (idx = std::string::npos) {
+    if (idx != std::string::npos) {
         std::string parent_name = name.substr(0, idx);
         VariantSymbol* parent = getSymbol(parent_name);
         if (parent) {
