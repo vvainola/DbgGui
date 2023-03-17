@@ -425,8 +425,13 @@ void DbgGui::loadPreviousSessionSettings() {
 void DbgGui::updateSavedSettings() {
     if (m_options.clear_saved_settings) {
         m_options.clear_saved_settings = false;
+        nlohmann::json tmp = m_settings;
         m_settings.clear();
         m_settings_saved.clear();
+        // Symbols are not erased, needs proper fix to go through all signals and
+        // check if they are a symbol that exists
+        m_settings["scalar_symbols"] = tmp["scalar_symbols"];
+        m_settings["vector_symbols"] = tmp["vector_symbols"];
     }
 
     int width, height;
