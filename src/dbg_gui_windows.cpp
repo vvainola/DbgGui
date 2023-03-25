@@ -485,12 +485,16 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
             uint64_t id = *(uint64_t*)payload->Data;
             Scalar* scalar = getScalar(id);
-            custom_window.scalars.push_back(scalar);
+            if (!contains(custom_window.scalars, scalar)) {
+                custom_window.scalars.push_back(scalar);
+            }
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
             VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
             Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-            custom_window.scalars.push_back(scalar);
+            if (!contains(custom_window.scalars, scalar)) {
+                custom_window.scalars.push_back(scalar);
+            }
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
             char* symbol_name = (char*)payload->Data;
@@ -502,7 +506,9 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
                                            || sym->getType() == VariantSymbol::Type::Enum;
                     if (arithmetic_or_enum) {
                         Scalar* scalar = addScalarSymbol(sym, m_group_to_add_symbols);
-                        custom_window.scalars.push_back(scalar);
+                        if (!contains(custom_window.scalars, scalar)) {
+                            custom_window.scalars.push_back(scalar);
+                        }
                     }
 
                     for (auto& child : sym->getChildren()) {
