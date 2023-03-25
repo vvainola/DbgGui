@@ -447,30 +447,32 @@ void CsvPlotter::showSignalWindow() {
     for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten. Wait that file has not been modified in the last second
         // in case it is still being written
-        auto last_write_time = std::filesystem::last_write_time(file.name);
-        auto write_time_plus_1s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(1);
-        auto now = std::chrono::system_clock::now();
+        if (std::filesystem::exists(file.name)) {
+            auto last_write_time = std::filesystem::last_write_time(file.name);
+            auto write_time_plus_1s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(1);
+            auto now = std::chrono::system_clock::now();
 
-        if (last_write_time != file.write_time
-            && now > write_time_plus_1s
-            && file.write_time != std::filesystem::file_time_type()) {
-            std::optional<CsvFileData> csv_data = parseCsvData(file.name);
-            if (csv_data) {
-                if (csv_data->signals.size() == file.signals.size()) {
-                    for (int i = 0; i < file.signals.size(); ++i) {
-                        csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
-                        csv_data->signals[i].color = file.signals[i].color;
-                        file.signals[i].plot_idx = NOT_VISIBLE;
-                        file.signals[i].color = NO_COLOR;
+            if (last_write_time != file.write_time
+                && now > write_time_plus_1s
+                && file.write_time != std::filesystem::file_time_type()) {
+                std::optional<CsvFileData> csv_data = parseCsvData(file.name);
+                if (csv_data) {
+                    if (csv_data->signals.size() == file.signals.size()) {
+                        for (int i = 0; i < file.signals.size(); ++i) {
+                            csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
+                            csv_data->signals[i].color = file.signals[i].color;
+                            file.signals[i].plot_idx = NOT_VISIBLE;
+                            file.signals[i].color = NO_COLOR;
+                        }
                     }
+                    // Set write time to default so that the file gets reloaded again for the latest dataset
+                    file.write_time = std::filesystem::file_time_type();
+                    file.run_number++;
+                    csv_data->run_number = file.run_number;
+                    file.displayed_name += " " + std::to_string(file.run_number);
+                    m_csv_data.push_back(*csv_data);
+                    break;
                 }
-                // Set write time to default so that the file gets reloaded again for the latest dataset
-                file.write_time = std::filesystem::file_time_type();
-                file.run_number++;
-                csv_data->run_number = file.run_number;
-                file.displayed_name += " " + std::to_string(file.run_number);
-                m_csv_data.push_back(*csv_data);
-                break;
             }
         }
 
@@ -647,7 +649,6 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
         NFD_PathSet_Free(&path_set);
     } else if (result == NFD_ERROR) {
         std::cerr << NFD_GetError() << std::endl;
-    
     }
     return csv_datas;
 }
