@@ -45,6 +45,7 @@ std::vector<double> ASCENDING_NUMBERS;
 void setTheme();
 std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, std::map<std::string, int> name_and_plot_idx);
 std::vector<CsvFileData> openCsvFromFileDialog();
+bool PscadInfToCsv(std::string const& inf_filename);
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
@@ -308,8 +309,17 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename,
+std::optional<CsvFileData> parseCsvData(std::string const& filename,
                                         std::map<std::string, int> name_and_plot_idx = {}) {
+    std::string csv_filename = filename;
+    if (filename.ends_with(".inf")) {
+        bool csv_file_created = PscadInfToCsv(filename);
+        if (!csv_file_created) {
+            return std::nullopt;
+        }
+        csv_filename = filename.substr(0, filename.find_last_of(".")) + ".csv";
+    }
+
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
@@ -402,10 +412,96 @@ std::optional<CsvFileData> parseCsvData(std::string const& csv_filename,
     }
 
     return CsvFileData{
-        .name = std::filesystem::relative(csv_filename).string(),
-        .displayed_name = std::filesystem::relative(csv_filename).string(),
+        .name = std::filesystem::relative(filename).string(),
+        .displayed_name = std::filesystem::relative(filename).string(),
         .signals = csv_signals,
-        .write_time = std::filesystem::last_write_time(csv_filename)};
+        .write_time = std::filesystem::last_write_time(filename)};
+}
+
+void writeLineToCsv(std::ofstream& csv_file, std::string const& line, bool include_first_column) {
+    std::istringstream iss(line);
+    double signal_data;
+    if (!include_first_column) {
+        iss >> signal_data;
+    }
+    while (iss >> signal_data) {
+        csv_file << signal_data << ",";
+    }
+}
+
+// Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
+// csv file with same basename. Returns true if csv file was created, false if something went wrong.
+bool PscadInfToCsv(std::string const& inf_filename) {
+    std::ifstream inf_file(inf_filename);
+    if (!inf_file.is_open()) {
+        std::cerr << "Unable to open file " + inf_filename << std::endl;
+        return false;
+    }
+
+    // Collect signal names from the .inf file
+    std::vector<std::string> signal_names;
+    std::string line;
+    while (std::getline(inf_file, line)) {
+        std::string desc_tag = "Desc=\"";
+        size_t desc_start_idx = line.find(desc_tag);
+        if (desc_start_idx != std::string::npos) {
+            desc_start_idx += desc_tag.length();
+            size_t desc_end_idx = line.find("\"", desc_start_idx);
+            if (desc_end_idx != std::string::npos) {
+                std::string desc_content = line.substr(desc_start_idx, desc_end_idx - desc_start_idx);
+                signal_names.push_back(desc_content);
+            }
+        }
+    }
+
+    // Open the .out files
+    std::string inf_basename = inf_filename.substr(0, inf_filename.find_last_of("."));
+    std::vector<std::ifstream> out_files;
+    int out_file_cnt = ceil(signal_names.size() / 10.0);
+    for (int i = 1; i < out_file_cnt + 1; ++i) {
+        std::stringstream ss;
+        ss << std::setw(2) << std::setfill('0') << i << ".out";
+        std::string out_filename = inf_basename + "_" + ss.str();
+        std::ifstream& out_file = out_files.emplace_back(out_filename);
+        if (!out_file.is_open()) {
+            std::cerr << "Unable to open file " + out_filename << std::endl;
+            return false;
+        }
+        // Ignore first line that contains the project name
+        std::getline(out_file, line);
+    }
+
+    // Open the .csv file for writing
+    std::string csv_filename = inf_basename + ".csv";
+    std::ofstream csv_file(csv_filename);
+    if (!csv_file.is_open()) {
+        std::cerr << "Unable to open file " + csv_filename << std::endl;
+        return false;
+    }
+
+    // Write signal names to header row
+    csv_file << "Time,";
+    for (int i = 0; i < signal_names.size(); i++) {
+        csv_file << signal_names[i];
+        if (i < signal_names.size() - 1) {
+            csv_file << ",";
+        }
+    }
+    csv_file << ",\n";
+
+    // Go through the .out files line by line to write out the data. Time column is included
+    // only from the first file
+    std::ifstream& out_file1 = out_files[0];
+    while (std::getline(out_file1, line)) {
+        writeLineToCsv(csv_file, line, true);
+        for (int i = 1; i < out_files.size(); ++i) {
+            std::getline(out_files[i], line);
+            writeLineToCsv(csv_file, line, false);
+        }
+        csv_file << "\n";
+    }
+    csv_file.close();
+    return true;
 }
 
 void CsvPlotter::showSignalWindow() {
@@ -637,7 +733,7 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
     nfdpathset_t path_set;
     std::vector<CsvFileData> csv_datas;
     auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_OpenDialogMultiple("csv", cwd.string().c_str(), &path_set);
+    nfdresult_t result = NFD_OpenDialogMultiple("csv;inf", cwd.string().c_str(), &path_set);
     if (result == NFD_OKAY) {
         for (int i = 0; i < path_set.count; ++i) {
             std::string out(NFD_PathSet_GetPath(&path_set, i));

@@ -1,0 +1,22 @@
+PGB(1)  Output   Desc="Fund - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(2)  Output   Desc="2nd harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(3)  Output   Desc="3rd harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units="" 
+PGB(4)  Output   Desc="4th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(5)  Output   Desc="5th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(6)  Output   Desc="6th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(7)  Output   Desc="7th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(8)  Output   Desc="8th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(9)  Output   Desc="9th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(10)  Output  Desc="10th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(11)  Output  Desc="11th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(12)  Output  Desc="12th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(13)  Output  Desc="13th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(14)  Output  Desc="14th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(15)  Output  Desc="15th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(16)  Output  Desc="16th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(17)  Output  Desc="17th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(18)  Output  Desc="18th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(19)  Output  Desc="19th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(20)  Output  Desc="20th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units
+PGB(21)  Output  Desc="21th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
+PGB(22)  Output  Desc="22th harm - mag"  Group="Main"  Max=25.0  Min=0.0  Units=""
