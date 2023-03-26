@@ -190,6 +190,15 @@ void CsvPlotter::loadPreviousSessionSettings() {
 }
 
 void CsvPlotter::updateSavedSettings() {
+    int width, height;
+    glfwGetWindowSize(m_window, &width, &height);
+    int xpos, ypos;
+    glfwGetWindowPos(m_window, &xpos, &ypos);
+    // Early return in case something is wrong
+    if (width == 0 || height == 0) {
+        return;
+    }
+
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
 
     size_t ini_settings_size = 0;
@@ -205,10 +214,6 @@ void CsvPlotter::updateSavedSettings() {
     }
 
     nlohmann::json settings;
-    int width, height;
-    glfwGetWindowSize(m_window, &width, &height);
-    int xpos, ypos;
-    glfwGetWindowPos(m_window, &xpos, &ypos);
     settings["window"]["width"] = width;
     settings["window"]["height"] = height;
     settings["window"]["xpos"] = xpos;
