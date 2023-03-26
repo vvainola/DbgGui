@@ -43,9 +43,9 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
 void setTheme();
-std::optional<CsvFileData> parseCsvData(std::string const& csv_filename, std::map<std::string, int> name_and_plot_idx);
+std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
 std::vector<CsvFileData> openCsvFromFileDialog();
-bool PscadInfToCsv(std::string const& inf_filename);
+bool pscadInfToCsv(std::string const& inf_filename);
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
@@ -309,15 +309,29 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
-std::optional<CsvFileData> parseCsvData(std::string const& filename,
+std::optional<CsvFileData> parseCsvData(std::string filename,
                                         std::map<std::string, int> name_and_plot_idx = {}) {
     std::string csv_filename = filename;
     if (filename.ends_with(".inf")) {
-        bool csv_file_created = PscadInfToCsv(filename);
+        bool csv_file_created = pscadInfToCsv(filename);
         if (!csv_file_created) {
             return std::nullopt;
         }
-        csv_filename = filename.substr(0, filename.find_last_of(".")) + ".csv";
+        std::string basename = filename.substr(0, filename.find_last_of("."));
+        csv_filename = basename + ".csv";
+        // Set the _01.out file as the filename instead of inf because PSCAD writes the inf file immediately
+        // but the out files do not have all the data yet. The out file is watched for changes so that the
+        // files are not re-read too early
+        filename = basename + "_01.out";
+    } else if (filename.ends_with(".out")) {
+        // A inf file has been read earlier. Re-read the inf file and re-create the csv file.
+        std::string basename = filename.substr(0, filename.find_last_of(".") - 3);
+        std::string inf_filename = basename + ".inf";
+        bool csv_file_created = pscadInfToCsv(inf_filename);
+        if (!csv_file_created) {
+            return std::nullopt;
+        }
+        csv_filename = basename + ".csv";
     }
 
     std::ifstream csv(csv_filename);
@@ -431,7 +445,7 @@ void writeLineToCsv(std::ofstream& csv_file, std::string const& line, bool inclu
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.
-bool PscadInfToCsv(std::string const& inf_filename) {
+bool pscadInfToCsv(std::string const& inf_filename) {
     std::ifstream inf_file(inf_filename);
     if (!inf_file.is_open()) {
         std::cerr << "Unable to open file " + inf_filename << std::endl;
@@ -733,7 +747,7 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
     nfdpathset_t path_set;
     std::vector<CsvFileData> csv_datas;
     auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_OpenDialogMultiple("csv;inf", cwd.string().c_str(), &path_set);
+    nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", cwd.string().c_str(), &path_set);
     if (result == NFD_OKAY) {
         for (int i = 0; i < path_set.count; ++i) {
             std::string out(NFD_PathSet_GetPath(&path_set, i));
