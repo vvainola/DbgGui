@@ -22,6 +22,11 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
+#pragma warning(push, 0)
+#define FTS_FUZZY_MATCH_IMPLEMENTATION
+#include "symbols/fts_fuzzy_match.h"
+#pragma warning(pop)
+
 #include "csvplot.h"
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 #include "imgui.h"
@@ -558,6 +563,9 @@ void CsvPlotter::showSignalWindow() {
     ImGui::Checkbox("Link x-axis", &m_link_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
 
+    static char signal_name_filter[256] = "";
+    ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
+
     CsvFileData* file_to_remove = nullptr;
     for (CsvFileData& file : m_csv_data) {
         // Reload file if it has been rewritten. Wait that file has not been modified in the last second
@@ -614,6 +622,12 @@ void CsvPlotter::showSignalWindow() {
 
         if (opened) {
             for (CsvSignal& signal : file.signals) {
+                // Skip signal if it doesn't match the filter
+                if (std::string(signal_name_filter) != ""
+                    && !fts::fuzzy_match_simple(signal_name_filter, signal.name.c_str())) {
+                    continue;
+                }
+
                 bool selected = signal.plot_idx != NOT_VISIBLE;
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
