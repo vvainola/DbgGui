@@ -691,6 +691,7 @@ void CsvPlotter::showPlots() {
                 ImGui::EndDragDropTarget();
             }
 
+            // Get signals in the plot
             size_t longest_name_length = 1;
             struct FileAndSignal {
                 CsvFileData* file;
@@ -729,12 +730,13 @@ void CsvPlotter::showPlots() {
                 }
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
+                std::string displayed_signal_name = ss.str();
                 // Store color so that it does not change if legend length changes
                 if (sig.signal->color.x == -1) {
                     sig.signal->color = ImPlot::NextColormapColor();
                 }
                 ImPlot::PushStyleColor(ImPlotCol_Line, sig.signal->color);
-                ImPlot::PlotLine(ss.str().c_str(),
+                ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  x_data,
                                  sig.signal->samples.data(),
                                  int(sig.signal->samples.size()),
@@ -766,6 +768,14 @@ void CsvPlotter::showPlots() {
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
                     ImGui::EndTooltip();
+                }
+
+                // Legend right click
+                if (ImPlot::BeginLegendPopup(displayed_signal_name.c_str())) {
+                    if (ImGui::Button("Remove")) {
+                        sig.signal->plot_idx = NOT_VISIBLE;
+                    }
+                    ImPlot::EndLegendPopup();
                 }
             }
             ImPlot::EndPlot();
