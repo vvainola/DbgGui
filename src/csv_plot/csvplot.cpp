@@ -441,8 +441,8 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     std::sort(csv_signals.begin() + 1, csv_signals.end(), [](CsvSignal const& l, CsvSignal const& r) {
         std::string l_name = l.name;
         std::string r_name = r.name;
-        std::transform(l_name.begin(), l_name.end(), l_name.begin(), [](unsigned char c) { return unsigned(std::tolower(c)); });
-        std::transform(r_name.begin(), r_name.end(), r_name.begin(), [](unsigned char c) { return unsigned(std::tolower(c)); });
+        std::transform(l_name.begin(), l_name.end(), l_name.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
+        std::transform(r_name.begin(), r_name.end(), r_name.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
         return l_name < r_name;
     });
 
