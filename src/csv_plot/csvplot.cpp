@@ -187,6 +187,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
             m_link_axis = settings["window"]["link_axis"];
             m_fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
+            m_keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
@@ -226,6 +227,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["plot_cnt"] = m_plot_cnt;
     settings["window"]["link_axis"] = m_link_axis;
     settings["window"]["fit_on_drag_and_drop"] = m_fit_after_drag_and_drop;
+    settings["window"]["keep_old_signals_on_reload"] = m_keep_old_signals_on_reload;
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
@@ -435,6 +437,15 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         }
     }
 
+    // Sort signals alphabetically, skip first since that is usually time
+    std::sort(csv_signals.begin() + 1, csv_signals.end(), [](CsvSignal const& l, CsvSignal const& r) {
+        std::string l_name = l.name;
+        std::string r_name = r.name;
+        std::transform(l_name.begin(), l_name.end(), l_name.begin(), [](unsigned char c) { return unsigned(std::tolower(c)); });
+        std::transform(r_name.begin(), r_name.end(), r_name.begin(), [](unsigned char c) { return unsigned(std::tolower(c)); });
+        return l_name < r_name;
+    });
+
     return CsvFileData{
         .name = std::filesystem::relative(filename).string(),
         .displayed_name = std::filesystem::relative(filename).string(),
@@ -481,7 +492,7 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     // Open the .out files
     std::string inf_basename = inf_filename.substr(0, inf_filename.find_last_of("."));
     std::vector<std::ifstream> out_files;
-    int out_file_cnt = ceil(signal_names.size() / 10.0);
+    int out_file_cnt = int(ceil(signal_names.size() / 10.0));
     for (int i = 1; i < out_file_cnt + 1; ++i) {
         std::stringstream ss;
         ss << std::setw(2) << std::setfill('0') << i << ".out";
@@ -559,9 +570,9 @@ void CsvPlotter::showSignalWindow() {
     if (ImGui::Checkbox("Use first signal as x-axis", &m_first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
-    ImGui::SameLine();
     ImGui::Checkbox("Link x-axis", &m_link_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
+    ImGui::Checkbox("Keep old signals on reload", &m_keep_old_signals_on_reload);
 
     static char signal_name_filter[256] = "";
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
@@ -583,9 +594,11 @@ void CsvPlotter::showSignalWindow() {
                     if (csv_data->signals.size() == file.signals.size()) {
                         for (int i = 0; i < file.signals.size(); ++i) {
                             csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
-                            csv_data->signals[i].color = file.signals[i].color;
-                            file.signals[i].plot_idx = NOT_VISIBLE;
-                            file.signals[i].color = NO_COLOR;
+                            if (!m_keep_old_signals_on_reload) {
+                                csv_data->signals[i].color = file.signals[i].color;
+                                file.signals[i].plot_idx = NOT_VISIBLE;
+                                file.signals[i].color = NO_COLOR;
+                            }
                         }
                     }
                     // Set write time to default so that the file gets reloaded again for the latest dataset

@@ -71,6 +71,7 @@ class CsvPlotter {
     bool m_first_signal_as_x = true;
     bool m_link_axis = true;
     bool m_fit_after_drag_and_drop = true;
+    bool m_keep_old_signals_on_reload = true;
     double m_x_axis_min;
     double m_x_axis_max;
 };
