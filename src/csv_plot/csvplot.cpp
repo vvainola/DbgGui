@@ -42,6 +42,33 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <span>
+
+int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
+    int32_t original_start = start;
+    int32_t mid = std::midpoint(start, end);
+    while (start <= end) {
+        mid = std::midpoint(start, end);
+        double val = values[mid];
+        if (val < searched_value) {
+            start = mid + 1;
+        } else if (val > searched_value) {
+            end = mid - 1;
+        } else {
+            return mid;
+        }
+    }
+    return std::max(original_start, end);
+}
+
+std::pair<int32_t, int32_t> getTimeIndices(std::span<double> time, double start_time, double end_time) {
+    int32_t start_idx = 0;
+    int32_t end_idx = int32_t(time.size() - 1);
+    start_idx = binarySearch(time, start_time, start_idx, end_idx);
+    end_idx = binarySearch(time, end_time, start_idx, end_idx);
+    end_idx = std::max(end_idx, start_idx);
+    return {start_idx, end_idx};
+}
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
@@ -667,7 +694,8 @@ void CsvPlotter::showSignalWindow() {
 void CsvPlotter::showPlots() {
     for (int plot_idx = 0; plot_idx < m_plot_cnt; ++plot_idx) {
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
-        if (plot_idx == m_fit_plot_idx) {
+        bool fit_data = (plot_idx == m_fit_plot_idx);
+        if (fit_data) {
             ImPlot::SetNextAxesToFit();
             m_fit_plot_idx = -1;
         }
@@ -722,12 +750,23 @@ void CsvPlotter::showPlots() {
             }
 
             for (FileAndSignal& sig : signals) {
-                double const* x_data;
-                if (m_first_signal_as_x) {
-                    x_data = sig.file->signals[0].samples.data();
-                } else {
-                    x_data = ASCENDING_NUMBERS.data();
+                // Collect only values that are within plot range so that the autofit fits to the plotted values instead
+                // of the entire data
+                std::vector<double>& all_x_values = m_first_signal_as_x ? sig.file->signals[0].samples : ASCENDING_NUMBERS;
+                std::vector<double>& all_y_values = sig.signal->samples;
+                ImPlotRect limits = ImPlot::GetPlotLimits();
+                std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min, limits.X.Max);
+                // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
+                indices.first = std::max(0, indices.first - 1);
+                indices.second = std::min(int32_t(all_x_values.size()), indices.second + 2);
+
+                std::span<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
+                std::span<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
+                if (fit_data) {
+                    plotted_x = all_x_values;
+                    plotted_y = all_y_values;
                 }
+
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
                 std::string displayed_signal_name = ss.str();
@@ -737,33 +776,22 @@ void CsvPlotter::showPlots() {
                 }
                 ImPlot::PushStyleColor(ImPlotCol_Line, sig.signal->color);
                 ImPlot::PlotLine(displayed_signal_name.c_str(),
-                                 x_data,
-                                 sig.signal->samples.data(),
-                                 int(sig.signal->samples.size()),
+                                 plotted_x.data(),
+                                 plotted_y.data(),
+                                 int(plotted_x.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::PopStyleColor();
 
                 // Tooltip
-                if (ImPlot::IsPlotHovered() && sig.signal->samples.size() > 0) {
+                if (ImPlot::IsPlotHovered() && plotted_x.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                     ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
-                    int idx = 0;
-                    int last_idx = int(sig.signal->samples.size()) - 1;
-                    if (mouse.x > x_data[last_idx]) {
-                        idx = last_idx;
-                    } else {
-                        for (int i = 0; i <= last_idx; ++i) {
-                            if (x_data[i] > mouse.x) {
-                                idx = i;
-                                break;
-                            }
-                        }
-                    }
+                    int idx = binarySearch(plotted_x, mouse.x, 0, int(plotted_x.size() - 1));
                     ss.str("");
-                    ss << sig.signal->name << " : " << sig.signal->samples[idx];
+                    ss << sig.signal->name << " : " << plotted_y[idx];
                     ImGui::PushStyleColor(ImGuiCol_Text, sig.signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
@@ -776,6 +804,11 @@ void CsvPlotter::showPlots() {
                         sig.signal->plot_idx = NOT_VISIBLE;
                     }
                     ImPlot::EndLegendPopup();
+                }
+
+                // Fit to the entire data with mouse middle button
+                if (ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
+                    m_fit_plot_idx = plot_idx;
                 }
             }
             ImPlot::EndPlot();
