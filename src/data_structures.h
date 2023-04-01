@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "dbghelp_symbols_lookup.h"
+#include "symbols/dbghelp_symbols_lookup.h"
 #include <imgui.h>
 
 #include <numeric>

@@ -222,6 +222,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
     // children can be copied from reference symbol if children have been added to that type of symbol already
     // before. The tree structure for each type has to be then looked up only once.
+    std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*> reference_symbols;
     std::vector<std::unique_ptr<RawSymbol>> raw_symbols;
     raw_symbols.reserve(symbols.size());
     m_root_symbols.reserve(symbols.size());
@@ -231,12 +232,14 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
         }
 
         std::unique_ptr<RawSymbol>& raw_symbol = raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
-        addChildrenToSymbol(*raw_symbol);
+        addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }
     if (!json_to_save.empty()) {
         saveSymbolsToJson(json_to_save, raw_symbols, omit_names_from_json);
     }
+
+    SymCleanup(current_process);
 }
 
 void DbgHelpSymbols::saveSnapshot(std::string const& json) {

@@ -166,7 +166,7 @@ void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     }
 }
 
-void addFirstChildToArray(RawSymbol& parent) {
+void addFirstChildToArray(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
     assert((parent.tag == SymTagArrayType, "Symbol is not an array."));
     ULONG64 array_size_in_bytes = 0;
     DWORD element_count = 0;
@@ -186,16 +186,13 @@ void addFirstChildToArray(RawSymbol& parent) {
 
     // Add only first child because the rest can be added later by just adjusting memory address
     std::unique_ptr<RawSymbol>& first_child = parent.children.emplace_back(std::make_unique<RawSymbol>(base));
-    addChildrenToSymbol(*first_child);
+    addChildrenToSymbol(*first_child, reference_symbols);
 }
 
 // https://yanshurong.wordpress.com/2009/01/02/how-to-use-dbghelp-to-access-type-information-from-www-debuginfo-com/
-void addChildrenToSymbol(RawSymbol& parent) {
+void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
     // Copy structure from reference symbol if children have already been looked up for same type before
-    using ModBase = ULONG64;
-    using TypeIndex = ULONG;
-    static std::map<std::pair<ModBase, TypeIndex>, RawSymbol*> reference_symbols;
-    std::pair<ModBase, TypeIndex> modbase_and_type_idx{parent.info.ModBase, parent.info.TypeIndex};
+    std::pair<ModuleBase, TypeIndex> modbase_and_type_idx{parent.info.ModBase, parent.info.TypeIndex};
     if (reference_symbols.find(modbase_and_type_idx) != reference_symbols.end()) {
         copyChildrenFromSymbol(*reference_symbols[modbase_and_type_idx], parent);
         return;
@@ -207,7 +204,7 @@ void addChildrenToSymbol(RawSymbol& parent) {
     assert(SymGetTypeInfo(current_process, parent.info.ModBase, parent.info.TypeIndex, TI_GET_CHILDRENCOUNT, &num_children));
     if (num_children == 0) {
         if (parent.tag == SymTagArrayType) {
-            addFirstChildToArray(parent);
+            addFirstChildToArray(parent, reference_symbols);
         }
         return;
     }
@@ -238,7 +235,7 @@ void addChildrenToSymbol(RawSymbol& parent) {
 
                 // Skip standard library objects for children of children
                 if (child->info.Name.find("std::") == std::string::npos) {
-                    addChildrenToSymbol(*child);
+                    addChildrenToSymbol(*child, reference_symbols);
                     parent.children.push_back(std::move(child));
                 }
             }

@@ -24,13 +24,17 @@
 #include "raw_symbol.h"
 #include <optional>
 #include <memory>
+#include <map>
+
+using ModuleBase = ULONG64;
+using TypeIndex = ULONG;
 
 void printLastError();
 
 int getBitPosition(RawSymbol const& sym);
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
 BasicType getBasicType(RawSymbol const& sym);
-void addChildrenToSymbol(RawSymbol& parent_symbol);
+void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
 std::string getUndecoratedSymbolName(std::string const& name);
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
 
