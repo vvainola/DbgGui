@@ -63,6 +63,7 @@ lib_symbols = static_library('symbols',
         'src/symbols/raw_symbol.cpp',
         'src/symbols/symbol_helpers.cpp',
         'src/symbols/variant_symbol.cpp',
+        'src/symbols/global_snapshot.cpp'
     ],
     dependencies : deps,
     include_directories : 'include'
@@ -112,3 +113,11 @@ lib_gui_dep = declare_dependency(
     link_with : [lib_gui, lib_symbols],
     include_directories : 'include'
 )
+
+
+if get_option('tests')
+executable('tests',
+    sources : ['tests/symbols_test.cpp'],
+    dependencies : [lib_dbghelp_symbols_dep, dependency('catch2-with-main')]
+)
+endif

@@ -4,9 +4,12 @@ magic_enum/0.7.3
 kissfft/131.1.0
 glfw/3.3.8
 cxxopts/3.0.0
+catch2/3.3.2
+pkgconf/1.9.3
 
 [generators]
 pkg_config
 
 [imports]
 ., license* -> ./licenses @ folder=True, ignore_case=True
+bin, *.exe -> ./bin
