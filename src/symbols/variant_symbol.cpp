@@ -26,6 +26,10 @@
 #include <numeric>
 #include <format>
 
+#if !defined(DBGHELP_MAX_ARRAY_ELEMENT_COUNT)
+#define DBGHELP_MAX_ARRAY_ELEMENT_COUNT 10000
+#endif
+
 VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                              RawSymbol* symbol,
                              VariantSymbol* parent)
@@ -68,9 +72,12 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             m_children.reserve(symbol->array_element_count);
             RawSymbol* first_element = symbol->children[0].get();
             MemoryAddress original_address = m_address;
-            for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
-                m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
-                m_address += first_element->info.Size;
+            // Skip very large arrays
+            if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
+                for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
+                    m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
+                    m_address += first_element->info.Size;
+                }
             }
             m_address = original_address;
         }
