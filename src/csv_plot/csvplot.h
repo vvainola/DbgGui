@@ -32,6 +32,7 @@ inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
 struct CsvSignal {
     std::string name;
     std::vector<double> samples;
+    double scale = 1;
     int plot_idx = NOT_VISIBLE;
     ImVec4 color{NO_COLOR};
 };

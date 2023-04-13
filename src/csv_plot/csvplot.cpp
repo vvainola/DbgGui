@@ -44,6 +44,10 @@
 #include <filesystem>
 #include <span>
 
+inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
+inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
+
+
 int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
@@ -621,6 +625,7 @@ void CsvPlotter::showSignalWindow() {
                     if (csv_data->signals.size() == file.signals.size()) {
                         for (int i = 0; i < file.signals.size(); ++i) {
                             csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
+                            csv_data->signals[i].scale = file.signals[i].scale;
                             if (!m_keep_old_signals_on_reload) {
                                 csv_data->signals[i].color = file.signals[i].color;
                                 file.signals[i].plot_idx = NOT_VISIBLE;
@@ -669,15 +674,23 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 bool selected = signal.plot_idx != NOT_VISIBLE;
+                ImGui::PushStyleColor(ImGuiCol_Text, signal.scale == 1 ? COLOR_WHITE : COLOR_GRAY);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
                     signal.color = NO_COLOR;
                 }
+                ImGui::PopStyleColor();
+
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     CsvSignal* p = &signal;
                     ImGui::SetDragDropPayload("CSV", &p, sizeof(CsvSignal*));
                     ImGui::Text("Drag to plot");
                     ImGui::EndDragDropSource();
+                }
+
+                if (ImGui::BeginPopupContextItem((file.displayed_name + signal.name + "context_menu").c_str())) {
+                    ImGui::InputDouble("Scale", &signal.scale);
+                    ImGui::EndPopup();
                 }
             }
             ImGui::TreePop();
@@ -760,11 +773,15 @@ void CsvPlotter::showPlots() {
                 indices.first = std::max(0, indices.first - 1);
                 indices.second = std::min(int32_t(all_x_values.size()), indices.second + 2);
 
-                std::span<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
-                std::span<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
+                std::vector<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
+                std::vector<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {
                     plotted_x = all_x_values;
                     plotted_y = all_y_values;
+                }
+                // Scale samples
+                for (double& sample : plotted_y) {
+                    sample *= sig.signal->scale;
                 }
 
                 std::stringstream ss;
