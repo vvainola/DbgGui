@@ -63,8 +63,8 @@ TEST_CASE("Snapshot") {
     g_bitfield.b9 = temp_bf9;
 
     // Save snapshot twice to use the json file on second save instead of the PDB
-    saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
-    saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
+    DbgGui_saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
+    DbgGui_saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
 
     // Assign new random values to global variables
     g_int = random<int>();
@@ -76,7 +76,7 @@ TEST_CASE("Snapshot") {
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
     // Load snapshot
-    loadSnapshot("test_symbols.json", "test_snapshot.json");
+    DbgGui_loadSnapshot("test_symbols.json", "test_snapshot.json");
 
     // Check that the values of all global variables are the same as assigned before saving the snapshot
     REQUIRE(g_int == temp_int);

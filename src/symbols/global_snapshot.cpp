@@ -26,7 +26,7 @@
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
 
-void saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_names) {
+void DbgGui_saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_names) {
     std::string symbols_json_name = symbols_json == NULL ? "" : symbols_json;
     DbgHelpSymbols dbghelp_symbols(symbols_json_name, omit_names);
     if (snapshot_file != NULL) {
@@ -34,7 +34,7 @@ void saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_
     }
 }
 
-void loadSnapshot(const char* symbols_json, const char* snapshot_file) {
+void DbgGui_loadSnapshot(const char* symbols_json, const char* snapshot_file) {
     std::string symbols_json_name = symbols_json == NULL ? "" : symbols_json;
     DbgHelpSymbols dbghelp_symbols(symbols_json_name, true);
     dbghelp_symbols.loadSnapshot(snapshot_file);

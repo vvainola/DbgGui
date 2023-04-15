@@ -26,20 +26,20 @@
 extern "C" {
 #endif
 
-/// @brief Save snapshot to file using the given symbol file
+/// @brief Save snapshot of global symbols to file using the given symbol file
 /// @param symbol_json JSON file containing the symbol lookup data extracted from PDB file.
 ///                    If the JSON file does not exist or it is out of date, the PDB file
 ///                    will be used and saved to this file.
 ///                    Pass NULL if PDB file should always be used
 /// @param snapshot_file File to save current value of all globals
 /// @param omit_names Leave out names of symbols when looking up the information from PDB file
-void saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_names);
+void DbgGui_saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_names);
 
 /// @brief Load snapshot of all global symbols from file
 /// @param symbols_json Symbol JSON to use for loading the values. Pass NULL if PDB file should
 ///                     always be used
 /// @param snapshot_file File from which to load the values of globals
-void loadSnapshot(const char* symbols_json, const char* snapshot_file);
+void DbgGui_loadSnapshot(const char* symbols_json, const char* snapshot_file);
 
 #ifdef __cplusplus
 }
