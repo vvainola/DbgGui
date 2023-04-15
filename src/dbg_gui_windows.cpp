@@ -45,6 +45,17 @@ inline static std::string getSourceValueStr(ValueSource src) {
         src);
 }
 
+static void HelpMarker(const char* desc) {
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
     ImGuiKey* pressed_key = (ImGuiKey*)data->UserData;
     if (*pressed_key == ImGuiKey_None) {
@@ -174,7 +185,9 @@ void DbgGui::showMainMenuBar() {
             ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
             ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
             ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
-            
+            ImGui::SameLine();
+            HelpMarker("Pause when GUI is requested to close programmatically. Pressing start again will close the GUI.");
+
             // Pause after
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
             double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
@@ -184,6 +197,8 @@ void DbgGui::showMainMenuBar() {
             if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
                 m_pause_at_time = m_sample_timestamp + pause_after;
             }
+            ImGui::SameLine();
+            HelpMarker("Pause after x seconds. Hotkey is \"numpad /\"");
 
             // Pause at
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
@@ -191,6 +206,8 @@ void DbgGui::showMainMenuBar() {
                 ImGui::SetKeyboardFocusHere();
             }
             ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+            ImGui::SameLine();
+            HelpMarker("Pause at given time. Hotkey is \"numpad *\"");
 
             if (ImGui::Button("Add..")) {
                 ImGui::OpenPopup("##Add");
@@ -287,7 +304,7 @@ void DbgGui::showMainMenuBar() {
 
             ImGui::EndMenu();
         }
- 
+
         // Start stop
         const char* start_stop_text = m_paused ? "Start" : "Pause";
         if (ImGui::Button(start_stop_text)) {
@@ -305,6 +322,8 @@ void DbgGui::showMainMenuBar() {
         // Simulation speed
         ImGui::PushItemWidth(ImGui::CalcTextSize("Simulation speed XXXXXXX").x);
         ImGui::SliderFloat("##Simulation speed", &m_simulation_speed, 1e-4f, 10, "Simulation speed %.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+        ImGui::SameLine();
+        HelpMarker("Simulated speed relative to real time. Hotkey to double speed is \"numpad +\" and halve \"numpad -\".");
         ImGui::SameLine();
 
         if (m_pause_at_time > m_sample_timestamp + std::numeric_limits<double>::epsilon()) {
