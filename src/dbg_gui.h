@@ -55,7 +55,7 @@ class DbgGui {
 
   private:
     void updateLoop();
-    void showConfigurationWindow();
+    void showMainMenuBar();
     void showScalarWindow();
     void showSymbolsWindow();
     void showVectorWindow();
@@ -110,7 +110,6 @@ class DbgGui {
     std::vector<SpectrumPlot> m_spectrum_plots;
     Focus m_vector_window_focus;
     Focus m_scalar_window_focus;
-    Focus m_configuration_window_focus;
 
     double m_sampling_time;
     double m_plot_timestamp = 0;

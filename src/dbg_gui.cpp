@@ -192,7 +192,7 @@ void DbgGui::updateLoop() {
     style.WindowPadding.x = 1;
     style.WindowPadding.y = 5;
     style.FramePadding.x = 1;
-    style.FramePadding.y = 1;
+    style.FramePadding.y = 2;
     style.CellPadding.y = 1;
     style.IndentSpacing = 20;
     ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
@@ -228,6 +228,34 @@ void DbgGui::updateLoop() {
             m_simulation_speed *= 2.;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
             m_simulation_speed /= 2.;
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
+            ImGui::OpenPopup("Pause after");
+        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
+            ImGui::OpenPopup("Pause at");
+        }
+
+        if (ImGui::BeginPopupModal("Pause after", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputDouble("##Pause after", &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_pause_at_time = m_sample_timestamp + pause_after;
+                ImGui::CloseCurrentPopup();
+            };
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("Pause at", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputDouble("##Pause at", &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+                ImGui::CloseCurrentPopup();
+            };
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
 
         //---------- Main windows ----------
@@ -236,7 +264,7 @@ void DbgGui::updateLoop() {
             m_plot_timestamp = m_sample_timestamp;
             m_sampler.emptyTempBuffers();
         }
-        showConfigurationWindow();
+        showMainMenuBar();
         showScalarWindow();
         showVectorWindow();
         showCustomWindow();
@@ -305,7 +333,6 @@ void DbgGui::loadPreviousSessionSettings() {
 
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
-        TRY(m_configuration_window_focus.focused = m_settings["initial_focus"]["configuration"];)
 
         TRY(for (auto symbol
                  : m_settings["scalar_symbols"]) {
@@ -466,7 +493,6 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
-    m_settings["initial_focus"]["configuration"] = m_configuration_window_focus.focused;
 
     // If vector is deleted, mark the scalars as also deleted but don't delete them for real
     // yet before they are removed from all other structures
@@ -653,11 +679,6 @@ void DbgGui::setInitialFocus() {
     }
     m_initial_focus_set = true;
 
-    if (m_configuration_window_focus.initial_focus) {
-        ImGui::Begin("Configuration");
-        ImGui::SetWindowFocus("Configuration");
-        ImGui::End();
-    }
     if (m_scalar_window_focus.initial_focus) {
         ImGui::Begin("Scalars");
         ImGui::SetWindowFocus("Scalars");

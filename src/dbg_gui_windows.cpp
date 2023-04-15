@@ -165,143 +165,154 @@ void addSymbolContextMenu(VariantSymbol& sym) {
     }
 }
 
-void DbgGui::showConfigurationWindow() {
-    m_configuration_window_focus.focused = ImGui::Begin("Configuration");
-    if (!m_configuration_window_focus.focused) {
-        ImGui::End();
-        return;
-    }
+void DbgGui::showMainMenuBar() {
+    if (ImGui::BeginMainMenuBar()) {
+        ImGui::Text("Time %.3f s", m_plot_timestamp);
+        ImGui::SameLine();
 
-    ImGui::Text("Time %.3f s", m_plot_timestamp);
-    ImGui::SameLine();
-    const char* start_stop_text = m_paused ? "Start" : "Pause";
-    if (ImGui::Button(start_stop_text)) {
-        m_paused = !m_paused;
-    }
+        if (ImGui::BeginMenu("Menu")) {
+            ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
+            ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
+            ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
+            
+            // Pause after
+            ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
+            double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
+                m_pause_at_time = m_sample_timestamp + pause_after;
+            }
 
-    // Step button for pausing after next sample
-    ImGui::SameLine();
-    if (ImGui::Button("Step")
-        || ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_Space)) {
-        m_pause_at_time = std::numeric_limits<double>::epsilon();
-        m_paused = false;
-    }
+            // Pause at
+            ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
+            if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
 
-    ImGui::PushItemWidth(0.5f * ImGui::GetContentRegionAvail().x);
-    ImGui::SliderFloat("Simulation speed", &m_simulation_speed, 1e-4f, 10, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
-    if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
-        ImGui::SetKeyboardFocusHere();
-    }
-    double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
-    if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
-        m_pause_at_time = m_sample_timestamp + pause_after;
-    }
+            if (ImGui::Button("Add..")) {
+                ImGui::OpenPopup("##Add");
+            }
+            if (ImGui::BeginPopup("##Add")) {
+                // Always center this window when appearing
+                ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+                ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
-        ImGui::SetKeyboardFocusHere();
-    }
-    ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+                if (ImGui::Button("Scalar plot")) {
+                    ImGui::OpenPopup("Add scalar plot");
+                }
+                static char window_or_plot_name[256] = "";
+                if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    if (ImGui::InputText("Name",
+                                         window_or_plot_name,
+                                         IM_ARRAYSIZE(window_or_plot_name),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        m_scalar_plots.push_back(ScalarPlot{.name = window_or_plot_name,
+                                                            .y_axis = {-1, 1},
+                                                            .x_axis = {0, 1},
+                                                            .x_range = 1});
+                        strcpy_s(window_or_plot_name, "");
+                        ImGui::CloseCurrentPopup();
+                    };
+                    ImGui::EndPopup();
+                }
 
-    if (ImGui::Button("Add..")) {
-        ImGui::OpenPopup("##Add");
-    }
+                if (ImGui::Button("Vector plot")) {
+                    ImGui::OpenPopup("Add vector plot");
+                }
+                if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    if (ImGui::InputText("Vector plot name",
+                                         window_or_plot_name,
+                                         IM_ARRAYSIZE(window_or_plot_name),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        m_vector_plots.push_back(VectorPlot{.name = window_or_plot_name});
+                        strcpy_s(window_or_plot_name, "");
+                        ImGui::CloseCurrentPopup();
+                    };
+                    ImGui::EndPopup();
+                }
 
-    if (ImGui::Button("Save snapshot")) {
-        m_dbghelp_symbols.saveSnapshot("snapshot.json");
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Load snapshot")) {
-        // Pause during snapshot loading so that the execution continues from point when
-        // load button was pressed
-        bool paused = m_paused;
-        m_paused = true;
-        // Wait until main thread goes to pause state
-        while (m_next_sync_timestamp > 0) {
+                if (ImGui::Button("Spectrum plot")) {
+                    ImGui::OpenPopup("Add spectrum plot");
+                }
+                if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    if (ImGui::InputText("Spectrum plot name",
+                                         window_or_plot_name,
+                                         IM_ARRAYSIZE(window_or_plot_name),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        m_spectrum_plots.push_back(SpectrumPlot{.name = window_or_plot_name});
+                        strcpy_s(window_or_plot_name, "");
+                        ImGui::CloseCurrentPopup();
+                    };
+                    ImGui::EndPopup();
+                }
+
+                if (ImGui::Button("Custom window")) {
+                    ImGui::OpenPopup("Add custom window");
+                }
+                if (ImGui::BeginPopupModal("Add custom window", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    if (ImGui::InputText("Custom window name",
+                                         window_or_plot_name,
+                                         IM_ARRAYSIZE(window_or_plot_name),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        m_custom_windows.push_back(CustomWindow{.name = window_or_plot_name});
+                        strcpy_s(window_or_plot_name, "");
+                        ImGui::CloseCurrentPopup();
+                    };
+                    ImGui::EndPopup();
+                }
+                ImGui::EndPopup();
+            }
+
+            if (ImGui::Button("Save snapshot")) {
+                m_dbghelp_symbols.saveSnapshot("snapshot.json");
+            }
+            if (ImGui::Button("Load snapshot")) {
+                // Pause during snapshot loading so that the execution continues from point when
+                // load button was pressed
+                bool paused = m_paused;
+                m_paused = true;
+                // Wait until main thread goes to pause state
+                while (m_next_sync_timestamp > 0) {
+                }
+                m_dbghelp_symbols.loadSnapshot("snapshot.json");
+                m_paused = paused;
+            }
+
+            if (ImGui::Button("Clear saved settings")) {
+                m_options.clear_saved_settings = true;
+            }
+
+            ImGui::EndMenu();
         }
-        m_dbghelp_symbols.loadSnapshot("snapshot.json");
-        m_paused = paused;
+ 
+        // Start stop
+        const char* start_stop_text = m_paused ? "Start" : "Pause";
+        if (ImGui::Button(start_stop_text)) {
+            m_paused = !m_paused;
+        }
+
+        // Step
+        if (ImGui::Button("Step")
+            || ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_Space)) {
+            m_pause_at_time = std::numeric_limits<double>::epsilon();
+            m_paused = false;
+        }
+        ImGui::SameLine();
+
+        // Simulation speed
+        ImGui::PushItemWidth(ImGui::CalcTextSize("Simulation speed XXXXXXX").x);
+        ImGui::SliderFloat("##Simulation speed", &m_simulation_speed, 1e-4f, 10, "Simulation speed %.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+        ImGui::SameLine();
+
+        if (m_pause_at_time > m_sample_timestamp + std::numeric_limits<double>::epsilon()) {
+            ImGui::Text("Pausing after %g", m_pause_at_time - m_plot_timestamp);
+        }
+
+        ImGui::EndMainMenuBar();
     }
-
-    if (ImGui::BeginPopup("##Add")) {
-        // Always center this window when appearing
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::Button("Scalar plot")) {
-            ImGui::OpenPopup("Add scalar plot");
-        }
-        static char window_or_plot_name[256] = "";
-        if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::InputText("Name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_scalar_plots.push_back(ScalarPlot{.name = window_or_plot_name,
-                                                    .y_axis = {-1, 1},
-                                                    .x_axis = {0, 1},
-                                                    .x_range = 1});
-                strcpy_s(window_or_plot_name, "");
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-
-        if (ImGui::Button("Vector plot")) {
-            ImGui::OpenPopup("Add vector plot");
-        }
-        if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::InputText("Vector plot name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_vector_plots.push_back(VectorPlot{.name = window_or_plot_name});
-                strcpy_s(window_or_plot_name, "");
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-
-        if (ImGui::Button("Spectrum plot")) {
-            ImGui::OpenPopup("Add spectrum plot");
-        }
-        if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::InputText("Spectrum plot name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_spectrum_plots.push_back(SpectrumPlot{.name = window_or_plot_name});
-                strcpy_s(window_or_plot_name, "");
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-
-        if (ImGui::Button("Custom window")) {
-            ImGui::OpenPopup("Add custom window");
-        }
-        if (ImGui::BeginPopupModal("Add custom window", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::InputText("Custom window name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_custom_windows.push_back(CustomWindow{.name = window_or_plot_name});
-                strcpy_s(window_or_plot_name, "");
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-        ImGui::EndPopup();
-    }
-    if (ImGui::TreeNode("Options")) {
-        ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
-        ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
-        ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
-        if (ImGui::Button("Clear saved settings")) {
-            m_options.clear_saved_settings = true;
-        }
-        ImGui::TreePop();
-    }
-    ImGui::End();
 }
 
 void DbgGui::showScalarWindow() {
