@@ -289,6 +289,11 @@ void DbgGui::showVectorPlots() {
             ImGui::End();
             continue;
         }
+        // Fit first few frames because the initial fit does not seem to work sometimes with equal axes
+        if (ImGui::GetFrameCount() < 5) {
+            ImPlot::SetNextAxesToFit();
+        }
+
         Vector2D* signal_to_remove = nullptr;
 
         float time_range_ms = vector_plot.time_range * 1e3f;
