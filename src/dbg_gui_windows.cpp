@@ -310,13 +310,7 @@ void DbgGui::showMainMenuBar() {
         if (ImGui::Button(start_stop_text)) {
             m_paused = !m_paused;
         }
-
-        // Step
-        if (ImGui::Button("Step")
-            || ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_Space)) {
-            m_pause_at_time = std::numeric_limits<double>::epsilon();
-            m_paused = false;
-        }
+        HelpMarker("Hotkey for start/pause is space. Shift+space advances one step. Hold shift+space to advance very slowly.");
         ImGui::SameLine();
 
         // Simulation speed
