@@ -436,11 +436,6 @@ int closestSpectralBin(std::vector<double> const& vec_x, std::vector<double> con
     }
     auto const it_lower = std::lower_bound(vec_x.begin(), vec_x.end(), x - abs(x) * 0.03);
     auto const it_upper = std::upper_bound(vec_x.begin(), vec_x.end(), x + abs(x) * 0.03);
-    if (it_lower == vec_x.begin()) {
-        return 0;
-    } else if (it_upper == vec_x.end()) {
-        return int(vec_x.size() - 1);
-    }
 
     int closest_idx = -1;
     double y_err_min = INFINITY;
