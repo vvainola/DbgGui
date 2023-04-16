@@ -604,6 +604,7 @@ void CsvPlotter::showSignalWindow() {
     ImGui::Checkbox("Link x-axis", &m_link_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
     ImGui::Checkbox("Keep old signals on reload", &m_keep_old_signals_on_reload);
+    ImGui::Checkbox("Cursor measurements", &m_cursor_measurements);
 
     static char signal_name_filter[256] = "";
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
@@ -713,6 +714,70 @@ void CsvPlotter::showPlots() {
             m_fit_plot_idx = -1;
         }
 
+        // Get signals in the plot
+        size_t longest_name_length = 1;
+        size_t longest_file_length = 1;
+        struct FileAndSignal {
+            CsvFileData* file;
+            CsvSignal* signal;
+        };
+        std::vector<FileAndSignal> signals;
+        for (CsvFileData& file : m_csv_data) {
+            for (CsvSignal& signal : file.signals) {
+                if (signal.plot_idx == plot_idx) {
+                    longest_name_length = std::max(longest_name_length, signal.name.size());
+                    longest_file_length = std::max(longest_file_length, file.displayed_name.size());
+                    signals.push_back(FileAndSignal{
+                        .file = &file,
+                        .signal = &signal});
+                }
+            }
+        }
+
+        if (m_cursor_measurements) {
+            if (ImGui::BeginTable("Delta", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("X").x * (longest_name_length + longest_file_length + 5));
+                const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
+                ImGui::TableSetupColumn("y1", ImGuiTableColumnFlags_WidthFixed, num_width);
+                ImGui::TableSetupColumn("y2", ImGuiTableColumnFlags_WidthFixed, num_width);
+                ImGui::TableSetupColumn("delta (y2 - y1)", ImGuiTableColumnFlags_WidthFixed, num_width);
+                ImGui::TableHeadersRow();
+
+                // Time row
+                ImGui::TableNextColumn();
+                ImGui::Text("Time");
+                ImGui::TableNextColumn();
+                ImGui::Text(std::format("{:g}", m_drag_x1).c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text(std::format("{:g}", m_drag_x2).c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
+
+                for (FileAndSignal& sig : signals) {
+                    std::vector<double>& all_x_values = m_first_signal_as_x ? sig.file->signals[0].samples : ASCENDING_NUMBERS;
+                    std::vector<double>& all_y_values = sig.signal->samples;
+                    int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
+                    int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
+                    double y1 = all_y_values[idx1] * sig.signal->scale;
+                    double y2 = all_y_values[idx2] * sig.signal->scale;
+
+                    std::stringstream ss;
+                    ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
+                    std::string displayed_signal_name = ss.str();
+
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(sig.signal->color, displayed_signal_name.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y1).c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y2).c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y2 - y1).c_str());
+                }
+                ImGui::EndTable();
+            }
+        }
+
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
@@ -730,24 +795,6 @@ void CsvPlotter::showPlots() {
                     }
                 }
                 ImGui::EndDragDropTarget();
-            }
-
-            // Get signals in the plot
-            size_t longest_name_length = 1;
-            struct FileAndSignal {
-                CsvFileData* file;
-                CsvSignal* signal;
-            };
-            std::vector<FileAndSignal> signals;
-            for (CsvFileData& file : m_csv_data) {
-                for (CsvSignal& signal : file.signals) {
-                    if (signal.plot_idx == plot_idx) {
-                        longest_name_length = std::max(longest_name_length, signal.name.size());
-                        signals.push_back(FileAndSignal{
-                            .file = &file,
-                            .signal = &signal});
-                    }
-                }
             }
 
             // Reset plot colors if there are no signals in it
@@ -828,6 +875,24 @@ void CsvPlotter::showPlots() {
                     m_fit_plot_idx = plot_idx;
                 }
             }
+
+            // Vertical lines for cursor measurements
+            if (m_cursor_measurements) {
+                ImPlotRect plot_limits = ImPlot::GetPlotLimits();
+                ImPlotRange x_range = plot_limits.X;
+                if (m_drag_x1 == 0 && m_drag_x2 == 0) {
+                    m_drag_x1 = x_range.Min + 0.1 * x_range.Size();
+                    m_drag_x2 = x_range.Max - 0.1 * x_range.Size();
+                }
+                ImPlot::DragLineX(0, &m_drag_x1, ImVec4(1, 1, 1, 1));
+                ImPlot::DragLineX(1, &m_drag_x2, ImVec4(1, 1, 1, 1));
+                ImPlot::PlotText(std::format("x1 : {:g}", m_drag_x1).c_str(), m_drag_x1, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
+                ImPlot::PlotText(std::format("x2 : {:g}", m_drag_x2).c_str(), m_drag_x2, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
+            } else {
+                m_drag_x1 = 0;
+                m_drag_x2 = 0;
+            }
+
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
