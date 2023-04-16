@@ -11,7 +11,6 @@ project_root = meson.current_source_dir()
 add_project_arguments([
         '-DNOMINMAX',
         '-DJSON_DIAGNOSTICS=1',
-        f'-DCOUSINE_REGULAR_FONT="@project_root@\\Cousine-Regular.ttf"'.replace('\\', '/')
     ], language : ['c', 'cpp'])
 
 python = import('python3').find_python()
@@ -44,6 +43,7 @@ imgui_src = files([
     'src/imgui/implot_internal.h',
     'src/imgui/implot_items.cpp',
     'src/imgui/implot_items.cpp',
+    'src/imgui/ubuntu_mono_regular.cpp',
     'src/nativefiledialog/nfd_common.c',
     'src/nativefiledialog/nfd_win.cpp',
 ])
