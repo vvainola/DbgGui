@@ -201,9 +201,9 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    extern unsigned int ubuntu_mono_compressed_size;
-    extern unsigned int ubuntu_mono_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(ubuntu_mono_compressed_data, ubuntu_mono_compressed_size, 13.0f);
+    extern unsigned int cousine_regular_compressed_size;
+    extern unsigned int cousine_regular_compressed_data[];
+    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
     setTheme();
 
     loadPreviousSessionSettings();

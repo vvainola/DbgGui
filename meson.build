@@ -26,6 +26,7 @@ deps = [
 ]
 
 imgui_src = files([
+    'src/imgui/cousine_regular.cpp',
     'src/imgui/imgui_impl_opengl3.cpp',
     'src/imgui/imgui_impl_opengl3.h',
     'src/imgui/imgui_impl_glfw.cpp',
@@ -43,7 +44,6 @@ imgui_src = files([
     'src/imgui/implot_internal.h',
     'src/imgui/implot_items.cpp',
     'src/imgui/implot_items.cpp',
-    'src/imgui/ubuntu_mono_regular.cpp',
     'src/nativefiledialog/nfd_common.c',
     'src/nativefiledialog/nfd_win.cpp',
 ])
