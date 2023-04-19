@@ -209,7 +209,7 @@ int main(int, char**) {
     movavg.init(0, 2000 / test_freq);
 
     while (!DbgGui_isClosed()) {
-        DbgGui_sample();
+        DbgGui_sampleWithTimestamp(timestamp);
         timestamp += 10e-6;
         sfl = (float)timestamp;
         theta += 2 * PI * test_freq * 10e-6;

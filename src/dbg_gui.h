@@ -114,7 +114,6 @@ class DbgGui {
     double m_sampling_time;
     double m_plot_timestamp = 0;
     double m_sample_timestamp = 0;
-    double m_prev_sample_timestamp = 0;
     double m_next_sync_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;

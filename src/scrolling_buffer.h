@@ -38,6 +38,15 @@ class ScrollingBuffer {
         }
     }
 
+    void shiftTime(double time) {
+        for (double& t : m_time) {
+            t += time;
+        }
+        for (double& t : m_time_temp) {
+            t += time;
+        }
+    }
+
     void emptyTempBuffers() {
         // Empty time buffer first and collect indices to which the time samples are added
         std::vector<int32_t> indices;
@@ -148,7 +157,6 @@ class ScrollingBuffer {
             if (m_idx == 0) {
                 return {-1, -1};
             }
-            start_time = std::max(0.0, start_time);
             start_idx = binarySearch(start_time, 0, m_idx - 1);
             end_idx = binarySearch(end_time, start_idx, m_idx - 1);
         } else {

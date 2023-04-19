@@ -124,11 +124,15 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     if (isClosed()) {
         return;
     }
-    m_sample_timestamp += std::max(timestamp - m_prev_sample_timestamp, 0.0);
-    m_prev_sample_timestamp = timestamp;
 
     { // Sample signals
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+        if (timestamp < m_sample_timestamp) {
+            m_sampler.shiftTime(timestamp - m_sample_timestamp);
+            m_next_sync_timestamp = 0;
+        }
+        m_sample_timestamp = timestamp;
+
         m_sampler.sample(m_sample_timestamp);
         for (auto& signal : m_scalars) {
             if (signal->m_pause_triggers.size() > 0) {
