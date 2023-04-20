@@ -253,7 +253,8 @@ void DbgGui::savePlotAsCsv(ScalarPlot const& plot) {
         csv << "time0,";
         csv << "time,";
         std::vector<ScrollingBuffer::DecimatedValues> values;
-        auto time_idx = m_sampler.getTimeIndices(plot.x_axis.min, plot.x_axis.max);
+        MinMax limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : plot.x_axis;
+        auto time_idx = m_sampler.getTimeIndices(limits.min, limits.max);
         for (Scalar* signal : plot.signals) {
             csv << signal->name_and_group << ",";
             values.push_back(m_sampler.getValuesInRange(signal,
