@@ -145,7 +145,31 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
     return nullptr;
 }
 
-std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string const& name) const {
+std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string const& name,
+                                                                bool recursive,
+                                                                int max_count) const {
+    std::vector<VariantSymbol*> matching_symbols;
+    // Find from all symbols, can be pretty slow
+    if (recursive) {
+        std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
+            // Exact match is shown first
+            if (name == sym->getFullName()) {
+                matching_symbols.insert(matching_symbols.begin(), sym);
+            } else if (matching_symbols.size() < max_count
+                       && fts::fuzzy_match_simple(name.c_str(), sym->getFullName().c_str())) {
+                matching_symbols.push_back(sym);
+            }
+            // Find children
+            for (std::unique_ptr<VariantSymbol> const& child : sym->getChildren()) {
+                find_matching_recursively(child.get());
+            }
+        };
+        for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+            find_matching_recursively(sym.get());
+        }
+        return matching_symbols;
+    }
+
     std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
     std::string name_to_search = name;
 
@@ -160,12 +184,12 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
         }
     }
 
-    std::vector<VariantSymbol*> matching_symbols;
     for (std::unique_ptr<VariantSymbol> const& sym : *symbols_to_search) {
         // Exact match is shown first
         if (name_to_search == sym->getName()) {
             matching_symbols.insert(matching_symbols.begin(), sym.get());
-        } else if (fts::fuzzy_match_simple(name_to_search.c_str(), sym->getName().c_str())) {
+        } else if (matching_symbols.size() < max_count
+                   && fts::fuzzy_match_simple(name_to_search.c_str(), sym->getName().c_str())) {
             matching_symbols.push_back(sym.get());
         }
     }

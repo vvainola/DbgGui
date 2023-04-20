@@ -617,41 +617,53 @@ void DbgGui::showSymbolsWindow() {
         ImGui::End();
         return;
     }
+    static bool recursive_symbol_search = false;
+    static bool recursive_search_toggled = false;
+
+    // Just manually tested width that name, group and recursive boxes are visible.
+    float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 25 * ImGui::CalcTextSize("x").x;
+    ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
+    static char symbols_to_search[MAX_NAME_LENGTH];
+    if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
+        if (std::string(symbols_to_search).size() > 2) {
+            m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
+            auto begin_it = m_symbol_search_results.begin();
+            // Don't sort first element if it is an exact match
+            if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
+                begin_it++;
+            }
+            // Sort search results
+            std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
+                return l->getFullName() < r->getFullName();
+            });
+        } else {
+            m_symbol_search_results.clear();
+        }
+    }
+    // Group box
+    ImGui::SameLine();
+    ImGui::PushItemWidth(name_and_group_boxes_width * 0.35f);
+    ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
+    // Recursive checkbox
+    ImGui::SameLine();
+    recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
 
     static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
                                        | ImGuiTableFlags_BordersH
                                        | ImGuiTableFlags_Resizable
                                        | ImGuiTableFlags_NoSavedSettings;
     if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
-        ImGui::TableNextColumn();
-        static char symbols_to_search[MAX_NAME_LENGTH];
-        if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank)) {
-            if (std::string(symbols_to_search).size() > 2) {
-                m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search);
-                auto begin_it = m_symbol_search_results.begin();
-                // Don't sort first element if it is an exact match
-                if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
-                    begin_it++;
-                }
-                // Sort search results
-                std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
-                    return l->getFullName() < r->getFullName();
-                });
-            } else {
-                m_symbol_search_results.clear();
-            }
-        }
-        ImGui::TableNextColumn();
-        ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
         for (VariantSymbol* symbol : m_symbol_search_results) {
             // Recursive lambda for displaying children in the table
             std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
+                // Full name has to be displayed with recursive search
+                std::string symbol_name = recursive_symbol_search ? sym->getFullName() : sym->getName();
                 std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
                 if (children.size() > 0) {
                     // Object/array
-                    bool open = ImGui::TreeNodeEx(sym->getName().c_str());
+                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         static char symbol_name_buffer[MAX_NAME_LENGTH];
                         strcpy_s(symbol_name_buffer, sym->getFullName().data());
@@ -676,7 +688,7 @@ void DbgGui::showSymbolsWindow() {
                     if (!pointed_symbol) {
                         flags |= ImGuiTreeNodeFlags_Leaf;
                     }
-                    bool open = ImGui::TreeNodeEx(sym->getName().c_str(), flags);
+                    bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
                     addSymbolContextMenu(*sym);
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
@@ -695,7 +707,7 @@ void DbgGui::showSymbolsWindow() {
                     if (selected) {
                         flags |= ImGuiTreeNodeFlags_Selected;
                     }
-                    ImGui::TreeNodeEx(sym->getName().c_str(), flags);
+                    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
                     ImGui::TreePop();
                     if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
                         // Clear if already selected
