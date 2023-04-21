@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
         ("f,files", "Files to open for plotting", cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("n,names", "Names of signals to add to plots e.g. \"foo,bar\"", cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("p,plots", "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"", cxxopts::value<std::vector<int>>()->default_value("-1"))
+        ("xlim",    "X-axis limits e.g. \"1.0,1.5\"", cxxopts::value<std::vector<double>>()->default_value("-1,-1"))
         ("h,help", "Show help and exit")
         ;
     // clang-format on
@@ -40,11 +41,13 @@ int main(int argc, char** argv) {
     std::vector<std::string> files;
     std::vector<std::string> names;
     std::vector<int> plots;
+    std::vector<double> xlimits;
     try {
         parsed_options = options.parse(argc, argv);
         files = parsed_options["files"].as<std::vector<std::string>>();
         names = parsed_options["names"].as<std::vector<std::string>>();
         plots = parsed_options["plots"].as<std::vector<int>>();
+        xlimits = parsed_options["xlim"].as<std::vector<double>>();
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
         std::abort();
@@ -68,6 +71,9 @@ int main(int argc, char** argv) {
         std::cerr << std::format("Number of names and plots does not match: {}!={}", names.size(), plots.size());
         std::abort();
     }
+    if (xlimits.size() != 2) {
+        std::cerr << std::format("Wrong amount of x-axis limits: {}, expected 2", xlimits.size());
+    }
 
     // Signal name <-> plot idx mapping given from cmd line
     std::map<std::string, int> name_and_plot_idx; 
@@ -76,5 +82,5 @@ int main(int argc, char** argv) {
         name_and_plot_idx[names[i]] = plots[i];
     }
 
-    CsvPlotter plotter(files, name_and_plot_idx);
+    CsvPlotter plotter(files, name_and_plot_idx, xlimits);
 }

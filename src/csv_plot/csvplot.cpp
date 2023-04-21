@@ -47,7 +47,6 @@
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 
-
 int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
@@ -98,7 +97,14 @@ static void glfw_error_callback(int error, const char* description) {
 }
 
 CsvPlotter::CsvPlotter(std::vector<std::string> files,
-                       std::map<std::string, int> name_and_plot_idx) {
+                       std::map<std::string, int> name_and_plot_idx,
+                       std::vector<double> xlimits) {
+    assert(xlimits.size() == 2);
+    if (xlimits != std::vector<double>{AUTOFIT_AXIS, AUTOFIT_AXIS}) {
+        m_x_axis_min = std::min(xlimits[0], xlimits[1]);
+        m_x_axis_max = std::max(xlimits[0], xlimits[1]);
+    }
+
     for (std::string file : files) {
         std::optional<CsvFileData> data = parseCsvData(file, name_and_plot_idx);
         if (data) {
@@ -708,8 +714,9 @@ void CsvPlotter::showSignalWindow() {
 void CsvPlotter::showPlots() {
     for (int plot_idx = 0; plot_idx < m_plot_cnt; ++plot_idx) {
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
+        bool autofit_x_axis = (m_x_axis_min == AUTOFIT_AXIS && m_x_axis_max == AUTOFIT_AXIS);
         bool fit_data = (plot_idx == m_fit_plot_idx);
-        if (fit_data) {
+        if (fit_data || autofit_x_axis) {
             ImPlot::SetNextAxesToFit();
             m_fit_plot_idx = -1;
         }
@@ -783,7 +790,9 @@ void CsvPlotter::showPlots() {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
             if (m_link_axis) {
                 ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis_min, &m_x_axis_max);
-                ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+                if (!autofit_x_axis) {
+                    ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+                }
             }
 
             if (ImGui::BeginDragDropTarget()) {
