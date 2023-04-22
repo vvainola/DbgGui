@@ -171,6 +171,10 @@ void DbgGui::showScalarPlots() {
                     ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%g");
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%g");
+                    if (ImGui::Button("Copy name")) {
+                        ImGui::SetClipboardText(signal->alias.c_str());
+                        ImGui::CloseCurrentPopup();
+                    }
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     };
@@ -390,6 +394,10 @@ void DbgGui::showVectorPlots() {
                         if (ImGui::Button("Set as reference frame")) {
                             vector_plot.reference_frame_vector = signal;
                         };
+                    }
+                    if (ImGui::Button("Copy name")) {
+                        ImGui::SetClipboardText(signal->name.c_str());
+                        ImGui::CloseCurrentPopup();
                     }
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
