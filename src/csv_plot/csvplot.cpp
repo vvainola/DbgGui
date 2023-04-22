@@ -706,6 +706,10 @@ void CsvPlotter::showSignalWindow() {
 
                 if (ImGui::BeginPopupContextItem((file.displayed_name + signal.name + "context_menu").c_str())) {
                     ImGui::InputDouble("Scale", &signal.scale);
+                    if (ImGui::Button("Copy name")) {
+                        ImGui::SetClipboardText(signal.name.c_str());
+                        ImGui::CloseCurrentPopup();
+                    }
                     ImGui::EndPopup();
                 }
             }
