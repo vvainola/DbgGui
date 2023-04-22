@@ -222,7 +222,9 @@ struct CustomWindow {
 
 template <typename T>
 struct SignalGroup {
+    // For e.g. "abc|xyz" name is only "xyz" and full name is "abc|xyz"
     std::string name;
+    std::string full_name;
     std::vector<T*> signals;
     std::map<std::string, SignalGroup<T>> subgroups;
 };

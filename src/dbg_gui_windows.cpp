@@ -359,6 +359,16 @@ void DbgGui::showScalarWindow() {
                 if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                     delete_entire_group = true;
                 }
+                // Symbols can be dragged from one group to another for easier reorganizing if symbol
+                // is initially added to wrong group
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+                        uint64_t id = *(uint64_t*)payload->Data;
+                        Scalar* scalar = getScalar(id);
+                        addSymbol(scalar->name, group.full_name, scalar->alias, scalar->scale, scalar->offset);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
 
                 // Show subgroups first
                 for (auto& subgroup : group.subgroups) {

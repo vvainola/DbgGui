@@ -768,6 +768,8 @@ Scalar* DbgGui::addSymbol(std::string const& src, std::string group, std::string
     VariantSymbol* sym = m_dbghelp_symbols.getSymbol(src);
     if (sym) {
         Scalar* ptr = addScalar(sym->getValueSource(), group, name, scale, offset);
+        m_settings["scalar_symbols"][ptr->name_and_group]["name"] = ptr->name;
+        m_settings["scalar_symbols"][ptr->name_and_group]["group"] = ptr->group;
         return ptr;
     }
     return nullptr;
@@ -797,9 +799,13 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     std::vector<std::string> groups = split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
     added_group->name = groups[0];
+    added_group->full_name = added_group->name;
+    std::string full_group_name = added_group->name;
     for (int i = 1; i < groups.size(); ++i) {
         added_group = &added_group->subgroups[groups[i]];
         added_group->name = groups[i];
+        full_group_name += "|" + added_group->name;
+        added_group->full_name = full_group_name;
     }
 
     added_group->signals.push_back(new_scalar.get());
