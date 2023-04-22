@@ -227,7 +227,11 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     SymSetOptions(SYMOPT_DEFERRED_LOADS);
 
     HANDLE current_process = GetCurrentProcess();
-    SymInitialize(current_process, NULL, TRUE);
+    static bool once = true;
+    if (once) {
+        once = false;
+        assert(SymInitialize(current_process, NULL, TRUE));
+    }
 
     // Collect symbol infos into vector
     std::vector<SymbolInfo> symbols;
@@ -263,7 +267,8 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
         saveSymbolsToJson(json_to_save, raw_symbols, omit_names_from_json);
     }
 
-    SymCleanup(current_process);
+    // Leave out clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
+    // SymCleanup(current_process);
 }
 
 void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
