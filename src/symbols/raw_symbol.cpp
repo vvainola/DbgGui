@@ -93,8 +93,8 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     }
 
     for (int i = 0; auto& child : sym.children) {
-        if (sym.info.Name[0] == '_') {
-            child->info.Name = std::format("_{}", std::to_string(i));
+        if (sym.info.Name.starts_with("____")) {
+            child->info.Name = std::format("____{}", std::to_string(i));
         }
         to_json(field["children"][std::to_string(i)], *child);
         ++i;
@@ -111,7 +111,7 @@ void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<
         }
 
         if (omit_names) {
-            sym->info.Name = std::format("_{}", std::to_string(i));
+            sym->info.Name = std::format("____{}", std::to_string(i));
         }
         symbols_json["symbols"][std::to_string(i)] = *sym;
         ++i;

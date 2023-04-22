@@ -266,7 +266,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     SymCleanup(current_process);
 }
 
-void DbgHelpSymbols::saveSnapshot(std::string const& json) {
+void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
     nlohmann::json snapshot;
     auto module_info = getCurrentModuleInfo();
     snapshot["md5"] = module_info.md5_hash;
@@ -306,7 +306,37 @@ void DbgHelpSymbols::saveSnapshot(std::string const& json) {
     std::ofstream(json) << std::setw(4) << snapshot;
 }
 
-void DbgHelpSymbols::loadSnapshot(std::string const& json) {
+std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
+    std::vector<SymbolValue> snapshot;
+    auto module_info = getCurrentModuleInfo();
+    std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
+        // Add symbol value to snapshot
+        VariantSymbol::Type type = sym->getType();
+        if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
+            snapshot.push_back({sym, sym->read()});
+        } else if (type == VariantSymbol::Type::Pointer) {
+            MemoryAddress pointed_address = sym->getPointedAddress();
+            MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
+            // Set pointer only if it points to something else within this module
+            bool pointed_address_ok = pointed_address_offset < module_info.size;
+            if (pointed_address == NULL) {
+                snapshot.push_back({sym, MemoryAddress(0)});
+            } else if (pointed_address_ok) {
+                snapshot.push_back({sym, sym->getPointedAddress()});
+            }
+        }
+        // Add all children
+        for (auto const& child : sym->getChildren()) {
+            save_symbol_to_snapshot(child.get());
+        }
+    };
+    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+        save_symbol_to_snapshot(sym.get());
+    }
+    return snapshot;
+}
+
+void DbgHelpSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto module_info = getCurrentModuleInfo();
     nlohmann::json snapshot = nlohmann::json::parse(std::ifstream(json));
     if (module_info.md5_hash != snapshot["md5"]) {
@@ -347,5 +377,29 @@ void DbgHelpSymbols::loadSnapshot(std::string const& json) {
 
     for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
         load_symbol_state(sym.get());
+    }
+}
+
+void DbgHelpSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const {
+    for (SymbolValue symbol_snapshot : snapshot) {
+        VariantSymbol* sym = symbol_snapshot.symbol;
+        std::visit(
+            [=](auto&& value) {
+                using T = std::decay_t<decltype(value)>;
+                // Change value only if it is different because trying to write const variables causes crash
+                // and there seems to be no easy way to determine if a symbol is const
+                if constexpr (std::is_same_v<T, MemoryAddress>) {
+                    MemoryAddress current_pointed_address = sym->getPointedAddress();
+                    MemoryAddress new_pointed_address = value;
+                    if (current_pointed_address != new_pointed_address) {
+                        sym->setPointedAddress(new_pointed_address);
+                    }
+                } else {
+                    if (sym->read() != value) {
+                        sym->write(value);
+                    }
+                }
+            },
+            symbol_snapshot.value);
     }
 }

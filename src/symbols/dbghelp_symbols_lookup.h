@@ -27,6 +27,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <variant>
+#include "global_snapshot.h"
 
 class VariantSymbol;
 
@@ -59,12 +61,14 @@ class DbgHelpSymbols {
 
     /// @brief Save snapshot containing the value of all arithmetic symbols and pointers
     /// @param Filename of the json file created
-    void saveSnapshot(std::string const& json);
+    void saveSnapshotToFile(std::string const& json) const;
+    std::vector<SymbolValue> saveSnapshotToMemory() const;
 
     /// @brief Load value of all arithmetic symbols and restore pointers if they
     /// point to something else within the module or they are null pointer
     /// @param Filename of the json file to load
-    void loadSnapshot(std::string const& json);
+    void loadSnapshotFromFile(std::string const& json) const;
+    void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
   private:
     bool loadSymbolsFromJson(std::string const& json);

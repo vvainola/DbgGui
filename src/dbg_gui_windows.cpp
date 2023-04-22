@@ -284,7 +284,7 @@ void DbgGui::showMainMenuBar() {
             }
 
             if (ImGui::Button("Save snapshot")) {
-                m_dbghelp_symbols.saveSnapshot("snapshot.json");
+                m_dbghelp_symbols.saveSnapshotToFile("snapshot.json");
             }
             if (ImGui::Button("Load snapshot")) {
                 // Pause during snapshot loading so that the execution continues from point when
@@ -294,7 +294,7 @@ void DbgGui::showMainMenuBar() {
                 // Wait until main thread goes to pause state
                 while (m_next_sync_timestamp > 0) {
                 }
-                m_dbghelp_symbols.loadSnapshot("snapshot.json");
+                m_dbghelp_symbols.loadSnapshotFromFile("snapshot.json");
                 m_paused = paused;
             }
 

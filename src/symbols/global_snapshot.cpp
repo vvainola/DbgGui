@@ -26,16 +26,27 @@
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
 
-void DbgGui_saveSnapshot(const char* symbols_json, const char* snapshot_file, int omit_names) {
+void* SNP_NewSymbolLookup(const char* symbols_json, int omit_names_from_json) {
     std::string symbols_json_name = symbols_json == NULL ? "" : symbols_json;
-    DbgHelpSymbols dbghelp_symbols(symbols_json_name, omit_names);
-    if (snapshot_file != NULL) {
-        dbghelp_symbols.saveSnapshot(snapshot_file);
-    }
+    return new DbgHelpSymbols(symbols_json_name, omit_names_from_json);
 }
 
-void DbgGui_loadSnapshot(const char* symbols_json, const char* snapshot_file) {
-    std::string symbols_json_name = symbols_json == NULL ? "" : symbols_json;
-    DbgHelpSymbols dbghelp_symbols(symbols_json_name, true);
-    dbghelp_symbols.loadSnapshot(snapshot_file);
+void SNP_DeleteSymbolLookup(void* symbol_lookup) {
+    delete (DbgHelpSymbols*)symbol_lookup;
+}
+
+void SNP_saveSnapshotToFile(void* symbols, const char* snapshot_file) {
+    ((DbgHelpSymbols*)symbols)->saveSnapshotToFile(snapshot_file);
+}
+
+void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file)  {
+    ((DbgHelpSymbols*)symbols)->loadSnapshotFromFile(snapshot_file);
+}
+
+std::vector<SymbolValue> SNP_saveSnapshotToMemory(void* symbols) {
+    return ((DbgHelpSymbols*)symbols)->saveSnapshotToMemory();
+}
+
+void SNP_loadSnapshotFromMemory(void* symbols, std::vector<SymbolValue> const& snapshot) {
+    ((DbgHelpSymbols*)symbols)->loadSnapshotFromMemory(snapshot);
 }

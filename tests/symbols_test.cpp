@@ -37,11 +37,10 @@ double g_double2;
 double g_multidim_double[5][5];
 double* g_double_ptr;
 void (*g_fn_ptr)();
+void (*g_fn_ptr2)();
 BitField g_bitfield;
 
-TEST_CASE("Snapshot") {
-    int omit_names = 0;
-
+TEST_CASE("Snapshot from file") {
     // Create temp variables
     int idx1 = random<uint16_t>() % 4;
     int idx2 = random<uint16_t>() % 4;
@@ -57,26 +56,31 @@ TEST_CASE("Snapshot") {
     g_float = temp_float;
     g_double1 = temp_double1;
     g_fn_ptr = &test_fn1;
+    g_fn_ptr2 = NULL;
     g_double_ptr = &g_double1;
     g_multidim_double[idx1][idx2] = temp_double2;
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
 
-    // Save snapshot twice to use the json file on second save instead of the PDB
-    DbgGui_saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
-    DbgGui_saveSnapshot("test_symbols.json", "test_snapshot.json", omit_names);
+    // Lookup symbols twice to create the json on first lookup that can be used on second lookup instead of the pdb
+    int omit_names_from_json = 1;
+    void* symbols = SNP_NewSymbolLookup("test_symbols.json", omit_names_from_json);
+    SNP_DeleteSymbolLookup(symbols);
+    symbols = SNP_NewSymbolLookup("test_symbols.json", omit_names_from_json);
+    SNP_saveSnapshotToFile(symbols, "test_snapshot.json");
 
     // Assign new random values to global variables
     g_int = random<int>();
     g_float = random<float>();
     g_double1 = random<double>();
     g_fn_ptr = &test_fn2;
+    g_fn_ptr2 = &test_fn2;
     g_double_ptr = &g_double2;
     g_multidim_double[idx1][idx2] = random<double>();
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
     // Load snapshot
-    DbgGui_loadSnapshot("test_symbols.json", "test_snapshot.json");
+    SNP_loadSnapshotFromFile(symbols, "test_snapshot.json");
 
     // Check that the values of all global variables are the same as assigned before saving the snapshot
     REQUIRE(g_int == temp_int);
@@ -84,7 +88,63 @@ TEST_CASE("Snapshot") {
     REQUIRE(g_double1 == temp_double1);
     REQUIRE(g_double_ptr == &g_double1);
     REQUIRE(g_fn_ptr == test_fn1);
+    REQUIRE(g_fn_ptr2 == NULL);
     REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
+
+    SNP_DeleteSymbolLookup(symbols);
+}
+
+TEST_CASE("Snapshot from memory") {
+    // Create temp variables
+    int idx1 = random<uint16_t>() % 4;
+    int idx2 = random<uint16_t>() % 4;
+    int temp_int = random<int>();
+    float temp_float = random<float>();
+    double temp_double1 = random<double>();
+    double temp_double2 = random<double>();
+    uint32_t temp_bf0 = random<uint32_t>() % 7;
+    uint32_t temp_bf9 = random<uint32_t>() % 17;
+
+    // Assign random values to global variables
+    g_int = temp_int;
+    g_float = temp_float;
+    g_double1 = temp_double1;
+    g_fn_ptr = &test_fn1;
+    g_fn_ptr2 = NULL;
+    g_double_ptr = &g_double1;
+    g_multidim_double[idx1][idx2] = temp_double2;
+    g_bitfield.b0 = temp_bf0;
+    g_bitfield.b9 = temp_bf9;
+
+    void* symbols = SNP_NewSymbolLookup(NULL, 0);
+    auto snapshot = SNP_saveSnapshotToMemory(symbols);
+
+    // Assign new random values to global variables
+    g_int = random<int>();
+    g_float = random<float>();
+    g_double1 = random<double>();
+    g_fn_ptr = &test_fn2;
+    g_fn_ptr2 = &test_fn2;
+    g_double_ptr = &g_double2;
+    g_multidim_double[idx1][idx2] = random<double>();
+    g_bitfield.b0 = random<uint32_t>() % 9;
+    g_bitfield.b9 = random<uint32_t>() % 17;
+
+    // Load snapshot
+    SNP_loadSnapshotFromMemory(symbols, snapshot);
+
+    // Check that the values of all global variables are the same as assigned before saving the snapshot
+    REQUIRE(g_int == temp_int);
+    REQUIRE(g_float == temp_float);
+    REQUIRE(g_double1 == temp_double1);
+    REQUIRE(g_double_ptr == &g_double1);
+    REQUIRE(g_fn_ptr == test_fn1);
+    REQUIRE(g_fn_ptr2 == NULL);
+    REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
+    REQUIRE(g_bitfield.b0 == temp_bf0);
+    REQUIRE(g_bitfield.b9 == temp_bf9);
+
+    SNP_DeleteSymbolLookup(symbols);
 }
