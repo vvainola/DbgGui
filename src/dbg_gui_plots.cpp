@@ -136,11 +136,6 @@ void DbgGui::showScalarPlots() {
                                                                                      SCALAR_PLOT_POINT_COUNT,
                                                                                      signal->scale,
                                                                                      signal->offset);
-                // Fatter line with custom settings
-                bool custom_scale_or_offset = signal->scale != 1 || signal->offset != 0;
-                if (custom_scale_or_offset) {
-                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2);
-                }
                 ImPlot::PlotLine(signal->alias_and_group.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
@@ -151,9 +146,6 @@ void DbgGui::showScalarPlots() {
                                  values.y_max.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
-                if (custom_scale_or_offset) {
-                    ImPlot::PopStyleVar();
-                }
                 ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
                 ImPlot::PlotShaded(signal->alias_and_group.c_str(),
                                    values.time.data(),
