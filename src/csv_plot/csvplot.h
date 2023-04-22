@@ -56,9 +56,10 @@ struct CsvFileData {
 struct GLFWwindow;
 class CsvPlotter {
   public:
-    CsvPlotter(std::vector<std::string> files,
-               std::map<std::string, int> name_and_plot_idx,
-               std::vector<double> xlimits);
+    CsvPlotter(std::vector<std::string> files = {},
+               std::map<std::string, int> name_and_plot_idx = {},
+               std::vector<double> xlimits = {AUTOFIT_AXIS, AUTOFIT_AXIS},
+               std::string const& image_filepath = "");
 
   private:
     void showSignalWindow();

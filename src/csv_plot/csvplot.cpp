@@ -33,6 +33,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
+#include "save_image.h"
 
 #include <nfd.h>
 #include <nlohmann/json.hpp>
@@ -46,6 +47,8 @@
 
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
+// Render few frames before saving image because plot are not immediately autofitted correctly
+inline int IMAGE_SAVE_FRAME_COUNT = 3;
 
 int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -98,7 +101,8 @@ static void glfw_error_callback(int error, const char* description) {
 
 CsvPlotter::CsvPlotter(std::vector<std::string> files,
                        std::map<std::string, int> name_and_plot_idx,
-                       std::vector<double> xlimits) {
+                       std::vector<double> xlimits,
+                       std::string const& image_filepath) {
     assert(xlimits.size() == 2);
     if (xlimits != std::vector<double>{AUTOFIT_AXIS, AUTOFIT_AXIS}) {
         m_x_axis_min = std::min(xlimits[0], xlimits[1]);
@@ -197,6 +201,11 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             glfwMakeContextCurrent(backup_current_context);
         }
         glfwSwapBuffers(m_window);
+
+        if (!image_filepath.empty() && ImGui::GetFrameCount() > IMAGE_SAVE_FRAME_COUNT) {
+            saveImage(image_filepath.c_str(), m_window);
+            glfwSetWindowShouldClose(m_window, true);
+        }
     }
 
     // Cleanup

@@ -6,6 +6,7 @@ glfw/3.3.8
 cxxopts/3.0.0
 catch2/3.3.2
 pkgconf/1.9.3
+stb/cci.20220909
 
 [generators]
 pkg_config

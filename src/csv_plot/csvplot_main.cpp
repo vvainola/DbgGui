@@ -26,15 +26,16 @@
 
 int main(int argc, char** argv) {
     std::string csv_file;
-    
+
     cxxopts::Options options("CSV Plotter");
     // clang-format off
     options.add_options()
-        ("f,files", "Files to open for plotting", cxxopts::value<std::vector<std::string>>()->default_value("-"))
-        ("n,names", "Names of signals to add to plots e.g. \"foo,bar\"", cxxopts::value<std::vector<std::string>>()->default_value("-"))
-        ("p,plots", "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"", cxxopts::value<std::vector<int>>()->default_value("-1"))
-        ("xlim",    "X-axis limits e.g. \"1.0,1.5\"", cxxopts::value<std::vector<double>>()->default_value("-1,-1"))
-        ("h,help", "Show help and exit")
+        ("f,files" , "Files to open for plotting"                                                            , cxxopts::value<std::vector<std::string>>()->default_value("-"))
+        ("n,names" , "Names of signals to add to plots e.g. \"foo,bar\""                                     , cxxopts::value<std::vector<std::string>>()->default_value("-"))
+        ("p,plots" , "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"" , cxxopts::value<std::vector<int>>()->default_value("-1"))
+        ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1,-1"))
+        ("image"   , "Save plot as png image to given path and exit."                                        , cxxopts::value<std::string>()->default_value(""))
+        ("h,help"  , "Show help and exit")
         ;
     // clang-format on
     cxxopts::ParseResult parsed_options;
@@ -42,17 +43,19 @@ int main(int argc, char** argv) {
     std::vector<std::string> names;
     std::vector<int> plots;
     std::vector<double> xlimits;
+    std::string image_filepath;
     try {
         parsed_options = options.parse(argc, argv);
         files = parsed_options["files"].as<std::vector<std::string>>();
         names = parsed_options["names"].as<std::vector<std::string>>();
         plots = parsed_options["plots"].as<std::vector<int>>();
         xlimits = parsed_options["xlim"].as<std::vector<double>>();
+        image_filepath = parsed_options["image"].as<std::string>();
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
         std::abort();
     }
-    
+
     if (parsed_options.count("help")) {
         std::cout << options.help() << std::endl;
         std::abort();
@@ -76,11 +79,10 @@ int main(int argc, char** argv) {
     }
 
     // Signal name <-> plot idx mapping given from cmd line
-    std::map<std::string, int> name_and_plot_idx; 
-    for (int i = 0; i < names.size(); ++i) 
-    {
+    std::map<std::string, int> name_and_plot_idx;
+    for (int i = 0; i < names.size(); ++i) {
         name_and_plot_idx[names[i]] = plots[i];
     }
 
-    CsvPlotter plotter(files, name_and_plot_idx, xlimits);
+    CsvPlotter plotter(files, name_and_plot_idx, xlimits, image_filepath);
 }

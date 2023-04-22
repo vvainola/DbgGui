@@ -97,11 +97,12 @@ c_gui = executable('test_gui_c',
 csv_plotter = executable('csv_plotter',
     sources : [
         'src/csv_plot/csvplot_main.cpp',
-        'src/csv_plot/csvplot.cpp'
+        'src/csv_plot/csvplot.cpp',
+        'src/csv_plot/save_image.cpp'
     ],
     include_directories : inc + ['src'],
     link_with : imgui_lib,
-    dependencies : deps,
+    dependencies : deps + dependency('stb'),
 )
 
 lib_dbghelp_symbols_dep = declare_dependency(
