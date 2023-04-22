@@ -102,7 +102,7 @@ csv_plotter = executable('csv_plotter',
     ],
     include_directories : inc + ['src'],
     link_with : imgui_lib,
-    dependencies : deps + dependency('stb'),
+    dependencies : deps,
 )
 
 lib_dbghelp_symbols_dep = declare_dependency(

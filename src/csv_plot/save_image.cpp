@@ -24,7 +24,7 @@
 
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
+#include "stb_image_write.h"
 #include <vector>
 
 // https://lencerf.github.io/post/2019-09-21-save-the-opengl-rendering-to-image-file/
