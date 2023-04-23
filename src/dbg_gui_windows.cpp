@@ -365,6 +365,8 @@ void DbgGui::showScalarWindow() {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                         uint64_t id = *(uint64_t*)payload->Data;
                         Scalar* scalar = getScalar(id);
+                        // Delete old signal and add new one to new group
+                        scalar->deleted = true;
                         addSymbol(scalar->name, group.full_name, scalar->alias, scalar->scale, scalar->offset);
                     }
                     ImGui::EndDragDropTarget();
