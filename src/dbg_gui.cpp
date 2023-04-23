@@ -811,8 +811,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
 
     added_group->signals.push_back(new_scalar.get());
     // Sort items within the inserted group
-    auto& inserted_group = m_scalar_groups[new_scalar->group];
-    std::sort(inserted_group.signals.begin(), inserted_group.signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
+    std::sort(added_group->signals.begin(), added_group->signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
     return new_scalar.get();
 }
 
