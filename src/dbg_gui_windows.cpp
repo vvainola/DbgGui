@@ -549,7 +549,7 @@ void DbgGui::showVectorWindow() {
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         ImGui::SetDragDropPayload("VECTOR_ID", &signal->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot");
+                        ImGui::Text("Drag to vector plot");
                         ImGui::EndDragDropSource();
                     }
 
