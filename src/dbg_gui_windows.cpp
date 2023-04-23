@@ -401,8 +401,10 @@ void DbgGui::showScalarWindow() {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                         uint64_t id = *(uint64_t*)payload->Data;
                         Scalar* scalar = getScalar(id);
-                        if (addSymbol(scalar->name, group.full_name, scalar->alias, scalar->scale, scalar->offset)) {
-                            // Delete old signal if new one was added
+                        // Do nothing if dragged to same group.
+                        // Old one will be deleted if new one is added.
+                        if (scalar->group != group.full_name
+                            && addSymbol(scalar->name, group.full_name, scalar->alias, scalar->scale, scalar->offset)) {
                             scalar->deleted = true;
                         }
                     }
