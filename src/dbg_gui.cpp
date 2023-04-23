@@ -765,10 +765,12 @@ void DbgGui::close() {
     }
 }
 
-Scalar* DbgGui::addSymbol(std::string const& src, std::string group, std::string const& name, double scale, double offset) {
-    VariantSymbol* sym = m_dbghelp_symbols.getSymbol(src);
+Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale, double offset) {
+    VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
     if (sym) {
-        Scalar* ptr = addScalar(sym->getValueSource(), group, name, scale, offset);
+        Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
+        ptr->alias = alias;
+        ptr->alias_and_group = ptr->alias + "(" + ptr->group + ")";
         m_settings["scalar_symbols"][ptr->name_and_group]["name"] = ptr->name;
         m_settings["scalar_symbols"][ptr->name_and_group]["group"] = ptr->group;
         return ptr;
