@@ -90,6 +90,8 @@ class DbgGui {
     ScrollingBuffer m_sampler;
     std::vector<std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
+    std::vector<std::unique_ptr<Vector2D>> m_vectors;
+    std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
     double m_linked_scalar_x_axis_range = 1;
 
@@ -101,8 +103,6 @@ class DbgGui {
         }
         return nullptr;
     }
-    std::vector<std::unique_ptr<Vector2D>> m_vectors;
-    std::map<std::string, std::vector<Vector2D*>> m_vector_groups;
 
     std::vector<CustomWindow> m_custom_windows;
     std::vector<ScalarPlot> m_scalar_plots;

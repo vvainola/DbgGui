@@ -625,9 +625,9 @@ void DbgGui::updateSavedSettings() {
 
     // Remove deleted vectors from vector groups
     for (auto& vector_group : m_vector_groups) {
-        auto& vectors = vector_group.second;
+        std::vector<Vector2D*>& vectors = vector_group.second.signals;
         for (int i = int(vectors.size() - 1); i >= 0; --i) {
-            auto vector = vectors[i];
+            Vector2D* vector = vectors[i];
             if (vector->deleted) {
                 remove(vectors, vector);
             }
@@ -839,10 +839,21 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     new_vector->x->offset = offset;
     new_vector->y->scale = scale;
     new_vector->y->offset = offset;
-    m_vector_groups[group].push_back(new_vector.get());
+    std::vector<std::string> groups = split(new_vector->group, '|');
+    SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
+    added_group->name = groups[0];
+    added_group->full_name = added_group->name;
+    std::string full_group_name = added_group->name;
+    for (int i = 1; i < groups.size(); ++i) {
+        added_group = &added_group->subgroups[groups[i]];
+        added_group->name = groups[i];
+        full_group_name += "|" + added_group->name;
+        added_group->full_name = full_group_name;
+    }
+
+    added_group->signals.push_back(new_vector.get());
     // Sort items within the inserted group
-    auto& inserted_group = m_vector_groups[group];
-    std::sort(inserted_group.begin(), inserted_group.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
+    std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
     return new_vector.get();
 }
 

@@ -329,7 +329,7 @@ void DbgGui::showMainMenuBar() {
     }
 }
 
-bool groupHasVisibleItems(SignalGroup<Scalar> const& group, std::string const& filter) {
+bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& group, std::string const& filter) {
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
         [&](SignalGroup<Scalar> const& group, std::string const& filter) {
@@ -357,9 +357,9 @@ void DbgGui::showScalarWindow() {
         ImGui::End();
         return;
     }
-    static char signal_name_filter_buffer[256] = "";
-    ImGui::InputText("Filter", signal_name_filter_buffer, IM_ARRAYSIZE(signal_name_filter_buffer));
-    std::string signal_name_filter = std::string(signal_name_filter_buffer);
+    static char scalar_name_filter_buffer[256] = "";
+    ImGui::InputText("Filter", scalar_name_filter_buffer, IM_ARRAYSIZE(scalar_name_filter_buffer));
+    std::string scalar_name_filter = std::string(scalar_name_filter_buffer);
 
     if (ImGui::BeginTable("scalar_table",
                           2,
@@ -371,7 +371,7 @@ void DbgGui::showScalarWindow() {
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
             // Do not show group if there are no visible items in it
-            if (!groupHasVisibleItems(group, signal_name_filter)) {
+            if (!scalarGroupHasVisibleItems(group, scalar_name_filter)) {
                 return;
             }
             ImGui::TableNextRow();
@@ -380,13 +380,13 @@ void DbgGui::showScalarWindow() {
             // Group has to be opened automatically if signal in it matches the filter.
             // If there is no filter, then it should be kept open if it has been opened
             // manually before.
-            if (!signal_name_filter.empty()) {
+            if (!scalar_name_filter.empty()) {
                 ImGui::SetNextItemOpen(true, ImGuiCond_Always);
             } else if (!group.opened_manually) {
                 ImGui::SetNextItemOpen(false, ImGuiCond_Always);
             }
             bool group_opened = ImGui::TreeNode(group.name.c_str());
-            if (signal_name_filter.empty()) {
+            if (scalar_name_filter.empty()) {
                 group.opened_manually = group_opened;
             }
 
@@ -415,7 +415,7 @@ void DbgGui::showScalarWindow() {
 
                 // Show each scalar
                 for (Scalar* scalar : scalars) {
-                    bool hide_by_filter = !signal_name_filter.empty() && !fts::fuzzy_match_simple(signal_name_filter.c_str(), scalar->name.c_str());
+                    bool hide_by_filter = !scalar_name_filter.empty() && !fts::fuzzy_match_simple(scalar_name_filter.c_str(), scalar->name.c_str());
                     if (scalar->hide_from_scalars_window || hide_by_filter) {
                         continue;
                     }
@@ -472,12 +472,35 @@ void DbgGui::showScalarWindow() {
     ImGui::End();
 }
 
+bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& group, std::string const& filter) {
+    bool group_has_visible_items = false;
+    std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
+        [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
+            for (Vector2D* vector : group.signals) {
+                group_has_visible_items |= filter.empty() || fts::fuzzy_match_simple(filter.c_str(), vector->name.c_str());
+            }
+            for (auto const& subgroup : group.subgroups) {
+                check_group_for_visible_items(subgroup.second, filter);
+            }
+        };
+    check_group_for_visible_items(group, filter);
+    for (auto const& subgroup : group.subgroups) {
+        check_group_for_visible_items(subgroup.second, filter);
+    }
+    return group_has_visible_items;
+}
+
 void DbgGui::showVectorWindow() {
     m_vector_window_focus.focused = ImGui::Begin("Vectors");
     if (!m_vector_window_focus.focused) {
         ImGui::End();
         return;
     }
+
+    static char vector_name_filter_buffer[256] = "";
+    ImGui::InputText("Filter", vector_name_filter_buffer, IM_ARRAYSIZE(vector_name_filter_buffer));
+    std::string vector_name_filter = std::string(vector_name_filter_buffer);
+
     if (ImGui::BeginTable("vector_table",
                           3,
                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
@@ -485,16 +508,40 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
-        for (auto it = m_vector_groups.begin(); it != m_vector_groups.end(); it++) {
-            std::vector<Vector2D*> const& vectors = it->second;
-            if (vectors.size() == 0) {
-                continue;
+
+        std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
+            std::vector<Vector2D*> const& vectors = group.signals;
+            if (!vectorGroupHasVisibleItems(group, vector_name_filter)) {
+                return;
             }
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            if (ImGui::TreeNode(it->first.c_str())) {
+
+            // Group has to be opened automatically if signal in it matches the filter.
+            // If there is no filter, then it should be kept open if it has been opened
+            // manually before.
+            if (!vector_name_filter.empty()) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            } else if (!group.opened_manually) {
+                ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+            }
+            bool group_opened = ImGui::TreeNode(group.name.c_str());
+            if (vector_name_filter.empty()) {
+                group.opened_manually = group_opened;
+            }
+
+            if (group_opened) {
+                // Show subgroups first
+                for (auto& subgroup : group.subgroups) {
+                    show_vector_group(subgroup.second, delete_entire_group);
+                }
+
                 for (Vector2D* signal : vectors) {
+                    if (!vector_name_filter.empty() && !fts::fuzzy_match_simple(vector_name_filter.c_str(), signal->name.c_str())) {
+                        continue;
+                    }
+
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     // Show name
@@ -547,7 +594,11 @@ void DbgGui::showVectorWindow() {
                 }
                 ImGui::TreePop();
             }
+        };
+        for (auto it = m_vector_groups.begin(); it != m_vector_groups.end(); it++) {
+            show_vector_group(it->second, false);
         }
+
         ImGui::EndTable();
     }
     ImGui::End();
