@@ -809,15 +809,22 @@ void DbgGui::showSymbolsWindow() {
                     }
                     ImGui::TreeNodeEx(symbol_name.c_str(), flags);
                     ImGui::TreePop();
-                    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
-                        // Clear if already selected
-                        if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
+                    if (ImGui::IsItemClicked()) {
+                        if (ImGui::GetIO().KeyCtrl) {
+                            // Clear if already selected
+                            if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
+                                selected_symbol_idx = 0;
+                                selected_symbols[0] = nullptr;
+                                selected_symbols[1] = nullptr;
+                            } else {
+                                selected_symbols[selected_symbol_idx] = sym;
+                                selected_symbol_idx = (selected_symbol_idx + 1) % 2;
+                            }
+                        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
+                            // Clear if clicking something else than the selected
                             selected_symbol_idx = 0;
                             selected_symbols[0] = nullptr;
                             selected_symbols[1] = nullptr;
-                        } else {
-                            selected_symbols[selected_symbol_idx] = sym;
-                            selected_symbol_idx = (selected_symbol_idx + 1) % 2;
                         }
                     }
 
