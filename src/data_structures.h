@@ -227,4 +227,5 @@ struct SignalGroup {
     std::string full_name;
     std::vector<T*> signals;
     std::map<std::string, SignalGroup<T>> subgroups;
+    bool opened_manually = false;
 };

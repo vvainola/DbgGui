@@ -22,6 +22,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
+#include "symbols/fts_fuzzy_match.h"
 #include <format>
 #include <iostream>
 
@@ -328,12 +329,38 @@ void DbgGui::showMainMenuBar() {
     }
 }
 
+bool groupHasVisibleItems(SignalGroup<Scalar> const& group, std::string const& filter) {
+    bool group_has_visible_items = false;
+    std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
+        [&](SignalGroup<Scalar> const& group, std::string const& filter) {
+            for (Scalar* scalar : group.signals) {
+                if (filter.empty()) {
+                    group_has_visible_items |= !scalar->hide_from_scalars_window;
+                } else {
+                    group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->name.c_str());
+                }
+            }
+            for (auto const& subgroup : group.subgroups) {
+                check_group_for_visible_items(subgroup.second, filter);
+            }
+        };
+    check_group_for_visible_items(group, filter);
+    for (auto const& subgroup : group.subgroups) {
+        check_group_for_visible_items(subgroup.second, filter);
+    }
+    return group_has_visible_items;
+}
+
 void DbgGui::showScalarWindow() {
     m_scalar_window_focus.focused = ImGui::Begin("Scalars");
     if (!m_scalar_window_focus.focused) {
         ImGui::End();
         return;
     }
+    static char signal_name_filter_buffer[256] = "";
+    ImGui::InputText("Filter", signal_name_filter_buffer, IM_ARRAYSIZE(signal_name_filter_buffer));
+    std::string signal_name_filter = std::string(signal_name_filter_buffer);
+
     if (ImGui::BeginTable("scalar_table",
                           2,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable)) {
@@ -343,19 +370,28 @@ void DbgGui::showScalarWindow() {
 
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
-            // Do not show group if there are no visible items in it (it only contains scalars of vector signals)
-            bool show_group = false;
-            for (Scalar* scalar : scalars) {
-                show_group |= !scalar->hide_from_scalars_window;
-            }
-            if (!show_group && group.subgroups.size() == 0) {
+            // Do not show group if there are no visible items in it
+            if (!groupHasVisibleItems(group, signal_name_filter)) {
                 return;
             }
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
+            // Group has to be opened automatically if signal in it matches the filter.
+            // If there is no filter, then it should be kept open if it has been opened
+            // manually before.
+            if (!signal_name_filter.empty()) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            } else if (!group.opened_manually) {
+                ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+            }
+            bool group_opened = ImGui::TreeNode(group.name.c_str());
+            if (signal_name_filter.empty()) {
+                group.opened_manually = group_opened;
+            }
+
             // Show values inside the group
-            if (ImGui::TreeNode(group.name.c_str())) {
+            if (group_opened) {
                 if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                     delete_entire_group = true;
                 }
@@ -379,7 +415,8 @@ void DbgGui::showScalarWindow() {
 
                 // Show each scalar
                 for (Scalar* scalar : scalars) {
-                    if (scalar->hide_from_scalars_window) {
+                    bool hide_by_filter = !signal_name_filter.empty() && !fts::fuzzy_match_simple(signal_name_filter.c_str(), scalar->name.c_str());
+                    if (scalar->hide_from_scalars_window || hide_by_filter) {
                         continue;
                     }
                     ImGui::TableNextRow();
