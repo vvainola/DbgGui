@@ -225,7 +225,7 @@ void DbgGui::updateLoop() {
         // ImPlot::ShowDemoWindow();
 
         //---------- Hotkeys ----------
-        if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
         } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
             m_pause_at_time = std::numeric_limits<double>::epsilon();
