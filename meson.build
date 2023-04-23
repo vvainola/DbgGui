@@ -71,6 +71,7 @@ lib_symbols = static_library('symbols',
 
 lib_gui = static_library('dbg_gui',
     sources : [
+        'src/dark_theme.cpp',
         'src/dbg_gui_wrapper.cpp',
         'src/dbg_gui.cpp',
         'src/dbg_gui_plots.cpp',
@@ -98,7 +99,8 @@ csv_plotter = executable('csv_plotter',
     sources : [
         'src/csv_plot/csvplot_main.cpp',
         'src/csv_plot/csvplot.cpp',
-        'src/csv_plot/save_image.cpp'
+        'src/csv_plot/save_image.cpp',
+        'src/dark_theme.cpp',
     ],
     include_directories : inc + ['src'],
     link_with : imgui_lib,
