@@ -336,7 +336,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& group, std::string co
             for (Scalar* scalar : group.signals) {
                 if (filter.empty()) {
                     group_has_visible_items |= !scalar->hide_from_scalars_window;
-                } else {
+                } else if (!scalar->hide_from_scalars_window) {
                     group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->name.c_str());
                 }
             }
