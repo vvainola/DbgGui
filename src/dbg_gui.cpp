@@ -624,13 +624,19 @@ void DbgGui::updateSavedSettings() {
 
     // Remove deleted vectors from vector groups
     for (auto& vector_group : m_vector_groups) {
-        std::vector<Vector2D*>& vectors = vector_group.second.signals;
-        for (int i = int(vectors.size() - 1); i >= 0; --i) {
-            Vector2D* vector = vectors[i];
-            if (vector->deleted) {
-                remove(vectors, vector);
+        std::function<void(SignalGroup<Vector2D>&)> remove_vector_group_deleted_signals = [&](SignalGroup<Vector2D>& group) {
+            std::vector<Vector2D*>& vectors = group.signals;
+            for (int i = int(vectors.size() - 1); i >= 0; --i) {
+                auto vector = vectors[i];
+                if (vector->deleted) {
+                    remove(vectors, vector);
+                }
             }
-        }
+            for (auto& subgroup : group.subgroups) {
+                remove_vector_group_deleted_signals(subgroup.second);
+            }
+        };
+        remove_vector_group_deleted_signals(vector_group.second);
     }
 
     for (int i = int(m_vectors.size() - 1); i >= 0; --i) {

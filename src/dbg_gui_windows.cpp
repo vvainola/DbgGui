@@ -535,6 +535,26 @@ void DbgGui::showVectorWindow() {
             }
 
             if (group_opened) {
+                // Symbols can be dragged from one group to another for easier reorganizing if symbol
+                // is initially added to wrong group
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
+                        uint64_t id = *(uint64_t*)payload->Data;
+                        Vector2D* vector = getVector(id);
+                        // Do nothing if dragged to same group.
+                        // Old one will be deleted if new one is added.
+                        if (vector->group != group.full_name) {
+                            Vector2D* new_vector = addVector(vector->x->src, vector->y->src, group.full_name, vector->name);
+                            new_vector->x->scale = vector->x->scale;
+                            new_vector->x->offset = vector->x->offset;
+                            new_vector->y->scale = vector->y->scale;
+                            new_vector->y->offset = vector->y->offset;
+                            vector->deleted = true;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
                 // Show subgroups first
                 for (auto& subgroup : group.subgroups) {
                     show_vector_group(subgroup.second, delete_entire_group);
