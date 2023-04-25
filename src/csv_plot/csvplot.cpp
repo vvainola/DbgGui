@@ -166,6 +166,10 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
     setDarkTheme(m_window);
     loadPreviousSessionSettings();
+    // Move window out of sight if creating image to avoid popups
+    if (!image_filepath.empty()) {
+        glfwSetWindowPos(m_window, 10000, 10000);
+    }
 
     //---------- Actual update loop ----------
     while (!glfwWindowShouldClose(m_window)) {
@@ -180,7 +184,12 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         //---------- Main windows ----------
         showSignalWindow();
         showPlots();
-        updateSavedSettings();
+        // Settings are not saved when creating image because the window
+        // is moved out of sight and should not be restored there
+        if (image_filepath.empty()) {
+            updateSavedSettings();
+        }
+        
 
         //---------- Rendering ----------
         ImGui::Render();
