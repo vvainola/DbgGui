@@ -43,6 +43,7 @@ class DbgHelpSymbols {
     /// The JSON file can then be used for saving/loading snapshot of globals without the
     /// PDB file but otherwise symbol searching does not work.
     DbgHelpSymbols(std::string symbol_json = "", bool omit_names_from_json = false);
+    ~DbgHelpSymbols();
 
     /// @brief Fuzzy search for all matching symbol names in the global namespace. Exact match is
     /// always the first element. Members of a symbol are searched if the parent name is an exact

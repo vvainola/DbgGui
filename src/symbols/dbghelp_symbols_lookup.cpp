@@ -70,6 +70,11 @@ DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_jso
     });
 }
 
+DbgHelpSymbols::~DbgHelpSymbols() {
+    // Delay clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
+    SymCleanup(GetCurrentProcess());
+}
+
 // For name[2][3][4] return {2, 3, 4}
 std::vector<size_t> getArrayIndices(std::string const& s) {
     std::vector<size_t> indices;
@@ -227,10 +232,11 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     SymSetOptions(SYMOPT_DEFERRED_LOADS);
 
     HANDLE current_process = GetCurrentProcess();
-    static bool once = true;
-    if (once) {
-        once = false;
-        assert(SymInitialize(current_process, NULL, TRUE));
+    if (!SymInitialize(current_process, NULL, TRUE)) {
+        std::cerr << "SymInitialize failed with error:\n";
+        printLastError();
+        std::cerr << "Unable to load symbols from PDB file.";
+        return;
     }
 
     // Collect symbol infos into vector
@@ -266,9 +272,6 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     if (!json_to_save.empty()) {
         saveSymbolsToJson(json_to_save, raw_symbols, omit_names_from_json);
     }
-
-    // Leave out clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
-    // SymCleanup(current_process);
 }
 
 void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
