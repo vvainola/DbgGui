@@ -106,7 +106,7 @@ BasicType getBasicType(RawSymbol const& sym) {
     BasicType base_type = BasicType::btNoType;
     if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.TypeIndex, TI_GET_BASETYPE, &base_type)) {
         printLastError();
-        assert((0, "Unable to get base type of symbol."));
+        assert(("Unable to get base type of symbol.", 0));
     }
     return base_type;
 }
@@ -146,7 +146,7 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
     pSymbol->MaxNameLen = MAX_SYM_NAME;
 
-    if (SymFromIndex(current_process, parent.info.ModBase, index, pSymbol)) {
+    if (SymFromIndex(current_process, parent.info.ModBase, index, pSymbol) && pSymbol->TypeIndex != 0) {
         return std::make_unique<RawSymbol>(pSymbol);
     } else {
         // printLastError();
