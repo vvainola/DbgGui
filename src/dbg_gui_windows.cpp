@@ -333,6 +333,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& group, std::string co
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
         [&](SignalGroup<Scalar> const& group, std::string const& filter) {
+            group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
             for (Scalar* scalar : group.signals) {
                 if (group_has_visible_items) {
                     // No need to check further
@@ -340,7 +341,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& group, std::string co
                 } else if (filter.empty()) {
                     group_has_visible_items |= !scalar->hide_from_scalars_window;
                 } else if (!scalar->hide_from_scalars_window) {
-                    group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->alias_and_group.c_str());
+                    group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->alias.c_str());
                 }
             }
             for (auto const& subgroup : group.subgroups) {
@@ -419,12 +420,13 @@ void DbgGui::showScalarWindow() {
                     show_scalar_group(subgroup.second, delete_entire_group);
                 }
 
+                // All signals in a group are shown if the group name matches filter
+                bool group_matches_filter = fts::fuzzy_match_simple(scalar_name_filter.c_str(), group.full_name.c_str());
                 // Show each scalar
                 for (Scalar* scalar : scalars) {
-                    // All signals in a group are shown if the group name matches filter
                     bool hide_by_filter = !scalar_name_filter.empty()
                                        && !fts::fuzzy_match_simple(scalar_name_filter.c_str(), scalar->alias.c_str())
-                                       && !fts::fuzzy_match_simple(scalar_name_filter.c_str(), group.name.c_str());
+                                       && !group_matches_filter;
                     if (scalar->hide_from_scalars_window || hide_by_filter) {
                         continue;
                     }
@@ -485,11 +487,12 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& group, std::string 
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
         [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
+            group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
             for (Vector2D* vector : group.signals) {
                 if (group_has_visible_items) {
                     return;
                 }
-                group_has_visible_items |= filter.empty() || fts::fuzzy_match_simple(filter.c_str(), vector->name_and_group.c_str());
+                group_has_visible_items |= filter.empty() || fts::fuzzy_match_simple(filter.c_str(), vector->name.c_str());
             }
             for (auto const& subgroup : group.subgroups) {
                 check_group_for_visible_items(subgroup.second, filter);
@@ -569,11 +572,12 @@ void DbgGui::showVectorWindow() {
                     show_vector_group(subgroup.second, delete_entire_group);
                 }
 
+                // All signals in a group are shown if the group name matches filter
+                bool group_matches_filter = fts::fuzzy_match_simple(vector_name_filter.c_str(), group.full_name.c_str());
                 for (Vector2D* signal : vectors) {
-                    // All signals in a group are shown if the group name matches filter
                     if (!vector_name_filter.empty()
                         && !fts::fuzzy_match_simple(vector_name_filter.c_str(), signal->name.c_str())
-                        && !fts::fuzzy_match_simple(vector_name_filter.c_str(), group.name.c_str())) {
+                        && !group_matches_filter) {
                         continue;
                     }
 
