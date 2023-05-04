@@ -333,7 +333,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& group, std::string co
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
         [&](SignalGroup<Scalar> const& group, std::string const& filter) {
-            group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
+            group_has_visible_items |= !filter.empty() && fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
             for (Scalar* scalar : group.signals) {
                 if (group_has_visible_items) {
                     // No need to check further
@@ -493,7 +493,7 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& group, std::string 
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
         [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
-            group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
+            group_has_visible_items |= !filter.empty() && fts::fuzzy_match_simple(filter.c_str(), group.full_name.c_str());
             for (Vector2D* vector : group.signals) {
                 if (group_has_visible_items) {
                     return;
