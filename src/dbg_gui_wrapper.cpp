@@ -42,7 +42,7 @@ void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::str
 
 void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale, double offset) {
     if (gui) {
-        gui->addVector(x, y, group, name, scale, offset);
+        gui->addVector(x, y, group, name + ".x", name + ".y", scale, offset);
     }
 }
 

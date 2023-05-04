@@ -741,7 +741,7 @@ Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
 }
 
 Vector2D* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
-    Vector2D* vector = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName());
+    Vector2D* vector = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName(), y->getFullName());
     m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
     m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
     m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
@@ -822,25 +822,25 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     return new_scalar.get();
 }
 
-Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name, double scale, double offset) {
+Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {
     if (group.empty()) {
         group = "debug";
     } else {
         group = group;
     }
-    uint64_t id = hash(name + " (" + group + ")");
+    uint64_t id = hash(name_x + " (" + group + ")");
     Vector2D* existing_vector = getVector(id);
     if (existing_vector != nullptr) {
         return existing_vector;
     }
     auto& new_vector = m_vectors.emplace_back(std::make_unique<Vector2D>());
-    new_vector->name = name;
+    new_vector->name = name_x;
     new_vector->group = group;
-    new_vector->name_and_group = name + " (" + group + ")";
+    new_vector->name_and_group = name_x + " (" + group + ")";
     new_vector->id = id;
-    new_vector->x = addScalar(x, group, name + ".x");
+    new_vector->x = addScalar(x, group, name_x);
     new_vector->x->hide_from_scalars_window = true;
-    new_vector->y = addScalar(y, group, name + ".y");
+    new_vector->y = addScalar(y, group, name_y);
     new_vector->y->hide_from_scalars_window = true;
     new_vector->x->scale = scale;
     new_vector->x->offset = offset;

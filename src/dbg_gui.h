@@ -49,9 +49,23 @@ class DbgGui {
     bool isClosed();
     void close();
 
-    Scalar* addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale = 1.0, double offset = 0.0);
-    Scalar* addScalar(ValueSource const& src, std::string group, std::string const& name, double scale = 1.0, double offset = 0.0);
-    Vector2D* addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name, double scale = 1.0, double offset = 0.0);
+    Scalar* addSymbol(std::string const& symbol_name,
+                      std::string group,
+                      std::string const& alias,
+                      double scale = 1.0,
+                      double offset = 0.0);
+    Scalar* addScalar(ValueSource const& src,
+                      std::string group,
+                      std::string const& name,
+                      double scale = 1.0,
+                      double offset = 0.0);
+    Vector2D* addVector(ValueSource const& x,
+                        ValueSource const& y,
+                        std::string group,
+                        std::string const& name_x,
+                        std::string const& name_y,
+                        double scale = 1.0,
+                        double offset = 0.0);
 
   private:
     void updateLoop();

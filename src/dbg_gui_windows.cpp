@@ -407,9 +407,15 @@ void DbgGui::showScalarWindow() {
                         Scalar* scalar = getScalar(id);
                         // Do nothing if dragged to same group.
                         // Old one will be deleted if new one is added.
-                        if (scalar->group != group.full_name
-                            && addSymbol(scalar->name, group.full_name, scalar->alias, scalar->scale, scalar->offset)) {
-                            scalar->deleted = true;
+                        if (scalar->group != group.full_name) {
+                            VariantSymbol* scalar_symbol = m_dbghelp_symbols.getSymbol(scalar->name);
+                            if (scalar_symbol) {
+                                Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
+                                new_scalar->alias = scalar->alias;
+                                new_scalar->scale = scalar->scale;
+                                new_scalar->offset = scalar->offset;
+                                scalar->deleted = true;
+                            }
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -556,12 +562,16 @@ void DbgGui::showVectorWindow() {
                         // Do nothing if dragged to same group.
                         // Old one will be deleted if new one is added.
                         if (vector->group != group.full_name) {
-                            Vector2D* new_vector = addVector(vector->x->src, vector->y->src, group.full_name, vector->name);
-                            new_vector->x->scale = vector->x->scale;
-                            new_vector->x->offset = vector->x->offset;
-                            new_vector->y->scale = vector->y->scale;
-                            new_vector->y->offset = vector->y->offset;
-                            vector->deleted = true;
+                            VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
+                            VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+                            if (x && y) {
+                                Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
+                                new_vector->x->scale = vector->x->scale;
+                                new_vector->x->offset = vector->x->offset;
+                                new_vector->y->scale = vector->y->scale;
+                                new_vector->y->offset = vector->y->offset;
+                                vector->deleted = true;
+                            }
                         }
                     }
                     ImGui::EndDragDropTarget();
