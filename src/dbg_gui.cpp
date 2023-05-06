@@ -84,7 +84,7 @@ void DbgGui::synchronizeSpeed() {
     static double last_timestamp = m_sample_timestamp;
     static std::future<void> tick;
 
-    if (m_sample_timestamp > m_next_sync_timestamp) {
+    if (m_sample_timestamp > m_next_sync_timestamp || tick._Is_ready()) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
@@ -93,10 +93,7 @@ void DbgGui::synchronizeSpeed() {
                           []() {
                               std::this_thread::sleep_for(std::chrono::milliseconds(30));
                           });
-
         m_next_sync_timestamp = m_sample_timestamp + sync_interval * m_simulation_speed;
-        // Limit sync interval to 0.1 second in case simulation speed is set very high
-        m_next_sync_timestamp = std::min(m_sample_timestamp + 0.1, m_next_sync_timestamp);
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
