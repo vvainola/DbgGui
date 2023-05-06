@@ -100,12 +100,11 @@ static void glfw_error_callback(int error, const char* description) {
 
 CsvPlotter::CsvPlotter(std::vector<std::string> files,
                        std::map<std::string, int> name_and_plot_idx,
-                       std::vector<double> xlimits,
+                       MinMax const& xlimits,
                        std::string const& image_filepath) {
-    assert(xlimits.size() == 2);
-    if (xlimits != std::vector<double>{AUTOFIT_AXIS, AUTOFIT_AXIS}) {
-        m_x_axis_min = std::min(xlimits[0], xlimits[1]);
-        m_x_axis_max = std::max(xlimits[0], xlimits[1]);
+    if (xlimits != AUTOFIT_AXIS) {
+        m_x_axis.min = std::min(xlimits.min, xlimits.max);
+        m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
 
     for (std::string file : files) {
@@ -189,7 +188,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         if (image_filepath.empty()) {
             updateSavedSettings();
         }
-        
+
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -659,7 +658,7 @@ void CsvPlotter::showSignalWindow() {
 void CsvPlotter::showPlots() {
     for (int plot_idx = 0; plot_idx < m_plot_cnt; ++plot_idx) {
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
-        bool autofit_x_axis = (m_x_axis_min == AUTOFIT_AXIS && m_x_axis_max == AUTOFIT_AXIS);
+        bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
         bool fit_data = (plot_idx == m_fit_plot_idx);
         if (fit_data || autofit_x_axis) {
             ImPlot::SetNextAxesToFit();
@@ -734,9 +733,9 @@ void CsvPlotter::showPlots() {
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
             if (m_link_axis) {
-                ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis_min, &m_x_axis_max);
+                ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis.min, &m_x_axis.max);
                 if (!autofit_x_axis) {
-                    ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis_min, m_x_axis_max);
+                    ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis.min, m_x_axis.max);
                 }
             }
 

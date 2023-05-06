@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
         ("f,files" , "Files to open for plotting"                                                            , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("n,names" , "Names of signals to add to plots e.g. \"foo,bar\""                                     , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("p,plots" , "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"" , cxxopts::value<std::vector<int>>()->default_value("-1"))
-        ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1,-1"))
+        ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1e100,1e100"))
         ("image"   , "Save plot as png image to given path and exit."                                        , cxxopts::value<std::string>()->default_value(""))
         ("h,help"  , "Show help and exit")
         ;
@@ -84,5 +84,5 @@ int main(int argc, char** argv) {
         name_and_plot_idx[names[i]] = plots[i];
     }
 
-    CsvPlotter plotter(files, name_and_plot_idx, xlimits, image_filepath);
+    CsvPlotter plotter(files, name_and_plot_idx, {xlimits[0], xlimits[1]}, image_filepath);
 }

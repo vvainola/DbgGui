@@ -26,9 +26,21 @@
 #include <imgui.h>
 #include <map>
 
+struct MinMax {
+    double min;
+    double max;
+
+    bool operator==(MinMax const& other) const {
+        return min == other.min && max == other.max;
+    }
+    bool operator!=(MinMax const& other) const {
+        return !(*this == other);
+    }
+};
+
 inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
-inline constexpr double AUTOFIT_AXIS = -1;
+inline constexpr MinMax AUTOFIT_AXIS{-1e100, 1e100};
 
 struct CsvSignal {
     std::string name;
@@ -58,7 +70,7 @@ class CsvPlotter {
   public:
     CsvPlotter(std::vector<std::string> files = {},
                std::map<std::string, int> name_and_plot_idx = {},
-               std::vector<double> xlimits = {AUTOFIT_AXIS, AUTOFIT_AXIS},
+               MinMax const& xlimits = AUTOFIT_AXIS,
                std::string const& image_filepath = "");
 
   private:
@@ -77,8 +89,7 @@ class CsvPlotter {
     bool m_fit_after_drag_and_drop = true;
     bool m_keep_old_signals_on_reload = true;
     bool m_cursor_measurements = false;
-    double m_x_axis_min = AUTOFIT_AXIS;
-    double m_x_axis_max = AUTOFIT_AXIS;
+    MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
 };
