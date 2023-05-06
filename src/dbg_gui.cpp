@@ -280,13 +280,7 @@ void DbgGui::updateLoop() {
         showVectorPlots();
         showSpectrumPlots();
         setInitialFocus();
-
-        {
-            // Lock is needed while updating settings because signals may have been marked as
-            // deleted and they must not be sampled while deleting them for real
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            updateSavedSettings();
-        }
+        updateSavedSettings();
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -650,6 +644,7 @@ void DbgGui::updateSavedSettings() {
     for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (scalar->deleted) {
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_sampler.stopSampling(scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
