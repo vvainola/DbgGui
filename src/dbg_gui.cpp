@@ -84,7 +84,7 @@ void DbgGui::synchronizeSpeed() {
     static double last_timestamp = m_sample_timestamp;
     static std::future<void> tick;
 
-    if (m_sample_timestamp > m_next_sync_timestamp || tick._Is_ready()) {
+    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick._Is_ready())) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
