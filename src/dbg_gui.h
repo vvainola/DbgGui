@@ -83,6 +83,7 @@ class DbgGui {
     void setInitialFocus();
     void synchronizeSpeed();
     void savePlotAsCsv(ScalarPlot const& plot);
+    void addScalarContextMenu(Scalar* scalar);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
@@ -122,6 +123,7 @@ class DbgGui {
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
+    std::vector<PauseTrigger> m_pause_triggers;
     Focus m_vector_window_focus;
     Focus m_scalar_window_focus;
 

@@ -131,12 +131,15 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
             m_next_sync_timestamp = 0;
         }
         m_sample_timestamp = timestamp;
-
         m_sampler.sample(m_sample_timestamp);
-        for (auto& signal : m_scalars) {
-            if (signal->m_pause_triggers.size() > 0) {
-                double value = signal->getScaledValue();
-                m_paused = m_paused || signal->checkTriggers(value);
+
+        // Check pause triggers
+        for (PauseTrigger& trigger : m_pause_triggers) {
+            bool pause_triggered = trigger.check();
+            if (pause_triggered) {
+                remove(m_pause_triggers, trigger);
+                m_paused = true;
+                break;
             }
         }
     }
@@ -857,25 +860,4 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
     return new_vector.get();
-}
-
-void Scalar::addTrigger(double pause_level) {
-    double current_value = getScaledValue();
-    m_pause_triggers.push_back(Trigger{
-        .initial_value = current_value,
-        .previous_sample = current_value,
-        .pause_level = pause_level});
-}
-
-bool Scalar::checkTriggers(double value) {
-    for (Trigger& trigger : m_pause_triggers) {
-        // Pause when value changes if trigger value is same as initial value
-        bool zero_crossed = (value - trigger.pause_level) * (trigger.previous_sample - trigger.pause_level) <= 0;
-        if (value != trigger.initial_value && zero_crossed) {
-            remove(m_pause_triggers, trigger);
-            return true;
-        }
-        trigger.previous_sample = value;
-    }
-    return false;
 }

@@ -75,17 +75,6 @@ struct MinMax {
     double max;
 };
 
-struct Trigger {
-    double initial_value;
-    double previous_sample;
-    double pause_level;
-
-    bool operator==(Trigger const& r) {
-        return initial_value == r.initial_value
-            && previous_sample == r.previous_sample;
-    }
-};
-
 struct Scalar {
     uint64_t id;
     std::string name;
@@ -115,10 +104,39 @@ struct Scalar {
     void setScaledValue(double value) {
         setValue((value - offset) / scale);
     }
+};
 
-    std::vector<Trigger> m_pause_triggers;
-    void addTrigger(double pause_level);
-    bool checkTriggers(double value);
+class PauseTrigger {
+  public:
+    PauseTrigger(Scalar const* src, double pause_level)
+        : src(src) {
+        double current_value = src->getScaledValue();
+        m_initial_value = current_value,
+        m_previous_sample = current_value,
+        m_pause_level = pause_level;
+    }
+
+    bool check() {
+        double current_value = src->getScaledValue();
+        // Pause when value changes if trigger value is same as initial value
+        bool zero_crossed = (current_value - m_pause_level) * (m_previous_sample - m_pause_level) <= 0;
+        if (current_value != m_initial_value && zero_crossed) {
+            return true;
+        }
+        m_previous_sample = current_value;
+        return false;
+    }
+
+    bool operator==(PauseTrigger const& r) {
+        return m_initial_value == r.m_initial_value
+            && m_previous_sample == r.m_previous_sample;
+    }
+
+  private:
+    Scalar const* src;
+    double m_initial_value;
+    double m_previous_sample;
+    double m_pause_level;
 };
 
 struct Vector2D {

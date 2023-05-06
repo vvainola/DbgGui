@@ -143,11 +143,11 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label, dou
     }
 }
 
-void addScalarContextMenu(Scalar* scalar) {
+void DbgGui::addScalarContextMenu(Scalar* scalar) {
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = scalar->getScaledValue();
         if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
-            scalar->addTrigger(pause_level);
+            m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
             ImGui::CloseCurrentPopup();
         }
         ImGui::InputDouble("Scale", &scalar->scale, 0, 0, "%g", ImGuiInputTextFlags_CharsScientific);

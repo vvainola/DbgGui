@@ -164,7 +164,7 @@ void DbgGui::showScalarPlots() {
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        signal->addTrigger(current_value);
+                        m_pause_triggers.push_back(PauseTrigger(signal, current_value));
                         ImGui::CloseCurrentPopup();
                     }
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
