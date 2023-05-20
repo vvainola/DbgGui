@@ -42,6 +42,10 @@ inline bool startsWith(std::string const& s, std::string const& w) {
     return s.rfind(w, 0) == 0;
 }
 
+inline bool endsWith(std::string_view str, std::string_view suffix) {
+    return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
 inline std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> elems;
     std::istringstream iss(s);

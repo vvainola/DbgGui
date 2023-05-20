@@ -43,14 +43,15 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagData)
         || startsWith(pSymInfo->Name, "_")
+        || startsWith(pSymInfo->Name, "std::")
+        || endsWith(pSymInfo->Name, "$initializer$")
         || startsWith(pSymInfo->Name, "IID_")
         || startsWith(pSymInfo->Name, "CLSID_")
         || startsWith(pSymInfo->Name, "LIBID_")
         || startsWith(pSymInfo->Name, "FONT_ATLAS_")
         || startsWith(pSymInfo->Name, "nlohmann::")
         || startsWith(pSymInfo->Name, "Concurrency::")
-        || startsWith(pSymInfo->Name, "ImPlot::")
-        || startsWith(pSymInfo->Name, "std::")) {
+        || startsWith(pSymInfo->Name, "ImPlot::")) {
         return TRUE;
     }
 
