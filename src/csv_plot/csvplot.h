@@ -40,7 +40,7 @@ struct MinMax {
 
 inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
-inline constexpr MinMax AUTOFIT_AXIS{-1e100, 1e100};
+inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 
 struct CsvSignal {
     std::string name;
