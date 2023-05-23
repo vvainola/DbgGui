@@ -33,11 +33,11 @@ extern "C" {
 ///						Pass NULL if PDB file should always be used
 /// @param omit_names	Leave out names of symbols when looking up the information from PDB file
 /// @return Symbol information. SNP_DeleteSymbolLookup must be used for deleting the object.
-void* SNP_NewSymbolLookup(const char* symbols_json, int omit_names_from_json);
+void* SNP_newSymbolLookup(const char* symbols_json, int omit_names_from_json);
 
 /// @brief Delete symbol lookup created by SNP_NewSymbolLookup
 /// @param symbol_lookup Symbol information from SNP_NewSymbolLookup
-void SNP_DeleteSymbolLookup(void* symbol_lookup);
+void SNP_deleteSymbolLookup(void* symbol_lookup);
 
 /// @brief Save snapshot of global symbols to file using the given symbol file
 /// @param symbols			Symbol lookup from SNP_NewSymbolLookup

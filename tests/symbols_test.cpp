@@ -64,9 +64,9 @@ TEST_CASE("Snapshot from file") {
 
     // Lookup symbols twice to create the json on first lookup that can be used on second lookup instead of the pdb
     int omit_names_from_json = 1;
-    void* symbols = SNP_NewSymbolLookup("test_symbols.json", omit_names_from_json);
-    SNP_DeleteSymbolLookup(symbols);
-    symbols = SNP_NewSymbolLookup("test_symbols.json", omit_names_from_json);
+    void* symbols = SNP_newSymbolLookup("test_symbols.json", omit_names_from_json);
+    SNP_deleteSymbolLookup(symbols);
+    symbols = SNP_newSymbolLookup("test_symbols.json", omit_names_from_json);
     SNP_saveSnapshotToFile(symbols, "test_snapshot.json");
 
     // Assign new random values to global variables
@@ -93,7 +93,7 @@ TEST_CASE("Snapshot from file") {
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
 
-    SNP_DeleteSymbolLookup(symbols);
+    SNP_deleteSymbolLookup(symbols);
 }
 
 TEST_CASE("Snapshot from memory") {
@@ -118,7 +118,7 @@ TEST_CASE("Snapshot from memory") {
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
 
-    void* symbols = SNP_NewSymbolLookup(NULL, 0);
+    void* symbols = SNP_newSymbolLookup(NULL, 0);
     auto snapshot = SNP_saveSnapshotToMemory(symbols);
 
     // Assign new random values to global variables
@@ -146,5 +146,5 @@ TEST_CASE("Snapshot from memory") {
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
 
-    SNP_DeleteSymbolLookup(symbols);
+    SNP_deleteSymbolLookup(symbols);
 }
