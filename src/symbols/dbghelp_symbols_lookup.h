@@ -30,20 +30,31 @@
 #include <variant>
 #include "global_snapshot.h"
 
+struct RawSymbol;
 class VariantSymbol;
 
 class DbgHelpSymbols {
   public:
-    /// @brief Load global symbols from JSON or PDB file
-    /// @param symbol_json
-    /// JSON file from which the global symbols are loaded if it matches the
-    /// current binary. If it doesn't, symbols are loaded from the pdb file and saved into this file.
-    /// @param omit_names_from_json
-    /// Leave out names of symbols from the symbols JSON.
+    ~DbgHelpSymbols();
+
+    /// @brief Load global symbols from PDB file
+    /// @return Singleton object
+    static DbgHelpSymbols const& getSymbolsFromPdb();
+
+    /// @brief Load global symbols from JSON file
+    /// @param symbol_json JSON file from which the global symbols are loaded if it matches the current binary.
+    DbgHelpSymbols(std::string const& symbol_json);
+
+    /// @return Symbols succesfully loaded from json file
+    bool symbolsLoadedFromJson() const { return m_symbols_loaded_from_json; }
+
+    /// @brief Save symbol info collected from PDB file into a json file that can be used for
+    /// loading symbol information without PDB file later on.
+    /// @param filename Filename to save
+    /// @param omit_names Omit names of symbols from json file.
     /// The JSON file can then be used for saving/loading snapshot of globals without the
     /// PDB file but otherwise symbol searching does not work.
-    DbgHelpSymbols(std::string symbol_json = "", bool omit_names_from_json = false);
-    ~DbgHelpSymbols();
+    void saveSymbolInfoToJson(std::string const& filename, bool omit_names) const;
 
     /// @brief Fuzzy search for all matching symbol names in the global namespace. Exact match is
     /// always the first element. Members of a symbol are searched if the parent name is an exact
@@ -71,9 +82,14 @@ class DbgHelpSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
-  private:
-    bool loadSymbolsFromJson(std::string const& json);
-    void loadSymbolsFromPdb(std::string const& json_to_save, bool omit_names_from_json);
 
+  private:
+    DbgHelpSymbols();
+    bool loadSymbolsFromJson(std::string const& json);
+    void loadSymbolsFromPdb();
+
+    std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
+    bool m_symbols_loaded_from_json = false;
+    bool m_symbols_loaded_from_pdb = false;
 };

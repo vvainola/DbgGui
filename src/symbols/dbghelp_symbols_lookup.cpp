@@ -60,11 +60,21 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     return TRUE;
 }
 
-DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_json) {
-    bool load_ok = loadSymbolsFromJson(symbol_json);
-    if (!load_ok) {
-        loadSymbolsFromPdb(symbol_json, omit_names_from_json);
-    }
+void DbgHelpSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
+    saveSymbolsToJson(filename, m_raw_symbols, omit_names);
+}
+
+DbgHelpSymbols::DbgHelpSymbols() {
+    loadSymbolsFromPdb();
+    m_symbols_loaded_from_pdb = true;
+    // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
+    std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
+        return l->getAddress() < r->getAddress();
+    });
+}
+
+DbgHelpSymbols::DbgHelpSymbols(std::string const& symbol_json) {
+    m_symbols_loaded_from_json = loadSymbolsFromJson(symbol_json);
     // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
     std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
         return l->getAddress() < r->getAddress();
@@ -72,8 +82,15 @@ DbgHelpSymbols::DbgHelpSymbols(std::string symbol_json, bool omit_names_from_jso
 }
 
 DbgHelpSymbols::~DbgHelpSymbols() {
-    // Delay clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
-    SymCleanup(GetCurrentProcess());
+    if (m_symbols_loaded_from_pdb) {
+        // Delay clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
+        SymCleanup(GetCurrentProcess());
+    }
+}
+
+DbgHelpSymbols const& DbgHelpSymbols::getSymbolsFromPdb() {
+    static DbgHelpSymbols dbghelp_symbols;
+    return dbghelp_symbols;
 }
 
 // For name[2][3][4] return {2, 3, 4}
@@ -227,7 +244,7 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
     return true;
 }
 
-void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool omit_names_from_json) {
+void DbgHelpSymbols::loadSymbolsFromPdb() {
     // Symbols are not loaded until a reference is made requiring the symbols be loaded.
     // This is the fastest, most efficient way to use the symbol handler.
     SymSetOptions(SYMOPT_DEFERRED_LOADS);
@@ -258,20 +275,16 @@ void DbgHelpSymbols::loadSymbolsFromPdb(std::string const& json_to_save, bool om
     // children can be copied from reference symbol if children have been added to that type of symbol already
     // before. The tree structure for each type has to be then looked up only once.
     std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*> reference_symbols;
-    std::vector<std::unique_ptr<RawSymbol>> raw_symbols;
-    raw_symbols.reserve(symbols.size());
+    m_raw_symbols.reserve(symbols.size());
     m_root_symbols.reserve(symbols.size());
     for (SymbolInfo const& symbol : symbols) {
         if (symbol.Address == 0) {
             continue;
         }
 
-        std::unique_ptr<RawSymbol>& raw_symbol = raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
+        std::unique_ptr<RawSymbol>& raw_symbol = m_raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
         addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
-    }
-    if (!json_to_save.empty()) {
-        saveSymbolsToJson(json_to_save, raw_symbols, omit_names_from_json);
     }
 }
 

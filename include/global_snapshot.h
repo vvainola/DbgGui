@@ -26,18 +26,26 @@
 extern "C" {
 #endif
 
-/// @brief Collect information of all global symbols.
-/// @param symbol_json	JSON file containing the symbol lookup data extracted from PDB file.
-///						If the JSON file does not exist or it is out of date, the PDB file
-///						will be used and saved to this file.
-///						Pass NULL if PDB file should always be used
-/// @param omit_names	Leave out names of symbols when looking up the information from PDB file
-/// @return Symbol information. SNP_DeleteSymbolLookup must be used for deleting the object.
-void* SNP_newSymbolLookup(const char* symbols_json, int omit_names_from_json);
+/// @brief Get information of all global symbols from PDB file.
+/// @return Symbol information. The object is a singleton that does not have to
+///     deleted because DbgHelp library cannot be initialized multiple times in
+///     a single process.
+void* SNP_getSymbolsFromPdb();
 
-/// @brief Delete symbol lookup created by SNP_NewSymbolLookup
-/// @param symbol_lookup Symbol information from SNP_NewSymbolLookup
-void SNP_deleteSymbolLookup(void* symbol_lookup);
+/**
+ * @brief Save symbol info collected from PDB file to json that can be used for loading symbol
+ * info without PDB file
+ *
+ * @param symbols Symbol information
+ * @param symbols_file File to save information
+ * @param omit_names Leave out names of symbols from json.
+ */
+void SNP_saveSymbolInfoToJson(void* symbols, const char* symbols_file, int omit_names);
+
+/// @param symbol_json	JSON file containing the symbol lookup data extracted from PDB file.
+/// @return Symbol information. SNP_DeleteSymbolLookup must be used for deleting the object.
+void* SNP_getSymbolsFromJson(const char* symbols_json);
+void SNP_deleteSymbolLookup(void* symbols);
 
 /// @brief Save snapshot of global symbols to file using the given symbol file
 /// @param symbols			Symbol lookup from SNP_NewSymbolLookup

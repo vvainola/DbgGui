@@ -26,20 +26,34 @@
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
 
-void* SNP_newSymbolLookup(const char* symbols_json, int omit_names_from_json) {
-    std::string symbols_json_name = symbols_json == NULL ? "" : symbols_json;
-    return new DbgHelpSymbols(symbols_json_name, omit_names_from_json);
+void* SNP_getSymbolsFromPdb() {
+    return (void*)&DbgHelpSymbols::getSymbolsFromPdb();
+}
+void* SNP_getSymbolsFromJson(const char* symbols_json) {
+    DbgHelpSymbols* symbols = new DbgHelpSymbols(symbols_json);
+    if (!symbols->symbolsLoadedFromJson()) {
+        delete (DbgHelpSymbols*)symbols;
+        symbols = nullptr;
+    }
+    return symbols;
+
 }
 
-void SNP_deleteSymbolLookup(void* symbol_lookup) {
-    delete (DbgHelpSymbols*)symbol_lookup;
+void SNP_deleteSymbolLookup(void* symbols) {
+    if (((DbgHelpSymbols*)symbols)->symbolsLoadedFromJson()) {
+        delete (DbgHelpSymbols*)symbols;
+    }
+}
+
+void SNP_saveSymbolInfoToJson(void* symbols, const char* symbols_file, int omit_names) {
+    ((DbgHelpSymbols*)symbols)->saveSymbolInfoToJson(symbols_file, omit_names);
 }
 
 void SNP_saveSnapshotToFile(void* symbols, const char* snapshot_file) {
     ((DbgHelpSymbols*)symbols)->saveSnapshotToFile(snapshot_file);
 }
 
-void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file)  {
+void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file) {
     ((DbgHelpSymbols*)symbols)->loadSnapshotFromFile(snapshot_file);
 }
 

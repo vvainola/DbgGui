@@ -2,6 +2,8 @@
 #include <catch2/generators/catch_generators_random.hpp>
 #include "global_snapshot.h"
 
+
+#include <filesystem>
 #include <random>
 
 std::random_device rd;
@@ -62,11 +64,22 @@ TEST_CASE("Snapshot from file") {
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
 
-    // Lookup symbols twice to create the json on first lookup that can be used on second lookup instead of the pdb
-    int omit_names_from_json = 1;
-    void* symbols = SNP_newSymbolLookup("test_symbols.json", omit_names_from_json);
-    SNP_deleteSymbolLookup(symbols);
-    symbols = SNP_newSymbolLookup("test_symbols.json", omit_names_from_json);
+    // Try loading non-existent json file
+    std::string const& symbols_json = "test_symbols.json";
+    if (std::filesystem::exists(symbols_json)) {
+        std::filesystem::remove(symbols_json);
+    }
+    void* symbols = SNP_getSymbolsFromJson(symbols_json.c_str());
+    REQUIRE(symbols == nullptr);
+
+    // Load symbols from PDB and save info to json
+    symbols = SNP_getSymbolsFromPdb();
+    int omit_names_from_json = 0;
+    SNP_saveSymbolInfoToJson(symbols, symbols_json.c_str(), omit_names_from_json);
+
+    // Try again loading info from json and use the json info for snapshot
+    symbols = SNP_getSymbolsFromJson(symbols_json.c_str());
+    REQUIRE(symbols != nullptr);
     SNP_saveSnapshotToFile(symbols, "test_snapshot.json");
 
     // Assign new random values to global variables
@@ -118,7 +131,7 @@ TEST_CASE("Snapshot from memory") {
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
 
-    void* symbols = SNP_newSymbolLookup(NULL, 0);
+    void* symbols = SNP_getSymbolsFromPdb();
     auto snapshot = SNP_saveSnapshotToMemory(symbols);
 
     // Assign new random values to global variables

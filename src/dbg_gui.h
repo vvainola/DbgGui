@@ -90,7 +90,7 @@ class DbgGui {
 
     GLFWwindow* m_window = nullptr;
 
-    DbgHelpSymbols m_dbghelp_symbols;
+    DbgHelpSymbols const& m_dbghelp_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
 
