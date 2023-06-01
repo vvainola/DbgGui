@@ -294,18 +294,25 @@ void DbgGui::showMainMenuBar() {
                 ImGui::EndPopup();
             }
 
+            static std::vector<SymbolValue> saved_snapshot;
             if (ImGui::Button("Save snapshot")) {
-                m_dbghelp_symbols.saveSnapshotToFile("snapshot.json");
-            }
-            if (ImGui::Button("Load snapshot")) {
-                // Pause during snapshot loading so that the execution continues from point when
-                // load button was pressed
+                // Pause during snapshot saving so that all symbols are from same time instant
                 bool paused = m_paused;
                 m_paused = true;
                 // Wait until main thread goes to pause state
                 while (m_next_sync_timestamp > 0) {
                 }
-                m_dbghelp_symbols.loadSnapshotFromFile("snapshot.json");
+                saved_snapshot = m_dbghelp_symbols.saveSnapshotToMemory();
+                m_paused = paused;
+            }
+            if (ImGui::Button("Load snapshot")) {
+                // Pause during snapshot loading so that the execution continues from point when load button was pressed
+                bool paused = m_paused;
+                m_paused = true;
+                // Wait until main thread goes to pause state
+                while (m_next_sync_timestamp > 0) {
+                }
+                m_dbghelp_symbols.loadSnapshotFromMemory(saved_snapshot);
                 m_paused = paused;
             }
 
