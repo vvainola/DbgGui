@@ -226,7 +226,7 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
 
     try {
         nlohmann::ordered_json symbols_json = nlohmann::ordered_json::parse(std::ifstream(json));
-        if (symbols_json["md5"] != getCurrentModuleInfo().md5_hash) {
+        if (symbols_json["md5"] != getCurrentModuleMD5()) {
             return false;
         }
 
@@ -291,7 +291,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
 void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
     nlohmann::json snapshot;
     auto module_info = getCurrentModuleInfo();
-    snapshot["md5"] = module_info.md5_hash;
+    snapshot["md5"] = getCurrentModuleMD5();
 
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
         VariantSymbol::Type type = sym->getType();
@@ -361,7 +361,7 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
 void DbgHelpSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto module_info = getCurrentModuleInfo();
     nlohmann::json snapshot = nlohmann::json::parse(std::ifstream(json));
-    if (module_info.md5_hash != snapshot["md5"]) {
+    if (getCurrentModuleMD5() != snapshot["md5"]) {
         std::cerr << "Snapshot has been made with different binary" << std::endl;
         return;
     }

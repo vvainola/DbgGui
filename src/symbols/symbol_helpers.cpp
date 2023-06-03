@@ -265,10 +265,25 @@ ModuleInfo getCurrentModuleInfo() {
         printLastError();
         std::abort();
     }
+    return ModuleInfo{
+        .base_address = (MemoryAddress)handle,
+        .size = module_info.SizeOfImage};
+}
+
+std::string getCurrentModuleMD5() {
+    HMODULE handle = NULL;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)&getCurrentModuleInfo,
+                           &handle)) {
+        printLastError();
+        std::abort();
+    }
+    char path[MAX_PATH];
     if (!GetModuleFileName(handle, path, sizeof(path))) {
         printLastError();
         std::abort();
     }
+
     std::string md5_hash;
     std::string certutil_out_filename = std::format("md5_{}{}{}.txt", rand(), rand(), rand());
     if (std::system(std::format("certutil -hashfile {} MD5 > {}", path, certutil_out_filename).c_str()) == 0) {
@@ -276,10 +291,7 @@ ModuleInfo getCurrentModuleInfo() {
         md5_hash = split(certutil_out, '\n')[1];
         std::filesystem::remove(certutil_out_filename);
     }
-    return ModuleInfo{
-        .base_address = (MemoryAddress)handle,
-        .size = module_info.SizeOfImage,
-        .md5_hash = md5_hash};
+    return md5_hash;
 }
 
 std::string readFile(std::string const& filename) {

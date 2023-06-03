@@ -104,7 +104,7 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
 void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<RawSymbol>> const& symbols, bool omit_names) {
     ModuleInfo module_info = getCurrentModuleInfo();
     nlohmann::ordered_json symbols_json;
-    symbols_json["md5"] = module_info.md5_hash;
+    symbols_json["md5"] = getCurrentModuleMD5();
     for (int i = 0; auto& sym : symbols) {
         if (sym->info.ModBase != module_info.base_address) {
             return;
