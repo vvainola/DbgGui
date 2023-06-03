@@ -270,12 +270,12 @@ ModuleInfo getCurrentModuleInfo() {
         std::abort();
     }
     std::string md5_hash;
-    if (std::system(std::format("certutil -hashfile {} MD5 > md5.txt", path).c_str()) == 0) {
-        std::string certutil_out = (std::stringstream() << std::ifstream("md5.txt").rdbuf()).str();
+    std::string certutil_out_filename = std::format("md5_{}{}{}.txt", rand(), rand(), rand());
+    if (std::system(std::format("certutil -hashfile {} MD5 > {}", path, certutil_out_filename).c_str()) == 0) {
+        std::string certutil_out = readFile(certutil_out_filename);
         md5_hash = split(certutil_out, '\n')[1];
-        std::filesystem::remove("md5.txt");
+        std::filesystem::remove(certutil_out_filename);
     }
-
     return ModuleInfo{
         .base_address = (MemoryAddress)handle,
         .size = module_info.SizeOfImage,
