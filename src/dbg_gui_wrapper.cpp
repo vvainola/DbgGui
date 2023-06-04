@@ -20,29 +20,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "..\include\dbg_gui_wrapper.h"
 #include "dbg_gui_wrapper.h"
 #include "dbg_gui.h"
 #include <memory>
 
-static std::unique_ptr<DbgGui> gui;
+static std::unique_ptr<DbgGui> g_dbg_gui;
 
 void DbgGui_addSymbol(std::string const& src, std::string const& group, std::string const& name, double scale, double offset) {
-    if (gui) {
-        Scalar* sym = gui->addSymbol(src, group, name, scale, offset);
+    if (g_dbg_gui) {
+        Scalar* sym = g_dbg_gui->addSymbol(src, group, name, scale, offset);
         assert(sym != nullptr);
     }
 }
 
 void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale, double offset) {
-    if (gui) {
-        gui->addScalar(src, group, name, scale, offset);
+    if (g_dbg_gui) {
+        g_dbg_gui->addScalar(src, group, name, scale, offset);
     }
 }
 
 void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale, double offset) {
-    if (gui) {
-        gui->addVector(x, y, group, name + ".x", name + ".y", scale, offset);
+    if (g_dbg_gui) {
+        g_dbg_gui->addVector(x, y, group, name + ".x", name + ".y", scale, offset);
     }
 }
 
@@ -94,36 +93,36 @@ void DbgGui_addVector_f64(double* x, double* y, const char* group, const char* n
 }
 
 void DbgGui_create(double sampling_time) {
-    gui = std::make_unique<DbgGui>(sampling_time);
+    g_dbg_gui = std::make_unique<DbgGui>(sampling_time);
 }
 
 void DbgGui_startUpdateLoop(void) {
-    if (gui) {
-        gui->startUpdateLoop();
+    if (g_dbg_gui) {
+        g_dbg_gui->startUpdateLoop();
     }
 }
 
 void DbgGui_sample(void) {
-    if (gui) {
-        gui->sample();
+    if (g_dbg_gui) {
+        g_dbg_gui->sample();
     }
 }
 
 void DbgGui_sampleWithTimestamp(double timestamp) {
-    if (gui) {
-        gui->sampleWithTimestamp(timestamp);
+    if (g_dbg_gui) {
+        g_dbg_gui->sampleWithTimestamp(timestamp);
     }
 }
 
 int DbgGui_isClosed(void) {
-    if (gui) {
-        return gui->isClosed();
+    if (g_dbg_gui) {
+        return g_dbg_gui->isClosed();
     }
     return 1;
 
 #ifdef __cplusplus
 }
 void DbgGui_close(void) {
-    gui = nullptr;
+    g_dbg_gui = nullptr;
 }
 #endif

@@ -233,8 +233,9 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
                 // Members by default have no address, the address is offset relative to parent
                 child->offset_to_parent = offset_to_parent;
 
-                // Skip standard library objects for children of children
-                if (child->info.Name.find("std::") == std::string::npos) {
+                // Skip stdlib objects e.g. std::default_delete
+                std::string child_name = child->info.Name;
+                if (!startsWith(child_name, "std::")) {
                     addChildrenToSymbol(*child, reference_symbols);
                     parent.children.push_back(std::move(child));
                 }
