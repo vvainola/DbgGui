@@ -242,6 +242,7 @@ void DbgGui::updateLoop() {
             ImGui::OpenPopup("Pause at");
         }
 
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
         if (ImGui::BeginPopupModal("Pause after", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
             ImGui::SetKeyboardFocusHere();
@@ -255,6 +256,7 @@ void DbgGui::updateLoop() {
             ImGui::EndPopup();
         }
 
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
         if (ImGui::BeginPopupModal("Pause at", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputDouble("##Pause at", &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {

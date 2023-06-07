@@ -232,6 +232,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup("Add scalar plot");
                 }
                 static char window_or_plot_name[256] = "";
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Name",
                                          window_or_plot_name,
@@ -250,6 +251,7 @@ void DbgGui::showMainMenuBar() {
                 if (ImGui::Button("Vector plot")) {
                     ImGui::OpenPopup("Add vector plot");
                 }
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Vector plot name",
                                          window_or_plot_name,
@@ -265,6 +267,7 @@ void DbgGui::showMainMenuBar() {
                 if (ImGui::Button("Spectrum plot")) {
                     ImGui::OpenPopup("Add spectrum plot");
                 }
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Spectrum plot name",
                                          window_or_plot_name,
@@ -280,6 +283,7 @@ void DbgGui::showMainMenuBar() {
                 if (ImGui::Button("Custom window")) {
                     ImGui::OpenPopup("Add custom window");
                 }
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 if (ImGui::BeginPopupModal("Add custom window", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Custom window name",
                                          window_or_plot_name,
