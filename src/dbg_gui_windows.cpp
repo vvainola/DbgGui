@@ -420,31 +420,32 @@ void DbgGui::showScalarWindow() {
                 group.opened_manually = group_opened;
             }
 
+            // Symbols can be dragged from one group to another for easier reorganizing if symbol
+            // is initially added to wrong group
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+                    uint64_t id = *(uint64_t*)payload->Data;
+                    Scalar* scalar = getScalar(id);
+                    // Do nothing if dragged to same group.
+                    // Old one will be deleted if new one is added.
+                    if (scalar->group != group.full_name) {
+                        VariantSymbol* scalar_symbol = m_dbghelp_symbols.getSymbol(scalar->name);
+                        if (scalar_symbol) {
+                            Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
+                            new_scalar->alias = scalar->alias;
+                            new_scalar->scale = scalar->scale;
+                            new_scalar->offset = scalar->offset;
+                            scalar->deleted = true;
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             // Show values inside the group
             if (group_opened) {
                 if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
                     delete_entire_group = true;
-                }
-                // Symbols can be dragged from one group to another for easier reorganizing if symbol
-                // is initially added to wrong group
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                        uint64_t id = *(uint64_t*)payload->Data;
-                        Scalar* scalar = getScalar(id);
-                        // Do nothing if dragged to same group.
-                        // Old one will be deleted if new one is added.
-                        if (scalar->group != group.full_name) {
-                            VariantSymbol* scalar_symbol = m_dbghelp_symbols.getSymbol(scalar->name);
-                            if (scalar_symbol) {
-                                Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
-                                new_scalar->alias = scalar->alias;
-                                new_scalar->scale = scalar->scale;
-                                new_scalar->offset = scalar->offset;
-                                scalar->deleted = true;
-                            }
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
                 }
 
                 // Show subgroups first
@@ -587,31 +588,31 @@ void DbgGui::showVectorWindow() {
                 group.opened_manually = group_opened;
             }
 
-            if (group_opened) {
-                // Symbols can be dragged from one group to another for easier reorganizing if symbol
-                // is initially added to wrong group
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                        uint64_t id = *(uint64_t*)payload->Data;
-                        Vector2D* vector = getVector(id);
-                        // Do nothing if dragged to same group.
-                        // Old one will be deleted if new one is added.
-                        if (vector->group != group.full_name) {
-                            VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
-                            VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
-                            if (x && y) {
-                                Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
-                                new_vector->x->scale = vector->x->scale;
-                                new_vector->x->offset = vector->x->offset;
-                                new_vector->y->scale = vector->y->scale;
-                                new_vector->y->offset = vector->y->offset;
-                                vector->deleted = true;
-                            }
+            // Symbols can be dragged from one group to another for easier reorganizing if symbol
+            // is initially added to wrong group
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
+                    uint64_t id = *(uint64_t*)payload->Data;
+                    Vector2D* vector = getVector(id);
+                    // Do nothing if dragged to same group.
+                    // Old one will be deleted if new one is added.
+                    if (vector->group != group.full_name) {
+                        VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
+                        VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+                        if (x && y) {
+                            Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
+                            new_vector->x->scale = vector->x->scale;
+                            new_vector->x->offset = vector->x->offset;
+                            new_vector->y->scale = vector->y->scale;
+                            new_vector->y->offset = vector->y->offset;
+                            vector->deleted = true;
                         }
                     }
-                    ImGui::EndDragDropTarget();
                 }
+                ImGui::EndDragDropTarget();
+            }
 
+            if (group_opened) {
                 // Show subgroups first
                 for (auto& subgroup : group.subgroups) {
                     show_vector_group(subgroup.second, delete_entire_group);
