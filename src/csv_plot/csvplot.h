@@ -45,7 +45,6 @@ inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 struct CsvSignal {
     std::string name;
     std::vector<double> samples;
-    double scale = 1;
     int plot_idx = NOT_VISIBLE;
     ImVec4 color{NO_COLOR};
 };
@@ -82,6 +81,7 @@ class CsvPlotter {
     GLFWwindow* m_window;
 
     std::vector<CsvFileData> m_csv_data;
+    std::map<std::string, double> m_signal_scales;
     int m_plot_cnt = 1;
     int m_fit_plot_idx = -1;
     bool m_first_signal_as_x = true;

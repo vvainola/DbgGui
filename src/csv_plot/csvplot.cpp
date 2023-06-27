@@ -242,6 +242,9 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_link_axis = settings["window"]["link_axis"];
             m_fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
+            for (auto scale : settings["scales"].items()) {
+                m_signal_scales[scale.key()] = scale.value();
+            }
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
@@ -282,6 +285,9 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["link_axis"] = m_link_axis;
     settings["window"]["fit_on_drag_and_drop"] = m_fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_keep_old_signals_on_reload;
+    for (auto& [name, scale] : m_signal_scales) {
+        settings["scales"][name] = scale;
+    }
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
@@ -572,7 +578,6 @@ void CsvPlotter::showSignalWindow() {
                     if (csv_data->signals.size() == file.signals.size()) {
                         for (int i = 0; i < file.signals.size(); ++i) {
                             csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
-                            csv_data->signals[i].scale = file.signals[i].scale;
                             if (!m_keep_old_signals_on_reload) {
                                 csv_data->signals[i].color = file.signals[i].color;
                                 file.signals[i].plot_idx = NOT_VISIBLE;
@@ -621,7 +626,8 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 bool selected = signal.plot_idx != NOT_VISIBLE;
-                ImGui::PushStyleColor(ImGuiCol_Text, signal.scale == 1 ? COLOR_WHITE : COLOR_GRAY);
+                double& signal_scale = m_signal_scales[signal.name];
+                ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? COLOR_WHITE : COLOR_GRAY);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
                     signal.color = NO_COLOR;
@@ -636,7 +642,7 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 if (ImGui::BeginPopupContextItem((file.displayed_name + signal.name + "context_menu").c_str())) {
-                    ImGui::InputDouble("Scale", &signal.scale);
+                    ImGui::InputDouble("Scale", &signal_scale);
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
                         ImGui::CloseCurrentPopup();
@@ -709,8 +715,9 @@ void CsvPlotter::showPlots() {
                     std::vector<double>& all_y_values = sig.signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
-                    double y1 = all_y_values[idx1] * sig.signal->scale;
-                    double y2 = all_y_values[idx2] * sig.signal->scale;
+                    double signal_scale = m_signal_scales[sig.signal->name];
+                    double y1 = all_y_values[idx1] * signal_scale;
+                    double y2 = all_y_values[idx2] * signal_scale;
 
                     std::stringstream ss;
                     ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
@@ -779,9 +786,13 @@ void CsvPlotter::showPlots() {
                     plotted_x = all_x_values;
                     plotted_y = all_y_values;
                 }
-                // Scale samples
+                // Scale samples. Set default scale if signal has no scale
+                double& signal_scale = m_signal_scales[sig.signal->name];
+                if (signal_scale == 0) {
+                    signal_scale = 1;
+                }
                 for (double& sample : plotted_y) {
-                    sample *= sig.signal->scale;
+                    sample *= signal_scale;
                 }
 
                 std::stringstream ss;
