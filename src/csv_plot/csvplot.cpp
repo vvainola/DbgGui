@@ -189,7 +189,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             updateSavedSettings();
         }
 
-
         //---------- Rendering ----------
         ImGui::Render();
         int display_w, display_h;
@@ -627,6 +626,10 @@ void CsvPlotter::showSignalWindow() {
 
                 bool selected = signal.plot_idx != NOT_VISIBLE;
                 double& signal_scale = m_signal_scales[signal.name];
+                // Set default scale if signal has no scale
+                if (signal_scale == 0) {
+                    signal_scale = 1;
+                }
                 ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? COLOR_WHITE : COLOR_GRAY);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     signal.plot_idx = NOT_VISIBLE;
