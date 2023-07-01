@@ -254,7 +254,6 @@ std::string getUndecoratedSymbolName(std::string const& name) {
 }
 
 ModuleInfo getCurrentModuleInfo() {
-    char path[MAX_PATH];
     HMODULE handle = NULL;
     if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            (LPCSTR)&getCurrentModuleInfo,
@@ -267,33 +266,16 @@ ModuleInfo getCurrentModuleInfo() {
         printLastError();
         std::abort();
     }
-    return ModuleInfo{
-        .base_address = (MemoryAddress)handle,
-        .size = module_info.SizeOfImage};
-}
-
-std::string getCurrentModuleMD5() {
-    HMODULE handle = NULL;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCSTR)&getCurrentModuleInfo,
-                           &handle)) {
-        printLastError();
-        std::abort();
-    }
     char path[MAX_PATH];
     if (!GetModuleFileName(handle, path, sizeof(path))) {
         printLastError();
         std::abort();
     }
-
-    std::string md5_hash;
-    std::string certutil_out_filename = std::format("md5_{}{}{}.txt", rand(), rand(), rand());
-    if (std::system(std::format("certutil -hashfile {} MD5 > {}", path, certutil_out_filename).c_str()) == 0) {
-        std::string certutil_out = readFile(certutil_out_filename);
-        md5_hash = split(certutil_out, '\n')[1];
-        std::filesystem::remove(certutil_out_filename);
-    }
-    return md5_hash;
+    return ModuleInfo {
+        .base_address = (MemoryAddress)handle,
+        .size = module_info.SizeOfImage,
+        .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path)))
+    };
 }
 
 std::string readFile(std::string const& filename) {

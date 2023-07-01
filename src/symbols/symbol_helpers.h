@@ -59,9 +59,9 @@ inline std::vector<std::string> split(const std::string& s, char delim) {
 struct ModuleInfo {
     MemoryAddress base_address;
     MemoryAddress size;
+    std::string write_time;
 };
 ModuleInfo getCurrentModuleInfo();
-std::string getCurrentModuleMD5();
 
 std::string readFile(std::string const& filename);
 
