@@ -71,7 +71,6 @@ void DbgHelpSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit
 
 DbgHelpSymbols::DbgHelpSymbols() {
     loadSymbolsFromPdb();
-    m_symbols_loaded_from_pdb = true;
     // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
     std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
         return l->getAddress() < r->getAddress();
@@ -84,13 +83,6 @@ DbgHelpSymbols::DbgHelpSymbols(std::string const& symbol_json) {
     std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
         return l->getAddress() < r->getAddress();
     });
-}
-
-DbgHelpSymbols::~DbgHelpSymbols() {
-    if (m_symbols_loaded_from_pdb) {
-        // Delay clean up because looking up names of function pointers in GUI does not work if SymCleanup is ran
-        SymCleanup(GetCurrentProcess());
-    }
 }
 
 DbgHelpSymbols const& DbgHelpSymbols::getSymbolsFromPdb() {
@@ -258,7 +250,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
     if (!SymInitialize(current_process, NULL, TRUE)) {
         std::cerr << "SymInitialize failed with error:\n";
         printLastError();
-        std::cerr << "Unable to load symbols from PDB file.";
+        std::cerr << "Unable to load symbols from PDB file.\n";
         return;
     }
 
@@ -291,6 +283,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
         addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }
+    SymCleanup(current_process);
 }
 
 void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {

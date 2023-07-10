@@ -35,8 +35,6 @@ class VariantSymbol;
 
 class DbgHelpSymbols {
   public:
-    ~DbgHelpSymbols();
-
     /// @brief Load global symbols from PDB file
     /// @return Singleton object
     static DbgHelpSymbols const& getSymbolsFromPdb();
@@ -91,5 +89,4 @@ class DbgHelpSymbols {
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
     bool m_symbols_loaded_from_json = false;
-    bool m_symbols_loaded_from_pdb = false;
 };

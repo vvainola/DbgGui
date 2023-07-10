@@ -25,6 +25,7 @@
 #include <cassert>
 #include <numeric>
 #include <format>
+#include <processthreadsapi.h>
 
 #if !defined(DBGHELP_MAX_ARRAY_ELEMENT_COUNT)
 #define DBGHELP_MAX_ARRAY_ELEMENT_COUNT 10000
@@ -186,7 +187,8 @@ std::string VariantSymbol::valueAsStr() const {
         return std::format("{:g}", m_arithmetic_symbol->read());
     }
     case Type::Pointer: {
-        if (getPointedAddress() == NULL) {
+        MemoryAddress pointed_address = getPointedAddress();
+        if (pointed_address == NULL) {
             return "NULL";
         }
         VariantSymbol* symbol = getPointedSymbol();
@@ -194,19 +196,36 @@ std::string VariantSymbol::valueAsStr() const {
             // Return "name (value)"
             return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
         }
+
         // Try find name just a name with DbgHelp API
-        auto sym = getSymbolFromAddress(getPointedAddress());
+        // Cache symbols because constantly reinitializing DbgHelp is slow
+        static std::unordered_map<MemoryAddress, std::string> symbol_addresses;
+        auto it = symbol_addresses.find(pointed_address);
+        if (it != symbol_addresses.end()) {
+            return it->second;
+        }
+
+        SymSetOptions(SYMOPT_DEFERRED_LOADS);
+        bool symbol_handler_initialized = SymInitialize(GetCurrentProcess(), NULL, TRUE);
+        if (!symbol_handler_initialized) {
+            printLastError();
+        }
+        auto sym = getSymbolFromAddress(pointed_address);
+        std::string name = "??";
         if (sym) {
-            std::string name = sym->info.Name;
+            name = sym->info.Name;
             size_t decoration_offset = name.find("?");
             if (decoration_offset != name.npos) {
                 std::string decorated_name = name.substr(decoration_offset);
                 decorated_name.pop_back(); // Remove trailing ")"
                 name = getUndecoratedSymbolName(decorated_name);
             }
-            return name;
+            symbol_addresses[pointed_address] = name;
         }
-        return "??";
+        if (symbol_handler_initialized) {
+            SymCleanup(GetCurrentProcess());
+        }
+        return name;
     }
     case Type::Enum: {
         int32_t value = static_cast<int32_t>(m_arithmetic_symbol->read());

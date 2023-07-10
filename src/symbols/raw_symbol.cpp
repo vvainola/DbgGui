@@ -80,16 +80,14 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
     field["bitfield_position"] = NO_VALUE;
     field["value"] = sym.info.Value;
     if (sym.tag == SymTagBaseType) {
-        BasicType basic_type = getBasicType(sym);
-        field["basic_type"] = basic_type;
-        if (basic_type == BasicType::btUInt
-            || basic_type == BasicType::btInt
-            || basic_type == BasicType::btBool) {
-            field["bitfield_position"] = getBitPosition(sym);
+        field["basic_type"] = sym.basic_type;
+        if (sym.basic_type == BasicType::btUInt
+            || sym.basic_type == BasicType::btInt
+            || sym.basic_type == BasicType::btBool) {
+            field["bitfield_position"] = sym.bitfield_position;
         }
     } else if (sym.tag == SymTagEnumerator) {
-        BasicType base_type = getBasicType(sym);
-        field["basic_type"] = base_type;
+        field["basic_type"] = sym.basic_type;
     }
 
     for (int i = 0; auto& child : sym.children) {

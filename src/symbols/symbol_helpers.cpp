@@ -47,7 +47,7 @@ void printLastError() {
 
         std::string message(messageBuffer, size);
         LocalFree(messageBuffer);
-        std::cerr << message;
+        std::cerr << "Symbol search error: " << message << std::endl;
     }
 }
 
