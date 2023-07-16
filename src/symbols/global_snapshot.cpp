@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "global_snapshot.h"
+#include "DbgGui/global_snapshot.h"
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
 

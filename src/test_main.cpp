@@ -20,10 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbg_gui_wrapper.h"
+#include "DbgGui/dbg_gui_wrapper.h"
 #include "zero_crossing_freq_est.h"
 #include "moving_average.h"
 #include <thread>
+#include "DbgGui/global_snapshot.h"
 
 struct Vector_ABC {
     double a;

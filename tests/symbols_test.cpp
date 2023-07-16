@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_random.hpp>
-#include "global_snapshot.h"
+#include "DbgGui/global_snapshot.h"
 
 
 #include <filesystem>

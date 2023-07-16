@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbg_gui_wrapper.h"
+#include "DbgGui/dbg_gui_wrapper.h"
 #include <math.h>
 
 #define PI 3.14159265358979323846 // pi

@@ -28,7 +28,7 @@
 #include <unordered_map>
 #include <vector>
 #include <variant>
-#include "global_snapshot.h"
+#include "DbgGui/global_snapshot.h"
 
 struct RawSymbol;
 class VariantSymbol;
