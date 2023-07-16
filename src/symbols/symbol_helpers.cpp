@@ -274,7 +274,8 @@ ModuleInfo getCurrentModuleInfo() {
     return ModuleInfo {
         .base_address = (MemoryAddress)handle,
         .size = module_info.SizeOfImage,
-        .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path)))
+        .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path))),
+        .path = path
     };
 }
 

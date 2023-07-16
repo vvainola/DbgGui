@@ -60,6 +60,7 @@ struct ModuleInfo {
     MemoryAddress base_address;
     MemoryAddress size;
     std::string write_time;
+    std::string path;
 };
 ModuleInfo getCurrentModuleInfo();
 

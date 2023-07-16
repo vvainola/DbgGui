@@ -267,6 +267,12 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
         printLastError();
         _ASSERTE(!"Invalid symbols?");
     }
+    // Symbols from other modules are included only in executables because if a DLL includes other modules
+    // and same DLL is loaded twice within the executable, same name symbols are found for both DLLs.
+    // The symbol search will then contain duplicate for every symbol and it is not possible to know which
+    // symbol belongs in which DLL. Thus DLLs will only load symbols that belong to that DLL.
+    ModuleInfo module_info = getCurrentModuleInfo();
+    bool exclude_other_modules = !module_info.path.ends_with(".exe");
 
     // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
     // children can be copied from reference symbol if children have been added to that type of symbol already
@@ -275,7 +281,10 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
     m_raw_symbols.reserve(symbols.size());
     m_root_symbols.reserve(symbols.size());
     for (SymbolInfo const& symbol : symbols) {
-        if (symbol.Address == 0) {
+        bool symbol_in_current_module = symbol.Address >= module_info.base_address
+                                     && symbol.Address < module_info.base_address + module_info.size;
+        if (symbol.Address == 0
+            || (exclude_other_modules && !symbol_in_current_module)) {
             continue;
         }
 
