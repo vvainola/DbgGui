@@ -562,15 +562,15 @@ void CsvPlotter::showSignalWindow() {
 
     CsvFileData* file_to_remove = nullptr;
     for (CsvFileData& file : m_csv_data) {
-        // Reload file if it has been rewritten. Wait that file has not been modified in the last second
+        // Reload file if it has been rewritten. Wait that file has not been modified in the last 2 seconds
         // in case it is still being written
         if (std::filesystem::exists(file.name)) {
             auto last_write_time = std::filesystem::last_write_time(file.name);
-            auto write_time_plus_1s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(1);
+            auto write_time_plus_2s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(2);
             auto now = std::chrono::system_clock::now();
 
             if (last_write_time != file.write_time
-                && now > write_time_plus_1s
+                && now > write_time_plus_2s
                 && file.write_time != std::filesystem::file_time_type()) {
                 std::optional<CsvFileData> csv_data = parseCsvData(file.name);
                 if (csv_data) {
