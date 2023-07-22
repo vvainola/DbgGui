@@ -342,10 +342,11 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     }
 
     // Try detect delimiter from the end of file as that part likely doesn't contain extra information
+    // Use second last line in case the last line gets modified suddenly
     char delimiter = '\0';
     size_t element_count = 0;
     size_t last_line = 0;
-    for (size_t i = lines.size() - 1; i > 0; --i) {
+    for (size_t i = lines.size() - 2; i > 0; --i) {
         if (!lines[i].empty()) {
             last_line = i;
             std::vector<std::string> values_comma = split(lines[i], ',');
@@ -365,7 +366,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         }
     }
     if (delimiter == '\0') {
-        exit(std::format("Unable to detect delimiter from last line of the file \"{}\"\n", csv_filename));
+        exit(std::format("Unable to detect delimiter from second last line of the file \"{}\"\n", csv_filename));
     }
 
     // Find first line where header begins
