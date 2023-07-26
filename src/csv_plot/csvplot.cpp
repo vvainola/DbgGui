@@ -336,7 +336,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     std::stringstream buffer;
     buffer << csv.rdbuf();
     std::vector<std::string> lines = split(buffer.str(), '\n');
-    if (lines.size() == 0) {
+    if (lines.size() < 2) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return std::nullopt;
     }
