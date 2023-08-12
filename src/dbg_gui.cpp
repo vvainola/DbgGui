@@ -36,6 +36,8 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
+constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
+
 #define TRY(expression)                       \
     try {                                     \
         expression                            \
@@ -455,6 +457,17 @@ void DbgGui::loadPreviousSessionSettings() {
 }
 
 void DbgGui::updateSavedSettings() {
+    // Checking settings on every frame can be slow if there are a lot of signals. However,
+    // adding a flag when to update them is noisy on the rest of the code so check with some
+    // small interval that settings are fairly guaranteed to get updated if user changes
+    // something but not too often to slow the GUI down.
+    static auto last_check_time = std::chrono::system_clock::now();
+    auto now = std::chrono::system_clock::now();
+    if (now - last_check_time < std::chrono::milliseconds(SETTINGS_CHECK_INTERVAL_MS)) {
+        return;
+    }
+    last_check_time = now;
+
     if (m_options.clear_saved_settings) {
         m_options.clear_saved_settings = false;
         m_settings.clear();
