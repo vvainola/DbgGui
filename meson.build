@@ -21,7 +21,7 @@ if get_option('force_optimizations')
     # Override options does not work in VS backend so use Directory.Build.Targets to
     # override to optimization flag set in the VS project.
     configure_file(
-        input : 'Directory.Build.Targets',
+        input : 'Directory.Build.Targets.in',
         output : 'Directory.Build.Targets',
         copy : true
     )
