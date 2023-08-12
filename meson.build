@@ -1,4 +1,4 @@
-project('DbgGui', ['cpp', 'c'], 
+project('DbgGui', ['cpp', 'c'],
     default_options : [
         'b_vscrt=md',
         'cpp_std=c++latest',
@@ -15,6 +15,19 @@ add_project_arguments([
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
+
+if get_option('force_optimizations')
+    override_options = {'optimization' : '3'}
+    # Override options does not work in VS backend so use Directory.Build.Targets to
+    # override to optimization flag set in the VS project.
+    configure_file(
+        input : 'Directory.Build.Targets',
+        output : 'Directory.Build.Targets',
+        copy : true
+    )
+else
+    override_options = {}
+endif
 
 deps = [
     dependency('nlohmann_json'),
@@ -54,6 +67,7 @@ imgui_lib = static_library('imgui',
     sources : imgui_src,
     dependencies : deps,
     include_directories : inc,
+    override_options : override_options,
 )
 
 lib_symbols = static_library('symbols',
@@ -66,7 +80,8 @@ lib_symbols = static_library('symbols',
         'src/symbols/global_snapshot.cpp'
     ],
     dependencies : deps,
-    include_directories : 'include'
+    include_directories : 'include',
+    override_options : override_options,
 )
 
 lib_gui = static_library('dbg_gui',
@@ -80,7 +95,8 @@ lib_gui = static_library('dbg_gui',
     ],
     include_directories : inc,
     link_with : [lib_symbols, imgui_lib],
-    dependencies : deps
+    dependencies : deps,
+    override_options : override_options,
 )
 
 cpp_gui = executable('test_gui_cpp',
@@ -105,6 +121,7 @@ csv_plotter = executable('csv_plotter',
     include_directories : inc + ['src'],
     link_with : imgui_lib,
     dependencies : deps,
+    override_options : override_options,
 )
 
 lib_dbghelp_symbols_dep = declare_dependency(

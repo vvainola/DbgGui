@@ -1,0 +1,7 @@
+<Project>
+    <ItemDefinitionGroup>
+        <ClCompile>
+            <Optimization>MaxSpeed</Optimization>
+        </ClCompile>
+    </ItemDefinitionGroup>
+</Project>
