@@ -17,7 +17,7 @@ python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
 
 if get_option('force_optimizations')
-    override_options = {'optimization' : '3'}
+    override_options = ['optimization=3']
     # Override options does not work in VS backend so use Directory.Build.Targets to
     # override to optimization flag set in the VS project.
     configure_file(
@@ -26,7 +26,7 @@ if get_option('force_optimizations')
         copy : true
     )
 else
-    override_options = {}
+    override_options = []
 endif
 
 deps = [
