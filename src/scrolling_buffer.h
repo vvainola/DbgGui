@@ -114,8 +114,8 @@ class ScrollingBuffer {
                 current_max = -INFINITY;
                 counter = decimation;
             }
-            current_min = std::min(data[i], current_min);
-            current_max = std::max(data[i], current_max);
+            current_min = min(data[i], current_min);
+            current_max = max(data[i], current_max);
             counter--;
         }
         // Update leftover so that blanks are not left at the end

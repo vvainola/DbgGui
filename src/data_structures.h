@@ -31,6 +31,16 @@
 #include <future>
 #include <string>
 
+template <typename T>
+T inline min(T a, T b) {
+    return a < b ? a : b;
+}
+
+template <typename T>
+T inline max(T a, T b) {
+    return a > b ? a : b;
+}
+
 inline double getSourceValue(ValueSource src) {
     return std::visit(
         [=](auto&& src) {
