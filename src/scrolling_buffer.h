@@ -50,6 +50,7 @@ class ScrollingBuffer {
     void emptyTempBuffers() {
         // Empty time buffer first and collect indices to which the time samples are added
         std::vector<int32_t> indices;
+        indices.reserve(m_time_temp.size());
         for (size_t i = 0; i < m_time_temp.size(); ++i) {
             double time = m_time_temp[i];
             m_time[m_idx] = time;
