@@ -441,11 +441,14 @@ int closestSpectralBin(std::vector<double> const& vec_x, std::vector<double> con
         return -1;
     }
     auto const it_lower = std::lower_bound(vec_x.begin(), vec_x.end(), x - abs(x) * 0.03);
-    auto const it_upper = std::upper_bound(vec_x.begin(), vec_x.end(), x + abs(x) * 0.03);
+    auto it_upper = std::upper_bound(vec_x.begin(), vec_x.end(), x + abs(x) * 0.03);
+    if (it_upper == vec_x.end()) {
+        it_upper = vec_x.end() - 1;
+    }
 
     int closest_idx = -1;
     double y_err_min = INFINITY;
-    for (auto it = it_lower; it < it_upper; ++it) {
+    for (auto it = it_lower; it <= it_upper; ++it) {
         int idx = int(std::distance(vec_x.begin(), it));
         double y_err = std::abs(vec_y[idx] - y);
         if (y_err < y_err_min) {
