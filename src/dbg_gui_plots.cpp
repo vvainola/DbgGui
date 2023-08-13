@@ -69,7 +69,8 @@ void DbgGui::showScalarPlots() {
         }
         if (ImGui::BeginPopup("##Menu")) {
             if (ImGui::Button("Save as csv")) {
-                savePlotAsCsv(scalar_plot);
+                MinMax time_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
+                saveSignalsAsCsv(scalar_plot.signals, time_limits);
                 ImGui::CloseCurrentPopup();
             }
             if (ImGui::Button("Remove all")) {
@@ -230,49 +231,6 @@ void DbgGui::showScalarPlots() {
             size_t signals_removed = m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
-    }
-}
-
-void DbgGui::savePlotAsCsv(ScalarPlot const& plot) {
-    nfdchar_t* out_path = NULL;
-    auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
-
-    if (result == NFD_OKAY) {
-        std::string out(out_path);
-        free(out_path);
-        if (!out.ends_with(".csv")) {
-            out.append(".csv");
-        }
-        std::ofstream csv(out);
-
-        csv << "time0,";
-        csv << "time,";
-        std::vector<ScrollingBuffer::DecimatedValues> values;
-        MinMax limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : plot.x_axis;
-        auto time_idx = m_sampler.getTimeIndices(limits.min, limits.max);
-        for (Scalar* signal : plot.signals) {
-            csv << signal->name_and_group << ",";
-            values.push_back(m_sampler.getValuesInRange(signal,
-                                                        time_idx,
-                                                        ALL_SAMPLES,
-                                                        signal->scale,
-                                                        signal->offset));
-        }
-        csv << "\n";
-        if (values.size() == 0) {
-            csv.close();
-            return;
-        }
-        for (size_t i = 0; i < values[0].time.size(); ++i) {
-            csv << values[0].time[i] - values[0].time[0] << ",";
-            csv << values[0].time[i] << ",";
-            for (auto& value : values) {
-                csv << value.y_min[i] << ",";
-            }
-            csv << "\n";
-        }
-        csv.close();
     }
 }
 
@@ -716,4 +674,54 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
     }
 
     return spec;
+}
+
+void DbgGui::saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits) {
+    nfdchar_t* out_path = NULL;
+    auto cwd = std::filesystem::current_path();
+    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+
+    // Pause while saving CSV because the CSV saving can take a long time and the sampling
+    // buffers would get filled and start hogging a lot of memory
+    bool paused = m_paused;
+    m_paused = true;
+    if (result == NFD_OKAY) {
+        std::string out(out_path);
+        free(out_path);
+        if (!out.ends_with(".csv")) {
+            out.append(".csv");
+        }
+        std::ofstream csv(out);
+
+        csv << "time0,";
+        csv << "time,";
+        std::vector<ScrollingBuffer::DecimatedValues> values;
+        auto time_idx = m_sampler.getTimeIndices(time_limits.min, time_limits.max);
+        for (auto const& signal : signals) {
+            if (!m_sampler.isSignalSampled(signal)) {
+                continue;
+            }
+            csv << signal->name_and_group << ",";
+            values.push_back(m_sampler.getValuesInRange(signal,
+                                                        time_idx,
+                                                        ALL_SAMPLES,
+                                                        signal->scale,
+                                                        signal->offset));
+        }
+        csv << "\n";
+        if (values.size() == 0) {
+            csv.close();
+            m_paused = paused;
+            return;
+        }
+        for (size_t i = 0; i < values[0].time.size(); ++i) {
+            csv << std::format("{:g},{:g},", values[0].time[i] - values[0].time[0], values[0].time[i]);
+            for (auto& value : values) {
+                csv << std::format("{:g},", value.y_min[i]);
+            }
+            csv << "\n";
+        }
+        csv.close();
+    }
+    m_paused = paused;
 }

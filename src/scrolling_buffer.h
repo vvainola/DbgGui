@@ -168,6 +168,10 @@ class ScrollingBuffer {
         return {start_idx, end_idx};
     }
 
+    bool isSignalSampled(Scalar* signal) {
+        return m_scalar_buffers.contains(signal);
+    }
+
   private:
     int32_t binarySearch(double t, int32_t start, int32_t end) {
         int32_t original_start = start;

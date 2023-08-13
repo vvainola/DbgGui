@@ -298,6 +298,14 @@ void DbgGui::showMainMenuBar() {
                 ImGui::EndPopup();
             }
 
+            if (ImGui::Button("Save all plots as csv")) {
+                std::vector<Scalar*> signals;
+                for (auto const& scalar : m_scalars) {
+                    signals.push_back(scalar.get());
+                }
+                saveSignalsAsCsv(signals);
+            }
+
             static std::vector<SymbolValue> saved_snapshot;
             if (ImGui::Button("Save snapshot")) {
                 // Pause during snapshot saving so that all symbols are from same time instant

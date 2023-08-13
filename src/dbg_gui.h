@@ -82,7 +82,7 @@ class DbgGui {
     void updateSavedSettings();
     void setInitialFocus();
     void synchronizeSpeed();
-    void savePlotAsCsv(ScalarPlot const& plot);
+    void saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits = {-INFINITY, INFINITY});
     void addScalarContextMenu(Scalar* scalar);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
