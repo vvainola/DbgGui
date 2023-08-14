@@ -78,6 +78,8 @@ DbgGui::~DbgGui() {
 
 void DbgGui::startUpdateLoop() {
     m_gui_thread = std::jthread(&DbgGui::updateLoop, std::ref(*this));
+    while (!m_initialized) {
+    }
 }
 
 void DbgGui::synchronizeSpeed() {
@@ -150,7 +152,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     }
 
     // Wait in infinitely loop while paused
-    while (m_paused || !m_initialized) {
+    while (m_paused) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         // Set sync time to 0 so that if speed is changed while paused, it will
         // be effective immediately. Otherwise simulation could run for e.g. 10ms
