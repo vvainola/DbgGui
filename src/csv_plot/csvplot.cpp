@@ -49,6 +49,13 @@ inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
+inline constexpr unsigned MAX_NAME_LENGTH = 255;
+std::vector<double> ASCENDING_NUMBERS;
+
+std::string getLineFromEnd(std::ifstream& file, size_t line_count);
+std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
+std::vector<CsvFileData> openCsvFromFileDialog();
+bool pscadInfToCsv(std::string const& inf_filename);
 
 int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -76,22 +83,9 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double> time, double start_
     return {start_idx, end_idx};
 }
 
-inline constexpr unsigned MAX_NAME_LENGTH = 255;
-
-std::vector<double> ASCENDING_NUMBERS;
-
-std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
-std::vector<CsvFileData> openCsvFromFileDialog();
-bool pscadInfToCsv(std::string const& inf_filename);
-
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
     v.erase(std::remove(v.begin(), v.end(), item), v.end());
-}
-
-void exit(std::string const& err) {
-    std::cerr << err;
-    exit(-1);
 }
 
 static void glfw_error_callback(int error, const char* description) {
@@ -303,6 +297,19 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return elems;
 }
 
+std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count = 1) {
+    std::vector<std::string_view> elems;
+    elems.reserve(expected_column_count);
+    int32_t pos_start = 0;
+    for (int i = 0; i < s.size(); ++i) {
+        if (s[i] == delim) {
+            elems.push_back(std::string_view(&s[pos_start], &s[i]));
+            pos_start = i + 1;
+        }
+    }
+    return elems;
+}
+
 std::optional<CsvFileData> parseCsvData(std::string filename,
                                         std::map<std::string, int> name_and_plot_idx = {}) {
     std::string csv_filename = filename;
@@ -333,56 +340,42 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         std::cerr << "Unable to open file " + csv_filename << std::endl;
         return std::nullopt;
     }
-    std::stringstream buffer;
-    buffer << csv.rdbuf();
-    std::vector<std::string> lines = split(buffer.str(), '\n');
-    if (lines.size() < 2) {
+    std::string third_last_line = getLineFromEnd(csv, 3);
+    if (third_last_line.empty()) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return std::nullopt;
     }
 
     // Try detect delimiter from the end of file as that part likely doesn't contain extra information
-    // Use second last line in case the last line gets modified suddenly
+    // Use third last line in case the last line gets modified suddenly
     char delimiter = '\0';
     size_t element_count = 0;
-    size_t last_line = 0;
-    for (size_t i = lines.size() - 2; i > 0; --i) {
-        if (!lines[i].empty()) {
-            last_line = i;
-            std::vector<std::string> values_comma = split(lines[i], ',');
-            std::vector<std::string> values_semicolon = split(lines[i], ';');
-            std::vector<std::string> values_tab = split(lines[i], '\t');
-            if (values_comma.size() > values_semicolon.size() && values_comma.size() > values_tab.size()) {
-                delimiter = ',';
-                element_count = values_comma.size();
-            } else if (values_semicolon.size() > values_comma.size() && values_semicolon.size() > values_tab.size()) {
-                delimiter = ';';
-                element_count = values_semicolon.size();
-            } else if (values_tab.size() > values_comma.size() && values_tab.size() > values_semicolon.size()) {
-                delimiter = '\t';
-                element_count = values_tab.size();
-            }
-            break;
-        }
+    std::vector<std::string> values_comma = split(third_last_line, ',');
+    std::vector<std::string> values_semicolon = split(third_last_line, ';');
+    std::vector<std::string> values_tab = split(third_last_line, '\t');
+    if (values_comma.size() > values_semicolon.size() && values_comma.size() > values_tab.size()) {
+        delimiter = ',';
+        element_count = values_comma.size();
+    } else if (values_semicolon.size() > values_comma.size() && values_semicolon.size() > values_tab.size()) {
+        delimiter = ';';
+        element_count = values_semicolon.size();
+    } else if (values_tab.size() > values_comma.size() && values_tab.size() > values_semicolon.size()) {
+        delimiter = '\t';
+        element_count = values_tab.size();
     }
     if (delimiter == '\0') {
-        exit(std::format("Unable to detect delimiter from second last line of the file \"{}\"\n", csv_filename));
+        std::cerr << std::format("Unable to detect delimiter from third last line of the file \"{}\"\n", csv_filename);
+        return std::nullopt;
     }
 
     // Find first line where header begins
-    size_t first_line = 0;
-    for (size_t i = 0; i < lines.size(); ++i) {
-        if (split(lines[i], delimiter).size() == element_count) {
-            first_line = i;
+    std::string line;
+    while (std::getline(csv, line)) {
+        if (split(line, delimiter).size() == element_count) {
             break;
         }
     }
-
-    std::vector<std::string> signal_names = split(lines[first_line], delimiter);
-    size_t sample_cnt = last_line - first_line;
-    for (size_t i = ASCENDING_NUMBERS.size(); i < sample_cnt; ++i) {
-        ASCENDING_NUMBERS.push_back(double(i));
-    }
+    std::vector<std::string> signal_names = split(line, delimiter);
 
     // Count number of instances with same name
     std::map<std::string, int> signal_name_count;
@@ -411,12 +404,22 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         if (name_and_plot_idx.contains(signal_name)) {
             csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
         }
-        csv_signals.back().samples.reserve(sample_cnt);
     }
-    for (size_t i = 0; i < sample_cnt; ++i) {
-        std::vector<std::string> values = split(lines[first_line + i + 1], delimiter);
+    int line_number = 1;
+    while (std::getline(csv, line)) {
+        line_number++;
+        std::vector<std::string_view> values = splitSv(line, delimiter, csv_signals.size());
+        if (values.size() != signal_names.size()) {
+            break;
+        }
         for (size_t j = 0; j < values.size(); ++j) {
-            csv_signals[j].samples.push_back(std::stod(values[j]));
+            double value;
+            std::from_chars_result result = std::from_chars(values[j].data(), values[j].data() + values[j].size(), value);
+            if (result.ec != std::errc()) {
+                std::cerr << std::format("Invalid data in column \"{}\" (column index {}) at line {}\n", csv_signals[j].name, j, line_number);
+                return std::nullopt;
+            }
+            csv_signals[j].samples.push_back(value);
         }
     }
 
@@ -428,6 +431,10 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         std::transform(r_name.begin(), r_name.end(), r_name.begin(), [](unsigned char c) { return (unsigned char)std::tolower(c); });
         return l_name < r_name;
     });
+
+    for (size_t i = ASCENDING_NUMBERS.size(); i < csv_signals[0].samples.size(); ++i) {
+        ASCENDING_NUMBERS.push_back(double(i));
+    }
 
     return CsvFileData{
         .name = std::filesystem::relative(filename).string(),
@@ -886,4 +893,37 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
         std::cerr << NFD_GetError() << std::endl;
     }
     return csv_datas;
+}
+
+std::string getLineFromEnd(std::ifstream& file, size_t line_count) {
+    file.seekg(0, std::ios::end);
+    std::streampos file_size = file.tellg();
+
+    if (file_size <= 1) {
+        file.seekg(0);
+        return ""; // Return an empty string for empty or single-character files
+    }
+
+    // Go back in the line until correct amount of newlines found
+    std::string line;
+    size_t new_line_count = 0;
+    for (std::streampos pos = file_size - std::streampos(1); pos >= 0; pos -= std::streampos(1)) {
+        file.seekg(pos);
+        char c = (char)file.get();
+
+        if (c == '\n') {
+            ++new_line_count;
+            if (new_line_count == line_count) {
+                break;
+            }
+        }
+        line = c + line;
+    }
+    file.seekg(0);
+
+    if (new_line_count < line_count) {
+        return ""; // Return an empty string if there are not enough lines
+    }
+
+    return split(line, '\n')[0];
 }
