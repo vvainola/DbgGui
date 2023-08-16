@@ -307,6 +307,10 @@ std::vector<std::string_view> splitSv(const std::string& s, char delim, int expe
             pos_start = i + 1;
         }
     }
+    // Add the last value if there is no trailing delimiter
+    if (s.back() != delim) {
+        elems.push_back(std::string_view(&s[pos_start]));
+    }
     return elems;
 }
 
