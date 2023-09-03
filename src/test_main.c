@@ -75,18 +75,18 @@ typedef enum {
 } EnumWithNeg;
 EnumWithNeg enum_with_neg;
 
-typedef union  {
+typedef union {
     uint16_t u16;
     struct {
-        uint16_t b1 : 1;
-        uint16_t b2 : 1;
-        uint16_t b3 : 1;
-        uint16_t b4 : 1;
-        uint16_t b5 : 1;
-        uint16_t b6 : 1;
-        uint16_t b7 : 1;
-        uint16_t b8 : 1;
-        uint16_t b9 : 1;
+        uint16_t b1  : 1;
+        uint16_t b2  : 1;
+        uint16_t b3  : 1;
+        uint16_t b4  : 1;
+        uint16_t b5  : 1;
+        uint16_t b6  : 1;
+        uint16_t b7  : 1;
+        uint16_t b8  : 1;
+        uint16_t b9  : 1;
         uint16_t b10 : 1;
         uint16_t b11 : 1;
         uint16_t b12 : 1;

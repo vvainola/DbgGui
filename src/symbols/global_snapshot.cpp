@@ -36,7 +36,6 @@ void* SNP_getSymbolsFromJson(const char* symbols_json) {
         symbols = nullptr;
     }
     return symbols;
-
 }
 
 void SNP_deleteSymbolLookup(void* symbols) {

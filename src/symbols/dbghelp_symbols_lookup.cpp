@@ -93,18 +93,19 @@ DbgHelpSymbols const& DbgHelpSymbols::getSymbolsFromPdb() {
 // For name[2][3][4] return {2, 3, 4}
 std::vector<size_t> getArrayIndices(std::string const& s) {
     std::vector<size_t> indices;
-    size_t start_idx = s.find('['); // find the first '[' character
+    size_t start_idx = s.find('[');              // find the first '[' character
     while (start_idx != std::string::npos) {
         size_t end_idx = s.find(']', start_idx); // find the corresponding ']' character
         if (end_idx == std::string::npos) {
-            return {}; // error: no matching ']' found
+            return {};                           // error: no matching ']' found
         }
+
         std::string idx_str = s.substr(start_idx + 1, end_idx - start_idx - 1); // extract the index string
         int index;
         try {
             index = stoi(idx_str); // convert the index string to an integer
         } catch (...) {
-            return {}; // error: index is not a valid integer
+            return {};             // error: index is not a valid integer
         }
         indices.push_back(index);
         start_idx = s.find('[', end_idx); // find the next '[' character
@@ -413,22 +414,22 @@ void DbgHelpSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snaps
     for (SymbolValue symbol_snapshot : snapshot) {
         VariantSymbol* sym = symbol_snapshot.symbol;
         std::visit(
-            [=](auto&& value) {
-                using T = std::decay_t<decltype(value)>;
-                // Change value only if it is different because trying to write const variables causes crash
-                // and there seems to be no easy way to determine if a symbol is const
-                if constexpr (std::is_same_v<T, MemoryAddress>) {
-                    MemoryAddress current_pointed_address = sym->getPointedAddress();
-                    MemoryAddress new_pointed_address = value;
-                    if (current_pointed_address != new_pointed_address) {
-                        sym->setPointedAddress(new_pointed_address);
-                    }
-                } else {
-                    if (sym->read() != value) {
-                        sym->write(value);
-                    }
-                }
-            },
-            symbol_snapshot.value);
+          [=](auto&& value) {
+              using T = std::decay_t<decltype(value)>;
+              // Change value only if it is different because trying to write const variables causes crash
+              // and there seems to be no easy way to determine if a symbol is const
+              if constexpr (std::is_same_v<T, MemoryAddress>) {
+                  MemoryAddress current_pointed_address = sym->getPointedAddress();
+                  MemoryAddress new_pointed_address = value;
+                  if (current_pointed_address != new_pointed_address) {
+                      sym->setPointedAddress(new_pointed_address);
+                  }
+              } else {
+                  if (sym->read() != value) {
+                      sym->write(value);
+                  }
+              }
+          },
+          symbol_snapshot.value);
     }
 }

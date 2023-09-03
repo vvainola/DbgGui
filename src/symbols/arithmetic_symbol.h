@@ -29,18 +29,18 @@
 using ReadWriteFn = std::function<double(std::optional<double>)>;
 using ReadWriteFnCustomStr = std::function<std::pair<std::string, double>(std::optional<double>)>;
 using ValueSource = std::variant<
-    int8_t*,
-    int16_t*,
-    int32_t*,
-    int64_t*,
-    uint8_t*,
-    uint16_t*,
-    uint32_t*,
-    uint64_t*,
-    float*,
-    double*,
-    ReadWriteFn,
-    ReadWriteFnCustomStr>;
+  int8_t*,
+  int16_t*,
+  int32_t*,
+  int64_t*,
+  uint8_t*,
+  uint16_t*,
+  uint32_t*,
+  uint64_t*,
+  float*,
+  double*,
+  ReadWriteFn,
+  ReadWriteFnCustomStr>;
 
 class ArithmeticSymbol {
   public:

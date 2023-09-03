@@ -80,7 +80,6 @@ class DbgHelpSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
-
   private:
     DbgHelpSymbols();
     bool loadSymbolsFromJson(std::string const& json);

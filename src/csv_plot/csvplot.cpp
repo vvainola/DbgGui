@@ -399,7 +399,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         bool has_duplicate_names = signal_name_count[signal_name] > 1;
         if (has_duplicate_names) {
             csv_signals.push_back(CsvSignal{
-                .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])});
+              .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])});
             ++signal_name_counter[signal_name];
         } else {
             csv_signals.push_back(CsvSignal{.name = signal_name});
@@ -441,10 +441,10 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     }
 
     return CsvFileData{
-        .name = std::filesystem::relative(filename).string(),
-        .displayed_name = std::filesystem::relative(filename).string(),
-        .signals = csv_signals,
-        .write_time = std::filesystem::last_write_time(filename)};
+      .name = std::filesystem::relative(filename).string(),
+      .displayed_name = std::filesystem::relative(filename).string(),
+      .signals = csv_signals,
+      .write_time = std::filesystem::last_write_time(filename)};
 }
 
 void writeLineToCsv(std::ofstream& csv_file, std::string const& line, bool include_first_column) {
@@ -700,8 +700,8 @@ void CsvPlotter::showPlots() {
                     longest_name_length = std::max(longest_name_length, signal.name.size());
                     longest_file_length = std::max(longest_file_length, file.displayed_name.size());
                     signals.push_back(FileAndSignal{
-                        .file = &file,
-                        .signal = &signal});
+                      .file = &file,
+                      .signal = &signal});
                 }
             }
         }

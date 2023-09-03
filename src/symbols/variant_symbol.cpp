@@ -50,49 +50,49 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
 
     switch (symbol->tag) {
-    case SymTagPointerType:
-        m_type = Type::Pointer;
-        break;
-    case SymTagBaseType: {
-        m_type = Type::Arithmetic;
-        m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size, symbol->bitfield_position);
-        break;
-    }
-    case SymTagEnumerator: {
-        m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size);
-        m_type = Type::Enum;
-        // Children of enum contain the enum values as strings.
-        for (auto& child : symbol->children) {
-            m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->info.Value), child->info.Name));
+        case SymTagPointerType:
+            m_type = Type::Pointer;
+            break;
+        case SymTagBaseType: {
+            m_type = Type::Arithmetic;
+            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size, symbol->bitfield_position);
+            break;
         }
-        break;
-    }
-    case SymTagArrayType: {
-        m_type = Type::Array;
-        if (symbol->array_element_count > 0) {
-            m_children.reserve(symbol->array_element_count);
-            RawSymbol* first_element = symbol->children[0].get();
-            MemoryAddress original_address = m_address;
-            // Skip very large arrays
-            if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
-                for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
-                    m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
-                    m_address += first_element->info.Size;
-                }
+        case SymTagEnumerator: {
+            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size);
+            m_type = Type::Enum;
+            // Children of enum contain the enum values as strings.
+            for (auto& child : symbol->children) {
+                m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->info.Value), child->info.Name));
             }
-            m_address = original_address;
+            break;
         }
-        break;
-    }
-    case SymTagUDT:
-        m_type = Type::Object;
-        m_children.reserve(symbol->children.size());
-        for (auto& child : symbol->children) {
-            m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, child.get(), this));
+        case SymTagArrayType: {
+            m_type = Type::Array;
+            if (symbol->array_element_count > 0) {
+                m_children.reserve(symbol->array_element_count);
+                RawSymbol* first_element = symbol->children[0].get();
+                MemoryAddress original_address = m_address;
+                // Skip very large arrays
+                if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
+                    for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
+                        m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
+                        m_address += first_element->info.Size;
+                    }
+                }
+                m_address = original_address;
+            }
+            break;
         }
-        break;
-    default:
-        assert((0, "Unknown type for variant symbol"));
+        case SymTagUDT:
+            m_type = Type::Object;
+            m_children.reserve(symbol->children.size());
+            for (auto& child : symbol->children) {
+                m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, child.get(), this));
+            }
+            break;
+        default:
+            assert((0, "Unknown type for variant symbol"));
     }
 }
 
@@ -183,67 +183,67 @@ ValueSource VariantSymbol::getValueSource() {
 
 std::string VariantSymbol::valueAsStr() const {
     switch (m_type) {
-    case Type::Arithmetic: {
-        return std::format("{:g}", m_arithmetic_symbol->read());
-    }
-    case Type::Pointer: {
-        MemoryAddress pointed_address = getPointedAddress();
-        if (pointed_address == NULL) {
-            return "NULL";
+        case Type::Arithmetic: {
+            return std::format("{:g}", m_arithmetic_symbol->read());
         }
-        VariantSymbol* symbol = getPointedSymbol();
-        if (symbol) {
-            // Return "name (value)"
-            return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
-        }
-
-        // Try find name just a name with DbgHelp API
-        // Cache symbols because constantly reinitializing DbgHelp is slow
-        static std::unordered_map<MemoryAddress, std::string> symbol_addresses;
-        auto it = symbol_addresses.find(pointed_address);
-        if (it != symbol_addresses.end()) {
-            return it->second;
-        }
-
-        SymSetOptions(SYMOPT_DEFERRED_LOADS);
-        bool symbol_handler_initialized = SymInitialize(GetCurrentProcess(), NULL, TRUE);
-        if (!symbol_handler_initialized) {
-            printLastError();
-        }
-        auto sym = getSymbolFromAddress(pointed_address);
-        std::string name = "??";
-        if (sym) {
-            name = sym->info.Name;
-            size_t decoration_offset = name.find("?");
-            if (decoration_offset != name.npos) {
-                std::string decorated_name = name.substr(decoration_offset);
-                decorated_name.pop_back(); // Remove trailing ")"
-                name = getUndecoratedSymbolName(decorated_name);
+        case Type::Pointer: {
+            MemoryAddress pointed_address = getPointedAddress();
+            if (pointed_address == NULL) {
+                return "NULL";
             }
-            symbol_addresses[pointed_address] = name;
+            VariantSymbol* symbol = getPointedSymbol();
+            if (symbol) {
+                // Return "name (value)"
+                return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
+            }
+
+            // Try find name just a name with DbgHelp API
+            // Cache symbols because constantly reinitializing DbgHelp is slow
+            static std::unordered_map<MemoryAddress, std::string> symbol_addresses;
+            auto it = symbol_addresses.find(pointed_address);
+            if (it != symbol_addresses.end()) {
+                return it->second;
+            }
+
+            SymSetOptions(SYMOPT_DEFERRED_LOADS);
+            bool symbol_handler_initialized = SymInitialize(GetCurrentProcess(), NULL, TRUE);
+            if (!symbol_handler_initialized) {
+                printLastError();
+            }
+            auto sym = getSymbolFromAddress(pointed_address);
+            std::string name = "??";
+            if (sym) {
+                name = sym->info.Name;
+                size_t decoration_offset = name.find("?");
+                if (decoration_offset != name.npos) {
+                    std::string decorated_name = name.substr(decoration_offset);
+                    decorated_name.pop_back(); // Remove trailing ")"
+                    name = getUndecoratedSymbolName(decorated_name);
+                }
+                symbol_addresses[pointed_address] = name;
+            }
+            if (symbol_handler_initialized) {
+                SymCleanup(GetCurrentProcess());
+            }
+            return name;
         }
-        if (symbol_handler_initialized) {
-            SymCleanup(GetCurrentProcess());
+        case Type::Enum: {
+            int32_t value = static_cast<int32_t>(m_arithmetic_symbol->read());
+            auto it = std::find_if(m_enum_mappings.begin(), m_enum_mappings.end(), [=](auto& enum_mapping) {
+                return enum_mapping.first == value;
+            });
+            if (it != m_enum_mappings.end()) {
+                return it->second;
+            }
+            return "";
         }
-        return name;
-    }
-    case Type::Enum: {
-        int32_t value = static_cast<int32_t>(m_arithmetic_symbol->read());
-        auto it = std::find_if(m_enum_mappings.begin(), m_enum_mappings.end(), [=](auto& enum_mapping) {
-            return enum_mapping.first == value;
-        });
-        if (it != m_enum_mappings.end()) {
-            return it->second;
-        }
-        return "";
-    }
-    case Type::Array:
-        return "Array[" + std::to_string(m_children.size()) + "]";
-    case Type::Object:
-        return "Object";
-    default:
-        assert((0, "Invalid type"));
-        return "Unknown";
+        case Type::Array:
+            return "Array[" + std::to_string(m_children.size()) + "]";
+        case Type::Object:
+            return "Object";
+        default:
+            assert((0, "Invalid type"));
+            return "Unknown";
     }
 }
 

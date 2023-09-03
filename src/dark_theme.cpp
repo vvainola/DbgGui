@@ -32,7 +32,9 @@ void setDarkTitleBar(GLFWwindow* window);
 void setDarkTheme(GLFWwindow* window) {
     setDarkTitleBar(window);
 
-    constexpr auto ColorFromBytes = [](uint8_t r, uint8_t g, uint8_t b) { return ImVec4((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f); };
+    constexpr auto ColorFromBytes = [](uint8_t r, uint8_t g, uint8_t b) {
+        return ImVec4((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
+    };
 
     auto& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;

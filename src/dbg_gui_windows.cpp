@@ -33,17 +33,17 @@ inline std::string numberAsStr(T number) {
 
 inline static std::string getSourceValueStr(ValueSource src) {
     return std::visit(
-        [=](auto&& src) {
-            using T = std::decay_t<decltype(src)>;
-            if constexpr (std::is_same_v<T, ReadWriteFn>) {
-                return numberAsStr(src(std::nullopt));
-            } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
-                return src(std::nullopt).first;
-            } else {
-                return numberAsStr(*src);
-            }
-        },
-        src);
+      [=](auto&& src) {
+          using T = std::decay_t<decltype(src)>;
+          if constexpr (std::is_same_v<T, ReadWriteFn>) {
+              return numberAsStr(src(std::nullopt));
+          } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
+              return src(std::nullopt).first;
+          } else {
+              return numberAsStr(*src);
+          }
+      },
+      src);
 }
 
 static void HelpMarker(const char* desc) {
@@ -361,27 +361,27 @@ void DbgGui::showMainMenuBar() {
 bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std::string const& filter) {
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
-        [&](SignalGroup<Scalar> const& group, std::string const& filter) {
-            // Check if this or any of the parent groups matches the filter
-            if (!filter.empty()) {
-                for (std::string const& g : split(group.full_name, '|')) {
-                    group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
-                }
-            }
-            for (Scalar* scalar : group.signals) {
-                if (group_has_visible_items) {
-                    // No need to check further
-                    return;
-                } else if (filter.empty()) {
-                    group_has_visible_items |= !scalar->hide_from_scalars_window;
-                } else if (!scalar->hide_from_scalars_window) {
-                    group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->alias.c_str());
-                }
-            }
-            for (auto const& subgroup : group.subgroups) {
-                check_group_for_visible_items(subgroup.second, filter);
-            }
-        };
+      [&](SignalGroup<Scalar> const& group, std::string const& filter) {
+          // Check if this or any of the parent groups matches the filter
+          if (!filter.empty()) {
+              for (std::string const& g : split(group.full_name, '|')) {
+                  group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
+              }
+          }
+          for (Scalar* scalar : group.signals) {
+              if (group_has_visible_items) {
+                  // No need to check further
+                  return;
+              } else if (filter.empty()) {
+                  group_has_visible_items |= !scalar->hide_from_scalars_window;
+              } else if (!scalar->hide_from_scalars_window) {
+                  group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->alias.c_str());
+              }
+          }
+          for (auto const& subgroup : group.subgroups) {
+              check_group_for_visible_items(subgroup.second, filter);
+          }
+      };
     check_group_for_visible_items(top_level_group, filter);
     for (auto const& subgroup : top_level_group.subgroups) {
         check_group_for_visible_items(subgroup.second, filter);
@@ -531,23 +531,23 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& top_level_group, st
 
     bool group_has_visible_items = false;
     std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
-        [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
-            // Check if this or any of the parent groups matches the filter
-            for (std::string const& g : split(group.full_name, '|')) {
-                group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
-            }
+      [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
+          // Check if this or any of the parent groups matches the filter
+          for (std::string const& g : split(group.full_name, '|')) {
+              group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
+          }
 
-            // Check if this or any of the parent groups matches the filter
-            for (Vector2D* vector : group.signals) {
-                if (group_has_visible_items) {
-                    return;
-                }
-                group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), vector->name.c_str());
-            }
-            for (auto const& subgroup : group.subgroups) {
-                check_group_for_visible_items(subgroup.second, filter);
-            }
-        };
+          // Check if this or any of the parent groups matches the filter
+          for (Vector2D* vector : group.signals) {
+              if (group_has_visible_items) {
+                  return;
+              }
+              group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), vector->name.c_str());
+          }
+          for (auto const& subgroup : group.subgroups) {
+              check_group_for_visible_items(subgroup.second, filter);
+          }
+      };
     check_group_for_visible_items(top_level_group, filter);
     for (auto const& subgroup : top_level_group.subgroups) {
         check_group_for_visible_items(subgroup.second, filter);

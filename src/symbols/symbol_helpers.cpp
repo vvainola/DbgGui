@@ -53,35 +53,35 @@ void printLastError() {
 
 double getVariantEnumValue(VARIANT const& variant) {
     switch (variant.vt) {
-    case VT_BOOL:
-        return variant.boolVal;
-    case VT_INT:
-        return variant.intVal;
-    case VT_I1:
-        return variant.cVal;
-    case VT_I2:
-        return variant.iVal;
-    case VT_I4:
-        return variant.lVal;
-    case VT_I8:
-        return static_cast<double>(variant.llVal); // hide warning C4244: 'return': conversion from 'LONGLONG' to 'double', possible loss of data
-    case VT_UINT:
-        return variant.uintVal;
-    case VT_UI1:
-        return variant.bVal;
-    case VT_UI2:
-        return variant.uiVal;
-    case VT_UI4:
-        return variant.ulVal;
-    case VT_UI8:
-        return static_cast<double>(variant.ullVal); // hide warning C4244: 'return': conversion from 'ULONGLONG' to 'double', possible loss of data
-    case VT_R4:
-        return variant.fltVal;
-    case VT_R8:
-        return variant.dblVal;
-    default:
-        assert(0);
-        return 0;
+        case VT_BOOL:
+            return variant.boolVal;
+        case VT_INT:
+            return variant.intVal;
+        case VT_I1:
+            return variant.cVal;
+        case VT_I2:
+            return variant.iVal;
+        case VT_I4:
+            return variant.lVal;
+        case VT_I8:
+            return static_cast<double>(variant.llVal); // hide warning C4244: 'return': conversion from 'LONGLONG' to 'double', possible loss of data
+        case VT_UINT:
+            return variant.uintVal;
+        case VT_UI1:
+            return variant.bVal;
+        case VT_UI2:
+            return variant.uiVal;
+        case VT_UI4:
+            return variant.ulVal;
+        case VT_UI8:
+            return static_cast<double>(variant.ullVal); // hide warning C4244: 'return': conversion from 'ULONGLONG' to 'double', possible loss of data
+        case VT_R4:
+            return variant.fltVal;
+        case VT_R8:
+            return variant.dblVal;
+        default:
+            assert(0);
+            return 0;
     }
 }
 
@@ -159,7 +159,7 @@ void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     parent.array_element_count = from.array_element_count;
     for (size_t i = 0; i < from.children.size(); ++i) {
         std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
-            std::make_unique<RawSymbol>(*from.children[i]));
+          std::make_unique<RawSymbol>(*from.children[i]));
 
         // Recursively copy children of children
         copyChildrenFromSymbol(*from.children[i], *new_child);
@@ -271,12 +271,11 @@ ModuleInfo getCurrentModuleInfo() {
         printLastError();
         std::abort();
     }
-    return ModuleInfo {
-        .base_address = (MemoryAddress)handle,
-        .size = module_info.SizeOfImage,
-        .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path))),
-        .path = path
-    };
+    return ModuleInfo{
+      .base_address = (MemoryAddress)handle,
+      .size = module_info.SizeOfImage,
+      .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path))),
+      .path = path};
 }
 
 std::string readFile(std::string const& filename) {

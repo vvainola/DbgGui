@@ -128,15 +128,15 @@ struct_with_arrays swa;
 union BitField {
     uint16_t u16;
     struct {
-        bool b1 : 1;
-        bool b2 : 1;
-        bool b3 : 1;
-        bool b4 : 1;
-        bool b5 : 1;
-        bool b6 : 1;
-        bool b7 : 1;
-        bool b8 : 1;
-        bool b9 : 1;
+        bool b1  : 1;
+        bool b2  : 1;
+        bool b3  : 1;
+        bool b4  : 1;
+        bool b5  : 1;
+        bool b6  : 1;
+        bool b7  : 1;
+        bool b8  : 1;
+        bool b9  : 1;
         bool b10 : 1;
         bool b11 : 1;
         bool b12 : 1;
@@ -151,11 +151,11 @@ BitField bitfield;
 union BitField2 {
     uint16_t u16;
     struct {
-        uint16_t b0 : 1;
-        uint16_t b1 : 1;
-        uint16_t b2 : 3;
-        uint16_t b5 : 3;
-        uint16_t b8 : 2;
+        uint16_t b0  : 1;
+        uint16_t b1  : 1;
+        uint16_t b2  : 3;
+        uint16_t b5  : 3;
+        uint16_t b8  : 2;
         uint16_t b10 : 1;
         uint16_t b11 : 2;
         uint16_t b13 : 1;
@@ -180,8 +180,8 @@ Vector_ABC xy_to_abc(XY in) {
 
 double test_freq = 50.3;
 ZeroCrossingFreqEst freq_est{
-    .dead_time = 1e-3f,
-    .sampling_period = 500e-6f};
+  .dead_time = 1e-3f,
+  .sampling_period = 500e-6f};
 
 double timestamp = 0;
 MovingAverage<2000> movavg;

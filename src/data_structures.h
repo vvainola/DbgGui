@@ -43,30 +43,30 @@ T inline max(T a, T b) {
 
 inline double getSourceValue(ValueSource src) {
     return std::visit(
-        [=](auto&& src) {
-            using T = std::decay_t<decltype(src)>;
-            if constexpr (std::is_same_v<T, ReadWriteFn>) {
-                return src(std::nullopt);
-            } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
-                return src(std::nullopt).second;
-            } else {
-                return static_cast<double>(*src);
-            }
-        },
-        src);
+      [=](auto&& src) {
+          using T = std::decay_t<decltype(src)>;
+          if constexpr (std::is_same_v<T, ReadWriteFn>) {
+              return src(std::nullopt);
+          } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
+              return src(std::nullopt).second;
+          } else {
+              return static_cast<double>(*src);
+          }
+      },
+      src);
 }
 
 inline void setSourceValue(ValueSource dst, double value) {
     std::visit(
-        [=](auto&& dst) {
-            using T = std::decay_t<decltype(dst)>;
-            if constexpr (std::is_same_v<T, ReadWriteFn> || std::is_same_v<T, ReadWriteFnCustomStr>) {
-                dst(value);
-            } else {
-                *dst = static_cast<std::remove_pointer<T>::type>(value);
-            }
-        },
-        dst);
+      [=](auto&& dst) {
+          using T = std::decay_t<decltype(dst)>;
+          if constexpr (std::is_same_v<T, ReadWriteFn> || std::is_same_v<T, ReadWriteFnCustomStr>) {
+              dst(value);
+          } else {
+              *dst = static_cast<std::remove_pointer<T>::type>(value);
+          }
+      },
+      dst);
 }
 
 template <typename T>
