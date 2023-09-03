@@ -80,7 +80,7 @@ Language: Cpp
 LineEnding: DeriveLF
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
-PackConstructorInitializers: CurrentLine
+PackConstructorInitializers: NextLine
 PointerAlignment: Left
 ReferenceAlignment: Left
 SeparateDefinitionBlocks: Leave
