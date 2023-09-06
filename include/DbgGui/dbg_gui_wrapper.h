@@ -77,6 +77,7 @@ void DbgGui_sample(void);
 void DbgGui_sampleWithTimestamp(double timestamp);
 int DbgGui_isClosed(void);
 void DbgGui_close(void);
+void DbgGui_pause(void);
 #ifdef __cplusplus
 }
 #endif

@@ -775,6 +775,13 @@ void DbgGui::close() {
     }
 }
 
+void DbgGui::pause() {
+    m_paused = true;
+    while (m_paused) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
 Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale, double offset) {
     VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
     if (sym) {

@@ -48,6 +48,7 @@ class DbgGui {
 
     bool isClosed();
     void close();
+    void pause();
 
     Scalar* addSymbol(std::string const& symbol_name,
                       std::string group,

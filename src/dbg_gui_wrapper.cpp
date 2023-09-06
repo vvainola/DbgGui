@@ -125,4 +125,9 @@ int DbgGui_isClosed(void) {
 void DbgGui_close(void) {
     g_dbg_gui = nullptr;
 }
+void DbgGui_pause(void) {
+    if (g_dbg_gui) {
+        g_dbg_gui->pause();
+    }
+}
 #endif
