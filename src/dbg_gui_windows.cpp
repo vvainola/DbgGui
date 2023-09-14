@@ -303,7 +303,7 @@ void DbgGui::showMainMenuBar() {
                 for (auto const& scalar : m_scalars) {
                     signals.push_back(scalar.get());
                 }
-                saveSignalsAsCsv(signals);
+                saveSignalsAsCsv(signals, m_linked_scalar_x_axis_limits);
             }
 
             static std::vector<SymbolValue> saved_snapshot;
