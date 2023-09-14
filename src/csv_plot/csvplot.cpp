@@ -57,7 +57,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::stri
 std::vector<CsvFileData> openCsvFromFileDialog();
 bool pscadInfToCsv(std::string const& inf_filename);
 
-int32_t binarySearch(std::span<double> values, double searched_value, int32_t start, int32_t end) {
+int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
     while (start <= end) {
@@ -74,7 +74,7 @@ int32_t binarySearch(std::span<double> values, double searched_value, int32_t st
     return std::max(original_start, end);
 }
 
-std::pair<int32_t, int32_t> getTimeIndices(std::span<double> time, double start_time, double end_time) {
+std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time) {
     int32_t start_idx = 0;
     int32_t end_idx = int32_t(time.size() - 1);
     start_idx = binarySearch(time, start_time, start_idx, end_idx);
@@ -689,19 +689,14 @@ void CsvPlotter::showPlots() {
         // Get signals in the plot
         size_t longest_name_length = 1;
         size_t longest_file_length = 1;
-        struct FileAndSignal {
-            CsvFileData* file;
-            CsvSignal* signal;
-        };
-        std::vector<FileAndSignal> signals;
+        std::vector<CsvSignal*> signals;
         for (CsvFileData& file : m_csv_data) {
             for (CsvSignal& signal : file.signals) {
                 if (signal.plot_idx == plot_idx) {
                     longest_name_length = std::max(longest_name_length, signal.name.size());
                     longest_file_length = std::max(longest_file_length, file.displayed_name.size());
-                    signals.push_back(FileAndSignal{
-                      .file = &file,
-                      .signal = &signal});
+                    signal.file = &file;
+                    signals.push_back(&signal);
                 }
             }
         }
@@ -725,27 +720,27 @@ void CsvPlotter::showPlots() {
                 ImGui::TableNextColumn();
                 ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
 
-                for (FileAndSignal& sig : signals) {
-                    std::vector<double>& all_x_values = m_first_signal_as_x ? sig.file->signals[0].samples : ASCENDING_NUMBERS;
-                    std::vector<double>& all_y_values = sig.signal->samples;
+                for (CsvSignal* signal : signals) {
+                    std::vector<double> const& all_x_values = m_first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                    std::vector<double> const& all_y_values = signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
-                    double signal_scale = m_signal_scales[sig.signal->name];
+                    double signal_scale = m_signal_scales[signal->name];
                     double y1 = all_y_values[idx1] * signal_scale;
                     double y2 = all_y_values[idx2] * signal_scale;
 
                     std::stringstream ss;
-                    ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
+                    ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
                     std::string displayed_signal_name = ss.str();
 
                     ImGui::TableNextColumn();
-                    ImGui::TextColored(sig.signal->color, displayed_signal_name.c_str());
+                    ImGui::TextColored(signal->color, displayed_signal_name.c_str());
                     ImGui::TableNextColumn();
-                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y1).c_str());
+                    ImGui::TextColored(signal->color, std::format("{:g}", y1).c_str());
                     ImGui::TableNextColumn();
-                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y2).c_str());
+                    ImGui::TextColored(signal->color, std::format("{:g}", y2).c_str());
                     ImGui::TableNextColumn();
-                    ImGui::TextColored(sig.signal->color, std::format("{:g}", y2 - y1).c_str());
+                    ImGui::TextColored(signal->color, std::format("{:g}", y2 - y1).c_str());
                 }
                 ImGui::EndTable();
             }
@@ -784,11 +779,11 @@ void CsvPlotter::showPlots() {
                 }
             }
 
-            for (FileAndSignal& sig : signals) {
+            for (CsvSignal* signal : signals) {
                 // Collect only values that are within plot range so that the autofit fits to the plotted values instead
                 // of the entire data
-                std::vector<double>& all_x_values = m_first_signal_as_x ? sig.file->signals[0].samples : ASCENDING_NUMBERS;
-                std::vector<double>& all_y_values = sig.signal->samples;
+                std::vector<double> const& all_x_values = m_first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                std::vector<double> const& all_y_values = signal->samples;
                 ImPlotRect limits = ImPlot::GetPlotLimits();
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min, limits.X.Max);
                 // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
@@ -802,7 +797,7 @@ void CsvPlotter::showPlots() {
                     plotted_y = all_y_values;
                 }
                 // Scale samples. Set default scale if signal has no scale
-                double& signal_scale = m_signal_scales[sig.signal->name];
+                double& signal_scale = m_signal_scales[signal->name];
                 if (signal_scale == 0) {
                     signal_scale = 1;
                 }
@@ -811,13 +806,13 @@ void CsvPlotter::showPlots() {
                 }
 
                 std::stringstream ss;
-                ss << std::left << std::setw(longest_name_length) << sig.signal->name << " | " << sig.file->displayed_name;
+                ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
                 std::string displayed_signal_name = ss.str();
                 // Store color so that it does not change if legend length changes
-                if (sig.signal->color.x == -1) {
-                    sig.signal->color = ImPlot::NextColormapColor();
+                if (signal->color.x == -1) {
+                    signal->color = ImPlot::NextColormapColor();
                 }
-                ImPlot::PushStyleColor(ImPlotCol_Line, sig.signal->color);
+                ImPlot::PushStyleColor(ImPlotCol_Line, signal->color);
                 ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  plotted_x.data(),
                                  plotted_y.data(),
@@ -834,8 +829,8 @@ void CsvPlotter::showPlots() {
                     ImGui::BeginTooltip();
                     int idx = binarySearch(plotted_x, mouse.x, 0, int(plotted_x.size() - 1));
                     ss.str("");
-                    ss << sig.signal->name << " : " << plotted_y[idx];
-                    ImGui::PushStyleColor(ImGuiCol_Text, sig.signal->color);
+                    ss << signal->name << " : " << plotted_y[idx];
+                    ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
                     ImGui::EndTooltip();
@@ -844,7 +839,7 @@ void CsvPlotter::showPlots() {
                 // Legend right click
                 if (ImPlot::BeginLegendPopup(displayed_signal_name.c_str())) {
                     if (ImGui::Button("Remove")) {
-                        sig.signal->plot_idx = NOT_VISIBLE;
+                        signal->plot_idx = NOT_VISIBLE;
                     }
                     ImPlot::EndLegendPopup();
                 }

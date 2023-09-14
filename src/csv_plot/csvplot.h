@@ -42,12 +42,7 @@ inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
 inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 
-struct CsvSignal {
-    std::string name;
-    std::vector<double> samples;
-    int plot_idx = NOT_VISIBLE;
-    ImVec4 color{NO_COLOR};
-};
+struct CsvSignal;
 
 struct CsvFileData {
     std::string name;
@@ -62,6 +57,14 @@ struct CsvFileData {
             && write_time == other.write_time
             && run_number == other.run_number;
     }
+};
+
+struct CsvSignal {
+    std::string name;
+    std::vector<double> samples;
+    int plot_idx = NOT_VISIBLE;
+    ImVec4 color{NO_COLOR};
+    CsvFileData const* file;
 };
 
 struct GLFWwindow;
