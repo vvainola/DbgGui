@@ -38,6 +38,7 @@
 #include <iostream>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+#include <psapi.h>
 
 BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {
     std::string symbol_name = pSymInfo->Name;
@@ -268,12 +269,11 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
         printLastError();
         _ASSERTE(!"Invalid symbols?");
     }
-    // Symbols from other modules are included only in executables because if a DLL includes other modules
-    // and same DLL is loaded twice within the executable, same name symbols are found for both DLLs.
-    // The symbol search will then contain duplicate for every symbol and it is not possible to know which
-    // symbol belongs in which DLL. Thus DLLs will only load symbols that belong to that DLL.
+    // Symbols from other modules are included with module name as prefix because if same DLL is loaded more
+    // than once within the executable, same name symbols are found for all DLLs. The symbol search will then
+    // contain duplicates for every symbol and it is not possible to know which symbol belongs in which DLL.
     ModuleInfo module_info = getCurrentModuleInfo();
-    bool exclude_other_modules = !module_info.path.ends_with(".exe");
+    std::map<uint64_t, std::string> module_names;
 
     // Process symbol info. Raw symbols are stored into a vector so that when adding children to symbol, the
     // children can be copied from reference symbol if children have been added to that type of symbol already
@@ -284,12 +284,17 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
     for (SymbolInfo const& symbol : symbols) {
         bool symbol_in_current_module = symbol.Address >= module_info.base_address
                                      && symbol.Address < module_info.base_address + module_info.size;
-        if (symbol.Address == 0
-            || (exclude_other_modules && !symbol_in_current_module)) {
+        if (symbol.Address == 0) {
             continue;
         }
-
+        if (!module_names.contains(symbol.ModBase)) {
+            module_names[symbol.ModBase] = getModuleName(symbol.ModBase);
+        }
+        
         std::unique_ptr<RawSymbol>& raw_symbol = m_raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
+        if (!symbol_in_current_module) {
+            raw_symbol->info.Name = std::format("{}|{}", module_names[symbol.ModBase], raw_symbol->info.Name);
+        }
         addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }

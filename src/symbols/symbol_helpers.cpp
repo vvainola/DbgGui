@@ -278,6 +278,16 @@ ModuleInfo getCurrentModuleInfo() {
       .path = path};
 }
 
+std::string getModuleName(ULONG64 module_base) {
+    char path[MAX_PATH];
+    if (!GetModuleBaseName(current_process, (HMODULE)module_base, path, sizeof(path))) {
+        printLastError();
+        std::abort();
+    }
+    std::filesystem::path p(path);
+    return p.stem().string();
+}
+
 std::string readFile(std::string const& filename) {
     return (std::stringstream() << std::ifstream(filename).rdbuf()).str();
 }

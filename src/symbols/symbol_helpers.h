@@ -63,6 +63,7 @@ struct ModuleInfo {
     std::string path;
 };
 ModuleInfo getCurrentModuleInfo();
+std::string getModuleName(ULONG64 module_base);
 
 std::string readFile(std::string const& filename);
 
