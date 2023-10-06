@@ -48,6 +48,7 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
         || startsWith(symbol_name, "std::")
         || endsWith(symbol_name, "$initializer$")
         || startsWith(symbol_name, "IID_")
+        || startsWith(symbol_name, "GUID_")
         || startsWith(symbol_name, "CLSID_")
         || startsWith(symbol_name, "LIBID_")
         || startsWith(symbol_name, "FONT_ATLAS_")
