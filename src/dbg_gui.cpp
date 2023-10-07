@@ -444,6 +444,11 @@ void DbgGui::loadPreviousSessionSettings() {
             custom_window.focus.initial_focus = custom_window_data["initial_focus"];
         })
 
+        TRY(for (std::string ignored_symbol
+                 : m_settings["hidden_symbols"]) {
+            m_hidden_symbols.insert(ignored_symbol);
+        };)
+
         TRY(std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
             strcpy_s(m_group_to_add_symbols, group_to_add_symbols.data());)
     }
@@ -666,6 +671,17 @@ void DbgGui::updateSavedSettings() {
             m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
         }
     }
+
+    for (std::string const& hidden_symbol : m_hidden_symbols) {
+        auto it = std::find_if(m_settings["hidden_symbols"].begin(),
+                               m_settings["hidden_symbols"].end(),
+                               [&](std::string const& s) {
+                                   return hidden_symbol == s;
+                               });
+        if (it == m_settings["hidden_symbols"].end()) {
+            m_settings["hidden_symbols"].push_back(hidden_symbol);
+        }
+    };
 
     std::string ini_settings = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;

@@ -176,11 +176,17 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
     }
 }
 
-void addSymbolContextMenu(VariantSymbol& sym) {
+void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(full_name.c_str());
+            ImGui::CloseCurrentPopup();
+        } else if (!m_hidden_symbols.contains(sym.getFullName()) && ImGui::Button("Hide")) {
+            m_hidden_symbols.insert(sym.getFullName());
+            ImGui::CloseCurrentPopup();
+        } else if (m_hidden_symbols.contains(sym.getFullName()) && ImGui::Button("Unhide")) {
+            m_hidden_symbols.erase(sym.getFullName());
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -812,9 +818,10 @@ void DbgGui::showSymbolsWindow() {
     }
     static bool recursive_symbol_search = false;
     static bool recursive_search_toggled = false;
+    static bool show_hidden_symbols = false;
 
-    // Just manually tested width that name, group and recursive boxes are visible.
-    float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 25 * ImGui::CalcTextSize("x").x;
+    // Just manually tested width that name, group and menu boxes are visible.
+    float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 20 * ImGui::CalcTextSize("x").x;
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
     static char symbols_to_search[MAX_NAME_LENGTH];
     if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
@@ -839,7 +846,11 @@ void DbgGui::showSymbolsWindow() {
     ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
     // Recursive checkbox
     ImGui::SameLine();
-    recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
+    if (ImGui::BeginMenu("Menu")) {
+        recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
+        ImGui::Checkbox("Show hidden", &show_hidden_symbols);
+        ImGui::EndMenu();
+    }
 
     static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
                                        | ImGuiTableFlags_BordersH
@@ -849,6 +860,13 @@ void DbgGui::showSymbolsWindow() {
         for (VariantSymbol* symbol : m_symbol_search_results) {
             // Recursive lambda for displaying children in the table
             std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
+                // Skip hidden symbols
+                bool hidden = m_hidden_symbols.contains(sym->getFullName());
+                if (!show_hidden_symbols && hidden) {
+                    return;
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : COLOR_WHITE);
+
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 // Full name has to be displayed with recursive search
@@ -951,6 +969,7 @@ void DbgGui::showSymbolsWindow() {
                         ImGui::Text(sym->valueAsStr().c_str());
                     }
                 }
+                ImGui::PopStyleColor();
             };
             show_children(symbol);
         }

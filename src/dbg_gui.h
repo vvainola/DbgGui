@@ -25,17 +25,20 @@
 #include "symbols/dbghelp_symbols_lookup.h"
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
+#include <imgui.h>
+#include <nlohmann/json.hpp>
+
 #include <mutex>
 #include <thread>
 #include <unordered_map>
-#include <imgui.h>
-#include <nlohmann/json.hpp>
+#include <set>
 
 struct GLFWwindow;
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
+inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 
 class DbgGui {
   public:
@@ -85,6 +88,7 @@ class DbgGui {
     void synchronizeSpeed();
     void saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar);
+    void addSymbolContextMenu(VariantSymbol const& sym);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
@@ -94,6 +98,7 @@ class DbgGui {
     DbgHelpSymbols const& m_dbghelp_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
+    std::set<std::string> m_hidden_symbols;
 
     Scalar* getScalar(uint64_t id) {
         for (auto& scalar : m_scalars) {
