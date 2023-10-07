@@ -182,11 +182,18 @@ void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(full_name.c_str());
             ImGui::CloseCurrentPopup();
-        } else if (!m_hidden_symbols.contains(sym.getFullName()) && ImGui::Button("Hide")) {
-            m_hidden_symbols.insert(sym.getFullName());
+        } else if (!m_hidden_symbols.contains(full_name) && ImGui::Button("Hide")) {
+            m_hidden_symbols.insert(full_name);
+            m_settings["hidden_symbols"].push_back(full_name);
             ImGui::CloseCurrentPopup();
-        } else if (m_hidden_symbols.contains(sym.getFullName()) && ImGui::Button("Unhide")) {
-            m_hidden_symbols.erase(sym.getFullName());
+        } else if (m_hidden_symbols.contains(full_name) && ImGui::Button("Unhide")) {
+            m_hidden_symbols.erase(full_name);
+            for (int i = 0; i < m_settings["hidden_symbols"].size(); ++i) {
+                if (m_settings["hidden_symbols"][i] == full_name) {
+                    m_settings["hidden_symbols"].erase(i);
+                    break;
+                }
+            }
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

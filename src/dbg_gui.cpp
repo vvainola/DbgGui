@@ -672,17 +672,6 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (std::string const& hidden_symbol : m_hidden_symbols) {
-        auto it = std::find_if(m_settings["hidden_symbols"].begin(),
-                               m_settings["hidden_symbols"].end(),
-                               [&](std::string const& s) {
-                                   return hidden_symbol == s;
-                               });
-        if (it == m_settings["hidden_symbols"].end()) {
-            m_settings["hidden_symbols"].push_back(hidden_symbol);
-        }
-    };
-
     std::string ini_settings = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
     bool closing = glfwWindowShouldClose(m_window);
