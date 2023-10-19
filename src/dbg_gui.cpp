@@ -557,7 +557,7 @@ void DbgGui::updateSavedSettings() {
         m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
         for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.signals[i];
-            if (vector->deleted) {
+            if (vector->deleted || vector->x->deleted || vector->y->deleted) {
                 m_settings["vector_plots"][vector_plot.name]["signals"].erase(vector->name_and_group);
                 remove(vector_plot.signals, vector);
             } else {
