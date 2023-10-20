@@ -447,9 +447,9 @@ void DbgGui::loadPreviousSessionSettings() {
             custom_window.focus.initial_focus = custom_window_data["initial_focus"];
         })
 
-        TRY(for (std::string ignored_symbol
+        TRY(for (std::string hidden_symbol
                  : m_settings["hidden_symbols"]) {
-            m_hidden_symbols.insert(ignored_symbol);
+            m_hidden_symbols.insert(hidden_symbol);
         };)
 
         TRY(std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
