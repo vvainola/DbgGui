@@ -146,35 +146,49 @@ void VariantSymbol::setPointedSymbol(VariantSymbol* symbol) {
 }
 
 void VariantSymbol::write(double value) {
-    assert(m_arithmetic_symbol);
     if (m_arithmetic_symbol) {
         m_arithmetic_symbol->write(value);
+    } else if (m_type == Type::Pointer) {
+        VariantSymbol* pointed = getPointedSymbol();
+        if (pointed) {
+            pointed->write(value);
+        }
     }
 }
 
 double VariantSymbol::read() const {
-    assert(m_arithmetic_symbol);
     if (m_arithmetic_symbol) {
         return m_arithmetic_symbol->read();
+    } else if (m_type == Type::Pointer) {
+        VariantSymbol* pointed = getPointedSymbol();
+        if (pointed) {
+            return pointed->read();
+        }
     }
-    return 0;
+    return NAN;
 }
 
 ValueSource VariantSymbol::getValueSource() {
-    assert(m_arithmetic_symbol);
-    if (m_arithmetic_symbol->isBitfield()) {
-        return [&](std::optional<double> write) {
-            if (write) {
-                m_arithmetic_symbol->write(*write);
+    if (m_type == Type::Arithmetic && m_arithmetic_symbol->isBitfield()) {
+        return [&](std::optional<double> value) {
+            if (value) {
+                m_arithmetic_symbol->write(*value);
             }
             return m_arithmetic_symbol->read();
         };
     } else if (m_type == Type::Enum) {
-        return [&](std::optional<double> write) {
-            if (write) {
-                m_arithmetic_symbol->write(*write);
+        return [&](std::optional<double> value) {
+            if (value) {
+                m_arithmetic_symbol->write(*value);
             }
             return std::make_pair(valueAsStr(), m_arithmetic_symbol->read());
+        };
+    } else if (m_type == Type::Pointer) {
+        return [&](std::optional<double> value) {
+            if (value) {
+                this->write(*value);
+            }
+            return std::make_pair(valueAsStr(), this->read());
         };
     } else {
         return m_arithmetic_symbol->getValueSource();

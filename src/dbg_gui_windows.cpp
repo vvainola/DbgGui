@@ -867,6 +867,12 @@ void DbgGui::showSymbolsWindow() {
         for (VariantSymbol* symbol : m_symbol_search_results) {
             // Recursive lambda for displaying children in the table
             std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
+                // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
+                if (sym == nullptr) {
+                    assert(false);
+                    return;
+                }
+
                 // Skip hidden symbols
                 bool hidden = m_hidden_symbols.contains(sym->getFullName());
                 if (!show_hidden_symbols && hidden) {
@@ -908,6 +914,21 @@ void DbgGui::showSymbolsWindow() {
                     }
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
                     addSymbolContextMenu(*sym);
+
+                    // Add symbol to scalar window on double click. The pointer can be null pointer or
+                    // point to function scope static or something but in that case it will not be
+                    // dereferenced and will show only NULL as value
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                        addScalarSymbol(sym, m_group_to_add_symbols);
+                    }
+
+                    if (ImGui::BeginDragDropSource()) {
+                        // drag-and-droppable to scalar plot
+                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+                        ImGui::Text("Drag to plot");
+                        ImGui::EndDragDropSource();
+                    }
+
                     ImGui::TableNextColumn();
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {

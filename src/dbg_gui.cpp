@@ -337,7 +337,10 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(for (auto symbol
                  : m_settings["scalar_symbols"]) {
             VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
-            if (sym && (sym->getType() == VariantSymbol::Type::Arithmetic || sym->getType() == VariantSymbol::Type::Enum)) {
+            if (sym
+                && (sym->getType() == VariantSymbol::Type::Arithmetic
+                    || sym->getType() == VariantSymbol::Type::Enum
+                    || sym->getType() == VariantSymbol::Type::Pointer)) {
                 addScalarSymbol(sym, symbol["group"]);
             }
         })
