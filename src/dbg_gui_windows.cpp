@@ -917,7 +917,7 @@ void DbgGui::showSymbolsWindow() {
 
                     // Add symbol to scalar window on double click. The pointer can be null pointer or
                     // point to function scope static or something but in that case it will not be
-                    // dereferenced and will show only NULL as value
+                    // dereferenced and will show only NAN as value
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
                         addScalarSymbol(sym, m_group_to_add_symbols);
                     }
