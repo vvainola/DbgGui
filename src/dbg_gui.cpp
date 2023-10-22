@@ -201,7 +201,7 @@ void DbgGui::updateLoop() {
     style.WindowPadding.y = 5;
     style.FramePadding.x = 1;
     style.FramePadding.y = 2;
-    style.CellPadding.y = 1;
+    style.CellPadding.y = 0;
     style.IndentSpacing = 20;
     ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
 
