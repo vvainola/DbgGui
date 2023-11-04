@@ -257,3 +257,8 @@ struct SignalGroup {
     std::map<std::string, SignalGroup<T>> subgroups;
     bool opened_manually = false;
 };
+
+enum FontSelection {
+    COUSINE_REGULAR,
+    CALIBRI
+};

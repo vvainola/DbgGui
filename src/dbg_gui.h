@@ -149,6 +149,7 @@ class DbgGui {
         bool pause_on_close = false;
         bool link_scalar_x_axis = false;
         bool clear_saved_settings = false;
+        FontSelection font_selection = COUSINE_REGULAR;
     } m_options;
 
     std::jthread m_gui_thread;

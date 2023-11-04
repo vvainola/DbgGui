@@ -212,6 +212,9 @@ void DbgGui::updateLoop() {
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
+    extern unsigned int calibri_compressed_size;
+    extern unsigned int calibri_compressed_data[];
+    io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, 13.0f);
     setDarkTheme(m_window);
 
     loadPreviousSessionSettings();
@@ -329,7 +332,9 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];)
         TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
+        TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
+        ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
 
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
@@ -509,6 +514,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
+    m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;

@@ -330,6 +330,7 @@ void DbgGui::showMainMenuBar() {
                 saved_snapshot = m_dbghelp_symbols.saveSnapshotToMemory();
                 m_paused = paused;
             }
+            ImGui::SameLine();
             if (ImGui::Button("Load snapshot")) {
                 // Pause during snapshot loading so that the execution continues from point when load button was pressed
                 bool paused = m_paused;
@@ -339,6 +340,15 @@ void DbgGui::showMainMenuBar() {
                 }
                 m_dbghelp_symbols.loadSnapshotFromMemory(saved_snapshot);
                 m_paused = paused;
+            }
+
+            // Order here must match the order in which fonts were added
+            if (ImGui::RadioButton("Cousine regular", reinterpret_cast<int*>(&m_options.font_selection), 0)) {
+                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[0];
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Calibri", reinterpret_cast<int*>(&m_options.font_selection), 1)) {
+                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
             }
 
             if (ImGui::Button("Clear saved settings")) {

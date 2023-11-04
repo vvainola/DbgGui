@@ -39,6 +39,7 @@ deps = [
 ]
 
 imgui_src = files([
+    'src/imgui/calibri.cpp',
     'src/imgui/cousine_regular.cpp',
     'src/imgui/imgui_impl_opengl3.cpp',
     'src/imgui/imgui_impl_opengl3.h',
