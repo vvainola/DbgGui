@@ -317,6 +317,46 @@ void DbgGui::updateLoop() {
     m_paused = false;
 }
 
+void DbgGui::restoreScalarSettings(Scalar* scalar) {
+    if (!m_initialized) {
+        return;
+    }
+
+    // Restore settings of the scalar signal
+    TRY(for (auto& scalar_data
+             : m_settings["scalars"]) {
+        uint64_t id = scalar_data["id"];
+        if (id == scalar->id) {
+            bool manually_added_custom_scale = scalar->scale != 1;
+            if (!manually_added_custom_scale) {
+                scalar->scale = scalar_data["scale"];
+            }
+            scalar->offset = scalar_data["offset"];
+            scalar->alias = scalar_data["alias"];
+            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+            break;
+        }
+    })
+
+    // Restore scalar to plots
+    TRY(for (auto scalar_plot_data
+             : m_settings["scalar_plots"]) {
+        ScalarPlot* plot = nullptr;
+        for (auto& scalar_plot : m_scalar_plots) {
+            if (scalar_plot.name == scalar_plot_data["name"]) {
+                plot = &scalar_plot;
+                break;
+            }
+        }
+        for (uint64_t id : scalar_plot_data["signals"]) {
+            if (plot != nullptr && id == scalar->id) {
+                m_sampler.startSampling(scalar);
+                plot->addSignalToPlot(scalar);
+            }
+        }
+    })
+}
+
 void DbgGui::loadPreviousSessionSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
     ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
@@ -830,6 +870,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->id = id;
     new_scalar->scale = scale;
     new_scalar->offset = offset;
+    restoreScalarSettings(new_scalar.get());
     std::vector<std::string> groups = split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
     added_group->name = groups[0];

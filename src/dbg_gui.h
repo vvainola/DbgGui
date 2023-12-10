@@ -89,6 +89,7 @@ class DbgGui {
     void saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol const& sym);
+    void restoreScalarSettings(Scalar* scalar);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
