@@ -11,6 +11,7 @@ project_root = meson.current_source_dir()
 add_project_arguments([
         '-DNOMINMAX',
         '-DJSON_DIAGNOSTICS=1',
+        '-Zc:preprocessor',
     ], language : ['c', 'cpp'])
 
 python = import('python3').find_python()
