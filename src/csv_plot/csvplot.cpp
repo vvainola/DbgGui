@@ -233,6 +233,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
             m_options.link_axis = settings["window"]["link_axis"];
+            m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
             m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
             for (auto scale : settings["scales"].items()) {
@@ -276,6 +277,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["ypos"] = ypos;
     settings["window"]["plot_cnt"] = m_plot_cnt;
     settings["window"]["link_axis"] = m_options.link_axis;
+    settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     for (auto& [name, scale] : m_signal_scales) {
@@ -564,6 +566,7 @@ void CsvPlotter::showSignalWindow() {
     if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
+    ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
     ImGui::Checkbox("Link x-axis", &m_options.link_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
     ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
@@ -785,7 +788,8 @@ void CsvPlotter::showPlots() {
                 std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
                 std::vector<double> const& all_y_values = signal->samples;
                 ImPlotRect limits = ImPlot::GetPlotLimits();
-                std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min, limits.X.Max);
+                double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
+                std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
                 // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
                 indices.first = std::max(0, indices.first - 1);
                 indices.second = std::min(int32_t(all_x_values.size()), indices.second + 2);
@@ -801,8 +805,10 @@ void CsvPlotter::showPlots() {
                 if (signal_scale == 0) {
                     signal_scale = 1;
                 }
-                for (double& sample : plotted_y) {
-                    sample *= signal_scale;
+                // Shift x-axis and scale y-axis
+                for (int i = 0; i < plotted_x.size(); ++i) {
+                    plotted_x[i] -= x_offset;
+                    plotted_y[i] *= signal_scale;
                 }
 
                 std::stringstream ss;
