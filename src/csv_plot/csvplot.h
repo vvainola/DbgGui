@@ -49,6 +49,7 @@ struct CsvFileData {
     std::string displayed_name;
     std::vector<CsvSignal> signals;
     std::filesystem::file_time_type write_time;
+    double x_axis_shift = 0;
     int run_number = 0;
 
     bool operator==(CsvFileData const& other) {

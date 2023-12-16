@@ -505,6 +505,7 @@ void CsvPlotter::showSignalWindow() {
                     file.displayed_name = file.name;
                 }
             }
+            ImGui::InputDouble("X-axis shift", &file.x_axis_shift, 0, 0, "%g");
             if (ImGui::Button("Remove")) {
                 file_to_remove = &file;
             }
@@ -669,6 +670,7 @@ void CsvPlotter::showPlots() {
                 std::vector<double> const& all_y_values = signal->samples;
                 ImPlotRect limits = ImPlot::GetPlotLimits();
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
+                x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
                 // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
                 indices.first = std::max(0, indices.first - 1);
