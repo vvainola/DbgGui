@@ -87,11 +87,13 @@ class CsvPlotter {
     std::map<std::string, double> m_signal_scales;
     int m_plot_cnt = 1;
     int m_fit_plot_idx = -1;
-    bool m_first_signal_as_x = true;
-    bool m_link_axis = true;
-    bool m_fit_after_drag_and_drop = true;
-    bool m_keep_old_signals_on_reload = true;
-    bool m_cursor_measurements = false;
+    struct {
+        bool first_signal_as_x = true;
+        bool link_axis = true;
+        bool fit_after_drag_and_drop = true;
+        bool keep_old_signals_on_reload = true;
+        bool cursor_measurements = false;
+    } m_options;
     MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;

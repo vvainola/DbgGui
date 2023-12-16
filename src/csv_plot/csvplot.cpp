@@ -232,9 +232,9 @@ void CsvPlotter::loadPreviousSessionSettings() {
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
-            m_link_axis = settings["window"]["link_axis"];
-            m_fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
-            m_keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
+            m_options.link_axis = settings["window"]["link_axis"];
+            m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
+            m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
             for (auto scale : settings["scales"].items()) {
                 m_signal_scales[scale.key()] = scale.value();
             }
@@ -275,9 +275,9 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
     settings["window"]["plot_cnt"] = m_plot_cnt;
-    settings["window"]["link_axis"] = m_link_axis;
-    settings["window"]["fit_on_drag_and_drop"] = m_fit_after_drag_and_drop;
-    settings["window"]["keep_old_signals_on_reload"] = m_keep_old_signals_on_reload;
+    settings["window"]["link_axis"] = m_options.link_axis;
+    settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
+    settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     for (auto& [name, scale] : m_signal_scales) {
         settings["scales"][name] = scale;
     }
@@ -561,13 +561,13 @@ void CsvPlotter::showSignalWindow() {
         m_plot_cnt = std::max(m_plot_cnt, 1);
     }
 
-    if (ImGui::Checkbox("Use first signal as x-axis", &m_first_signal_as_x)) {
+    if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
-    ImGui::Checkbox("Link x-axis", &m_link_axis);
-    ImGui::Checkbox("Fit after drag and drop", &m_fit_after_drag_and_drop);
-    ImGui::Checkbox("Keep old signals on reload", &m_keep_old_signals_on_reload);
-    ImGui::Checkbox("Cursor measurements", &m_cursor_measurements);
+    ImGui::Checkbox("Link x-axis", &m_options.link_axis);
+    ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
+    ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
+    ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
 
     static char signal_name_filter[256] = "";
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
@@ -589,7 +589,7 @@ void CsvPlotter::showSignalWindow() {
                     if (csv_data->signals.size() == file.signals.size()) {
                         for (int i = 0; i < file.signals.size(); ++i) {
                             csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
-                            if (!m_keep_old_signals_on_reload) {
+                            if (!m_options.keep_old_signals_on_reload) {
                                 csv_data->signals[i].color = file.signals[i].color;
                                 file.signals[i].plot_idx = NOT_VISIBLE;
                                 file.signals[i].color = NO_COLOR;
@@ -701,7 +701,7 @@ void CsvPlotter::showPlots() {
             }
         }
 
-        if (m_cursor_measurements) {
+        if (m_options.cursor_measurements) {
             if (ImGui::BeginTable("Delta", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
                 ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("X").x * (longest_name_length + longest_file_length + 5));
                 const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
@@ -721,7 +721,7 @@ void CsvPlotter::showPlots() {
                 ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
 
                 for (CsvSignal* signal : signals) {
-                    std::vector<double> const& all_x_values = m_first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                    std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
                     std::vector<double> const& all_y_values = signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
@@ -749,7 +749,7 @@ void CsvPlotter::showPlots() {
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
-            if (m_link_axis) {
+            if (m_options.link_axis) {
                 ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis.min, &m_x_axis.max);
                 if (!autofit_x_axis) {
                     ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis.min, m_x_axis.max);
@@ -760,7 +760,7 @@ void CsvPlotter::showPlots() {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
                     CsvSignal* sig = *(CsvSignal**)payload->Data;
                     sig->plot_idx = plot_idx;
-                    if (m_fit_after_drag_and_drop) {
+                    if (m_options.fit_after_drag_and_drop) {
                         m_fit_plot_idx = plot_idx;
                     }
                 }
@@ -782,7 +782,7 @@ void CsvPlotter::showPlots() {
             for (CsvSignal* signal : signals) {
                 // Collect only values that are within plot range so that the autofit fits to the plotted values instead
                 // of the entire data
-                std::vector<double> const& all_x_values = m_first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
                 std::vector<double> const& all_y_values = signal->samples;
                 ImPlotRect limits = ImPlot::GetPlotLimits();
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min, limits.X.Max);
@@ -851,7 +851,7 @@ void CsvPlotter::showPlots() {
             }
 
             // Vertical lines for cursor measurements
-            if (m_cursor_measurements) {
+            if (m_options.cursor_measurements) {
                 ImPlotRect plot_limits = ImPlot::GetPlotLimits();
                 ImPlotRange x_range = plot_limits.X;
                 if (m_drag_x1 == 0 && m_drag_x2 == 0) {
