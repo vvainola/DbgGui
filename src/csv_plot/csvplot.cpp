@@ -634,7 +634,7 @@ void CsvPlotter::showSignalWindow() {
         if (opened) {
             for (CsvSignal& signal : file.signals) {
                 // Skip signal if it doesn't match the filter
-                if (std::string(signal_name_filter) != ""
+                if (!std::string(signal_name_filter).empty()
                     && !fts::fuzzy_match_simple(signal_name_filter, signal.name.c_str())) {
                     continue;
                 }
