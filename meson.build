@@ -115,6 +115,7 @@ c_gui = executable('test_gui_c',
 
 csv_plotter = executable('csv_plotter',
     sources : [
+        'src/csv_plot/csv_helpers.cpp',
         'src/csv_plot/csvplot_main.cpp',
         'src/csv_plot/csvplot.cpp',
         'src/csv_plot/save_image.cpp',
