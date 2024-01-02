@@ -666,9 +666,13 @@ void CsvPlotter::showPlots() {
             for (CsvSignal* signal : signals) {
                 // Collect only values that are within plot range so that the autofit fits to the plotted values instead
                 // of the entire data
+                ImPlotRect limits = ImPlot::GetPlotLimits();
+                if (autofit_x_axis) {
+                    limits.X.Min = -INFINITY;
+                    limits.X.Max = INFINITY;
+                }
                 std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
                 std::vector<double> const& all_y_values = signal->samples;
-                ImPlotRect limits = ImPlot::GetPlotLimits();
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
