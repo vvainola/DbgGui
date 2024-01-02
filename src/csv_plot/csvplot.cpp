@@ -225,6 +225,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
+            m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
             m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
@@ -269,6 +270,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
     settings["window"]["plot_cnt"] = m_plot_cnt;
+    settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
