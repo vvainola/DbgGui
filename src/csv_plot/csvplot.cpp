@@ -680,7 +680,8 @@ void CsvPlotter::showPlots() {
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
                 // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
                 indices.first = std::max(0, indices.first - 1);
-                indices.second = std::min(int32_t(all_x_values.size()), indices.second + 2);
+                indices.second = std::min(int32_t(all_y_values.size() - 1), indices.second + 2);
+                indices.first = std::min(indices.first, indices.second);
 
                 std::vector<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
                 std::vector<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
@@ -688,13 +689,14 @@ void CsvPlotter::showPlots() {
                     plotted_x = all_x_values;
                     plotted_y = all_y_values;
                 }
+
                 // Scale samples. Set default scale if signal has no scale
                 double& signal_scale = m_signal_scales[signal->name];
                 if (signal_scale == 0) {
                     signal_scale = 1;
                 }
                 // Shift x-axis and scale y-axis
-                for (int i = 0; i < plotted_x.size(); ++i) {
+                for (int i = 0; i < plotted_y.size(); ++i) {
                     plotted_x[i] -= x_offset;
                     plotted_y[i] *= signal_scale;
                 }
@@ -710,18 +712,18 @@ void CsvPlotter::showPlots() {
                 ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  plotted_x.data(),
                                  plotted_y.data(),
-                                 int(plotted_x.size()),
+                                 int(plotted_y.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::PopStyleColor();
 
                 // Tooltip
-                if (ImPlot::IsPlotHovered() && plotted_x.size() > 0) {
+                if (ImPlot::IsPlotHovered() && plotted_y.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                     ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
-                    int idx = binarySearch(plotted_x, mouse.x, 0, int(plotted_x.size() - 1));
+                    int idx = binarySearch(plotted_x, mouse.x, 0, int(plotted_y.size() - 1));
                     ss.str("");
                     ss << signal->name << " : " << plotted_y[idx];
                     ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
