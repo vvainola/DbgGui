@@ -53,8 +53,10 @@ inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
+std::optional<int> pressedNumber();
 std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
 std::vector<CsvFileData> openCsvFromFileDialog();
+
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
@@ -530,8 +532,19 @@ void CsvPlotter::showSignalWindow() {
                 }
                 ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? COLOR_WHITE : COLOR_GRAY);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
-                    signal.plot_idx = NOT_VISIBLE;
-                    signal.color = NO_COLOR;
+                    // Always drag and dropping is tedious. Add signal to plot if it is selected while
+                    // pressing a number to make it easier to add signals with same name from different
+                    // files to same plot by selecting them while pressing the number of the plot
+                    std::optional<int> pressed_number = pressedNumber();
+                    if (pressed_number) {
+                        signal.plot_idx = *pressed_number;
+                        if (m_options.fit_after_drag_and_drop) {
+                            m_fit_plot_idx = signal.plot_idx;
+                        }
+                    } else {
+                        signal.plot_idx = NOT_VISIBLE;
+                        signal.color = NO_COLOR;
+                    }
                 }
                 ImGui::PopStyleColor();
 
@@ -788,4 +801,18 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
         std::cerr << NFD_GetError() << std::endl;
     }
     return csv_datas;
+}
+
+std::optional<int> pressedNumber() {
+    for (ImGuiKey key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
+        if (ImGui::IsKeyDown(key)) {
+            return key - ImGuiKey_0;
+        }
+    }
+    for (ImGuiKey key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
+        if (ImGui::IsKeyDown(key)) {
+            return key - ImGuiKey_Keypad0;
+        }
+    }
+    return std::nullopt;
 }
