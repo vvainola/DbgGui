@@ -22,18 +22,19 @@
 
 #include <iostream>
 #include "csvplot.h"
+#include "version.h"
 #include <cxxopts.hpp>
 
 int main(int argc, char** argv) {
     std::string csv_file;
 
-    cxxopts::Options options("CSV Plotter");
+    cxxopts::Options options(std::format("CSV Plotter version {}", GIT_COMMIT));
     // clang-format off
     options.add_options()
         ("f,files" , "Files to open for plotting"                                                            , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("n,names" , "Names of signals to add to plots e.g. \"foo,bar\""                                     , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("p,plots" , "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"" , cxxopts::value<std::vector<int>>()->default_value("-1"))
-        ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1,1"))
+        ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("0,1"))
         ("image"   , "Save plot as png image to given path and exit."                                        , cxxopts::value<std::string>()->default_value(""))
         ("h,help"  , "Show help and exit")
         ;

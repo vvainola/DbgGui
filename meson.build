@@ -113,6 +113,12 @@ c_gui = executable('test_gui_c',
     link_with : lib_gui,
 )
 
+version_header = vcs_tag(
+    command : ['git', 'rev-parse', '--short', 'HEAD'],
+    input : 'src/version.h.in',
+    output: 'version.h'
+)
+
 csv_plotter = executable('csv_plotter',
     sources : [
         'src/csv_plot/csv_helpers.cpp',
@@ -120,6 +126,7 @@ csv_plotter = executable('csv_plotter',
         'src/csv_plot/csvplot.cpp',
         'src/csv_plot/save_image.cpp',
         'src/dark_theme.cpp',
+        version_header,
     ],
     include_directories : inc + ['src'],
     link_with : imgui_lib,
