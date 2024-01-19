@@ -225,13 +225,13 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
     }
 
     try {
-        nlohmann::ordered_json symbols_json = nlohmann::ordered_json::parse(std::ifstream(json));
+        nlohmann::json symbols_json = nlohmann::json::parse(std::ifstream(json));
         if (symbols_json["write_time"] != getCurrentModuleInfo().write_time) {
             return false;
         }
 
         m_root_symbols.reserve(symbols_json.size());
-        for (nlohmann::ordered_json const& symbol_data : symbols_json["symbols"]) {
+        for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
             RawSymbol raw_symbol(symbol_data);
             m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
         }
@@ -291,7 +291,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
         if (!module_names.contains(symbol.ModBase)) {
             module_names[symbol.ModBase] = getModuleName(symbol.ModBase);
         }
-        
+
         std::unique_ptr<RawSymbol>& raw_symbol = m_raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
         if (!symbol_in_current_module) {
             raw_symbol->info.Name = std::format("{}|{}", module_names[symbol.ModBase], raw_symbol->info.Name);

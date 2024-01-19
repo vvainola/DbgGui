@@ -43,7 +43,7 @@ RawSymbol::RawSymbol(SymbolInfo const& symbol)
     }
 }
 
-RawSymbol::RawSymbol(nlohmann::ordered_json const& field) {
+RawSymbol::RawSymbol(nlohmann::json const& field) {
     static ModuleInfo module_info = getCurrentModuleInfo();
 
     info.Name = field["name"];
@@ -59,13 +59,13 @@ RawSymbol::RawSymbol(nlohmann::ordered_json const& field) {
     basic_type = field["basic_type"];
 
     if (field.contains("children")) {
-        for (nlohmann::ordered_json const& child_data : field["children"]) {
+        for (nlohmann::json const& child_data : field["children"]) {
             children.push_back(std::make_unique<RawSymbol>(child_data));
         }
     }
 }
 
-void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
+void to_json(nlohmann::json& field, RawSymbol const& sym) {
     field["name"] = sym.info.Name;
     if (sym.info.Address > 0) {
         field["address"] = sym.info.Address - sym.info.ModBase;
@@ -101,7 +101,7 @@ void to_json(nlohmann::ordered_json& field, RawSymbol const& sym) {
 
 void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<RawSymbol>> const& symbols, bool omit_names) {
     ModuleInfo module_info = getCurrentModuleInfo();
-    nlohmann::ordered_json symbols_json;
+    nlohmann::json symbols_json;
     symbols_json["write_time"] = module_info.write_time;
     for (int i = 0; auto& sym : symbols) {
         if (sym->info.ModBase != module_info.base_address) {
