@@ -16,6 +16,7 @@ add_project_arguments([
 
 python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
+windows = import('windows')
 
 if get_option('force_optimizations')
     override_options = ['optimization=3']
@@ -119,6 +120,15 @@ version_header = vcs_tag(
     output: 'version.h'
 )
 
+
+csv_plotter_icon = windows.compile_resources('src/csv_plot/icon.rc',
+    depend_files : [
+        'src/csv_plot/csv_plotter.png',
+        'src/csv_plot/csv_plotter.ico',
+        'src/csv_plot/resource.h'
+    ],
+)
+
 csv_plotter = executable('csv_plotter',
     sources : [
         'src/csv_plot/csv_helpers.cpp',
@@ -127,6 +137,7 @@ csv_plotter = executable('csv_plotter',
         'src/csv_plot/save_image.cpp',
         'src/dark_theme.cpp',
         version_header,
+        csv_plotter_icon
     ],
     include_directories : inc + ['src'],
     link_with : imgui_lib,

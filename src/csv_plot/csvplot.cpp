@@ -27,6 +27,10 @@
 #include "symbols/fts_fuzzy_match.h"
 #pragma warning(pop)
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include "resource.h"
+
 #include "csvplot.h"
 #include "dark_theme.h"
 #include "imgui.h"
@@ -35,6 +39,7 @@
 #include "implot.h"
 #include "save_image.h"
 #include "csv_helpers.h"
+#include "stb_image.h"
 
 #include <nfd.h>
 #include <nlohmann/json.hpp>
@@ -118,6 +123,15 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1);
     glfwSetWindowPos(m_window, 0, 0);
+
+    // Load icon
+    HRSRC resource_handle = FindResource(nullptr, MAKEINTRESOURCEA(ICON_PNG), "PNG");
+    HGLOBAL resource_memory_handle = LoadResource(nullptr, resource_handle);
+    size_t size_bytes = SizeofResource(nullptr, resource_handle);
+    void* resource_buffer = LockResource(resource_memory_handle);
+    GLFWimage image;
+    image.pixels = stbi_load_from_memory((stbi_uc*)resource_buffer, (int)size_bytes, &image.width, &image.height, 0, STBI_rgb_alpha);
+    glfwSetWindowIcon(m_window, 1, &image);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -384,7 +398,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     int line_number = 1;
     while (std::getline(csv, line)) {
         line_number++;
-        std::vector<std::string_view> values = splitSv(line, delimiter, csv_signals.size());
+        std::vector<std::string_view> values = splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;
         }

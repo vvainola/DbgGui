@@ -24,8 +24,10 @@
 
 #pragma warning(push, 0)
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#include "stb_image.h"
 #pragma warning(pop)
 #include <vector>
 
