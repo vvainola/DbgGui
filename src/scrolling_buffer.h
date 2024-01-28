@@ -48,14 +48,12 @@ class ScrollingBuffer {
     }
 
     void emptyTempBuffers() {
-        // Empty time buffer first and collect indices to which the time samples are added
-        std::vector<int32_t> indices;
-        indices.reserve(m_time_temp.size());
+        // Empty time buffer first
+        int32_t start_idx = m_idx;
         for (size_t i = 0; i < m_time_temp.size(); ++i) {
             double time = m_time_temp[i];
             m_time[m_idx] = time;
             m_time[m_idx + m_buffer_size] = time;
-            indices.push_back(m_idx);
 
             m_idx = (m_idx + 1) % m_buffer_size;
             if (m_idx == 0) {
@@ -64,14 +62,15 @@ class ScrollingBuffer {
         }
         m_time_temp.clear();
 
-        // Empty temp scalar buffer to same indices
+        // Empty temp scalar buffers to same indices
         for (auto& [scalar, buffer] : m_scalar_buffers) {
             auto& temp_buffer = m_scalar_buffers_temp[scalar];
+            int32_t idx = start_idx;
             for (size_t i = 0; i < temp_buffer.size(); ++i) {
-                size_t idx = indices[i];
                 double value = temp_buffer[i];
                 buffer[idx] = value;
                 buffer[idx + m_buffer_size] = value;
+                idx = (idx + 1) % m_buffer_size;
             }
             temp_buffer.clear();
         }
