@@ -347,6 +347,8 @@ void DbgGui::showMainMenuBar() {
                                                [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
                         if (it == m_dockspaces.end()) {
                             m_dockspaces.push_back(DockSpace{.name = window_or_plot_name});
+                            // Sort by name so that the dockspace order is the same as after loading them from json
+                            std::sort(m_dockspaces.begin(), m_dockspaces.end(), [](auto& a, auto& b) {return a.name < b.name;});
                         }
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
