@@ -406,8 +406,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
             double value;
             std::from_chars_result result = std::from_chars(values[j].data(), values[j].data() + values[j].size(), value);
             if (result.ec != std::errc()) {
-                std::cerr << std::format("Invalid data in column \"{}\" (column index {}) at line {}\n", csv_signals[j].name, j, line_number);
-                return std::nullopt;
+                value = NAN;
             }
             csv_signals[j].samples.push_back(value);
         }
