@@ -206,8 +206,11 @@ void DbgGui::showDockSpaces() {
             continue;
         }
         ImGui::PushStyleColor(ImGuiCol_Text, COLOR_TEAL);
-        dockspace.focus.focused = ImGui::Begin(dockspace.name.c_str(), &dockspace.open);
+        dockspace.focus.focused = ImGui::Begin(dockspace.name.c_str(), NULL);
         ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+            dockspace.open = false;
+        }
         ImGuiID dockspace_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
         ImGui::DockSpace(dockspace_id);
         ImGui::End();
@@ -819,7 +822,10 @@ void DbgGui::showCustomWindow() {
             continue;
         }
 
-        custom_window.focus.focused = ImGui::Begin(custom_window.name.c_str(), &custom_window.open);
+        custom_window.focus.focused = ImGui::Begin(custom_window.name.c_str(), NULL);
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+            custom_window.open = false;
+        }
         if (!custom_window.focus.focused) {
             ImGui::End();
             continue;
