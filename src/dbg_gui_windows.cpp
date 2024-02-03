@@ -464,7 +464,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std:
 }
 
 void DbgGui::showScalarWindow() {
-    m_scalar_window_focus.focused = ImGui::Begin("Scalars");
+    m_scalar_window_focus.focused = ImGui::Begin("Scalars", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_scalar_window_focus.focused) {
         ImGui::End();
         return;
@@ -630,7 +630,7 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& top_level_group, st
 }
 
 void DbgGui::showVectorWindow() {
-    m_vector_window_focus.focused = ImGui::Begin("Vectors");
+    m_vector_window_focus.focused = ImGui::Begin("Vectors", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_vector_window_focus.focused) {
         ImGui::End();
         return;
@@ -822,7 +822,7 @@ void DbgGui::showCustomWindow() {
             continue;
         }
 
-        custom_window.focus.focused = ImGui::Begin(custom_window.name.c_str(), NULL);
+        custom_window.focus.focused = ImGui::Begin(custom_window.name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             custom_window.open = false;
         }
@@ -883,7 +883,7 @@ void DbgGui::showCustomWindow() {
 }
 
 void DbgGui::showSymbolsWindow() {
-    if (!ImGui::Begin("Symbols")) {
+    if (!ImGui::Begin("Symbols", NULL, ImGuiWindowFlags_NoNavFocus)) {
         ImGui::End();
         return;
     }

@@ -350,7 +350,7 @@ void ImGui::ShowDemoWindow(bool* p_open)
     static bool no_docking = false;
     static bool unsaved_document = false;
 
-    ImGuiWindowFlags window_flags = 0;
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoNavFocus;
     if (no_titlebar)        window_flags |= ImGuiWindowFlags_NoTitleBar;
     if (no_scrollbar)       window_flags |= ImGuiWindowFlags_NoScrollbar;
     if (!no_menu)           window_flags |= ImGuiWindowFlags_MenuBar;
