@@ -280,6 +280,7 @@ void DbgGui::updateLoop() {
             m_plot_timestamp = m_sample_timestamp;
             m_sampler.emptyTempBuffers();
         }
+        showDockSpaces();
         showMainMenuBar();
         showScalarWindow();
         showVectorWindow();
@@ -397,6 +398,12 @@ void DbgGui::loadPreviousSessionSettings() {
             if (sym_x && sym_y) {
                 addVectorSymbol(sym_x, sym_y, symbol["group"]);
             }
+        })
+
+        TRY(for (auto dockspace_data : m_settings["dockspaces"]) {
+            DockSpace& dockspace = m_dockspaces.emplace_back();
+            dockspace.name = dockspace_data["name"];
+            dockspace.focus.initial_focus = dockspace_data["initial_focus"];
         })
 
         TRY(for (auto scalar_plot_data
@@ -567,6 +574,15 @@ void DbgGui::updateSavedSettings() {
             vector->x->deleted = true;
             vector->y->deleted = true;
         }
+    }
+
+    for (DockSpace& dockspace : m_dockspaces) {
+        if (!dockspace.open) {
+            m_settings["dockspaces"].erase(dockspace.name);
+            continue;
+        }
+        m_settings["dockspaces"][dockspace.name]["name"] = dockspace.name;
+        m_settings["dockspaces"][dockspace.name]["initial_focus"] = dockspace.focus.focused;
     }
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
@@ -762,6 +778,13 @@ void DbgGui::setInitialFocus() {
         ImGui::End();
     }
 
+    for (DockSpace& dockspace : m_dockspaces) {
+        ImGui::Begin(dockspace.name.c_str());
+        if (dockspace.focus.initial_focus) {
+            ImGui::SetWindowFocus(dockspace.name.c_str());
+        }
+        ImGui::End();
+    }
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         ImGui::Begin(scalar_plot.name.c_str());
         if (scalar_plot.focus.initial_focus) {

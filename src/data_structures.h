@@ -248,6 +248,12 @@ struct CustomWindow {
     bool open = true;
 };
 
+struct DockSpace {
+    std::string name;
+    Focus focus;
+    bool open = true;
+};
+
 template <typename T>
 struct SignalGroup {
     // For e.g. "abc|xyz" name is only "xyz" and full name is "abc|xyz"

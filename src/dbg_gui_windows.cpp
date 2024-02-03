@@ -200,6 +200,20 @@ void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
     }
 }
 
+void DbgGui::showDockSpaces() {
+    for (DockSpace& dockspace : m_dockspaces) {
+        if (!dockspace.open) {
+            continue;
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, COLOR_TEAL);
+        dockspace.focus.focused = ImGui::Begin(dockspace.name.c_str(), &dockspace.open);
+        ImGui::PopStyleColor();
+        ImGuiID dockspace_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
+        ImGui::DockSpace(dockspace_id);
+        ImGui::End();
+    }
+}
+
 void DbgGui::showMainMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         ImGui::Text("Time %.3f s", m_plot_timestamp);
@@ -237,6 +251,8 @@ void DbgGui::showMainMenuBar() {
                 ImGui::OpenPopup("##Add");
             }
             if (ImGui::BeginPopup("##Add")) {
+                // Pointer to open status is needed for the "X close" button to be visible
+                bool open = true;
                 // Always center this window when appearing
                 ImVec2 center = ImGui::GetMainViewport()->GetCenter();
                 ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -246,7 +262,8 @@ void DbgGui::showMainMenuBar() {
                 }
                 static char window_or_plot_name[256] = "";
                 ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add scalar plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                // Scalar plot
+                if (ImGui::BeginPopupModal("Add scalar plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Name",
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
@@ -261,11 +278,12 @@ void DbgGui::showMainMenuBar() {
                     ImGui::EndPopup();
                 }
 
+                // Vector plot
                 if (ImGui::Button("Vector plot")) {
                     ImGui::OpenPopup("Add vector plot");
                 }
                 ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add vector plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (ImGui::BeginPopupModal("Add vector plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Vector plot name",
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
@@ -277,11 +295,12 @@ void DbgGui::showMainMenuBar() {
                     ImGui::EndPopup();
                 }
 
+                // Spectrum plot
                 if (ImGui::Button("Spectrum plot")) {
                     ImGui::OpenPopup("Add spectrum plot");
                 }
                 ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add spectrum plot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (ImGui::BeginPopupModal("Add spectrum plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Spectrum plot name",
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
@@ -293,11 +312,12 @@ void DbgGui::showMainMenuBar() {
                     ImGui::EndPopup();
                 }
 
+                // Custom window
                 if (ImGui::Button("Custom window")) {
                     ImGui::OpenPopup("Add custom window");
                 }
                 ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add custom window", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (ImGui::BeginPopupModal("Add custom window", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
                     if (ImGui::InputText("Custom window name",
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
@@ -308,6 +328,34 @@ void DbgGui::showMainMenuBar() {
                     };
                     ImGui::EndPopup();
                 }
+
+                // Dockspace
+                if (ImGui::Button("Dockspace")) {
+                    ImGui::OpenPopup("Add dockspace");
+                }
+                ImGui::SameLine();
+                HelpMarker("Dockspaces are empty windows to which other windows can be docked to create nested tabs. Nested dockspaces are only supported in alphabetical order.");
+
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+                if (ImGui::BeginPopupModal("Add dockspace", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
+                    if (ImGui::InputText("Dockspace name",
+                                         window_or_plot_name,
+                                         IM_ARRAYSIZE(window_or_plot_name),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        // Check that dockspace name is unique because creating two dockspace with same will crash
+                        auto it = std::find_if(m_dockspaces.begin(),
+                                               m_dockspaces.end(),
+                                               [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
+                        if (it == m_dockspaces.end()) {
+                            m_dockspaces.push_back(DockSpace{.name = window_or_plot_name});
+                        }
+                        strcpy_s(window_or_plot_name, "");
+                        ImGui::CloseCurrentPopup();
+                    };
+                    ImGui::EndPopup();
+                }
+
+                // End "Add.." popup
                 ImGui::EndPopup();
             }
 
