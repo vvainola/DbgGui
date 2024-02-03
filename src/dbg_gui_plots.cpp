@@ -103,8 +103,6 @@ void DbgGui::showScalarPlots() {
         ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
         ImPlotAxisFlags y_flags = scalar_plot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
         ImGui::Checkbox("Autofit", &scalar_plot.autofit_y);
-        ImGui::SameLine();
-        ImGui::Checkbox("Show tooltip", &scalar_plot.show_tooltip);
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
@@ -202,7 +200,7 @@ void DbgGui::showScalarPlots() {
                 ImGui::EndDragDropTarget();
             }
 
-            if (scalar_plot.show_tooltip && ImPlot::IsPlotHovered()) {
+            if (m_options.scalar_plot_tooltip && ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                 ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
                 ImPlot::PlotInfLines("##", &mouse.x, 1);

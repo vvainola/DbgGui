@@ -221,13 +221,9 @@ void DbgGui::showMainMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         ImGui::Text("Time %.3f s", m_plot_timestamp);
         ImGui::SameLine();
+        ImGui::Separator();
 
         if (ImGui::BeginMenu("Menu")) {
-            ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
-            ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
-            ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
-            ImGui::SameLine();
-            HelpMarker("Pause when GUI is requested to close programmatically. Pressing start again will close the GUI.");
 
             // Pause after
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
@@ -392,7 +388,20 @@ void DbgGui::showMainMenuBar() {
                 m_dbghelp_symbols.loadSnapshotFromMemory(saved_snapshot);
                 m_paused = paused;
             }
+            ImGui::Separator();
 
+            // Options
+            ImGui::Text("Options");
+            ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
+            ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
+
+            ImGui::Checkbox("Scalar plot tooltip", &m_options.scalar_plot_tooltip);
+            ImGui::SameLine();
+            HelpMarker("Show vertical line containing the values of the signals when hovering over scalar plot.");
+
+            ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
+            ImGui::SameLine();
+            HelpMarker("Pause when GUI is requested to close programmatically. Pressing start again will close the GUI.");
             // Order here must match the order in which fonts were added
             if (ImGui::RadioButton("Cousine regular", reinterpret_cast<int*>(&m_options.font_selection), 0)) {
                 ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[0];
@@ -401,13 +410,17 @@ void DbgGui::showMainMenuBar() {
             if (ImGui::RadioButton("Calibri", reinterpret_cast<int*>(&m_options.font_selection), 1)) {
                 ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
             }
+            ImGui::Separator();
 
             if (ImGui::Button("Clear saved settings")) {
                 m_options.clear_saved_settings = true;
             }
+            ImGui::SameLine();
+            HelpMarker("Rewrite settings to contain only the current configuration. Removes all non-existing symbols and options.");
 
             ImGui::EndMenu();
         }
+        ImGui::Separator();
 
         // Start stop
         const char* start_stop_text = m_paused ? "Start" : "Pause";
@@ -416,6 +429,7 @@ void DbgGui::showMainMenuBar() {
         }
         HelpMarker("Hotkey for start/pause is space. Shift+space advances one step. Hold shift+space to advance very slowly.");
         ImGui::SameLine();
+        ImGui::Separator();
 
         // Simulation speed
         ImGui::PushItemWidth(ImGui::CalcTextSize("Simulation speed XXXXXXX").x);
@@ -423,6 +437,7 @@ void DbgGui::showMainMenuBar() {
         ImGui::SameLine();
         HelpMarker("Simulated speed relative to real time. Hotkey to double speed is \"numpad +\" and halve \"numpad -\".");
         ImGui::SameLine();
+        ImGui::Separator();
 
         if (m_pause_at_time > m_sample_timestamp + std::numeric_limits<double>::epsilon()) {
             ImGui::Text("Pausing after %g", m_pause_at_time - m_plot_timestamp);

@@ -168,7 +168,6 @@ struct ScalarPlot {
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp;
     bool autofit_y = true;
-    bool show_tooltip = true;
     bool open = true;
 
     void addSignalToPlot(Scalar* new_signal) {

@@ -373,6 +373,7 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];)
         TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
+        TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
         TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
@@ -413,7 +414,6 @@ void DbgGui::loadPreviousSessionSettings() {
             plot.x_axis.min = 0;
             plot.x_axis.max = scalar_plot_data["x_range"];
             plot.autofit_y = scalar_plot_data["autofit_y"];
-            plot.show_tooltip = scalar_plot_data["show_tooltip"];
             if (!plot.autofit_y) {
                 plot.y_axis.min = scalar_plot_data["y_min"];
                 plot.y_axis.max = scalar_plot_data["y_max"];
@@ -561,6 +561,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
+    m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;
     m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
@@ -594,7 +595,6 @@ void DbgGui::updateSavedSettings() {
         m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
         m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
         m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
-        m_settings["scalar_plots"][scalar_plot.name]["show_tooltip"] = scalar_plot.show_tooltip;
         // Update range only if autofit is not on because otherwise the file
         // could be continously rewritten when autofit range changes
         if (!scalar_plot.autofit_y) {
