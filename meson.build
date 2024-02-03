@@ -43,10 +43,10 @@ deps = [
 imgui_src = files([
     'src/imgui/calibri.cpp',
     'src/imgui/cousine_regular.cpp',
-    'src/imgui/imgui_impl_opengl3.cpp',
-    'src/imgui/imgui_impl_opengl3.h',
-    'src/imgui/imgui_impl_glfw.cpp',
-    'src/imgui/imgui_impl_glfw.h',
+    'src/imgui/backend/imgui_impl_opengl3.cpp',
+    'src/imgui/backend/imgui_impl_opengl3.h',
+    'src/imgui/backend/imgui_impl_glfw.cpp',
+    'src/imgui/backend/imgui_impl_glfw.h',
     'src/imgui/imgui.cpp',
     'src/imgui/imgui.h',
     'src/imgui/imgui_demo.cpp',
@@ -54,17 +54,23 @@ imgui_src = files([
     'src/imgui/imgui_internal.h',
     'src/imgui/imgui_tables.cpp',
     'src/imgui/imgui_widgets.cpp',
-    'src/imgui/implot.cpp',
-    'src/imgui/implot.h',
-    'src/imgui/implot_demo.cpp',
-    'src/imgui/implot_internal.h',
-    'src/imgui/implot_items.cpp',
-    'src/imgui/implot_items.cpp',
+    'src/imgui/implot/implot.cpp',
+    'src/imgui/implot/implot.h',
+    'src/imgui/implot/implot_demo.cpp',
+    'src/imgui/implot/implot_internal.h',
+    'src/imgui/implot/implot_items.cpp',
+    'src/imgui/implot/implot_items.cpp',
     'src/nativefiledialog/nfd_common.c',
     'src/nativefiledialog/nfd_win.cpp',
 ])
 inc = []
-inc += include_directories('src/imgui', 'src/nativefiledialog/include', 'include')
+inc += include_directories(
+    'src/imgui',
+    'src/imgui/implot',
+    'src/imgui/backend',
+    'src/nativefiledialog/include',
+    'include'
+)
 
 imgui_lib = static_library('imgui',
     sources : imgui_src,
