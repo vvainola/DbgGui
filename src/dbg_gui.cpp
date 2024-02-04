@@ -52,6 +52,12 @@ uint64_t hash(const std::string& str) {
     return hash;
 }
 
+uint64_t hashWithTime(const std::string& str) {
+    return hash(std::format("{}{}",
+                            std::chrono::system_clock::now().time_since_epoch().count(),
+                            str));
+}
+
 inline std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> elems;
     std::istringstream iss(s);
@@ -596,8 +602,12 @@ void DbgGui::updateSavedSettings() {
             m_settings["scalar_plots"].erase(scalar_plot.name);
             continue;
         }
-        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focus.focused;
+        if (scalar_plot.id == 0) {
+            scalar_plot.id = hashWithTime(scalar_plot.name);
+        }
         m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
+        m_settings["scalar_plots"][scalar_plot.name]["id"] = scalar_plot.id;
+        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focus.focused;
         m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
         m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
         // Update range only if autofit is not on because otherwise the file
@@ -622,8 +632,12 @@ void DbgGui::updateSavedSettings() {
             m_settings["vector_plots"].erase(vector_plot.name);
             continue;
         }
-        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
+        if (vector_plot.id == 0) {
+            vector_plot.id = hashWithTime(vector_plot.name);
+        }
         m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
+        m_settings["vector_plots"][vector_plot.name]["id"] = vector_plot.id;
+        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
         m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
         for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.signals[i];
@@ -641,8 +655,12 @@ void DbgGui::updateSavedSettings() {
             m_settings["spec_plots"].erase(spec_plot.name);
             continue;
         }
-        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focus.focused;
+        if (spec_plot.id == 0) {
+            spec_plot.id = hashWithTime(spec_plot.name);
+        }
         m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
+        m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.id;
+        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focus.focused;
         m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
         m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
         m_settings["spec_plots"][spec_plot.name]["window"] = spec_plot.window;
@@ -670,8 +688,12 @@ void DbgGui::updateSavedSettings() {
             m_settings["custom_windows"].erase(custom_window.name);
             continue;
         }
-        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
+        if (custom_window.id == 0) {
+            custom_window.id = hashWithTime(custom_window.name);
+        }
         m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
+        m_settings["custom_windows"][custom_window.name]["id"] = custom_window.id;
+        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
         for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {

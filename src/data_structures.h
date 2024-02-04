@@ -33,6 +33,7 @@
 #include <format>
 
 uint64_t hash(const std::string& str);
+uint64_t hashWithTime(const std::string& str);
 
 template <typename T>
 T inline min(T a, T b) {
@@ -164,6 +165,7 @@ struct Vector2D {
 
 struct ScalarPlot {
     std::string name;
+    uint64_t id;
     Focus focus;
     std::vector<Scalar*> signals;
     MinMax y_axis = {-1, 1};
@@ -186,6 +188,7 @@ struct ScalarPlot {
 
 struct VectorPlot {
     std::string name;
+    uint64_t id;
     Focus focus;
     std::vector<Vector2D*> signals;
     Vector2D* reference_frame_vector;
@@ -205,6 +208,7 @@ struct VectorPlot {
 
 struct SpectrumPlot {
     std::string name;
+    uint64_t id;
     Focus focus;
 
     // Source is either scalar or vector
@@ -245,6 +249,7 @@ struct SpectrumPlot {
 
 struct CustomWindow {
     std::string name;
+    uint64_t id;
     Focus focus;
     std::vector<Scalar*> scalars;
     bool open = true;
