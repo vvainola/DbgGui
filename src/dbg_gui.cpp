@@ -387,125 +387,133 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
 
-        TRY(for (auto symbol
-                 : m_settings["scalar_symbols"]) {
-            VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
-            if (sym
-                && (sym->getType() == VariantSymbol::Type::Arithmetic
-                    || sym->getType() == VariantSymbol::Type::Enum
-                    || sym->getType() == VariantSymbol::Type::Pointer)) {
-                addScalarSymbol(sym, symbol["group"]);
-            }
-        })
+        for (auto symbol : m_settings["scalar_symbols"]) {
+            TRY(
+              VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
+              if (sym
+                  && (sym->getType() == VariantSymbol::Type::Arithmetic
+                      || sym->getType() == VariantSymbol::Type::Enum
+                      || sym->getType() == VariantSymbol::Type::Pointer)) {
+                  addScalarSymbol(sym, symbol["group"]);
+              })
+        }
 
-        TRY(for (auto symbol
-                 : m_settings["vector_symbols"]) {
-            VariantSymbol* sym_x = m_dbghelp_symbols.getSymbol(symbol["x"]);
-            VariantSymbol* sym_y = m_dbghelp_symbols.getSymbol(symbol["y"]);
-            if (sym_x && sym_y) {
-                addVectorSymbol(sym_x, sym_y, symbol["group"]);
-            }
-        })
+        for (auto symbol : m_settings["vector_symbols"]) {
+            TRY(
+              VariantSymbol* sym_x = m_dbghelp_symbols.getSymbol(symbol["x"]);
+              VariantSymbol* sym_y = m_dbghelp_symbols.getSymbol(symbol["y"]);
+              if (sym_x && sym_y) {
+                  addVectorSymbol(sym_x, sym_y, symbol["group"]);
+              };)
+        }
 
-        TRY(for (auto dockspace_data
-                 : m_settings["dockspaces"]) {
-            DockSpace& dockspace = m_dockspaces.emplace_back();
-            dockspace.name = dockspace_data["name"];
-            dockspace.id = dockspace_data["id"];
-            dockspace.focus.initial_focus = dockspace_data["initial_focus"];
-        })
+        for (auto dockspace_data : m_settings["dockspaces"]) {
+            TRY(
+              DockSpace& dockspace = m_dockspaces.emplace_back();
+              dockspace.name = dockspace_data["name"];
+              dockspace.id = dockspace_data["id"];
+              dockspace.focus.initial_focus = dockspace_data["initial_focus"];)
+        }
 
-        TRY(for (auto scalar_plot_data
-                 : m_settings["scalar_plots"]) {
-            ScalarPlot& plot = m_scalar_plots.emplace_back();
-            plot.name = scalar_plot_data["name"];
-            plot.x_axis.min = 0;
-            plot.x_axis.max = scalar_plot_data["x_range"];
-            plot.autofit_y = scalar_plot_data["autofit_y"];
-            if (!plot.autofit_y) {
-                plot.y_axis.min = scalar_plot_data["y_min"];
-                plot.y_axis.max = scalar_plot_data["y_max"];
-            }
-            plot.x_range = scalar_plot_data["x_range"];
+        for (auto scalar_plot_data : m_settings["scalar_plots"]) {
+            TRY(
+              ScalarPlot& plot = m_scalar_plots.emplace_back();
+              plot.name = scalar_plot_data["name"];
 
-            for (uint64_t id : scalar_plot_data["signals"]) {
-                Scalar* scalar = getScalar(id);
-                if (scalar) {
-                    m_sampler.startSampling(scalar);
-                    plot.addSignalToPlot(scalar);
-                }
-            }
-            plot.focus.initial_focus = scalar_plot_data["initial_focus"];
-        })
+              plot.x_axis.min = 0;
+              plot.x_axis.max = scalar_plot_data["x_range"];
+              plot.autofit_y = scalar_plot_data["autofit_y"];
+              if (!plot.autofit_y) {
+                  plot.y_axis.min = scalar_plot_data["y_min"];
+                  plot.y_axis.max = scalar_plot_data["y_max"];
+              };
+              plot.x_range = scalar_plot_data["x_range"];
 
-        TRY(for (auto vector_plot_data
-                 : m_settings["vector_plots"]) {
-            VectorPlot& plot = m_vector_plots.emplace_back();
-            plot.name = vector_plot_data["name"];
-            plot.time_range = vector_plot_data["time_range"];
-            for (uint64_t id : vector_plot_data["signals"]) {
-                Vector2D* vec = getVector(id);
-                if (vec) {
-                    m_sampler.startSampling(vec);
-                    plot.addSignalToPlot(vec);
-                }
-            }
-            plot.focus.initial_focus = vector_plot_data["initial_focus"];
-        })
+              for (uint64_t id
+                   : scalar_plot_data["signals"]) {
+                  Scalar* scalar = getScalar(id);
+                  if (scalar) {
+                      m_sampler.startSampling(scalar);
+                      plot.addSignalToPlot(scalar);
+                  }
+              };
+              plot.focus.initial_focus = scalar_plot_data["initial_focus"];
+              plot.id = scalar_plot_data["id"];)
+        }
 
-        TRY(for (auto spec_plot_data
-                 : m_settings["spec_plots"]) {
-            SpectrumPlot& plot = m_spectrum_plots.emplace_back();
-            plot.name = spec_plot_data["name"];
-            plot.time_range = spec_plot_data["time_range"];
-            plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
-            plot.window = spec_plot_data["window"];
-            plot.x_axis.min = spec_plot_data["x_axis_min"];
-            plot.x_axis.max = spec_plot_data["x_axis_max"];
-            plot.y_axis.min = spec_plot_data["y_axis_min"];
-            plot.y_axis.max = spec_plot_data["y_axis_max"];
-            if (spec_plot_data.contains("id")) {
-                uint64_t id = spec_plot_data["id"];
-                Scalar* scalar = getScalar(id);
-                Vector2D* vector = getVector(id);
-                if (scalar) {
-                    m_sampler.startSampling(scalar);
-                    plot.addSignalToPlot(scalar);
-                } else if (vector) {
-                    m_sampler.startSampling(vector);
-                    plot.addSignalToPlot(vector);
-                }
-            }
-            plot.focus.initial_focus = spec_plot_data["initial_focus"];
-        })
+        for (auto vector_plot_data : m_settings["vector_plots"]) {
+            TRY(
+              VectorPlot& plot = m_vector_plots.emplace_back();
+              plot.name = vector_plot_data["name"];
+              plot.time_range = vector_plot_data["time_range"];
+              for (uint64_t id
+                   : vector_plot_data["signals"]) {
+                  Vector2D* vec = getVector(id);
+                  if (vec) {
+                      m_sampler.startSampling(vec);
+                      plot.addSignalToPlot(vec);
+                  }
+              };
+              plot.focus.initial_focus = vector_plot_data["initial_focus"];
+              plot.id = vector_plot_data["id"];)
+        }
 
-        TRY(for (auto& scalar_data
-                 : m_settings["scalars"]) {
-            uint64_t id = scalar_data["id"];
-            Scalar* scalar = getScalar(id);
-            if (scalar) {
-                bool manually_added_custom_scale = scalar->scale != 1;
-                if (!manually_added_custom_scale) {
-                    scalar->scale = scalar_data["scale"];
-                }
-                scalar->offset = scalar_data["offset"];
-                scalar->alias = scalar_data["alias"];
-                scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
-            }
-        })
+        for (auto spec_plot_data : m_settings["spec_plots"]) {
+            TRY(
+              SpectrumPlot& plot = m_spectrum_plots.emplace_back();
+              plot.name = spec_plot_data["name"];
+              plot.time_range = spec_plot_data["time_range"];
+              plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
+              plot.window = spec_plot_data["window"];
+              plot.x_axis.min = spec_plot_data["x_axis_min"];
+              plot.x_axis.max = spec_plot_data["x_axis_max"];
+              plot.y_axis.min = spec_plot_data["y_axis_min"];
+              plot.y_axis.max = spec_plot_data["y_axis_max"];
+              if (spec_plot_data.contains("id")) {
+                  uint64_t id = spec_plot_data["id"];
+                  Scalar* scalar = getScalar(id);
+                  Vector2D* vector = getVector(id);
+                  if (scalar) {
+                      m_sampler.startSampling(scalar);
+                      plot.addSignalToPlot(scalar);
+                  } else if (vector) {
+                      m_sampler.startSampling(vector);
+                      plot.addSignalToPlot(vector);
+                  }
+              };
+              plot.focus.initial_focus = spec_plot_data["initial_focus"];
+              plot.id = spec_plot_data["id"];)
+        }
 
-        TRY(for (auto custom_window_data
-                 : m_settings["custom_windows"]) {
-            CustomWindow& custom_window = m_custom_windows.emplace_back();
-            custom_window.name = custom_window_data["name"];
-            for (uint64_t id : custom_window_data["signals"]) {
-                Scalar* scalar = getScalar(id);
-                if (scalar) {
-                    custom_window.scalars.push_back(scalar);
-                }
-            }
-            custom_window.focus.initial_focus = custom_window_data["initial_focus"];
-        })
+        for (auto& scalar_data : m_settings["scalars"]) {
+            TRY(
+              uint64_t id = scalar_data["id"];
+              Scalar* scalar = getScalar(id);
+              if (scalar) {
+                  bool manually_added_custom_scale = scalar->scale != 1;
+                  if (!manually_added_custom_scale) {
+                      scalar->scale = scalar_data["scale"];
+                  }
+                  scalar->offset = scalar_data["offset"];
+                  scalar->alias = scalar_data["alias"];
+                  scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+              };)
+        }
+
+        for (auto custom_window_data : m_settings["custom_windows"]) {
+            TRY(
+              CustomWindow& custom_window = m_custom_windows.emplace_back();
+              custom_window.name = custom_window_data["name"];
+              for (uint64_t id
+                   : custom_window_data["signals"]) {
+                  Scalar* scalar = getScalar(id);
+                  if (scalar) {
+                      custom_window.scalars.push_back(scalar);
+                  }
+              };
+              custom_window.focus.initial_focus = custom_window_data["initial_focus"];
+              custom_window.id = custom_window_data["id"];)
+        }
 
         TRY(for (std::string hidden_symbol
                  : m_settings["hidden_symbols"]) {
