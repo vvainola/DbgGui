@@ -421,6 +421,8 @@ void DbgGui::showMainMenuBar() {
                                                m_dockspaces.end(),
                                                [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
                         if (it == m_dockspaces.end()) {
+                            // Add clock to hash calculation because dockspace name can change later and the user might
+                            // create a new dockspace which could have same name as the original and they would result in same id
                             uint64_t id = hash(std::format("{}{}",
                                                            std::chrono::system_clock::now().time_since_epoch().count(),
                                                            window_or_plot_name));
