@@ -401,7 +401,8 @@ void DbgGui::loadPreviousSessionSettings() {
             }
         })
 
-        TRY(for (auto dockspace_data : m_settings["dockspaces"]) {
+        TRY(for (auto dockspace_data
+                 : m_settings["dockspaces"]) {
             DockSpace& dockspace = m_dockspaces.emplace_back();
             dockspace.name = dockspace_data["name"];
             dockspace.focus.initial_focus = dockspace_data["initial_focus"];
@@ -577,13 +578,14 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (DockSpace& dockspace : m_dockspaces) {
+    for (int i = 0; i < m_dockspaces.size(); ++i) {
+        DockSpace const& dockspace = m_dockspaces[i];
         if (!dockspace.open) {
             m_settings["dockspaces"].erase(dockspace.name);
             continue;
         }
-        m_settings["dockspaces"][dockspace.name]["name"] = dockspace.name;
-        m_settings["dockspaces"][dockspace.name]["initial_focus"] = dockspace.focus.focused;
+        m_settings["dockspaces"][std::to_string(i)]["name"] = dockspace.name;
+        m_settings["dockspaces"][std::to_string(i)]["initial_focus"] = dockspace.focus.focused;
     }
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {

@@ -201,7 +201,9 @@ void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
 }
 
 void DbgGui::showDockSpaces() {
-    for (DockSpace& dockspace : m_dockspaces) {
+    std::vector<DockSpace> dockspaces_temp;
+    for (int i = 0; i < m_dockspaces.size(); ++i) {
+        DockSpace& dockspace = m_dockspaces[i];
         if (!dockspace.open) {
             continue;
         }
@@ -211,9 +213,19 @@ void DbgGui::showDockSpaces() {
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             dockspace.open = false;
         }
+        // If window is being dragged, move it to end of the list of dockspaces so that it can
+        // be docked into other dockspace
+        if (ImGui::IsItemActive()) {
+            dockspaces_temp = m_dockspaces;
+            std::swap(dockspaces_temp[i], dockspaces_temp.back());
+        }
+
         ImGuiID dockspace_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
         ImGui::DockSpace(dockspace_id);
         ImGui::End();
+    }
+    if (!dockspaces_temp.empty()) {
+        m_dockspaces = dockspaces_temp;
     }
 }
 
@@ -333,7 +345,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup("Add dockspace");
                 }
                 ImGui::SameLine();
-                HelpMarker("Dockspaces are empty windows to which other windows can be docked to create nested tabs. Nested dockspaces are only supported in alphabetical order.");
+                HelpMarker("Dockspaces are empty windows to which other windows can be docked to create nested tabs.");
 
                 ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 if (ImGui::BeginPopupModal("Add dockspace", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -347,8 +359,6 @@ void DbgGui::showMainMenuBar() {
                                                [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
                         if (it == m_dockspaces.end()) {
                             m_dockspaces.push_back(DockSpace{.name = window_or_plot_name});
-                            // Sort by name so that the dockspace order is the same as after loading them from json
-                            std::sort(m_dockspaces.begin(), m_dockspaces.end(), [](auto& a, auto& b) {return a.name < b.name;});
                         }
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
