@@ -405,6 +405,7 @@ void DbgGui::loadPreviousSessionSettings() {
                  : m_settings["dockspaces"]) {
             DockSpace& dockspace = m_dockspaces.emplace_back();
             dockspace.name = dockspace_data["name"];
+            dockspace.id = dockspace_data["id"];
             dockspace.focus.initial_focus = dockspace_data["initial_focus"];
         })
 
@@ -578,13 +579,15 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (int i = 0; i < m_dockspaces.size(); ++i) {
+    for (int i = int(m_dockspaces.size() - 1); i >= 0; --i) {
         DockSpace const& dockspace = m_dockspaces[i];
         if (!dockspace.open) {
-            m_settings["dockspaces"].erase(dockspace.name);
+            m_settings["dockspaces"].erase(std::to_string(i));
+            remove(m_dockspaces, dockspace);
             continue;
         }
         m_settings["dockspaces"][std::to_string(i)]["name"] = dockspace.name;
+        m_settings["dockspaces"][std::to_string(i)]["id"] = dockspace.id;
         m_settings["dockspaces"][std::to_string(i)]["initial_focus"] = dockspace.focus.focused;
     }
 
@@ -781,9 +784,9 @@ void DbgGui::setInitialFocus() {
     }
 
     for (DockSpace& dockspace : m_dockspaces) {
-        ImGui::Begin(dockspace.name.c_str());
+        ImGui::Begin(dockspace.title().c_str());
         if (dockspace.focus.initial_focus) {
-            ImGui::SetWindowFocus(dockspace.name.c_str());
+            ImGui::SetWindowFocus(dockspace.title().c_str());
         }
         ImGui::End();
     }

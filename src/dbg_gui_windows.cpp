@@ -203,7 +203,7 @@ void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
 
 std::optional<DockSpace> getDockSpace(std::vector<DockSpace>& dockspaces, ImGuiID id) {
     for (int i = 0; i < dockspaces.size(); ++i) {
-        if (dockspaces[i].id == id) {
+        if (dockspaces[i].dock_id == id) {
             return dockspaces[i];
         }
     }
@@ -212,7 +212,7 @@ std::optional<DockSpace> getDockSpace(std::vector<DockSpace>& dockspaces, ImGuiI
 
 std::optional<DockSpace> getDockSpace(std::vector<DockSpace> const& dockspaces, std::string const& name) {
     for (int i = 0; i < dockspaces.size(); ++i) {
-        if (dockspaces[i].name == name) {
+        if (dockspaces[i].title() == name) {
             return dockspaces[i];
         }
     }
@@ -233,7 +233,7 @@ void DbgGui::showDockSpaces() {
             dockspaces_temp.push_back(*dockspace);
         }
 
-        // Move child windows if they are dockspaces
+        // Move child windows if there is a dockspace that matches window name
         for (int j = 0; j < node->Windows.Size; ++j) {
             ImGuiWindow* window = node->Windows.Data[j];
             dockspace = getDockSpace(dockspaces_temp, window->Name);
@@ -241,7 +241,7 @@ void DbgGui::showDockSpaces() {
                 remove(dockspaces_temp, *dockspace);
                 dockspaces_temp.push_back(*dockspace);
                 // Move all child nodes within the window
-                ImGuiDockNode* child_node = ImGui::DockBuilderGetNode(dockspace->id);
+                ImGuiDockNode* child_node = ImGui::DockBuilderGetNode(dockspace->dock_id);
                 moveDockSpaceToEnd(child_node);
             }
         }
@@ -258,20 +258,32 @@ void DbgGui::showDockSpaces() {
             continue;
         }
         ImGui::PushStyleColor(ImGuiCol_Text, COLOR_TEAL);
-        dockspace.focus.focused = ImGui::Begin(dockspace.name.c_str(), NULL);
+        dockspace.focus.focused = ImGui::Begin(dockspace.title().c_str(), NULL);
         ImGui::PopStyleColor();
+        // Close on middle click
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             dockspace.open = false;
         }
-        dockspace.id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
-        ImGui::DockSpace(dockspace.id);
-
         // If window is being dragged, move it to end of the list of dockspaces so that it can
         // be docked into other dockspace
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            assert(dockspace.dock_id != 0);
             dockspaces_temp = m_dockspaces;
-            moveDockSpaceToEnd(ImGui::DockBuilderGetNode(dockspace.id));
+            moveDockSpaceToEnd(ImGui::DockBuilderGetNode(dockspace.dock_id));
         }
+        // Right-click context menu
+        if (ImGui::BeginPopupContextItem((dockspace.title() + "_context_menu").c_str())) {
+            dockspace.name.reserve(MAX_NAME_LENGTH);
+            if (ImGui::InputText("Name##dockspace_context_menu",
+                                 dockspace.name.data(),
+                                 MAX_NAME_LENGTH)) {
+                dockspace.name = std::string(dockspace.name.data());
+            }
+            ImGui::EndPopup();
+        }
+        // Create dockspace
+        dockspace.dock_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.id).c_str());
+        ImGui::DockSpace(dockspace.dock_id);
 
         ImGui::End();
     }
@@ -404,12 +416,16 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        // Check that dockspace name is unique because creating two dockspace with same will crash
+                        // Check that dockspace name is unique because creating two dockspace with same name will crash
                         auto it = std::find_if(m_dockspaces.begin(),
                                                m_dockspaces.end(),
                                                [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
                         if (it == m_dockspaces.end()) {
-                            m_dockspaces.push_back(DockSpace{.name = window_or_plot_name});
+                            uint64_t id = hash(std::format("{}{}",
+                                                           std::chrono::system_clock::now().time_since_epoch().count(),
+                                                           window_or_plot_name));
+                            m_dockspaces.push_back(DockSpace{.name = window_or_plot_name,
+                                                             .id = id});
                         }
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();

@@ -30,6 +30,9 @@
 #include <cmath>
 #include <future>
 #include <string>
+#include <format>
+
+uint64_t hash(const std::string& str);
 
 template <typename T>
 T inline min(T a, T b) {
@@ -249,12 +252,17 @@ struct CustomWindow {
 
 struct DockSpace {
     std::string name;
+    uint64_t id;
     Focus focus;
-    unsigned int id;
+    unsigned int dock_id = 0;
     bool open = true;
 
     bool operator==(DockSpace const& other) {
-        return name == other.name;
+        return id == other.id;
+    }
+
+    std::string title() const {
+        return std::format("{}###{}", name, id);
     }
 };
 
