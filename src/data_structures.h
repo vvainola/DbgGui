@@ -163,17 +163,28 @@ struct Vector2D {
     bool deleted = false;
 };
 
-struct ScalarPlot {
+struct Window {
     std::string name;
     uint64_t id;
     Focus focus;
+    bool open = true;
+
+    std::string title() const {
+        return std::format("{}###{}", name, id);
+    }
+
+    bool operator==(Window const& other) {
+        return id == other.id;
+    }
+};
+
+struct ScalarPlot : Window {
     std::vector<Scalar*> signals;
     MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp;
     bool autofit_y = true;
-    bool open = true;
 
     void addSignalToPlot(Scalar* new_signal) {
         // Add signal if it is not already in the plot
@@ -186,14 +197,10 @@ struct ScalarPlot {
     }
 };
 
-struct VectorPlot {
-    std::string name;
-    uint64_t id;
-    Focus focus;
+struct VectorPlot : Window {
     std::vector<Vector2D*> signals;
     Vector2D* reference_frame_vector;
     float time_range = 20e-3f;
-    bool open = true;
 
     void addSignalToPlot(Vector2D* new_signal) {
         // Add signal if it is not already in the plot
@@ -206,17 +213,12 @@ struct VectorPlot {
     }
 };
 
-struct SpectrumPlot {
-    std::string name;
-    uint64_t id;
-    Focus focus;
-
+struct SpectrumPlot : Window {
     // Source is either scalar or vector
     Scalar* scalar;
     Vector2D* vector;
 
     double time_range = 1;
-    bool open = true;
     bool logarithmic_y_axis = false;
     MinMax y_axis = {-0.1, 1.1};
     MinMax x_axis = {-1000, 1000};
@@ -247,28 +249,12 @@ struct SpectrumPlot {
     }
 };
 
-struct CustomWindow {
-    std::string name;
-    uint64_t id;
-    Focus focus;
+struct CustomWindow : Window {
     std::vector<Scalar*> scalars;
-    bool open = true;
 };
 
-struct DockSpace {
-    std::string name;
-    uint64_t id;
-    Focus focus;
+struct DockSpace : Window {
     unsigned int dock_id = 0;
-    bool open = true;
-
-    bool operator==(DockSpace const& other) {
-        return id == other.id;
-    }
-
-    std::string title() const {
-        return std::format("{}###{}", name, id);
-    }
 };
 
 template <typename T>

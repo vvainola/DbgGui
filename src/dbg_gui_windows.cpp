@@ -342,11 +342,13 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_scalar_plots.push_back(ScalarPlot{.name = window_or_plot_name,
-                                                            .id = hashWithTime(window_or_plot_name),
-                                                            .y_axis = {-1, 1},
-                                                            .x_axis = {0, 1},
-                                                            .x_range = 1});
+                        ScalarPlot plot;
+                        plot.name = window_or_plot_name;
+                        plot.id = hashWithTime(window_or_plot_name);
+                        plot.y_axis = {-1, 1};
+                        plot.x_axis = {0, 1};
+                        plot.x_range = 1;
+                        m_scalar_plots.push_back(plot);
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
@@ -363,8 +365,8 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_vector_plots.push_back(VectorPlot{.name = window_or_plot_name,
-                                                            .id = hashWithTime(window_or_plot_name)});
+                        m_vector_plots.push_back(VectorPlot{{.name = window_or_plot_name,
+                                                             .id = hashWithTime(window_or_plot_name)}});
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
@@ -381,8 +383,8 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_spectrum_plots.push_back(SpectrumPlot{.name = window_or_plot_name,
-                                                                .id = hashWithTime(window_or_plot_name)});
+                        m_spectrum_plots.push_back(SpectrumPlot{{.name = window_or_plot_name,
+                                                                 .id = hashWithTime(window_or_plot_name)}});
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
@@ -399,8 +401,8 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_custom_windows.push_back(CustomWindow{.name = window_or_plot_name,
-                                                                .id = hashWithTime(window_or_plot_name)});
+                        m_custom_windows.push_back(CustomWindow{{.name = window_or_plot_name,
+                                                                 .id = hashWithTime(window_or_plot_name)}});
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
@@ -422,8 +424,8 @@ void DbgGui::showMainMenuBar() {
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
                         // Add clock to hash calculation because dockspace name can change later and the user might
                         // create a new dockspace which could have same name as the original and they would result in same id
-                        m_dockspaces.push_back(DockSpace{.name = window_or_plot_name,
-                                                         .id = hashWithTime(window_or_plot_name)});
+                        m_dockspaces.push_back(DockSpace{{.name = window_or_plot_name,
+                                                          .id = hashWithTime(window_or_plot_name)}});
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
