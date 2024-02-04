@@ -25,6 +25,7 @@
 #include "symbols/fts_fuzzy_match.h"
 #include <format>
 #include <iostream>
+#include "imgui_internal.h"
 
 template <typename T>
 inline std::string numberAsStr(T number) {
@@ -200,8 +201,57 @@ void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
     }
 }
 
+std::optional<DockSpace> getDockSpace(std::vector<DockSpace>& dockspaces, ImGuiID id) {
+    for (int i = 0; i < dockspaces.size(); ++i) {
+        if (dockspaces[i].id == id) {
+            return dockspaces[i];
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<DockSpace> getDockSpace(std::vector<DockSpace> const& dockspaces, std::string const& name) {
+    for (int i = 0; i < dockspaces.size(); ++i) {
+        if (dockspaces[i].name == name) {
+            return dockspaces[i];
+        }
+    }
+    return std::nullopt;
+}
+
 void DbgGui::showDockSpaces() {
     std::vector<DockSpace> dockspaces_temp;
+
+    std::function<void(ImGuiDockNode*)> moveDockSpaceToEnd = [&](ImGuiDockNode* node) {
+        if (node == nullptr) {
+            return;
+        }
+        // Move this node
+        std::optional<DockSpace> dockspace = getDockSpace(dockspaces_temp, node->ID);
+        if (dockspace) {
+            remove(dockspaces_temp, *dockspace);
+            dockspaces_temp.push_back(*dockspace);
+        }
+
+        // Move child windows if they are dockspaces
+        for (int j = 0; j < node->Windows.Size; ++j) {
+            ImGuiWindow* window = node->Windows.Data[j];
+            dockspace = getDockSpace(dockspaces_temp, window->Name);
+            if (dockspace) {
+                remove(dockspaces_temp, *dockspace);
+                dockspaces_temp.push_back(*dockspace);
+                // Move all child nodes within the window
+                ImGuiDockNode* child_node = ImGui::DockBuilderGetNode(dockspace->id);
+                moveDockSpaceToEnd(child_node);
+            }
+        }
+
+        // Recurse child nodes
+        for (int j = 0; j < 2; ++j) {
+            moveDockSpaceToEnd(node->ChildNodes[j]);
+        }
+    };
+
     for (int i = 0; i < m_dockspaces.size(); ++i) {
         DockSpace& dockspace = m_dockspaces[i];
         if (!dockspace.open) {
@@ -213,15 +263,16 @@ void DbgGui::showDockSpaces() {
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             dockspace.open = false;
         }
+        dockspace.id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
+        ImGui::DockSpace(dockspace.id);
+
         // If window is being dragged, move it to end of the list of dockspaces so that it can
         // be docked into other dockspace
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
             dockspaces_temp = m_dockspaces;
-            std::swap(dockspaces_temp[i], dockspaces_temp.back());
+            moveDockSpaceToEnd(ImGui::DockBuilderGetNode(dockspace.id));
         }
 
-        ImGuiID dockspace_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.name).c_str());
-        ImGui::DockSpace(dockspace_id);
         ImGui::End();
     }
     if (!dockspaces_temp.empty()) {

@@ -250,7 +250,12 @@ struct CustomWindow {
 struct DockSpace {
     std::string name;
     Focus focus;
+    unsigned int id;
     bool open = true;
+
+    bool operator==(DockSpace const& other) {
+        return name == other.name;
+    }
 };
 
 template <typename T>
