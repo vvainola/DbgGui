@@ -215,7 +215,7 @@ void DbgGui::showDockSpaces() {
         }
         // If window is being dragged, move it to end of the list of dockspaces so that it can
         // be docked into other dockspace
-        if (ImGui::IsItemActive()) {
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
             dockspaces_temp = m_dockspaces;
             std::swap(dockspaces_temp[i], dockspaces_temp.back());
         }
