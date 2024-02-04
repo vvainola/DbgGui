@@ -821,30 +821,30 @@ void DbgGui::setInitialFocus() {
         ImGui::End();
     }
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
-        ImGui::Begin(scalar_plot.name.c_str());
+        ImGui::Begin(scalar_plot.title().c_str());
         if (scalar_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(scalar_plot.name.c_str());
+            ImGui::SetWindowFocus(scalar_plot.title().c_str());
         }
         ImGui::End();
     }
     for (VectorPlot& vector_plot : m_vector_plots) {
-        ImGui::Begin(vector_plot.name.c_str());
+        ImGui::Begin(vector_plot.title().c_str());
         if (vector_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(vector_plot.name.c_str());
+            ImGui::SetWindowFocus(vector_plot.title().c_str());
         }
         ImGui::End();
     }
     for (SpectrumPlot& spec_plot : m_spectrum_plots) {
-        ImGui::Begin(spec_plot.name.c_str());
+        ImGui::Begin(spec_plot.title().c_str());
         if (spec_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(spec_plot.name.c_str());
+            ImGui::SetWindowFocus(spec_plot.title().c_str());
         }
         ImGui::End();
     }
     for (CustomWindow& custom_window : m_custom_windows) {
-        ImGui::Begin(custom_window.name.c_str());
+        ImGui::Begin(custom_window.title().c_str());
         if (custom_window.focus.initial_focus) {
-            ImGui::SetWindowFocus(custom_window.name.c_str());
+            ImGui::SetWindowFocus(custom_window.title().c_str());
         }
         ImGui::End();
     }

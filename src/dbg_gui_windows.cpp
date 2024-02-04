@@ -915,7 +915,7 @@ void DbgGui::showCustomWindow() {
             continue;
         }
 
-        custom_window.focus.focused = ImGui::Begin(custom_window.name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        custom_window.focus.focused = ImGui::Begin(custom_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             custom_window.open = false;
         }

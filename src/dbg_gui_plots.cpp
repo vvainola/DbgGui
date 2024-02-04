@@ -57,7 +57,7 @@ void DbgGui::showScalarPlots() {
         }
         Scalar* signal_to_remove = nullptr;
 
-        scalar_plot.focus.focused = ImGui::Begin(scalar_plot.name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        scalar_plot.focus.focused = ImGui::Begin(scalar_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             scalar_plot.open = false;
         }
@@ -240,7 +240,7 @@ void DbgGui::showVectorPlots() {
         if (!vector_plot.open) {
             continue;
         }
-        vector_plot.focus.focused = ImGui::Begin(vector_plot.name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        vector_plot.focus.focused = ImGui::Begin(vector_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             vector_plot.open = false;
         }
@@ -427,7 +427,7 @@ void DbgGui::showSpectrumPlots() {
             continue;
         }
 
-        plot.focus.focused = ImGui::Begin(plot.name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        plot.focus.focused = ImGui::Begin(plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
             plot.open = false;
         }
