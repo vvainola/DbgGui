@@ -416,19 +416,13 @@ void DbgGui::showMainMenuBar() {
                                          window_or_plot_name,
                                          IM_ARRAYSIZE(window_or_plot_name),
                                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        // Check that dockspace name is unique because creating two dockspace with same name will crash
-                        auto it = std::find_if(m_dockspaces.begin(),
-                                               m_dockspaces.end(),
-                                               [&](DockSpace const& dockspace) { return dockspace.name == window_or_plot_name; });
-                        if (it == m_dockspaces.end()) {
-                            // Add clock to hash calculation because dockspace name can change later and the user might
-                            // create a new dockspace which could have same name as the original and they would result in same id
-                            uint64_t id = hash(std::format("{}{}",
-                                                           std::chrono::system_clock::now().time_since_epoch().count(),
-                                                           window_or_plot_name));
-                            m_dockspaces.push_back(DockSpace{.name = window_or_plot_name,
-                                                             .id = id});
-                        }
+                        // Add clock to hash calculation because dockspace name can change later and the user might
+                        // create a new dockspace which could have same name as the original and they would result in same id
+                        uint64_t id = hash(std::format("{}{}",
+                                                       std::chrono::system_clock::now().time_since_epoch().count(),
+                                                       window_or_plot_name));
+                        m_dockspaces.push_back(DockSpace{.name = window_or_plot_name,
+                                                         .id = id});
                         strcpy_s(window_or_plot_name, "");
                         ImGui::CloseCurrentPopup();
                     };
