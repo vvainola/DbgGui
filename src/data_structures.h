@@ -23,7 +23,7 @@
 #pragma once
 
 #include "symbols/dbghelp_symbols_lookup.h"
-#include <imgui.h>
+#include "imgui.h"
 
 #include <numeric>
 #include <vector>
@@ -31,6 +31,8 @@
 #include <future>
 #include <string>
 #include <format>
+
+inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
 uint64_t hash(const std::string& str);
 uint64_t hashWithTime(const std::string& str);
@@ -175,6 +177,24 @@ struct Window {
 
     bool operator==(Window const& other) {
         return id == other.id;
+    }
+
+    void closeOnMiddleClick() {
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+            open = false;
+        }
+    }
+
+    void contextMenu() {
+        if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
+            name.reserve(MAX_NAME_LENGTH);
+            if (ImGui::InputText("Name##window_context_menu",
+                                 name.data(),
+                                 MAX_NAME_LENGTH)) {
+                name = std::string(name.data());
+            }
+            ImGui::EndPopup();
+        }
     }
 };
 

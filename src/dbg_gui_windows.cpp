@@ -260,10 +260,6 @@ void DbgGui::showDockSpaces() {
         ImGui::PushStyleColor(ImGuiCol_Text, COLOR_TEAL);
         dockspace.focus.focused = ImGui::Begin(dockspace.title().c_str(), NULL);
         ImGui::PopStyleColor();
-        // Close on middle click
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-            dockspace.open = false;
-        }
         // If window is being dragged, move it to end of the list of dockspaces so that it can
         // be docked into other dockspace
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
@@ -271,16 +267,9 @@ void DbgGui::showDockSpaces() {
             dockspaces_temp = m_dockspaces;
             moveDockSpaceToEnd(ImGui::DockBuilderGetNode(dockspace.dock_id));
         }
-        // Right-click context menu
-        if (ImGui::BeginPopupContextItem((dockspace.title() + "_context_menu").c_str())) {
-            dockspace.name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##dockspace_context_menu",
-                                 dockspace.name.data(),
-                                 MAX_NAME_LENGTH)) {
-                dockspace.name = std::string(dockspace.name.data());
-            }
-            ImGui::EndPopup();
-        }
+        dockspace.closeOnMiddleClick();
+        dockspace.contextMenu();
+
         // Create dockspace
         dockspace.dock_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.id).c_str());
         ImGui::DockSpace(dockspace.dock_id);
@@ -916,9 +905,8 @@ void DbgGui::showCustomWindow() {
         }
 
         custom_window.focus.focused = ImGui::Begin(custom_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-            custom_window.open = false;
-        }
+        custom_window.closeOnMiddleClick();
+        custom_window.contextMenu();
         if (!custom_window.focus.focused) {
             ImGui::End();
             continue;
@@ -967,7 +955,7 @@ void DbgGui::showCustomWindow() {
 
         if (signal_to_remove) {
             remove(custom_window.scalars, signal_to_remove);
-            size_t signals_removed = m_settings["custom_windows"][custom_window.name]["signals"].erase(signal_to_remove->group + " " + signal_to_remove->name);
+            size_t signals_removed = m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(signal_to_remove->group + " " + signal_to_remove->name);
             assert(signals_removed > 0);
         }
 

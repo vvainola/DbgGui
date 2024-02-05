@@ -469,8 +469,8 @@ void DbgGui::loadPreviousSessionSettings() {
               plot.x_axis.max = spec_plot_data["x_axis_max"];
               plot.y_axis.min = spec_plot_data["y_axis_min"];
               plot.y_axis.max = spec_plot_data["y_axis_max"];
-              if (spec_plot_data.contains("id")) {
-                  uint64_t id = spec_plot_data["id"];
+              if (spec_plot_data.contains("signal_id")) {
+                  uint64_t id = spec_plot_data["signal_id"];
                   Scalar* scalar = getScalar(id);
                   Vector2D* vector = getVector(id);
                   if (scalar) {
@@ -607,109 +607,109 @@ void DbgGui::updateSavedSettings() {
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
-            m_settings["scalar_plots"].erase(scalar_plot.name);
+            m_settings["scalar_plots"].erase(std::to_string(scalar_plot.id));
             continue;
         }
         if (scalar_plot.id == 0) {
             scalar_plot.id = hashWithTime(scalar_plot.name);
         }
-        m_settings["scalar_plots"][scalar_plot.name]["name"] = scalar_plot.name;
-        m_settings["scalar_plots"][scalar_plot.name]["id"] = scalar_plot.id;
-        m_settings["scalar_plots"][scalar_plot.name]["initial_focus"] = scalar_plot.focus.focused;
-        m_settings["scalar_plots"][scalar_plot.name]["x_range"] = scalar_plot.x_range;
-        m_settings["scalar_plots"][scalar_plot.name]["autofit_y"] = scalar_plot.autofit_y;
+        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["name"] = scalar_plot.name;
+        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["id"] = scalar_plot.id;
+        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["initial_focus"] = scalar_plot.focus.focused;
+        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["x_range"] = scalar_plot.x_range;
+        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["autofit_y"] = scalar_plot.autofit_y;
         // Update range only if autofit is not on because otherwise the file
         // could be continously rewritten when autofit range changes
         if (!scalar_plot.autofit_y) {
-            m_settings["scalar_plots"][scalar_plot.name]["y_min"] = scalar_plot.y_axis.min;
-            m_settings["scalar_plots"][scalar_plot.name]["y_max"] = scalar_plot.y_axis.max;
+            m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_min"] = scalar_plot.y_axis.min;
+            m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_max"] = scalar_plot.y_axis.max;
         }
         for (int i = int(scalar_plot.signals.size() - 1); i >= 0; --i) {
             Scalar* scalar = scalar_plot.signals[i];
             if (scalar->deleted) {
-                m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(scalar->name_and_group);
+                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar->name_and_group);
                 remove(scalar_plot.signals, scalar);
             } else {
-                m_settings["scalar_plots"][scalar_plot.name]["signals"][scalar->name_and_group] = scalar->id;
+                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"][scalar->name_and_group] = scalar->id;
             }
         }
     }
 
     for (VectorPlot& vector_plot : m_vector_plots) {
         if (!vector_plot.open) {
-            m_settings["vector_plots"].erase(vector_plot.name);
+            m_settings["vector_plots"].erase(std::to_string(vector_plot.id));
             continue;
         }
         if (vector_plot.id == 0) {
             vector_plot.id = hashWithTime(vector_plot.name);
         }
-        m_settings["vector_plots"][vector_plot.name]["name"] = vector_plot.name;
-        m_settings["vector_plots"][vector_plot.name]["id"] = vector_plot.id;
-        m_settings["vector_plots"][vector_plot.name]["initial_focus"] = vector_plot.focus.focused;
-        m_settings["vector_plots"][vector_plot.name]["time_range"] = vector_plot.time_range;
+        m_settings["vector_plots"][std::to_string(vector_plot.id)]["name"] = vector_plot.name;
+        m_settings["vector_plots"][std::to_string(vector_plot.id)]["id"] = vector_plot.id;
+        m_settings["vector_plots"][std::to_string(vector_plot.id)]["initial_focus"] = vector_plot.focus.focused;
+        m_settings["vector_plots"][std::to_string(vector_plot.id)]["time_range"] = vector_plot.time_range;
         for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.signals[i];
             if (vector->deleted || vector->x->deleted || vector->y->deleted) {
-                m_settings["vector_plots"][vector_plot.name]["signals"].erase(vector->name_and_group);
+                m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(vector->name_and_group);
                 remove(vector_plot.signals, vector);
             } else {
-                m_settings["vector_plots"][vector_plot.name]["signals"][vector->name_and_group] = vector->id;
+                m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"][vector->name_and_group] = vector->id;
             }
         }
     }
 
     for (SpectrumPlot& spec_plot : m_spectrum_plots) {
         if (!spec_plot.open) {
-            m_settings["spec_plots"].erase(spec_plot.name);
+            m_settings["spec_plots"].erase(std::to_string(spec_plot.id));
             continue;
         }
         if (spec_plot.id == 0) {
             spec_plot.id = hashWithTime(spec_plot.name);
         }
-        m_settings["spec_plots"][spec_plot.name]["name"] = spec_plot.name;
-        m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.id;
-        m_settings["spec_plots"][spec_plot.name]["initial_focus"] = spec_plot.focus.focused;
-        m_settings["spec_plots"][spec_plot.name]["time_range"] = spec_plot.time_range;
-        m_settings["spec_plots"][spec_plot.name]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
-        m_settings["spec_plots"][spec_plot.name]["window"] = spec_plot.window;
-        m_settings["spec_plots"][spec_plot.name]["x_axis_min"] = spec_plot.x_axis.min;
-        m_settings["spec_plots"][spec_plot.name]["x_axis_max"] = spec_plot.x_axis.max;
-        m_settings["spec_plots"][spec_plot.name]["y_axis_min"] = spec_plot.y_axis.min;
-        m_settings["spec_plots"][spec_plot.name]["y_axis_max"] = spec_plot.y_axis.max;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["name"] = spec_plot.name;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["id"] = spec_plot.id;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["initial_focus"] = spec_plot.focus.focused;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["time_range"] = spec_plot.time_range;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["window"] = spec_plot.window;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["x_axis_min"] = spec_plot.x_axis.min;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["x_axis_max"] = spec_plot.x_axis.max;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["y_axis_min"] = spec_plot.y_axis.min;
+        m_settings["spec_plots"][std::to_string(spec_plot.id)]["y_axis_max"] = spec_plot.y_axis.max;
         if (spec_plot.scalar) {
             if (spec_plot.scalar->deleted) {
                 spec_plot.scalar = nullptr;
             } else {
-                m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.scalar->id;
+                m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.scalar->id;
             }
         } else if (spec_plot.vector) {
             if (spec_plot.vector->deleted) {
                 spec_plot.vector = nullptr;
             } else {
-                m_settings["spec_plots"][spec_plot.name]["id"] = spec_plot.vector->id;
+                m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.vector->id;
             }
         }
     }
 
     for (CustomWindow& custom_window : m_custom_windows) {
         if (!custom_window.open) {
-            m_settings["custom_windows"].erase(custom_window.name);
+            m_settings["custom_windows"].erase(std::to_string(custom_window.id));
             continue;
         }
         if (custom_window.id == 0) {
             custom_window.id = hashWithTime(custom_window.name);
         }
-        m_settings["custom_windows"][custom_window.name]["name"] = custom_window.name;
-        m_settings["custom_windows"][custom_window.name]["id"] = custom_window.id;
-        m_settings["custom_windows"][custom_window.name]["initial_focus"] = custom_window.focus.focused;
+        m_settings["custom_windows"][std::to_string(custom_window.id)]["name"] = custom_window.name;
+        m_settings["custom_windows"][std::to_string(custom_window.id)]["id"] = custom_window.id;
+        m_settings["custom_windows"][std::to_string(custom_window.id)]["initial_focus"] = custom_window.focus.focused;
         for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
                 remove(custom_window.scalars, scalar);
-                m_settings["custom_windows"][custom_window.name]["signals"].erase(scalar->group + " " + scalar->name);
+                m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar->group + " " + scalar->name);
             } else {
                 // use group first in key so that the signals are sorted alphabetically by group
-                m_settings["custom_windows"][custom_window.name]["signals"][scalar->group + " " + scalar->name] = scalar->id;
+                m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"][scalar->group + " " + scalar->name] = scalar->id;
             }
         }
     }

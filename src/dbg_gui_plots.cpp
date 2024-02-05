@@ -58,9 +58,8 @@ void DbgGui::showScalarPlots() {
         Scalar* signal_to_remove = nullptr;
 
         scalar_plot.focus.focused = ImGui::Begin(scalar_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-            scalar_plot.open = false;
-        }
+        scalar_plot.closeOnMiddleClick();
+        scalar_plot.contextMenu();
         if (!scalar_plot.focus.focused) {
             ImGui::End();
             continue;
@@ -229,7 +228,7 @@ void DbgGui::showScalarPlots() {
 
         if (signal_to_remove) {
             remove(scalar_plot.signals, signal_to_remove);
-            size_t signals_removed = m_settings["scalar_plots"][scalar_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            size_t signals_removed = m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
     }
@@ -241,13 +240,13 @@ void DbgGui::showVectorPlots() {
             continue;
         }
         vector_plot.focus.focused = ImGui::Begin(vector_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-            vector_plot.open = false;
-        }
+        vector_plot.closeOnMiddleClick();
+        vector_plot.contextMenu();
         if (!vector_plot.focus.focused) {
             ImGui::End();
             continue;
         }
+
         // Fit first few frames because the initial fit does not seem to work sometimes with equal axes
         if (ImGui::GetFrameCount() < 5) {
             ImPlot::SetNextAxesToFit();
@@ -392,7 +391,7 @@ void DbgGui::showVectorPlots() {
 
         if (signal_to_remove) {
             remove(vector_plot.signals, signal_to_remove);
-            size_t signals_removed = m_settings["vector_plots"][vector_plot.name]["signals"].erase(signal_to_remove->name_and_group);
+            size_t signals_removed = m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
     }
@@ -428,13 +427,13 @@ void DbgGui::showSpectrumPlots() {
         }
 
         plot.focus.focused = ImGui::Begin(plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-            plot.open = false;
-        }
+        plot.closeOnMiddleClick();
+        plot.contextMenu();
         if (!plot.focus.focused) {
             ImGui::End();
             continue;
         }
+
         double time_range_ms = plot.time_range * 1e3;
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
         double min = 1;
