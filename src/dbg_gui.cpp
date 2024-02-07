@@ -366,12 +366,18 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 
 void DbgGui::loadPreviousSessionSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
-    ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
-    m_ini_settings_saved = ImGui::SaveIniSettingsToMemory(nullptr);
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         TRY(m_settings = nlohmann::json::parse(f);
             m_settings_saved = m_settings;)
+
+        if (m_settings.contains("layout")) {
+            std::string layout = m_settings["layout"];
+            ImGui::LoadIniSettingsFromMemory(layout.data());
+        } else {
+            ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
+        }
+
         TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
             int ypos = std::max(0, int(m_settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
@@ -772,21 +778,19 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    std::string ini_settings = ImGui::SaveIniSettingsToMemory(nullptr);
+    m_settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
     bool closing = glfwWindowShouldClose(m_window);
-    bool settings_changed = (m_settings != m_settings_saved || ini_settings != m_ini_settings_saved);
+    bool settings_changed = (m_settings != m_settings_saved);
     if (!closing
         && m_initial_focus_set
         && settings_changed) {
-        m_ini_settings_saved = ini_settings;
         m_settings_saved = m_settings;
 
         std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
         if (!std::filesystem::exists(settings_dir)) {
             std::filesystem::create_directories(settings_dir);
         }
-        ImGui::SaveIniSettingsToDisk((settings_dir + "imgui.ini").c_str());
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_settings;
     }
 }

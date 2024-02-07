@@ -161,7 +161,6 @@ class DbgGui {
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
-    std::string m_ini_settings_saved;
 };
 
 template <typename T>
