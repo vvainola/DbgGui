@@ -519,7 +519,7 @@ void DbgGui::showMainMenuBar() {
             if (ImGui::IsItemHovered()) {
                 std::string m;
                 for (std::string const& msg : m_messages) {
-                    m += msg + "\n";
+                    m += msg;
                 }
                 ImGui::SetTooltip(m.c_str());
             }
