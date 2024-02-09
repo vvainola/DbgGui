@@ -110,7 +110,7 @@ class DbgGui {
         }
         return nullptr;
     }
-    ScrollingBuffer m_sampler;
+    ScrollingBuffer m_sampler{0};
     std::vector<std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
     std::vector<std::unique_ptr<Vector2D>> m_vectors;
@@ -154,6 +154,7 @@ class DbgGui {
         bool scalar_plot_tooltip = true;
         bool clear_saved_settings = false;
         FontSelection font_selection = COUSINE_REGULAR;
+        int sampling_buffer_size = (int)1e6;
     } m_options;
 
     std::jthread m_gui_thread;

@@ -477,6 +477,9 @@ void DbgGui::showMainMenuBar() {
             if (ImGui::RadioButton("Calibri", reinterpret_cast<int*>(&m_options.font_selection), 1)) {
                 ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
             }
+            ImGui::InputInt("Sampling buffer size", &m_options.sampling_buffer_size, 0);
+            ImGui::SameLine();
+            HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
             ImGui::Separator();
 
             if (ImGui::Button("Clear saved settings")) {

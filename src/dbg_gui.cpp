@@ -388,7 +388,9 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
         TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
+        TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
+        m_sampler.setBufferSize(m_options.sampling_buffer_size);
 
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
@@ -586,6 +588,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;
     m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
+    m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
 

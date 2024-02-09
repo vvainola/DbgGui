@@ -27,9 +27,16 @@
 // utility structure for realtime plot
 class ScrollingBuffer {
   public:
-    ScrollingBuffer(int32_t buffer_size = int32_t(1e6))
+    ScrollingBuffer(int32_t buffer_size)
         : m_buffer_size(buffer_size),
           m_time(2 * buffer_size) {}
+
+    void setBufferSize(int32_t buffer_size) {
+        assert(m_scalar_buffers.size() == 0);
+        m_buffer_size = buffer_size;
+        m_time.resize(2 * buffer_size);
+
+    }
 
     void sample(double time) {
         m_time_temp.push_back(time);
@@ -190,7 +197,7 @@ class ScrollingBuffer {
     }
 
     int32_t m_idx = 0;
-    int32_t m_buffer_size = int32_t(1e6);
+    int32_t m_buffer_size;
     std::vector<double> m_time;
     std::unordered_map<Scalar*, std::vector<double>> m_scalar_buffers;
     std::vector<double> m_time_temp;
