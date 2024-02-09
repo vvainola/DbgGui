@@ -32,6 +32,7 @@
 #include <thread>
 #include <unordered_map>
 #include <set>
+#include <deque>
 
 struct GLFWwindow;
 
@@ -70,6 +71,7 @@ class DbgGui {
                         std::string const& name_y,
                         double scale = 1.0,
                         double offset = 0.0);
+    void displayMessage(const char* msg);
 
   private:
     void updateLoop();
@@ -146,6 +148,7 @@ class DbgGui {
     bool m_initial_focus_set = false;
     float m_simulation_speed = 1;
     double m_pause_at_time = 0;
+    std::deque<std::string> m_messages;
 
     struct OptionalSettings {
         bool x_tick_labels = true;

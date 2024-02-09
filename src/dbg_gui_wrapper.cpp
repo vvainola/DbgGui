@@ -130,4 +130,9 @@ void DbgGui_pause(void) {
         g_dbg_gui->pause();
     }
 }
+void DbgGui_displayMessage(const char* msg) {
+    if (g_dbg_gui) {
+        g_dbg_gui->displayMessage(msg);
+    }
+}
 #endif

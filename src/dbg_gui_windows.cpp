@@ -511,6 +511,18 @@ void DbgGui::showMainMenuBar() {
 
         if (m_pause_at_time > m_sample_timestamp + std::numeric_limits<double>::epsilon()) {
             ImGui::Text("Pausing after %g", m_pause_at_time - m_plot_timestamp);
+            ImGui::Separator();
+        }
+
+        if (!m_messages.empty()) {
+            ImGui::Text(m_messages.back().c_str());
+            if (ImGui::IsItemHovered()) {
+                std::string m;
+                for (std::string const& msg : m_messages) {
+                    m += msg + "\n";
+                }
+                ImGui::SetTooltip(m.c_str());
+            }
         }
 
         ImGui::EndMainMenuBar();

@@ -995,3 +995,10 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
     return new_vector.get();
 }
+
+void DbgGui::displayMessage(const char* msg) {
+    if (m_messages.size() > 20) {
+        m_messages.pop_front();
+    }
+    m_messages.push_back(msg);
+}
