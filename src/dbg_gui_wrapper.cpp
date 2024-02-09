@@ -119,20 +119,20 @@ int DbgGui_isClosed(void) {
         return g_dbg_gui->isClosed();
     }
     return 1;
-
-#ifdef __cplusplus
 }
+
 void DbgGui_close(void) {
     g_dbg_gui = nullptr;
 }
+
 void DbgGui_pause(void) {
     if (g_dbg_gui) {
         g_dbg_gui->pause();
     }
 }
+
 void DbgGui_displayMessage(const char* msg) {
     if (g_dbg_gui) {
         g_dbg_gui->displayMessage(msg);
     }
 }
-#endif
