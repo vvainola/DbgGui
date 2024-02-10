@@ -540,7 +540,7 @@ void DbgGui::showMainMenuBar() {
 }
 
 void DbgGui::showLogWindow() {
-    if (ImGui::Begin("Log")) {
+    if (ImGui::Begin("Log", NULL, ImGuiWindowFlags_NoNavFocus)) {
         ImGui::TextUnformatted(m_all_messages.c_str());
         // Autoscroll
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
