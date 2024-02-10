@@ -131,8 +131,13 @@ void DbgGui_pause(void) {
     }
 }
 
-void DbgGui_displayMessage(const char* msg) {
+void DbgGui_log(const char* fmt, ...) {
     if (g_dbg_gui) {
-        g_dbg_gui->displayMessage(msg);
+        char buf[2000];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buf, 2000, fmt, args);
+        va_end(args);
+        g_dbg_gui->logMessage(buf);
     }
 }

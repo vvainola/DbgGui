@@ -271,6 +271,7 @@ void DbgGui::updateLoop() {
         }
         showDockSpaces();
         showMainMenuBar();
+        showLogWindow();
         showScalarWindow();
         showVectorWindow();
         showCustomWindow();
@@ -370,6 +371,7 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
         TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
         TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
+        TRY(m_options.show_latest_message_on_main_menu_bar = m_settings["options"]["show_latest_message_on_main_menu_bar"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
         TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
         TRY(m_options.theme = m_settings["options"]["theme"];)
@@ -571,6 +573,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
     m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;
+    m_settings["options"]["show_latest_message_on_main_menu_bar"] = m_options.show_latest_message_on_main_menu_bar;
     m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
@@ -982,9 +985,10 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     return new_vector.get();
 }
 
-void DbgGui::displayMessage(const char* msg) {
-    if (m_messages.size() > 20) {
-        m_messages.pop_front();
+void DbgGui::logMessage(const char* msg) {
+    m_all_messages += msg;
+    if (m_message_queue.size() > 20) {
+        m_message_queue.pop_front();
     }
-    m_messages.push_back(msg);
+    m_message_queue.push_back(msg);
 }

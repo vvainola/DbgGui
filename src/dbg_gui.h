@@ -72,12 +72,13 @@ class DbgGui {
                         std::string const& name_y,
                         double scale = 1.0,
                         double offset = 0.0);
-    void displayMessage(const char* msg);
+    void logMessage(const char* msg);
 
   private:
     void updateLoop();
     void showDockSpaces();
     void showMainMenuBar();
+    void showLogWindow();
     void showScalarWindow();
     void showSymbolsWindow();
     void showVectorWindow();
@@ -149,7 +150,9 @@ class DbgGui {
     bool m_initial_focus_set = false;
     float m_simulation_speed = 1;
     double m_pause_at_time = 0;
-    std::deque<std::string> m_messages;
+
+    std::deque<std::string> m_message_queue;
+    std::string m_all_messages;
 
     struct OptionalSettings {
         bool x_tick_labels = true;
@@ -157,6 +160,7 @@ class DbgGui {
         bool link_scalar_x_axis = false;
         bool scalar_plot_tooltip = true;
         bool clear_saved_settings = false;
+        bool show_latest_message_on_main_menu_bar = true;
         FontSelection font_selection = COUSINE_REGULAR;
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;

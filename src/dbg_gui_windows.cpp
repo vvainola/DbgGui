@@ -470,6 +470,12 @@ void DbgGui::showMainMenuBar() {
             ImGui::Checkbox("Pause on close", &m_options.pause_on_close);
             ImGui::SameLine();
             HelpMarker("Pause when GUI is requested to close programmatically. Pressing start again will close the GUI.");
+
+            ImGui::Checkbox("Show latest message on main menu bar", &m_options.show_latest_message_on_main_menu_bar);
+
+            // Theme
+            themeCombo(m_options.theme, m_window);
+
             // Order here must match the order in which fonts were added
             if (ImGui::RadioButton("Cousine regular", reinterpret_cast<int*>(&m_options.font_selection), 0)) {
                 ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[0];
@@ -482,8 +488,6 @@ void DbgGui::showMainMenuBar() {
             ImGui::SameLine();
             HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
 
-            // Theme
-            themeCombo(m_options.theme, m_window);
 
             ImGui::Separator();
 
@@ -519,11 +523,12 @@ void DbgGui::showMainMenuBar() {
             ImGui::Separator();
         }
 
-        if (!m_messages.empty()) {
-            ImGui::Text(m_messages.back().c_str());
+        if (m_options.show_latest_message_on_main_menu_bar
+            && !m_message_queue.empty()) {
+            ImGui::Text(m_message_queue.back().c_str());
             if (ImGui::IsItemHovered()) {
                 std::string m;
-                for (std::string const& msg : m_messages) {
+                for (std::string const& msg : m_message_queue) {
                     m += msg;
                 }
                 ImGui::SetTooltip(m.c_str());
@@ -532,6 +537,17 @@ void DbgGui::showMainMenuBar() {
 
         ImGui::EndMainMenuBar();
     }
+}
+
+void DbgGui::showLogWindow() {
+    if (ImGui::Begin("Log")) {
+        ImGui::TextUnformatted(m_all_messages.c_str());
+        // Autoscroll
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+            ImGui::SetScrollHereY(1.0f);
+        }
+    }
+    ImGui::End();
 }
 
 bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std::string const& filter) {
