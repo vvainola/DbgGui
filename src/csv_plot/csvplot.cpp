@@ -142,22 +142,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport
     io.IniFilename = NULL;                                // Set to NULL because ini file file is loaded manually
-    ImGui::StyleColorsDark();
-
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform
-    // windows can look identical to regular ones.
-    ImGuiStyle& style = ImGui::GetStyle();
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-    }
-    style.WindowPadding.x = 1;
-    style.WindowPadding.y = 5;
-    style.FramePadding.x = 1;
-    style.FramePadding.y = 1;
-    style.CellPadding.y = 1;
-    style.IndentSpacing = 20;
-    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
@@ -166,7 +150,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
-    setDarkTheme(m_window);
     loadPreviousSessionSettings();
     // Move window out of sight if creating image to avoid popups
     if (!image_filepath.empty()) {
@@ -246,6 +229,8 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
             m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
+            m_options.theme = settings["window"]["theme"];
+            setTheme(m_options.theme, m_window);
             for (auto scale : settings["scales"].items()) {
                 m_signal_scales[scale.key()] = scale.value();
             }
@@ -291,6 +276,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
+    settings["window"]["theme"] = m_options.theme;
     for (auto& [name, scale] : m_signal_scales) {
         settings["scales"][name] = scale;
     }
@@ -460,6 +446,7 @@ void CsvPlotter::showSignalWindow() {
         m_plot_cnt = std::max(m_plot_cnt, 1);
     }
 
+    themeCombo(m_options.theme, m_window);
     if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
     }
@@ -543,7 +530,7 @@ void CsvPlotter::showSignalWindow() {
                 if (signal_scale == 0) {
                     signal_scale = 1;
                 }
-                ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? COLOR_WHITE : COLOR_GRAY);
+                ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? ImGui::GetStyle().Colors[ImGuiCol_Text] : COLOR_GRAY);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     // Always drag and dropping is tedious. Add signal to plot if it is selected while
                     // pressing a number to make it easier to add signals with same name from different

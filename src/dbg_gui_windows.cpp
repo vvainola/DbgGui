@@ -26,6 +26,7 @@
 #include <format>
 #include <iostream>
 #include "imgui_internal.h"
+#include "themes.h"
 
 template <typename T>
 inline std::string numberAsStr(T number) {
@@ -480,6 +481,10 @@ void DbgGui::showMainMenuBar() {
             ImGui::InputInt("Sampling buffer size", &m_options.sampling_buffer_size, 0);
             ImGui::SameLine();
             HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
+
+            // Theme
+            themeCombo(m_options.theme, m_window);
+
             ImGui::Separator();
 
             if (ImGui::Button("Clear saved settings")) {
@@ -1038,7 +1043,7 @@ void DbgGui::showSymbolsWindow() {
                 if (!show_hidden_symbols && hidden) {
                     return;
                 }
-                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : COLOR_WHITE);
+                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();

@@ -19,11 +19,12 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-
 #pragma once
+
+#include "themes.h"
+#include "imgui.h"
 #include <string>
 #include <filesystem>
-#include <imgui.h>
 #include <map>
 
 struct MinMax {
@@ -95,6 +96,7 @@ class CsvPlotter {
         bool fit_after_drag_and_drop = true;
         bool keep_old_signals_on_reload = true;
         bool cursor_measurements = false;
+        Theme theme;
     } m_options;
     MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;

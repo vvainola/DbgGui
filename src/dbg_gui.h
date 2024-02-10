@@ -25,8 +25,9 @@
 #include "symbols/dbghelp_symbols_lookup.h"
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
-#include <imgui.h>
-#include <nlohmann/json.hpp>
+#include "imgui.h"
+#include "nlohmann/json.hpp"
+#include "themes.h"
 
 #include <mutex>
 #include <thread>
@@ -157,6 +158,7 @@ class DbgGui {
         bool scalar_plot_tooltip = true;
         bool clear_saved_settings = false;
         FontSelection font_selection = COUSINE_REGULAR;
+        Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
     } m_options;
 

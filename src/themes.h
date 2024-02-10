@@ -23,5 +23,29 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
+#include <string>
+#include <vector>
 
-void setDarkTheme(GLFWwindow* window);
+enum class Theme {
+    DefaultDark,
+    Cherry,
+    Comfy,
+    DarkRed,
+    DeepDark,
+    Gold,
+    GreenFont,
+    ImGuiClassic,
+    ImGuiDark,
+    ImGuiLight,
+    Microsoft,
+    Moonlight,
+    Photoshop,
+    QuickMinimal,
+    SoftCherry,
+    Steam,
+    Unreal,
+    THEME_COUNT
+};
+
+void themeCombo(Theme& theme, GLFWwindow* window);
+void setTheme(Theme theme, GLFWwindow* window);

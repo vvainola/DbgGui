@@ -194,22 +194,6 @@ void DbgGui::updateLoop() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport
     io.IniFilename = NULL;                                // Set to NULL because ini file file is loaded manually
-    ImGui::StyleColorsDark();
-
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform
-    // windows can look identical to regular ones.
-    ImGuiStyle& style = ImGui::GetStyle();
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-    }
-    style.WindowPadding.x = 1;
-    style.WindowPadding.y = 5;
-    style.FramePadding.x = 1;
-    style.FramePadding.y = 2;
-    style.CellPadding.y = 0;
-    style.IndentSpacing = 20;
-    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(5, 5));
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
@@ -221,7 +205,6 @@ void DbgGui::updateLoop() {
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, 13.0f);
-    setDarkTheme(m_window);
 
     loadPreviousSessionSettings();
     m_initialized = true;
@@ -389,8 +372,10 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
         TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
+        TRY(m_options.theme = m_settings["options"]["theme"];)
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
         m_sampler.setBufferSize(m_options.sampling_buffer_size);
+        setTheme(m_options.theme, m_window);
 
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
@@ -589,6 +574,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
+    m_settings["options"]["theme"] = m_options.theme;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
 
