@@ -732,7 +732,7 @@ void CsvPlotter::showPlots() {
                 // Tooltip
                 if (ImPlot::IsPlotHovered() && plotted_y.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                    ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
+                    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();

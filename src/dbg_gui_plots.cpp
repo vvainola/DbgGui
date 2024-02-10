@@ -201,7 +201,7 @@ void DbgGui::showScalarPlots() {
 
             if (m_options.scalar_plot_tooltip && ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                ImPlot::PushStyleColor(ImPlotCol_Line, {255, 255, 255, 0.25});
+                ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
                 ImPlot::PlotInfLines("##", &mouse.x, 1);
                 ImPlot::PopStyleColor(1);
                 ImGui::BeginTooltip();
