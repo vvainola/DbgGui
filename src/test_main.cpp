@@ -21,7 +21,6 @@
 // SOFTWARE.
 
 #include "DbgGui/dbg_gui_wrapper.h"
-#include "zero_crossing_freq_est.h"
 #include "moving_average.h"
 #include <thread>
 #include "DbgGui/global_snapshot.h"
@@ -177,11 +176,7 @@ Vector_ABC xy_to_abc(XY in) {
 }
 } // namespace g
 
-
 double test_freq = 50.3;
-ZeroCrossingFreqEst freq_est{
-  .dead_time = 1e-3f,
-  .sampling_period = 500e-6f};
 
 double timestamp = 0;
 MovingAverage<2000> movavg;
@@ -235,10 +230,9 @@ void t_500us() {
     static int n = 50;
     if (n <= 0) {
         n = 50;
-        
-        estimateFreq(&freq_est, (float)g::abc.a);
+
         movavg.step((float)(g::xy.x));
-        movavg.setLength(2000 / freq_est.out_estimated_freq);
-    } 
+        movavg.setLength(2000 / test_freq);
+    }
     n--;
 }
