@@ -23,7 +23,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "dbg_gui.h"
-#include "dark_theme.h"
+#include "themes.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"

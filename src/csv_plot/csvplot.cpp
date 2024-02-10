@@ -32,7 +32,7 @@
 #include "resource.h"
 
 #include "csvplot.h"
-#include "dark_theme.h"
+#include "themes.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
