@@ -362,10 +362,6 @@ void DbgGui::loadPreviousSessionSettings() {
             ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
         }
 
-        TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
-            int ypos = std::max(0, int(m_settings["window"]["ypos"]));
-            glfwSetWindowPos(m_window, xpos, ypos);
-            glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
         TRY(m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];)
         TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
@@ -378,6 +374,11 @@ void DbgGui::loadPreviousSessionSettings() {
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
         m_sampler.setBufferSize(m_options.sampling_buffer_size);
         setTheme(m_options.theme, m_window);
+
+        TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
+            int ypos = std::max(0, int(m_settings["window"]["ypos"]));
+            glfwSetWindowPos(m_window, xpos, ypos);
+            glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
 
         TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
