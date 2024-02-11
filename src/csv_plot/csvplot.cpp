@@ -219,10 +219,6 @@ void CsvPlotter::loadPreviousSessionSettings() {
     if (f.is_open()) {
         try {
             auto settings = nlohmann::json::parse(f);
-            int xpos = std::max(0, int(settings["window"]["xpos"]));
-            int ypos = std::max(0, int(settings["window"]["ypos"]));
-            glfwSetWindowPos(m_window, xpos, ypos);
-            glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
@@ -234,6 +230,11 @@ void CsvPlotter::loadPreviousSessionSettings() {
             for (auto scale : settings["scales"].items()) {
                 m_signal_scales[scale.key()] = scale.value();
             }
+
+            int xpos = std::max(0, int(settings["window"]["xpos"]));
+            int ypos = std::max(0, int(settings["window"]["ypos"]));
+            glfwSetWindowPos(m_window, xpos, ypos);
+            glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
         } catch (nlohmann::json::exception err) {
             std::cerr << "Failed to load previous session settings" << std::endl;
             std::cerr << err.what();
