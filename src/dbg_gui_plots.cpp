@@ -137,18 +137,19 @@ void DbgGui::showScalarPlots() {
                                                                                      SCALAR_PLOT_POINT_COUNT,
                                                                                      signal->scale,
                                                                                      signal->offset);
-                ImPlot::PlotLine(signal->alias_and_group.c_str(),
+                std::string label_id = std::format("{}###{}", signal->alias_and_group, signal->name_and_group);
+                ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
-                ImPlot::PlotLine(signal->alias_and_group.c_str(),
+                ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
                                  values.y_max.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
-                ImPlot::PlotShaded(signal->alias_and_group.c_str(),
+                ImPlot::PlotShaded(label_id.c_str(),
                                    values.time.data(),
                                    values.y_min.data(),
                                    values.y_max.data(),
@@ -158,10 +159,10 @@ void DbgGui::showScalarPlots() {
                 // update color for tooltip
                 signal->color = ImPlot::GetLastItemColor();
                 // Legend right-click
-                if (ImPlot::BeginLegendPopup(signal->alias_and_group.c_str())) {
+                if (ImPlot::BeginLegendPopup(label_id.c_str())) {
                     double current_value = signal->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::Text(signal->name_and_group.c_str());
+                    ImGui::Text(signal->alias_and_group.c_str());
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
