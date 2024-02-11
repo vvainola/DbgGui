@@ -38,7 +38,6 @@ enum class Theme {
     Moonlight,
     Photoshop,
     SoftCherry,
-    Steam,
     Unreal,
     THEME_COUNT
 };
