@@ -28,16 +28,16 @@
 
 enum class Theme {
     DefaultDark,
-    Cherry,
-    Comfy,
-    Gold,
+    Moonlight,
+    Photoshop,
+    Unreal,
     ImGuiClassic,
     ImGuiDark,
     ImGuiLight,
     Microsoft,
-    Moonlight,
-    Photoshop,
-    Unreal,
+    Cherry,
+    Comfy,
+    Gold,
     THEME_COUNT
 };
 
