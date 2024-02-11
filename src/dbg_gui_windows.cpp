@@ -488,14 +488,13 @@ void DbgGui::showMainMenuBar() {
             ImGui::SameLine();
             HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
 
-
             ImGui::Separator();
 
-            if (ImGui::Button("Clear saved settings")) {
+            if (ImGui::Button("Clear saved settings") && ImGui::GetIO().KeyCtrl) {
                 m_options.clear_saved_settings = true;
             }
             ImGui::SameLine();
-            HelpMarker("Rewrite settings to contain only the current configuration. Removes all non-existing symbols and options.");
+            HelpMarker("Requires ctrl-click. Rewrite settings to contain only the current configuration. Removes all non-existing symbols and options.");
 
             ImGui::EndMenu();
         }
