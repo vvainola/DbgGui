@@ -1235,6 +1235,8 @@ void setTheme(Theme theme) {
             style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.72f, 0.72f, 0.72f, 1.00f);
             style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.52f, 0.53f, 0.55f, 0.97f);
             style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.23f, 0.47f, 0.77f, 1.00f);
+            style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.2588235437870026f, 0.5882353186607361f, 0.9764705896377563f, 0.800000011920929f);
+
             break;
         }
         case Theme::Moonlight: {
