@@ -71,7 +71,10 @@ void setTheme(Theme theme, GLFWwindow* window) {
     style.FramePadding.y = 2;
     style.CellPadding.x = 4;
     style.CellPadding.y = 1;
+    style.ItemSpacing.x = 4;
+    style.ItemSpacing.y = 4;
     style.IndentSpacing = 20;
+    style.WindowMenuButtonPosition = ImGuiDir_None;
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform
     // windows can look identical to regular ones.
     style.WindowRounding = 0.0f;
