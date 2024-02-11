@@ -30,7 +30,6 @@ enum class Theme {
     DefaultDark,
     Cherry,
     Comfy,
-    DeepDark,
     Gold,
     ImGuiClassic,
     ImGuiDark,
