@@ -51,6 +51,7 @@
 #include <filesystem>
 #include <span>
 
+inline constexpr ImVec4 COLOR_TOOLTIP_LINE = ImVec4(0.7f, 0.7f, 0.7f, 0.6f);
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
@@ -733,7 +734,7 @@ void CsvPlotter::showPlots() {
                 // Tooltip
                 if (ImPlot::IsPlotHovered() && plotted_y.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
+                    ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
@@ -768,8 +769,8 @@ void CsvPlotter::showPlots() {
                     m_drag_x1 = x_range.Min + 0.1 * x_range.Size();
                     m_drag_x2 = x_range.Max - 0.1 * x_range.Size();
                 }
-                ImPlot::DragLineX(0, &m_drag_x1, ImVec4(1, 1, 1, 1));
-                ImPlot::DragLineX(1, &m_drag_x2, ImVec4(1, 1, 1, 1));
+                ImPlot::DragLineX(0, &m_drag_x1, COLOR_TOOLTIP_LINE);
+                ImPlot::DragLineX(1, &m_drag_x2, COLOR_TOOLTIP_LINE);
                 ImPlot::PlotText(std::format("x1 : {:g}", m_drag_x1).c_str(), m_drag_x1, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
                 ImPlot::PlotText(std::format("x2 : {:g}", m_drag_x2).c_str(), m_drag_x2, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
             } else {
