@@ -214,12 +214,19 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 
 void CsvPlotter::loadPreviousSessionSettings() {
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
-    ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
 
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         try {
             auto settings = nlohmann::json::parse(f);
+
+            if (settings.contains("layout")) {
+                std::string layout = settings["layout"];
+                ImGui::LoadIniSettingsFromMemory(layout.data());
+            } else {
+                ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
+            }
+
             m_plot_cnt = int(settings["window"]["plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
@@ -255,18 +262,6 @@ void CsvPlotter::updateSavedSettings() {
 
     std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
 
-    size_t ini_settings_size = 0;
-    std::string ini_settings = ImGui::SaveIniSettingsToMemory(&ini_settings_size);
-    static std::string ini_settings_saved = ini_settings;
-    if (ini_settings != ini_settings_saved) {
-        ini_settings_saved = ini_settings;
-
-        if (!std::filesystem::exists(settings_dir)) {
-            std::filesystem::create_directories(settings_dir);
-        }
-        ImGui::SaveIniSettingsToDisk((settings_dir + "imgui.ini").c_str());
-    }
-
     nlohmann::json settings;
     settings["window"]["width"] = width;
     settings["window"]["height"] = height;
@@ -279,11 +274,13 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["theme"] = m_options.theme;
+    settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     for (auto& [name, scale] : m_signal_scales) {
         settings["scales"][name] = scale;
     }
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
+        settings_saved = settings;
         std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
     }
 }
