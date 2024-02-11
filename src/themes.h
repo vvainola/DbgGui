@@ -36,7 +36,6 @@ enum class Theme {
     ImGuiLight,
     Microsoft,
     Cherry,
-    Comfy,
     Gold,
     THEME_COUNT
 };
