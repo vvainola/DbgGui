@@ -201,12 +201,6 @@ void DbgGui::showScalarPlots() {
             }
 
             if (m_options.scalar_plot_tooltip && ImPlot::IsPlotHovered()) {
-                bool paused = m_paused;
-                m_paused = true;
-                // Wait until main thread goes to pause state
-                while (m_next_sync_timestamp > 0) {
-                }
-
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                 ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
                 ImPlot::PlotInfLines("##", &mouse.x, 1);
@@ -219,24 +213,37 @@ void DbgGui::showScalarPlots() {
                                                                                         1,
                                                                                         signal->scale,
                                                                                         signal->offset);
-                    // Write the tooltip value to the signal to retrieve the enum value as str
                     double tooltip_value = value.y_min[0];
-                    double current_value = getSourceValue(signal->src);
-                    setSourceValue(signal->src, tooltip_value);
                     std::stringstream ss;
                     ss << signal->alias_and_group << " : " << tooltip_value;
+                    // Write enum value as string
                     if (std::get_if<ReadWriteFnCustomStr>(&signal->src)) {
-                        ss << " (" << getSourceValueStr(signal->src) << ")";
+                        // Retrieving the enum value on every iteration is slow so the values are cached.
+                        static std::map<std::pair<Scalar*, double>, std::string> enum_str_cache;
+                        std::pair<Scalar*, double> signal_and_value{signal, tooltip_value};
+                        if (!enum_str_cache.contains(signal_and_value)) {
+                            bool paused = m_paused;
+                            m_paused = true;
+                            // Wait until main thread goes to pause state
+                            while (m_next_sync_timestamp > 0) {
+                            }
+                            double current_value = getSourceValue(signal->src);
+                            // Write the tooltip value to the signal to retrieve the enum value as str
+                            setSourceValue(signal->src, tooltip_value);
+                            enum_str_cache[signal_and_value] = getSourceValueStr(signal->src);
+                            // Write the original value back
+                            setSourceValue(signal->src, current_value);
+                            m_paused = paused;
+                        }
+                        std::string enum_str = enum_str_cache[signal_and_value];
+                        ss << " (" << enum_str << ")";
                     }
-                    // Write the original value back
-                    setSourceValue(signal->src, current_value);
 
                     ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
                 }
 
-                m_paused = paused;
                 ImGui::EndTooltip();
             }
 
