@@ -28,12 +28,7 @@
 #include "imgui_internal.h"
 #include "themes.h"
 
-template <typename T>
-inline std::string numberAsStr(T number) {
-    return std::format("{:g}", double(number));
-}
-
-inline static std::string getSourceValueStr(ValueSource src) {
+std::string getSourceValueStr(ValueSource src) {
     return std::visit(
       [=](auto&& src) {
           using T = std::decay_t<decltype(src)>;

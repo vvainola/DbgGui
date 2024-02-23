@@ -143,7 +143,7 @@ class DbgGui {
     double m_sampling_time;
     double m_plot_timestamp = 0;
     double m_sample_timestamp = 0;
-    double m_next_sync_timestamp = 0;
+    std::atomic<double> m_next_sync_timestamp = 0;
 
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
@@ -187,3 +187,10 @@ inline bool contains(std::vector<T>& v, const T& item_to_search) {
     }
     return false;
 }
+
+template <typename T>
+inline std::string numberAsStr(T number) {
+    return std::format("{:g}", double(number));
+}
+
+std::string getSourceValueStr(ValueSource src);
