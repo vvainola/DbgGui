@@ -77,7 +77,7 @@ void DbgGui::showScalarPlots() {
             }
             if (ImGui::Button("Remove all")) {
                 scalar_plot.signals.clear();
-                m_settings["scalar_plots"][scalar_plot.name]["signals"].clear();
+                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].clear();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
