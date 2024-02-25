@@ -55,6 +55,7 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
         || startsWith(symbol_name, "nlohmann::")
         || startsWith(symbol_name, "Concurrency::")
         || startsWith(symbol_name, "ImPlot::")
+        || startsWith(symbol_name, "Catch::")
         || symbol_name == "GImGui"
         || symbol_name == "GImPlot"
         || symbol_name == "imgl3wProcs"
