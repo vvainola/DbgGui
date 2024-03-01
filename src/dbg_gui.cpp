@@ -886,6 +886,7 @@ void DbgGui::close() {
 
 void DbgGui::pause() {
     m_paused = true;
+    m_next_sync_timestamp = 0;
     while (m_paused) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
