@@ -32,11 +32,45 @@
 
 constexpr double PI = 3.1415926535897;
 constexpr int SCALAR_PLOT_POINT_COUNT = 2000;
+constexpr double MAG_MIN_OF_MAX = 2e-3;
+constexpr double APPROX_LIMIT = 1e-10;
 
 SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
                                          double sampling_time,
                                          SpectrumPlot::Window window,
                                          bool one_sided);
+
+std::vector<std::complex<double>> collectFftSamples(std::vector<double> const& time,
+                                                    std::vector<double> const& samples_x,
+                                                    std::vector<double> const& samples_y,
+                                                    double sampling_time) {
+    if (samples_x.size() != samples_y.size()) {
+        return {};
+    }
+    size_t sample_cnt = time.size();
+    std::vector<std::complex<double>> samples;
+    samples.reserve(sample_cnt);
+    double t_prev = 0;
+    // Get first sample that is a multiple of the sampling time
+    for (double t : time) {
+        double t_multiple = std::round(t / sampling_time) * sampling_time;
+        if (std::abs(t_multiple - t) < APPROX_LIMIT) {
+            t_prev = t;
+            break;
+        }
+    }
+    // Collect samples that samples that are "sampling time" away from each other and leave out
+    // samples in between in case of variable timestepping
+    for (size_t i = 0; i < sample_cnt; ++i) {
+        double t_current = time[i];
+        double t_delta = t_current - t_prev;
+        if (std::abs(t_delta - sampling_time) < APPROX_LIMIT) {
+            t_prev = t_current;
+            samples.push_back({samples_x[i], samples_y[i]});
+        }
+    }
+    return samples;
+}
 
 constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
     std::array<XY<double>, 1000> points;
@@ -560,12 +594,10 @@ void DbgGui::showSpectrumPlots() {
                                                                                     ALL_SAMPLES,
                                                                                     plot.vector->y->scale,
                                                                                     plot.vector->y->offset);
-            size_t sample_cnt = std::min(samples_x.y_min.size(), samples_y.y_min.size());
-            std::vector<std::complex<double>> samples;
-            samples.reserve(sample_cnt);
-            for (size_t i = 0; i < sample_cnt; ++i) {
-                samples.push_back({samples_x.y_min[i], samples_y.y_min[i]});
-            }
+            std::vector<std::complex<double>> samples = collectFftSamples(samples_x.time,
+                                                                          samples_x.y_min,
+                                                                          samples_y.y_min,
+                                                                          m_sampling_time);
             plot.spectrum_calculation = std::async(std::launch::async,
                                                    calculateSpectrum,
                                                    samples,
@@ -578,12 +610,11 @@ void DbgGui::showSpectrumPlots() {
                                                                                  ALL_SAMPLES,
                                                                                  plot.scalar->scale,
                                                                                  plot.scalar->offset);
-            size_t sample_cnt = values.y_min.size();
-            std::vector<std::complex<double>> samples;
-            samples.reserve(sample_cnt);
-            for (size_t i = 0; i < sample_cnt; ++i) {
-                samples.push_back({values.y_min[i], 0});
-            }
+            std::vector<double> zeros(values.time.size(), 0);
+            std::vector<std::complex<double>> samples = collectFftSamples(values.time,
+                                                                          values.y_min,
+                                                                          zeros,
+                                                                          m_sampling_time);
             plot.spectrum_calculation = std::async(std::launch::async,
                                                    calculateSpectrum,
                                                    samples,
@@ -677,7 +708,7 @@ SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> sampl
     for (std::complex<double> x : cplx_spec) {
         abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
     }
-    double mag_min = abs_max * 2e-3;
+    double mag_min = abs_max * MAG_MIN_OF_MAX;
 
     int mid = int(cplx_spec.size() / 2);
     double resolution = 1.0 / (sampling_time * cplx_spec.size());
