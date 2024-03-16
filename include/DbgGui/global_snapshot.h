@@ -65,6 +65,8 @@ void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file);
 
 #include <vector>
 #include <variant>
+#include <string>
+#include <functional>
 class VariantSymbol;
 using MemoryAddress = uint64_t;
 struct SymbolValue {
@@ -72,13 +74,22 @@ struct SymbolValue {
     std::variant<double, MemoryAddress> value;
 };
 /// @brief Save values of all global symbols into a vector
-/// @param symbols Symbol lookup from SNP_NewSymbolLookup
+/// @param symbols Symbol lookup from SNP_getSymbolsFromPdb/Json
 /// @return Current values that can be loaded with SNP_loadSnapshotFromMemory
 std::vector<SymbolValue> SNP_saveSnapshotToMemory(void* symbols);
 
 /// @brief Load previously saved values of global symbols
-/// @param symbols Symbol lookup from SNP_NewSymbolLookup
+/// @param symbols Symbol lookup from SNP_getSymbolsFromPdb/Json
 /// @param snapshot Values to load
 void SNP_loadSnapshotFromMemory(void* symbols, std::vector<SymbolValue> const& snapshot);
+
+///
+/// @brief Get lambda function for reading current symbol value
+///
+/// @param symbol_name Name of the symbol. Symbol must exist with given name
+/// @param symbols Optional symbol lookup from SNP_getSymbolsFromPdb/Json
+/// @return std::function<double(void)>
+///
+std::function<double(void)> SNP_getSymbolReadFn(std::string const& symbol_name, void* symbols = nullptr);
 
 #endif

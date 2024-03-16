@@ -25,6 +25,22 @@
 #include "DbgGui/global_snapshot.h"
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
+#include <print>
+
+static double getSourceValue(ValueSource src) {
+    return std::visit(
+      [=](auto&& src) {
+          using T = std::decay_t<decltype(src)>;
+          if constexpr (std::is_same_v<T, ReadWriteFn>) {
+              return src(std::nullopt);
+          } else if constexpr (std::is_same_v<T, ReadWriteFnCustomStr>) {
+              return src(std::nullopt).second;
+          } else {
+              return static_cast<double>(*src);
+          }
+      },
+      src);
+}
 
 void* SNP_getSymbolsFromPdb() {
     return (void*)&DbgHelpSymbols::getSymbolsFromPdb();
@@ -62,4 +78,22 @@ std::vector<SymbolValue> SNP_saveSnapshotToMemory(void* symbols) {
 
 void SNP_loadSnapshotFromMemory(void* symbols, std::vector<SymbolValue> const& snapshot) {
     ((DbgHelpSymbols*)symbols)->loadSnapshotFromMemory(snapshot);
+}
+
+std::function<double(void)> SNP_getSymbolReadFn(std::string const& symbol_name, void* symbols) {
+    if (symbols == nullptr) {
+        symbols = SNP_getSymbolsFromPdb();
+    }
+    VariantSymbol* sym = ((DbgHelpSymbols*)symbols)->getSymbol(symbol_name);
+    if (sym) {
+        return [=]() {
+            return getSourceValue(sym->getValueSource());
+        };
+    } else {
+        std::print(stderr, "Symbol \"{}\" not found\n", symbol_name);
+        assert(sym != nullptr);
+        return []() {
+            return 0;
+        };
+    }
 }
