@@ -60,8 +60,8 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::optional<int> pressedNumber();
-std::optional<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
-std::vector<CsvFileData> openCsvFromFileDialog();
+std::unique_ptr<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
+std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -103,9 +103,9 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     }
 
     for (std::string file : files) {
-        std::optional<CsvFileData> data = parseCsvData(file, name_and_plot_idx);
+        std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx);
         if (data) {
-            m_csv_data.push_back(*data);
+            m_csv_data.push_back(std::move(data));
         }
     }
 
@@ -285,13 +285,13 @@ void CsvPlotter::updateSavedSettings() {
     }
 }
 
-std::optional<CsvFileData> parseCsvData(std::string filename,
+std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
                                         std::map<std::string, int> name_and_plot_idx = {}) {
     std::string csv_filename = filename;
     if (filename.ends_with(".inf")) {
         bool csv_file_created = pscadInfToCsv(filename);
         if (!csv_file_created) {
-            return std::nullopt;
+            return nullptr;
         }
         std::string basename = filename.substr(0, filename.find_last_of("."));
         csv_filename = basename + ".csv";
@@ -305,7 +305,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         std::string inf_filename = basename + ".inf";
         bool csv_file_created = pscadInfToCsv(inf_filename);
         if (!csv_file_created) {
-            return std::nullopt;
+            return nullptr;
         }
         csv_filename = basename + ".csv";
     }
@@ -313,12 +313,12 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     std::ifstream csv(csv_filename);
     if (!csv.is_open()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
-        return std::nullopt;
+        return nullptr;
     }
     std::string third_last_line = getLineFromEnd(csv, 3);
     if (third_last_line.empty()) {
         std::cerr << "No data in file " + csv_filename << std::endl;
-        return std::nullopt;
+        return nullptr;
     }
 
     // Try detect delimiter from the end of file as that part likely doesn't contain extra information
@@ -340,7 +340,7 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
     }
     if (delimiter == '\0') {
         std::cerr << std::format("Unable to detect delimiter from third last line of the file \"{}\"\n", csv_filename);
-        return std::nullopt;
+        return nullptr;
     }
 
     // Find first line where header begins
@@ -410,11 +410,15 @@ std::optional<CsvFileData> parseCsvData(std::string filename,
         ASCENDING_NUMBERS.push_back(double(i));
     }
 
-    return CsvFileData{
-      .name = std::filesystem::relative(filename).string(),
-      .displayed_name = std::filesystem::relative(filename).string(),
-      .signals = csv_signals,
-      .write_time = std::filesystem::last_write_time(filename)};
+    std::unique_ptr<CsvFileData> csv_data = std::make_unique<CsvFileData>();
+    csv_data->name = std::filesystem::relative(filename).string();
+    csv_data->displayed_name = std::filesystem::relative(filename).string();
+    csv_data->signals = csv_signals;
+    csv_data->write_time = std::filesystem::last_write_time(filename);
+    for (CsvSignal& signal : csv_data->signals) {
+        signal.file = csv_data.get();
+    }
+    return std::move(csv_data);
 }
 
 void CsvPlotter::showSignalWindow() {
@@ -422,15 +426,15 @@ void CsvPlotter::showSignalWindow() {
 
     ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
-        std::vector<CsvFileData> csv_datas = openCsvFromFileDialog();
-        for (CsvFileData& csv_data : csv_datas) {
-            m_csv_data.push_back(csv_data);
+        std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
+        for (auto& csv_data : csv_datas) {
+            m_csv_data.push_back(std::move(csv_data));
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
-        for (CsvFileData& file : m_csv_data) {
-            for (CsvSignal& signal : file.signals) {
+        for (auto& file : m_csv_data) {
+            for (CsvSignal& signal : file->signals) {
                 signal.plot_idx = NOT_VISIBLE;
                 signal.color = NO_COLOR;
             }
@@ -441,8 +445,8 @@ void CsvPlotter::showSignalWindow() {
         std::stringstream ss_plots;
         ss_signals << "\"";
         ss_plots << "\"";
-        for (CsvFileData& file : m_csv_data) {
-            for (CsvSignal& signal : file.signals) {
+        for (auto& file : m_csv_data) {
+            for (CsvSignal& signal : file->signals) {
                 if (signal.plot_idx != NOT_VISIBLE) {
                     ss_signals << signal.name << ",";
                     ss_plots << signal.plot_idx << ",";
@@ -476,57 +480,57 @@ void CsvPlotter::showSignalWindow() {
     static char signal_name_filter[256] = "";
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
 
-    CsvFileData* file_to_remove = nullptr;
-    for (CsvFileData& file : m_csv_data) {
+    std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
+    for (auto& file : m_csv_data) {
         // Reload file if it has been rewritten. Wait that file has not been modified in the last 2 seconds
         // in case it is still being written
-        if (std::filesystem::exists(file.name)) {
-            auto last_write_time = std::filesystem::last_write_time(file.name);
+        if (std::filesystem::exists(file->name)) {
+            auto last_write_time = std::filesystem::last_write_time(file->name);
             auto write_time_plus_2s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(2);
             auto now = std::chrono::system_clock::now();
 
-            if (last_write_time != file.write_time
+            if (last_write_time != file->write_time
                 && now > write_time_plus_2s
-                && file.write_time != std::filesystem::file_time_type()) {
-                std::optional<CsvFileData> csv_data = parseCsvData(file.name);
+                && file->write_time != std::filesystem::file_time_type()) {
+                std::unique_ptr<CsvFileData> csv_data = parseCsvData(file->name);
                 if (csv_data) {
-                    if (csv_data->signals.size() == file.signals.size()) {
-                        for (int i = 0; i < file.signals.size(); ++i) {
-                            csv_data->signals[i].plot_idx = file.signals[i].plot_idx;
+                    if (csv_data->signals.size() == file->signals.size()) {
+                        for (int i = 0; i < file->signals.size(); ++i) {
+                            csv_data->signals[i].plot_idx = file->signals[i].plot_idx;
                             if (!m_options.keep_old_signals_on_reload) {
-                                csv_data->signals[i].color = file.signals[i].color;
-                                file.signals[i].plot_idx = NOT_VISIBLE;
-                                file.signals[i].color = NO_COLOR;
+                                csv_data->signals[i].color = file->signals[i].color;
+                                file->signals[i].plot_idx = NOT_VISIBLE;
+                                file->signals[i].color = NO_COLOR;
                             }
                         }
                     }
                     // Set write time to default so that the file gets reloaded again for the latest dataset
-                    file.write_time = std::filesystem::file_time_type();
-                    file.run_number++;
-                    csv_data->run_number = file.run_number;
-                    file.displayed_name += " " + std::to_string(file.run_number);
-                    m_csv_data.push_back(*csv_data);
+                    file->write_time = std::filesystem::file_time_type();
+                    file->run_number++;
+                    csv_data->run_number = file->run_number;
+                    file->displayed_name += " " + std::to_string(file->run_number);
+                    m_csv_data.push_back(std::move(csv_data));
                     break;
                 }
             }
         }
 
-        bool opened = ImGui::TreeNode(file.displayed_name.c_str());
+        bool opened = ImGui::TreeNode(file->displayed_name.c_str());
         // Make displayed name editable
-        if (ImGui::BeginPopupContextItem((file.displayed_name + "context_menu").c_str())) {
-            static std::string displayed_name_edit = file.displayed_name;
+        if (ImGui::BeginPopupContextItem((file->displayed_name + "context_menu").c_str())) {
+            static std::string displayed_name_edit = file->displayed_name;
             displayed_name_edit.reserve(MAX_NAME_LENGTH);
-            displayed_name_edit = file.displayed_name;
+            displayed_name_edit = file->displayed_name;
             if (ImGui::InputText("Name##scalar_context_menu",
                                  displayed_name_edit.data(),
                                  MAX_NAME_LENGTH,
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                file.displayed_name = std::string(displayed_name_edit.data());
-                if (file.displayed_name.empty()) {
-                    file.displayed_name = file.name;
+                file->displayed_name = std::string(displayed_name_edit.data());
+                if (file->displayed_name.empty()) {
+                    file->displayed_name = file->name;
                 }
             }
-            ImGui::InputDouble("X-axis shift", &file.x_axis_shift, 0, 0, "%g");
+            ImGui::InputDouble("X-axis shift", &file->x_axis_shift, 0, 0, "%g");
             if (ImGui::Button("Remove")) {
                 file_to_remove = &file;
             }
@@ -534,7 +538,7 @@ void CsvPlotter::showSignalWindow() {
         }
 
         if (opened) {
-            for (CsvSignal& signal : file.signals) {
+            for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
                 if (!std::string(signal_name_filter).empty()
                     && !fts::fuzzy_match_simple(signal_name_filter, signal.name.c_str())) {
@@ -572,7 +576,7 @@ void CsvPlotter::showSignalWindow() {
                     ImGui::EndDragDropSource();
                 }
 
-                if (ImGui::BeginPopupContextItem((file.displayed_name + signal.name + "context_menu").c_str())) {
+                if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
                     ImGui::InputDouble("Scale", &signal_scale);
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
@@ -606,12 +610,11 @@ void CsvPlotter::showPlots() {
         size_t longest_name_length = 1;
         size_t longest_file_length = 1;
         std::vector<CsvSignal*> signals;
-        for (CsvFileData& file : m_csv_data) {
-            for (CsvSignal& signal : file.signals) {
+        for (auto& file : m_csv_data) {
+            for (CsvSignal& signal : file->signals) {
                 if (signal.plot_idx == plot_idx) {
                     longest_name_length = std::max(longest_name_length, signal.name.size());
-                    longest_file_length = std::max(longest_file_length, file.displayed_name.size());
-                    signal.file = &file;
+                    longest_file_length = std::max(longest_file_length, file->displayed_name.size());
                     signals.push_back(&signal);
                 }
             }
@@ -800,9 +803,9 @@ void CsvPlotter::showPlots() {
     }
 }
 
-std::vector<CsvFileData> openCsvFromFileDialog() {
+std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
     nfdpathset_t path_set;
-    std::vector<CsvFileData> csv_datas;
+    std::vector<std::unique_ptr<CsvFileData>> csv_datas;
     auto cwd = std::filesystem::current_path();
     nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", cwd.string().c_str(), &path_set);
     if (result == NFD_OKAY) {
@@ -810,7 +813,7 @@ std::vector<CsvFileData> openCsvFromFileDialog() {
             std::string out(NFD_PathSet_GetPath(&path_set, i));
             auto csv_data = parseCsvData(out);
             if (csv_data) {
-                csv_datas.push_back(*csv_data);
+                csv_datas.push_back(std::move(csv_data));
             }
         }
         NFD_PathSet_Free(&path_set);
