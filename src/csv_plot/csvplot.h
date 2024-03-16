@@ -85,7 +85,7 @@ class CsvPlotter {
     void loadPreviousSessionSettings();
     GLFWwindow* m_window;
 
-    std::vector<CsvFileData> m_csv_data;
+    std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, double> m_signal_scales;
     int m_plot_cnt = 1;
     int m_fit_plot_idx = -1;
