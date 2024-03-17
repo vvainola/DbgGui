@@ -83,9 +83,13 @@ int32_t binarySearch(std::span<double const> values, double searched_value, int3
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time) {
     int32_t start_idx = 0;
     int32_t end_idx = int32_t(time.size() - 1);
-    start_idx = binarySearch(time, start_time, start_idx, end_idx);
-    end_idx = binarySearch(time, end_time, start_idx, end_idx);
+    // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
+    start_idx = binarySearch(time, start_time, start_idx, end_idx) - 1;
+    end_idx = binarySearch(time, end_time, start_idx, end_idx) + 2;
     end_idx = std::max(end_idx, start_idx);
+    // Prevent overflows
+    start_idx = std::max(start_idx, 0);
+    end_idx = std::min(end_idx, (int32_t)time.size() - 1);
     return {start_idx, end_idx};
 }
 
@@ -169,7 +173,9 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 
         //---------- Main windows ----------
         showSignalWindow();
-        showPlots();
+        showScalarPlots();
+        showVectorPlots();
+
         // Settings are not saved when creating image because the window
         // is moved out of sight and should not be restored there
         if (image_filepath.empty()) {
@@ -227,7 +233,8 @@ void CsvPlotter::loadPreviousSessionSettings() {
                 ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
             }
 
-            m_plot_cnt = int(settings["window"]["plot_cnt"]);
+            m_scalar_plot_cnt = int(settings["window"]["plot_cnt"]);
+            m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
@@ -267,7 +274,8 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["height"] = height;
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
-    settings["window"]["plot_cnt"] = m_plot_cnt;
+    settings["window"]["plot_cnt"] = m_scalar_plot_cnt;
+    settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
     settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
@@ -286,7 +294,7 @@ void CsvPlotter::updateSavedSettings() {
 }
 
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
-                                        std::map<std::string, int> name_and_plot_idx = {}) {
+                                          std::map<std::string, int> name_and_plot_idx = {}) {
     std::string csv_filename = filename;
     if (filename.ends_with(".inf")) {
         bool csv_file_created = pscadInfToCsv(filename);
@@ -458,15 +466,10 @@ void CsvPlotter::showSignalWindow() {
         ImGui::SetClipboardText(std::format("--names {} --plots {}", ss_signals.str(), ss_plots.str()).c_str());
     }
 
-    if (ImGui::Button("Add plot")) {
-        m_plot_cnt++;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Remove plot")) {
-        m_plot_cnt--;
-        m_plot_cnt = std::max(m_plot_cnt, 1);
-    }
-
+    ImGui::InputInt("Scalar plots", &m_scalar_plot_cnt, 1);
+    ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
+    m_scalar_plot_cnt = std::clamp(m_scalar_plot_cnt, 1, MAX_PLOTS);
+    m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
     themeCombo(m_options.theme, m_window);
     if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();
@@ -545,14 +548,28 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
 
-                bool selected = signal.plot_idx != NOT_VISIBLE;
                 double& signal_scale = m_signal_scales[signal.name];
                 // Set default scale if signal has no scale
                 if (signal_scale == 0) {
                     signal_scale = 1;
                 }
                 ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? ImGui::GetStyle().Colors[ImGuiCol_Text] : COLOR_GRAY);
+                bool selected = signal.plot_idx != NOT_VISIBLE
+                             || m_selected_signals[0] == &signal
+                             || m_selected_signals[1] == &signal;
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
+                    // Select two signals with ctrl-click for dragging to vector plot
+                    static bool selected_idx = 0;
+                    if (ImGui::GetIO().KeyCtrl) {
+                        m_selected_signals[selected_idx] = &signal;
+                        selected_idx = !selected_idx;
+                    } else {
+                        selected_idx = 0;
+                        m_selected_signals[0] = nullptr;
+                        m_selected_signals[1] = nullptr;
+                        signal.plot_idx = NOT_VISIBLE;
+                        signal.color = NO_COLOR;
+                    }
                     // Always drag and dropping is tedious. Add signal to plot if it is selected while
                     // pressing a number to make it easier to add signals with same name from different
                     // files to same plot by selecting them while pressing the number of the plot
@@ -562,9 +579,6 @@ void CsvPlotter::showSignalWindow() {
                         if (m_options.fit_after_drag_and_drop) {
                             m_fit_plot_idx = signal.plot_idx;
                         }
-                    } else {
-                        signal.plot_idx = NOT_VISIBLE;
-                        signal.color = NO_COLOR;
                     }
                 }
                 ImGui::PopStyleColor();
@@ -573,6 +587,15 @@ void CsvPlotter::showSignalWindow() {
                     CsvSignal* p = &signal;
                     ImGui::SetDragDropPayload("CSV", &p, sizeof(CsvSignal*));
                     ImGui::Text("Drag to plot");
+                    ImGui::EndDragDropSource();
+                }
+
+                if (m_selected_signals[0] != nullptr
+                    && m_selected_signals[1] != nullptr
+                    && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    // Payload is not used
+                    ImGui::SetDragDropPayload("CSV_Vector", NULL, 0);
+                    ImGui::Text("Drag to vector plot");
                     ImGui::EndDragDropSource();
                 }
 
@@ -596,8 +619,8 @@ void CsvPlotter::showSignalWindow() {
     }
 }
 
-void CsvPlotter::showPlots() {
-    for (int plot_idx = 0; plot_idx < m_plot_cnt; ++plot_idx) {
+void CsvPlotter::showScalarPlots() {
+    for (int plot_idx = 0; plot_idx < m_scalar_plot_cnt; ++plot_idx) {
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
         bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
         bool fit_data = (plot_idx == m_fit_plot_idx);
@@ -711,11 +734,6 @@ void CsvPlotter::showPlots() {
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
-                // Add 1 extra point to both ends not have blanks at the edges. +2 because end range is exclusive
-                indices.first = std::max(0, indices.first - 1);
-                indices.second = std::min(int32_t(all_y_values.size() - 1), indices.second + 2);
-                indices.first = std::min(indices.first, indices.second);
-
                 std::vector<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
                 std::vector<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {
