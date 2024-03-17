@@ -120,7 +120,8 @@ void CsvPlotter::showVectorPlots() {
                     y_sample *= y_scale;
                 }
 
-                ImPlot::PlotLine(signals.first->name.c_str(),
+                std::string displayed_signal_name = std::format("{} | {}", signals.first->name, signals.first->file->displayed_name);
+                ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  plotted_x.data(),
                                  plotted_y.data(),
                                  int(plotted_y.size()),
@@ -128,14 +129,14 @@ void CsvPlotter::showVectorPlots() {
                 // Plot line from origin to latest sample
                 double x_to_latest[2] = {0, plotted_x.back()};
                 double y_to_latest[2] = {0, plotted_y.back()};
-                ImPlot::PlotLine(signals.first->name.c_str(),
+                ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  x_to_latest,
                                  y_to_latest,
                                  2,
                                  ImPlotLineFlags_None);
 
                 // Legend right-click
-                if (ImPlot::BeginLegendPopup(signals.first->name.c_str())) {
+                if (ImPlot::BeginLegendPopup(displayed_signal_name.c_str())) {
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = &signals;
                     };
