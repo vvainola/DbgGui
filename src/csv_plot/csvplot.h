@@ -26,6 +26,7 @@
 #include <string>
 #include <filesystem>
 #include <map>
+#include <array>
 
 struct MinMax {
     double min;
@@ -42,8 +43,10 @@ struct MinMax {
 inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
 inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
+inline constexpr int MAX_PLOTS = 10;
 
 struct CsvSignal;
+struct GLFWwindow;
 
 struct CsvFileData {
     std::string name;
@@ -69,7 +72,10 @@ struct CsvSignal {
     CsvFileData const* file;
 };
 
-struct GLFWwindow;
+struct VectorPlot {
+    std::vector<std::pair<CsvSignal*, CsvSignal*>> signals;
+};
+
 class CsvPlotter {
   public:
     CsvPlotter(std::vector<std::string> files = {},
@@ -79,7 +85,8 @@ class CsvPlotter {
 
   private:
     void showSignalWindow();
-    void showPlots();
+    void showScalarPlots();
+    void showVectorPlots();
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
@@ -87,7 +94,8 @@ class CsvPlotter {
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, double> m_signal_scales;
-    int m_plot_cnt = 1;
+    int m_scalar_plot_cnt = 1;
+    int m_vector_plot_cnt = 0;
     int m_fit_plot_idx = -1;
     struct {
         bool first_signal_as_x = true;
@@ -101,4 +109,7 @@ class CsvPlotter {
     MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
+
+    CsvSignal* m_selected_signals[2] = {};
+    std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
 };
