@@ -60,6 +60,11 @@ void CsvPlotter::showVectorPlots() {
         auto& plot = m_vector_plots[i];
         ImGui::Begin(std::format("Vector plot {}", i).c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
 
+        if (plot.autofit_next_frame) {
+            ImPlot::SetNextAxesToFit();
+            plot.autofit_next_frame = false;
+        }
+
         if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
             // Plot unit circle
             ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
@@ -135,6 +140,11 @@ void CsvPlotter::showVectorPlots() {
                         signal_to_remove = &signals;
                     };
                     ImPlot::EndLegendPopup();
+                }
+
+                // Fit the data with both double click & mouse middle button
+                if (ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
+                    plot.autofit_next_frame = true;
                 }
             }
             if (signal_to_remove) {
