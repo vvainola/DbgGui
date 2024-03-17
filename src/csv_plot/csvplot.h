@@ -74,6 +74,7 @@ struct CsvSignal {
 
 struct VectorPlot {
     std::vector<std::pair<CsvSignal*, CsvSignal*>> signals;
+    bool autofit_next_frame = false;
 };
 
 class CsvPlotter {
