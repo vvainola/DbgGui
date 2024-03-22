@@ -144,10 +144,21 @@ class ScrollingBuffer {
             m_scalar_buffers_temp[scalar] = {};
         }
     }
+
     void startSampling(Vector2D* vector) {
         startSampling(vector->x);
         startSampling(vector->y);
     }
+
+    void copySamples(Scalar& from, Scalar& to) {
+        m_scalar_buffers[&to] = m_scalar_buffers[&from];
+    }
+
+    void copySamples(Vector2D& from, Vector2D& to) {
+        m_scalar_buffers[to.x] = m_scalar_buffers[from.x];
+        m_scalar_buffers[to.y] = m_scalar_buffers[from.y];
+    }
+
     void stopSampling(Scalar* scalar) {
         if (m_scalar_buffers.contains(scalar)) {
             m_scalar_buffers.erase(scalar);

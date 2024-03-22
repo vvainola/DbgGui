@@ -632,6 +632,7 @@ void DbgGui::showScalarWindow() {
                             scalar->deleted = true;
                             if (m_sampler.isSignalSampled(scalar)) {
                                 m_sampler.startSampling(new_scalar);
+                                m_sampler.copySamples(*scalar, *new_scalar);
                             }
                             scalar->replacement = new_scalar;
                         }
@@ -805,6 +806,7 @@ void DbgGui::showVectorWindow() {
                             new_vector->y->offset = vector->y->offset;
                             if (m_sampler.isSignalSampled(vector->x) || m_sampler.isSignalSampled(vector->y)) {
                                 m_sampler.startSampling(new_vector);
+                                m_sampler.copySamples(*vector, *new_vector);
                             }
                             vector->deleted = true;
                             vector->replacement = new_vector;
