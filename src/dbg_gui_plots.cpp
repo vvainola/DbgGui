@@ -33,7 +33,7 @@
 constexpr double PI = 3.1415926535897;
 constexpr int SCALAR_PLOT_POINT_COUNT = 2000;
 constexpr double MAG_MIN_OF_MAX = 2e-3;
-constexpr double APPROX_LIMIT = 1e-10;
+constexpr double APPROX_LIMIT = 1e-7;
 
 SpectrumPlot::Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
                                          double sampling_time,
