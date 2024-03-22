@@ -627,6 +627,9 @@ void DbgGui::updateSavedSettings() {
             Scalar* scalar = scalar_plot.signals[i];
             if (scalar->deleted) {
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar->name_and_group);
+                if (scalar->replacement != nullptr) {
+                    scalar_plot.addSignalToPlot(scalar->replacement);
+                }
                 remove(scalar_plot.signals, scalar);
             } else {
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"][scalar->name_and_group] = scalar->id;
@@ -649,6 +652,9 @@ void DbgGui::updateSavedSettings() {
         for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.signals[i];
             if (vector->deleted || vector->x->deleted || vector->y->deleted) {
+                if (vector->deleted && vector->replacement != nullptr) {
+                    vector_plot.addSignalToPlot(vector->replacement);
+                }
                 m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(vector->name_and_group);
                 remove(vector_plot.signals, vector);
             } else {
@@ -677,13 +683,13 @@ void DbgGui::updateSavedSettings() {
         m_settings["spec_plots"][std::to_string(spec_plot.id)]["y_axis_max"] = spec_plot.y_axis.max;
         if (spec_plot.scalar) {
             if (spec_plot.scalar->deleted) {
-                spec_plot.scalar = nullptr;
+                spec_plot.scalar = spec_plot.scalar->replacement;
             } else {
                 m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.scalar->id;
             }
         } else if (spec_plot.vector) {
             if (spec_plot.vector->deleted) {
-                spec_plot.vector = nullptr;
+                spec_plot.vector = spec_plot.vector->replacement;
             } else {
                 m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.vector->id;
             }
@@ -704,6 +710,9 @@ void DbgGui::updateSavedSettings() {
         for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
+                if (scalar->replacement != nullptr) {
+                    custom_window.scalars.push_back(scalar->replacement);
+                }
                 remove(custom_window.scalars, scalar);
                 m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar->group + " " + scalar->name);
             } else {

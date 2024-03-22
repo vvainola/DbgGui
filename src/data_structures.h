@@ -102,6 +102,7 @@ struct Scalar {
     ValueSource src;
     bool hide_from_scalars_window = false;
     bool deleted = false;
+    Scalar* replacement = nullptr;
     double scale = 1;
     double offset = 0;
 
@@ -163,6 +164,7 @@ struct Vector2D {
     Scalar* x;
     Scalar* y;
     bool deleted = false;
+    Vector2D* replacement = nullptr;
 };
 
 struct Window {

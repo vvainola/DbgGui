@@ -630,6 +630,10 @@ void DbgGui::showScalarWindow() {
                             new_scalar->scale = scalar->scale;
                             new_scalar->offset = scalar->offset;
                             scalar->deleted = true;
+                            if (m_sampler.isSignalSampled(scalar)) {
+                                m_sampler.startSampling(new_scalar);
+                            }
+                            scalar->replacement = new_scalar;
                         }
                     }
                 }
@@ -799,7 +803,11 @@ void DbgGui::showVectorWindow() {
                             new_vector->x->offset = vector->x->offset;
                             new_vector->y->scale = vector->y->scale;
                             new_vector->y->offset = vector->y->offset;
+                            if (m_sampler.isSignalSampled(vector->x) || m_sampler.isSignalSampled(vector->y)) {
+                                m_sampler.startSampling(new_vector);
+                            }
                             vector->deleted = true;
+                            vector->replacement = new_vector;
                         }
                     }
                 }
