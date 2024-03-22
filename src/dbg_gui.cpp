@@ -232,36 +232,24 @@ void DbgGui::updateLoop() {
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
             m_simulation_speed /= 2.;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
-            ImGui::OpenPopup("Pause after");
+            ImGui::OpenPopup(str::PAUSE_AFTER);
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
-            ImGui::OpenPopup("Pause at");
+            ImGui::OpenPopup(str::PAUSE_AT);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_1)) {
+            ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_2)) {
+            ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_3)) {
+            ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_4)) {
+            ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
         }
-
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-        if (ImGui::BeginPopupModal("Pause after", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputDouble("##Pause after", &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_pause_at_time = m_sample_timestamp + pause_after;
-                ImGui::CloseCurrentPopup();
-            };
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
-
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-        if (ImGui::BeginPopupModal("Pause at", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputDouble("##Pause at", &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
-                ImGui::CloseCurrentPopup();
-            };
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
+        addPopupModal(str::ADD_SCALAR_PLOT);
+        addPopupModal(str::ADD_VECTOR_PLOT);
+        addPopupModal(str::ADD_SPECTRUM_PLOT);
+        addPopupModal(str::ADD_CUSTOM_WINDOW);
+        addPopupModal(str::PAUSE_AFTER);
+        addPopupModal(str::PAUSE_AT);
 
         //---------- Main windows ----------
         {

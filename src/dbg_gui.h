@@ -41,6 +41,15 @@ inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_TEAL = ImVec4(0.0f, 1.0f, 1.0f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
+namespace str {
+inline constexpr const char* ADD_SCALAR_PLOT = "Add scalar plot";
+inline constexpr const char* ADD_VECTOR_PLOT = "Add vector plot";
+inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
+inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
+inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
+inline constexpr const char* PAUSE_AFTER = "Pause after";
+inline constexpr const char* PAUSE_AT = "Pause at";
+} // namespace str
 
 class DbgGui {
   public:
@@ -95,6 +104,7 @@ class DbgGui {
     void addScalarContextMenu(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol const& sym);
     void restoreScalarSettings(Scalar* scalar);
+    void addPopupModal(std::string const& modal_name);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);

@@ -310,112 +310,45 @@ void DbgGui::showMainMenuBar() {
                 ImGui::OpenPopup("##Add");
             }
             if (ImGui::BeginPopup("##Add")) {
-                // Pointer to open status is needed for the "X close" button to be visible
-                bool open = true;
-                // Always center this window when appearing
-                ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-                ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-                if (ImGui::Button("Scalar plot")) {
-                    ImGui::OpenPopup("Add scalar plot");
-                }
-                static char window_or_plot_name[256] = "";
-                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
                 // Scalar plot
-                if (ImGui::BeginPopupModal("Add scalar plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    if (ImGui::InputText("Name",
-                                         window_or_plot_name,
-                                         IM_ARRAYSIZE(window_or_plot_name),
-                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        ScalarPlot plot;
-                        plot.name = window_or_plot_name;
-                        plot.id = hashWithTime(window_or_plot_name);
-                        plot.y_axis = {-1, 1};
-                        plot.x_axis = {0, 1};
-                        plot.x_range = 1;
-                        m_scalar_plots.push_back(plot);
-                        strcpy_s(window_or_plot_name, "");
-                        ImGui::CloseCurrentPopup();
-                    };
-                    ImGui::EndPopup();
+                if (ImGui::Button("Scalar plot")) {
+                    ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
                 }
+                ImGui::SameLine();
+                HelpMarker("Hotkey to add new scalar plot is ctrl+shift+1");
+                addPopupModal(str::ADD_SCALAR_PLOT);
 
                 // Vector plot
                 if (ImGui::Button("Vector plot")) {
-                    ImGui::OpenPopup("Add vector plot");
+                    ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
                 }
-                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add vector plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    if (ImGui::InputText("Vector plot name",
-                                         window_or_plot_name,
-                                         IM_ARRAYSIZE(window_or_plot_name),
-                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_vector_plots.push_back(VectorPlot{{.name = window_or_plot_name,
-                                                             .id = hashWithTime(window_or_plot_name)}});
-                        strcpy_s(window_or_plot_name, "");
-                        ImGui::CloseCurrentPopup();
-                    };
-                    ImGui::EndPopup();
-                }
+                ImGui::SameLine();
+                HelpMarker("Hotkey to add new vector plot is ctrl+shift+2");
+                addPopupModal(str::ADD_VECTOR_PLOT);
 
                 // Spectrum plot
                 if (ImGui::Button("Spectrum plot")) {
-                    ImGui::OpenPopup("Add spectrum plot");
+                    ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
                 }
-                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add spectrum plot", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    if (ImGui::InputText("Spectrum plot name",
-                                         window_or_plot_name,
-                                         IM_ARRAYSIZE(window_or_plot_name),
-                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_spectrum_plots.push_back(SpectrumPlot{{.name = window_or_plot_name,
-                                                                 .id = hashWithTime(window_or_plot_name)}});
-                        strcpy_s(window_or_plot_name, "");
-                        ImGui::CloseCurrentPopup();
-                    };
-                    ImGui::EndPopup();
-                }
+                ImGui::SameLine();
+                HelpMarker("Hotkey to add new spectrum plot is ctrl+shift+3");
+                addPopupModal(str::ADD_SPECTRUM_PLOT);
 
                 // Custom window
                 if (ImGui::Button("Custom window")) {
-                    ImGui::OpenPopup("Add custom window");
+                    ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
                 }
-                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add custom window", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    if (ImGui::InputText("Custom window name",
-                                         window_or_plot_name,
-                                         IM_ARRAYSIZE(window_or_plot_name),
-                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        m_custom_windows.push_back(CustomWindow{{.name = window_or_plot_name,
-                                                                 .id = hashWithTime(window_or_plot_name)}});
-                        strcpy_s(window_or_plot_name, "");
-                        ImGui::CloseCurrentPopup();
-                    };
-                    ImGui::EndPopup();
-                }
+                ImGui::SameLine();
+                HelpMarker("Hotkey to add new custom window is ctrl+shift+4");
+                addPopupModal(str::ADD_CUSTOM_WINDOW);
 
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
-                    ImGui::OpenPopup("Add dockspace");
+                    ImGui::OpenPopup(str::ADD_DOCKSPACE);
                 }
                 ImGui::SameLine();
                 HelpMarker("Dockspaces are empty windows to which other windows can be docked to create nested tabs.");
-
-                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-                if (ImGui::BeginPopupModal("Add dockspace", &open, ImGuiWindowFlags_AlwaysAutoResize)) {
-                    if (ImGui::InputText("Dockspace name",
-                                         window_or_plot_name,
-                                         IM_ARRAYSIZE(window_or_plot_name),
-                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        // Add clock to hash calculation because dockspace name can change later and the user might
-                        // create a new dockspace which could have same name as the original and they would result in same id
-                        m_dockspaces.push_back(DockSpace{{.name = window_or_plot_name,
-                                                          .id = hashWithTime(window_or_plot_name)}});
-                        strcpy_s(window_or_plot_name, "");
-                        ImGui::CloseCurrentPopup();
-                    };
-                    ImGui::EndPopup();
-                }
+                addPopupModal(str::ADD_DOCKSPACE);
 
                 // End "Add.." popup
                 ImGui::EndPopup();
