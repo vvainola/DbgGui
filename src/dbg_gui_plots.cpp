@@ -244,7 +244,7 @@ void DbgGui::showScalarPlots() {
                     ScalarPlot* original_plot = plot_and_scalar.first;
                     Scalar* scalar = plot_and_scalar.second;
                     if (original_plot != &scalar_plot) {
-                         remove(original_plot->signals, plot_and_scalar.second);
+                        remove(original_plot->signals, scalar);
                         size_t signals_removed = m_settings["scalar_plots"][std::to_string(original_plot->id)]["signals"].erase(scalar->name_and_group);
                         assert(signals_removed > 0);
                         scalar_plot.addSignalToPlot(scalar);
@@ -445,6 +445,14 @@ void DbgGui::showVectorPlots() {
 
                     ImPlot::EndLegendPopup();
                 }
+
+                // Legend items can be dragged to other plots to move the signal.
+                if (ImPlot::BeginDragDropSourceItem(signal->name_and_group.c_str(), ImGuiDragDropFlags_None)) {
+                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = {&vector_plot, signal};
+                    ImGui::SetDragDropPayload("PLOT_AND_VECTOR", &plot_and_vector, sizeof(plot_and_vector));
+                    ImGui::Text("Drag to move another plot");
+                    ImPlot::EndDragDropSource();
+                }
             }
 
             if (ImPlot::BeginDragDropTargetPlot()) {
@@ -460,6 +468,17 @@ void DbgGui::showVectorPlots() {
                     Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
                     m_sampler.startSampling(vector);
                     vector_plot.addSignalToPlot(vector);
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_VECTOR")) {
+                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = *(std::pair<VectorPlot*, Vector2D*>*)payload->Data;
+                    VectorPlot* original_plot = plot_and_vector.first;
+                    Vector2D* vector = plot_and_vector.second;
+                    if (original_plot != &vector_plot) {
+                        remove(original_plot->signals, vector);
+                        size_t signals_removed = m_settings["vector_plots"][std::to_string(original_plot->id)]["signals"].erase(vector->name_and_group);
+                        assert(signals_removed > 0);
+                        vector_plot.addSignalToPlot(vector);
+                    }
                 }
                 ImPlot::EndDragDropTarget();
             }
