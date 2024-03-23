@@ -216,6 +216,14 @@ void DbgGui::showScalarPlots() {
                     };
                     ImPlot::EndLegendPopup();
                 }
+
+                // Legend items can be dragged to other plots to move the signal.
+                if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
+                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = {&scalar_plot, signal};
+                    ImGui::SetDragDropPayload("PLOT_AND_SCALAR", &plot_and_scalar, sizeof(plot_and_scalar));
+                    ImGui::Text("Drag to move another plot");
+                    ImPlot::EndDragDropSource();
+                }
             }
 
             if (ImPlot::BeginDragDropTargetPlot()) {
@@ -230,6 +238,17 @@ void DbgGui::showScalarPlots() {
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                     m_sampler.startSampling(scalar);
                     scalar_plot.addSignalToPlot(scalar);
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_SCALAR")) {
+                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = *(std::pair<ScalarPlot*, Scalar*>*)payload->Data;
+                    ScalarPlot* original_plot = plot_and_scalar.first;
+                    Scalar* scalar = plot_and_scalar.second;
+                    if (original_plot != &scalar_plot) {
+                         remove(original_plot->signals, plot_and_scalar.second);
+                        size_t signals_removed = m_settings["scalar_plots"][std::to_string(original_plot->id)]["signals"].erase(scalar->name_and_group);
+                        assert(signals_removed > 0);
+                        scalar_plot.addSignalToPlot(scalar);
+                    }
                 }
                 ImPlot::EndDragDropTarget();
             }
