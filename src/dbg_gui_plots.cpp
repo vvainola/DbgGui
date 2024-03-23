@@ -218,7 +218,7 @@ void DbgGui::showScalarPlots() {
                 }
             }
 
-            if (ImGui::BeginDragDropTarget()) {
+            if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
@@ -231,7 +231,7 @@ void DbgGui::showScalarPlots() {
                     m_sampler.startSampling(scalar);
                     scalar_plot.addSignalToPlot(scalar);
                 }
-                ImGui::EndDragDropTarget();
+                ImPlot::EndDragDropTarget();
             }
 
             if (m_options.scalar_plot_tooltip && ImPlot::IsPlotHovered()) {
@@ -428,7 +428,7 @@ void DbgGui::showVectorPlots() {
                 }
             }
 
-            if (ImGui::BeginDragDropTarget()) {
+            if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
@@ -442,7 +442,7 @@ void DbgGui::showVectorPlots() {
                     m_sampler.startSampling(vector);
                     vector_plot.addSignalToPlot(vector);
                 }
-                ImGui::EndDragDropTarget();
+                ImPlot::EndDragDropTarget();
             }
             ImPlot::EndPlot();
         }
@@ -533,7 +533,7 @@ void DbgGui::showSpectrumPlots() {
             }
             ImPlot::PlotStems(text.c_str(), plot.spectrum.freq.data(), plot.spectrum.mag.data(), int(plot.spectrum.mag.size()));
 
-            if (ImGui::BeginDragDropTarget()) {
+            if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
@@ -559,7 +559,7 @@ void DbgGui::showSpectrumPlots() {
                     m_sampler.startSampling(vector);
                     plot.addSignalToPlot(vector);
                 }
-                ImGui::EndDragDropTarget();
+                ImPlot::EndDragDropTarget();
             }
 
             if (ImPlot::IsPlotHovered()) {
