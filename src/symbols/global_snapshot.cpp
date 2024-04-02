@@ -25,7 +25,7 @@
 #include "DbgGui/global_snapshot.h"
 #include "dbghelp_symbols_lookup.h"
 #include "variant_symbol.h"
-#include <print>
+#include <iostream>
 
 static double getSourceValue(ValueSource src) {
     return std::visit(
@@ -90,7 +90,7 @@ std::function<double(void)> SNP_getSymbolReadFn(std::string const& symbol_name, 
             return getSourceValue(sym->getValueSource());
         };
     } else {
-        std::print(stderr, "Symbol \"{}\" not found\n", symbol_name);
+        std::cerr << "Symbol \"" << symbol_name << "\" not found\n";
         assert(sym != nullptr);
         return []() {
             return 0;
