@@ -865,6 +865,8 @@ bool DbgGui::isClosed() {
 }
 
 void DbgGui::close() {
+    m_next_sync_timestamp = 0;
+    m_closing = true;
     if (m_window && m_options.pause_on_close) {
         m_paused = true;
         while (m_paused) {

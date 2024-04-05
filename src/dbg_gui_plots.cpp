@@ -269,8 +269,8 @@ void DbgGui::showScalarPlots() {
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
                     ss << signal->alias_and_group << " : " << tooltip_value;
-                    // Write enum value as string
-                    if (std::get_if<ReadWriteFnCustomStr>(&signal->src)) {
+                    // Write enum value as string if not closing in destructor and it is not possible to write anymore
+                    if (std::get_if<ReadWriteFnCustomStr>(&signal->src) && !m_closing) {
                         // Retrieving the enum value on every iteration is slow so the values are cached.
                         static std::map<std::pair<Scalar*, double>, std::string> enum_str_cache;
                         std::pair<Scalar*, double> signal_and_value{signal, tooltip_value};

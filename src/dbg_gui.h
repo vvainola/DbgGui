@@ -157,6 +157,7 @@ class DbgGui {
 
     std::atomic<bool> m_initialized = false;
     std::atomic<bool> m_paused = true;
+    std::atomic<bool> m_closing = false;
     bool m_initial_focus_set = false;
     float m_simulation_speed = 1;
     double m_pause_at_time = 0;
