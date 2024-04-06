@@ -436,6 +436,24 @@ void CsvPlotter::showSignalWindow() {
             }
         }
     }
+    if (ImGui::Button("Copy signals to clipboard")) {
+        std::stringstream ss_signals;
+        std::stringstream ss_plots;
+        ss_signals << "\"";
+        ss_plots << "\"";
+        for (CsvFileData& file : m_csv_data) {
+            for (CsvSignal& signal : file.signals) {
+                if (signal.plot_idx != NOT_VISIBLE) {
+                    ss_signals << signal.name << ",";
+                    ss_plots << signal.plot_idx << ",";
+                }
+            }
+        }
+        ss_signals << "\"";
+        ss_plots << "\"";
+        ImGui::SetClipboardText(std::format("--names {} --plots {}", ss_signals.str(), ss_plots.str()).c_str());
+    }
+
     if (ImGui::Button("Add plot")) {
         m_plot_cnt++;
     }
