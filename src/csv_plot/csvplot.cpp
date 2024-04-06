@@ -244,6 +244,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
+            m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
             m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
@@ -286,6 +287,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
     settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
+    settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
@@ -490,6 +492,7 @@ void CsvPlotter::showSignalWindow() {
     }
     ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
     ImGui::Checkbox("Link x-axis", &m_options.link_axis);
+    ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
     ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
     ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
     ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
@@ -641,6 +644,9 @@ void CsvPlotter::showScalarPlots() {
         if (fit_data || autofit_x_axis) {
             ImPlot::SetNextAxesToFit();
             m_fit_plot_idx = -1;
+        }
+        if (m_options.autofit_y_axis) {
+            ImPlot::SetNextAxisToFit(ImAxis_Y1);
         }
 
         // Get signals in the plot

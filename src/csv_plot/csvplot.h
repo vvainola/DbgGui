@@ -103,6 +103,7 @@ class CsvPlotter {
         bool first_signal_as_x = true;
         bool shift_samples_to_start_from_zero = true;
         bool link_axis = true;
+        bool autofit_y_axis = true;
         bool fit_after_drag_and_drop = true;
         bool keep_old_signals_on_reload = true;
         bool cursor_measurements = false;
