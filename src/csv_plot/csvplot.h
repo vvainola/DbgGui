@@ -95,7 +95,8 @@ class CsvPlotter {
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, double> m_signal_scales;
-    int m_scalar_plot_cnt = 1;
+    int m_rows = 1;
+    int m_cols = 1;
     int m_vector_plot_cnt = 0;
     int m_fit_plot_idx = -1;
     struct {

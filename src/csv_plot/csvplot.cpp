@@ -34,6 +34,7 @@
 #include "csvplot.h"
 #include "themes.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
@@ -62,6 +63,7 @@ std::vector<double> ASCENDING_NUMBERS;
 std::optional<int> pressedNumber();
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
+void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals);
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -167,20 +169,24 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+        ImGuiID main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
         // ImGui::ShowDemoWindow();
         // ImPlot::ShowDemoWindow();
 
         //---------- Main windows ----------
-        showSignalWindow();
+        if (image_filepath.empty()) {
+            showSignalWindow();
+            showVectorPlots();
+        }
         showScalarPlots();
-        showVectorPlots();
 
         // Settings are not saved when creating image because the window
         // is moved out of sight and should not be restored there
         if (image_filepath.empty()) {
             updateSavedSettings();
         }
+
+        setLayout(main_dock, m_rows, m_cols, image_filepath.empty());
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -233,7 +239,8 @@ void CsvPlotter::loadPreviousSessionSettings() {
                 ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
             }
 
-            m_scalar_plot_cnt = int(settings["window"]["plot_cnt"]);
+            m_rows = int(settings["window"]["rows"]);
+            m_cols = int(settings["window"]["cols"]);
             m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
@@ -274,7 +281,8 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["height"] = height;
     settings["window"]["xpos"] = xpos;
     settings["window"]["ypos"] = ypos;
-    settings["window"]["plot_cnt"] = m_scalar_plot_cnt;
+    settings["window"]["rows"] = m_rows;
+    settings["window"]["cols"] = m_cols;
     settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
     settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
@@ -466,9 +474,15 @@ void CsvPlotter::showSignalWindow() {
         ImGui::SetClipboardText(std::format("--names {} --plots {}", ss_signals.str(), ss_plots.str()).c_str());
     }
 
-    ImGui::InputInt("Scalar plots", &m_scalar_plot_cnt, 1);
+    ImGui::SetNextItemWidth(75);
+    ImGui::InputInt("Rows", &m_rows, 1);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(75);
+    ImGui::InputInt("Columns", &m_cols, 1);
+    ImGui::SetNextItemWidth(183);
     ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
-    m_scalar_plot_cnt = std::clamp(m_scalar_plot_cnt, 1, MAX_PLOTS);
+    m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
+    m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
     m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
     themeCombo(m_options.theme, m_window);
     if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
@@ -620,7 +634,7 @@ void CsvPlotter::showSignalWindow() {
 }
 
 void CsvPlotter::showScalarPlots() {
-    for (int plot_idx = 0; plot_idx < m_scalar_plot_cnt; ++plot_idx) {
+    for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
         bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
         bool fit_data = (plot_idx == m_fit_plot_idx);
@@ -839,6 +853,44 @@ std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
         std::cerr << NFD_GetError() << std::endl;
     }
     return csv_datas;
+}
+
+void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals) {
+    // Remove the existing main dock node and all its subnodes to be able to split it
+    ImGui::DockBuilderRemoveNode(main_dock);
+    // Create new main dock
+    main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+    ImGuiID docks[MAX_PLOTS][MAX_PLOTS]{};
+    ImGuiID dock_signals = 0;
+    // Skip signals node if only creating image
+    if (include_signals) {
+        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Left, 0.15f, &dock_signals, &docks[0][0]);
+    } else {
+        docks[0][0] = main_dock;
+    }
+    // Split the grid nodes
+    for (int row = 0; row < rows; ++row) {
+        float row_height = 1.0f / (rows - row);
+        // Dont split the last row
+        if (row < rows - 1) {
+            ImGui::DockBuilderSplitNode(docks[row][0], ImGuiDir_Up, row_height, &docks[row][0], &docks[row + 1][0]);
+        }
+        for (int col = 0; col < cols - 1; ++col) {
+            float col_width = 1.0f / (cols - col);
+            ImGui::DockBuilderSplitNode(docks[row][col], ImGuiDir_Left, col_width, &docks[row][col], &docks[row][col + 1]);
+        }
+    }
+
+    // Dock the windows to correct node
+    if (dock_signals != 0) {
+        ImGui::DockBuilderDockWindow("Signals", dock_signals);
+    }
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; ++col) {
+            ImGui::DockBuilderDockWindow(std::format("Plot {}", row * cols + col).c_str(), docks[row][col]);
+        }
+    }
+    ImGui::DockBuilderFinish(main_dock);
 }
 
 std::optional<int> pressedNumber() {
