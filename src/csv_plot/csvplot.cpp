@@ -58,6 +58,7 @@ inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
+inline int MAX_PLOT_SAMPLE_COUNT = 3000;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::optional<int> pressedNumber();
@@ -752,11 +753,11 @@ void CsvPlotter::showScalarPlots() {
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
-                std::vector<double> plotted_x(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
-                std::vector<double> plotted_y(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
+                std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
+                std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {
-                    plotted_x = all_x_values;
-                    plotted_y = all_y_values;
+                    x_samples_in_range = all_x_values;
+                    y_samples_in_range = all_y_values;
                 }
 
                 // Scale samples. Set default scale if signal has no scale
@@ -765,10 +766,13 @@ void CsvPlotter::showScalarPlots() {
                     signal_scale = 1;
                 }
                 // Shift x-axis and scale y-axis
-                for (int i = 0; i < plotted_y.size(); ++i) {
-                    plotted_x[i] -= x_offset;
-                    plotted_y[i] *= signal_scale;
+                for (int i = 0; i < y_samples_in_range.size(); ++i) {
+                    x_samples_in_range[i] -= x_offset;
+                    y_samples_in_range[i] *= signal_scale;
                 }
+
+                // Decimate values because plotting very large amount of samples is slow and the GUI becomes unresponsive
+                DecimatedValues plotted_values = decimateValues(x_samples_in_range, y_samples_in_range, MAX_PLOT_SAMPLE_COUNT);
 
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
@@ -779,22 +783,34 @@ void CsvPlotter::showScalarPlots() {
                 }
                 ImPlot::PushStyleColor(ImPlotCol_Line, signal->color);
                 ImPlot::PlotLine(displayed_signal_name.c_str(),
-                                 plotted_x.data(),
-                                 plotted_y.data(),
-                                 int(plotted_y.size()),
+                                 plotted_values.x.data(),
+                                 plotted_values.y_min.data(),
+                                 int(plotted_values.x.size()),
                                  ImPlotLineFlags_None);
+                ImPlot::PlotLine(displayed_signal_name.c_str(),
+                                 plotted_values.x.data(),
+                                 plotted_values.y_max.data(),
+                                 int(plotted_values.x.size()),
+                                 ImPlotLineFlags_None);
+                ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
+                ImPlot::PlotShaded(displayed_signal_name.c_str(),
+                                   plotted_values.x.data(),
+                                   plotted_values.y_min.data(),
+                                   plotted_values.y_max.data(),
+                                   int(plotted_values.x.size()),
+                                   ImPlotLineFlags_None);
                 ImPlot::PopStyleColor();
 
                 // Tooltip
-                if (ImPlot::IsPlotHovered() && plotted_y.size() > 0) {
+                if (ImPlot::IsPlotHovered() && y_samples_in_range.size() > 0) {
                     ImPlotPoint mouse = ImPlot::GetPlotMousePos();
                     ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
                     ImGui::BeginTooltip();
-                    int idx = binarySearch(plotted_x, mouse.x, 0, int(plotted_y.size() - 1));
+                    int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
                     ss.str("");
-                    ss << signal->name << " : " << plotted_y[idx];
+                    ss << signal->name << " : " << y_samples_in_range[idx];
                     ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();

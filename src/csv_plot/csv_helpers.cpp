@@ -27,6 +27,16 @@
 #include <iostream>
 #include <iomanip>
 
+template <typename T>
+T inline min(T a, T b) {
+    return a < b ? a : b;
+}
+
+template <typename T>
+T inline max(T a, T b) {
+    return a > b ? a : b;
+}
+
 std::string& ltrim(std::string& str) {
     auto it2 = std::find_if(str.begin(), str.end(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
     str.erase(str.begin(), it2);
@@ -204,4 +214,36 @@ std::string getLineFromEnd(std::ifstream& file, size_t line_count) {
     }
 
     return split(line, '\n')[0];
+}
+
+DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
+    DecimatedValues decimated_values;
+    decimated_values.x.reserve(count + 2);
+    decimated_values.y_min.reserve(count + 2);
+    decimated_values.y_max.reserve(count + 2);
+
+    int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(x.size()) / count) - 1, 0.0));
+
+    double current_min = INFINITY;
+    double current_max = -INFINITY;
+    int64_t counter = 0;
+    for (int32_t i = 0; i <= x.size(); i++) {
+        if (counter < 0) {
+            decimated_values.x.push_back(x[i - 1]);
+            decimated_values.y_min.push_back(current_min);
+            decimated_values.y_max.push_back(current_max);
+
+            current_min = INFINITY;
+            current_max = -INFINITY;
+            counter = decimation;
+        }
+        current_min = min(y[i], current_min);
+        current_max = max(y[i], current_max);
+        counter--;
+    }
+    // Add last value
+    decimated_values.x.push_back(x.back());
+    decimated_values.y_min.push_back(y.back());
+    decimated_values.y_max.push_back(y.back());
+    return decimated_values;
 }
