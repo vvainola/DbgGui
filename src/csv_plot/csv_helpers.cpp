@@ -27,6 +27,22 @@
 #include <iostream>
 #include <iomanip>
 
+std::string& ltrim(std::string& str) {
+    auto it2 = std::find_if(str.begin(), str.end(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
+    str.erase(str.begin(), it2);
+    return str;
+}
+
+std::string& rtrim(std::string& str) {
+    auto it1 = std::find_if(str.rbegin(), str.rend(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
+    str.erase(it1.base(), str.end());
+    return str;
+}
+
+std::string& trim(std::string& str) {
+    return ltrim(rtrim(str));
+}
+
 std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> elems;
     std::istringstream iss(s);
@@ -54,15 +70,24 @@ std::vector<std::string_view> splitSv(const std::string& s, char delim, int expe
     return elems;
 }
 
-void writeLineToCsv(std::ofstream& csv_file, std::string const& line, bool include_first_column) {
-    std::istringstream iss(line);
-    double signal_data;
-    if (!include_first_column) {
-        iss >> signal_data;
+std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count) {
+    std::vector<std::string_view> elems;
+    elems.reserve(expected_column_count);
+    int32_t pos_start = 0;
+    for (int i = 0; i < s.size(); ++i) {
+        if (std::isspace(s[i])) {
+            elems.push_back(std::string_view(&s[pos_start], &s[i]));
+            pos_start = i + 1;
+            // Skip any intermediate spaces
+            while (i < s.size() && std::isspace(s[i])) {
+                ++i;
+                pos_start = i;
+            }
+        }
     }
-    while (iss >> signal_data) {
-        csv_file << signal_data << ",";
-    }
+    // Add the last value
+    elems.push_back(std::string_view(&s[pos_start]));
+    return elems;
 }
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
@@ -129,10 +154,18 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     // only from the first file
     std::ifstream& out_file1 = out_files[0];
     while (std::getline(out_file1, line)) {
-        writeLineToCsv(csv_file, line, true);
+        trim(line);
+        std::vector<std::string_view> values = splitWhitespace(line, 11);
+        for (int i = 0; i < values.size(); ++i) {
+            csv_file << values[i] << ",";
+        }
         for (int i = 1; i < out_files.size(); ++i) {
             std::getline(out_files[i], line);
-            writeLineToCsv(csv_file, line, false);
+            trim(line);
+            values = splitWhitespace(line, 11);
+            for (int j = 1; j < values.size(); ++j) {
+                csv_file << values[j] << ",";
+            }
         }
         csv_file << "\n";
     }

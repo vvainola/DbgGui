@@ -398,9 +398,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
             csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
         }
     }
-    int line_number = 1;
     while (std::getline(csv, line)) {
-        line_number++;
         std::vector<std::string_view> values = splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;
