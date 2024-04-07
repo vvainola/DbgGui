@@ -31,7 +31,7 @@ std::vector<std::string_view> splitWhitespace(std::string const& s, int expected
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.
 bool pscadInfToCsv(std::string const& inf_filename);
 
-std::string getLineFromEnd(std::ifstream& file, size_t line_count);
+std::string readFile(const std::string& filename);
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
@@ -44,4 +44,5 @@ struct DecimatedValues {
     std::vector<double> y_max;
 };
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
+
 

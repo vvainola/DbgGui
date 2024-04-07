@@ -329,12 +329,17 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         csv_filename = basename + ".csv";
     }
 
-    std::ifstream csv(csv_filename);
-    if (!csv.is_open()) {
+    std::string csv_str = readFile(csv_filename);
+    if (csv_str.empty()) {
         std::cerr << "Unable to open file " + csv_filename << std::endl;
         return nullptr;
     }
-    std::string third_last_line = getLineFromEnd(csv, 3);
+    std::vector<std::string_view> csv_lines = splitSv(csv_str, '\n');
+    if (csv_lines.size() < 3) {
+        std::cerr << "File " + csv_filename << " has less than 3 lines of data" << std::endl;
+        return nullptr;
+    }
+    std::string third_last_line = std::string(csv_lines[csv_lines.size() - 3]);
     if (third_last_line.empty()) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return nullptr;
@@ -363,13 +368,16 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     }
 
     // Find first line where header begins
-    std::string line;
-    while (std::getline(csv, line)) {
-        if (split(line, delimiter).size() == element_count) {
+    int header_line_idx = 0;
+    for (std::string_view line_sv : csv_lines) {
+        std::string line(line_sv);
+        if (splitSv(line, delimiter).size() == element_count) {
             break;
         }
+        ++header_line_idx;
     }
-    std::vector<std::string> signal_names = split(line, delimiter);
+    std::string header_line(csv_lines[header_line_idx]);
+    std::vector<std::string> signal_names = split(header_line, delimiter);
 
     // Count number of instances with same name
     std::map<std::string, int> signal_name_count;
@@ -399,7 +407,8 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
             csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
         }
     }
-    while (std::getline(csv, line)) {
+    for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
+        std::string line(csv_lines[i]);
         std::vector<std::string_view> values = splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;

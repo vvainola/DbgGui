@@ -26,6 +26,7 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include <windows.h>
 
 template <typename T>
 T inline min(T a, T b) {
@@ -183,39 +184,6 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     return true;
 }
 
-std::string getLineFromEnd(std::ifstream& file, size_t line_count) {
-    file.seekg(0, std::ios::end);
-    std::streampos file_size = file.tellg();
-
-    if (file_size <= 1) {
-        file.seekg(0);
-        return ""; // Return an empty string for empty or single-character files
-    }
-
-    // Go back in the line until correct amount of newlines found
-    std::string line;
-    size_t new_line_count = 0;
-    for (std::streampos pos = file_size - std::streampos(1); pos >= 0; pos -= std::streampos(1)) {
-        file.seekg(pos);
-        char c = (char)file.get();
-
-        if (c == '\n') {
-            ++new_line_count;
-            if (new_line_count == line_count) {
-                break;
-            }
-        }
-        line = c + line;
-    }
-    file.seekg(0);
-
-    if (new_line_count < line_count) {
-        return ""; // Return an empty string if there are not enough lines
-    }
-
-    return split(line, '\n')[0];
-}
-
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
     DecimatedValues decimated_values;
     decimated_values.x.reserve(count + 2);
@@ -246,4 +214,53 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     decimated_values.y_min.push_back(y.back());
     decimated_values.y_max.push_back(y.back());
     return decimated_values;
+}
+
+std::string readFile(const std::string& filename) {
+    HANDLE file_handle = CreateFileA(
+      filename.c_str(),
+      GENERIC_READ,
+      FILE_SHARE_READ,
+      nullptr,
+      OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL,
+      nullptr);
+
+    if (file_handle == INVALID_HANDLE_VALUE) {
+        std::cerr << "Error opening file: " << filename << std::endl;
+        return "";
+    }
+
+    LARGE_INTEGER file_size;
+    if (!GetFileSizeEx(file_handle, &file_size)) {
+        std::cerr << "Error getting file size: " << filename << std::endl;
+        CloseHandle(file_handle);
+        return "";
+    }
+
+    HANDLE file_mapping = CreateFileMapping(file_handle, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (file_mapping == nullptr) {
+        std::cerr << "Error creating file mapping: " << filename << std::endl;
+        CloseHandle(file_handle);
+        return "";
+    }
+
+    char* file_contents = static_cast<char*>(MapViewOfFile(file_mapping, FILE_MAP_READ, 0, 0, file_size.QuadPart));
+    if (file_contents == nullptr) {
+        std::cerr << "Error mapping file to memory: " << filename << std::endl;
+        CloseHandle(file_mapping);
+        CloseHandle(file_handle);
+        return "";
+    }
+
+    std::string result(file_contents, file_size.QuadPart);
+
+    if (!UnmapViewOfFile(file_contents)) {
+        std::cerr << "Error unmapping file: " << filename << std::endl;
+    }
+
+    CloseHandle(file_mapping);
+    CloseHandle(file_handle);
+
+    return result;
 }
