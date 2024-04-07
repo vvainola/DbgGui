@@ -717,15 +717,20 @@ void CsvPlotter::showScalarPlots() {
                 }
             }
 
-            if (ImGui::BeginDragDropTarget()) {
+            if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
                     CsvSignal* sig = *(CsvSignal**)payload->Data;
+                    // Reset color when dragging to another plot so that the new color will
+                    // be whatever is the next color in the plot
+                    if (sig->plot_idx != plot_idx) {
+                        sig->color = NO_COLOR;
+                    }
                     sig->plot_idx = plot_idx;
                     if (m_options.fit_after_drag_and_drop) {
                         m_fit_plot_idx = plot_idx;
                     }
                 }
-                ImGui::EndDragDropTarget();
+                ImPlot::EndDragDropTarget();
             }
 
             // Reset plot colors if there are no signals in it
@@ -828,6 +833,13 @@ void CsvPlotter::showScalarPlots() {
                 // Fit to the entire data with mouse middle button
                 if (ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
                     m_fit_plot_idx = plot_idx;
+                }
+
+                // Legend items can be dragged to other plots to move the signal.
+                if (ImPlot::BeginDragDropSourceItem(displayed_signal_name.c_str(), ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("CSV", &signal, sizeof(CsvSignal*));
+                    ImGui::Text("Drag to plot");
+                    ImPlot::EndDragDropSource();
                 }
             }
 
