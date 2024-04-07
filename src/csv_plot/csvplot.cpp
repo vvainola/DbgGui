@@ -377,6 +377,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         ++header_line_idx;
     }
     std::string header_line(csv_lines[header_line_idx]);
+    trim(header_line);
     std::vector<std::string> signal_names = split(header_line, delimiter);
 
     // Count number of instances with same name
@@ -409,6 +410,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
         std::string line(csv_lines[i]);
+        trim(line);
         std::vector<std::string_view> values = splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;

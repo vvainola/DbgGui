@@ -26,6 +26,7 @@
 std::vector<std::string> split(const std::string& s, char delim);
 std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count = 1);
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count = 1);
+std::string& trim(std::string& str);
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.
