@@ -159,9 +159,13 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
     loadPreviousSessionSettings();
-    // Move window out of sight if creating image to avoid popups
+    // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
+    // if window is not visible so only 1 pixel is visible to have correct layout.
     if (!image_filepath.empty()) {
-        glfwSetWindowPos(m_window, 10000, 10000);
+        int xpos = 0;
+        int ypos = 0;
+        glfwGetWindowSize(m_window, &xpos, &ypos);
+        glfwSetWindowPos(m_window, 0, -ypos + 1);
     }
 
     //---------- Actual update loop ----------
