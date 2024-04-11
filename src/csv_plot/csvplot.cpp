@@ -171,7 +171,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             auto [rows, cols] = getAutoLayout((int)m_csv_data.back()->signals.size() - 1);
             m_rows = rows;
             m_cols = cols;
-            glfwSetWindowSize(m_window, cols * 600, rows * 400);
+            glfwSetWindowSize(m_window, cols * 800, rows * 400);
         }
         int xpos = 0;
         int ypos = 0;
