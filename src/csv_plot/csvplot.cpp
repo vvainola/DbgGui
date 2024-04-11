@@ -62,9 +62,12 @@ inline int MAX_PLOT_SAMPLE_COUNT = 3000;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::optional<int> pressedNumber();
-std::unique_ptr<CsvFileData> parseCsvData(std::string filename, std::map<std::string, int> name_and_plot_idx);
+std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
+                                          std::map<std::string, int> name_and_plot_idx = {},
+                                          bool autoplot = false);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals);
+std::tuple<int, int> getAutoLayout(int signal_count);
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -107,13 +110,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     if (xlimits != AUTOFIT_AXIS) {
         m_x_axis.min = std::min(xlimits.min, xlimits.max);
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
-    }
-
-    for (std::string file : files) {
-        std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx);
-        if (data) {
-            m_csv_data.push_back(std::move(data));
-        }
     }
 
     //---------- Initializations ----------
@@ -159,9 +155,24 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
     loadPreviousSessionSettings();
+
+    bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
+    for (std::string file : files) {
+        std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx, autoplot);
+        if (data) {
+            m_csv_data.push_back(std::move(data));
+        }
+    }
+
     // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
     // if window is not visible so only 1 pixel is visible to have correct layout.
     if (!image_filepath.empty()) {
+        if (autoplot) {
+            auto [rows, cols] = getAutoLayout((int)m_csv_data.back()->signals.size() - 1);
+            m_rows = rows;
+            m_cols = cols;
+            glfwSetWindowSize(m_window, cols * 600, rows * 400);
+        }
         int xpos = 0;
         int ypos = 0;
         glfwGetWindowSize(m_window, &xpos, &ypos);
@@ -309,7 +320,8 @@ void CsvPlotter::updateSavedSettings() {
 }
 
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
-                                          std::map<std::string, int> name_and_plot_idx = {}) {
+                                          std::map<std::string, int> name_and_plot_idx,
+                                          bool autoplot) {
     std::string csv_filename = filename;
     if (filename.ends_with(".inf")) {
         bool csv_file_created = pscadInfToCsv(filename);
@@ -397,6 +409,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     std::vector<CsvSignal> csv_signals;
     csv_signals.reserve(signal_names.size());
     std::map<std::string, int> signal_name_counter;
+    int plot_idx = 0;
     for (std::string const& signal_name : signal_names) {
         // Add counter to name if same name is included multiple times
         bool has_duplicate_names = signal_name_count[signal_name] > 1;
@@ -410,7 +423,11 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         // Add signal to plot automatically if name was given from cmd line
         if (name_and_plot_idx.contains(signal_name)) {
             csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
+        // Skip first signal in auto layout
+        } else if (autoplot && plot_idx > 0) {
+            csv_signals.back().plot_idx = plot_idx - 1;
         }
+        ++plot_idx;
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
         std::string line(csv_lines[i]);
@@ -952,4 +969,47 @@ std::optional<int> pressedNumber() {
         }
     }
     return std::nullopt;
+}
+
+std::tuple<int, int> getAutoLayout(int signal_count) {
+    switch (signal_count) {
+        case 1: return {1, 1};
+        case 2: return {2, 1};
+        case 3: return {3, 1};
+        case 4: return {2, 2};
+        case 5: return {5, 1};
+        case 6: return {3, 2};
+        case 7: return {4, 2};
+        case 8: return {4, 2};
+        case 9: return {3, 3};
+        case 10: return {5, 2};
+        case 11: return {6, 2};
+        case 12: return {6, 2};
+        case 13: return {5, 3};
+        case 14: return {5, 3};
+        case 15: return {5, 3};
+        case 16: return {4, 4};
+        case 17: return {6, 3};
+        case 18: return {6, 3};
+        case 19: return {5, 4};
+        case 20: return {5, 4};
+        case 21: return {7, 3};
+        case 22: return {6, 4};
+        case 23: return {6, 4};
+        case 24: return {6, 4};
+        case 25: return {5, 5};
+        case 26: return {7, 4};
+        case 27: return {7, 4};
+        case 28: return {7, 4};
+        case 29: return {6, 5};
+        case 30: return {6, 5};
+        case 32: return {8, 4};
+        case 35: return {7, 5};
+        case 36: return {9, 4};
+        case 40: return {8, 5};
+        case 42: return {7, 4};
+        case 45: return {9, 5};
+        default:
+            return {(int)std::ceil(signal_count / 6.0), 6};
+    }
 }
