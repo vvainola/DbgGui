@@ -112,6 +112,16 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
 
+    bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
+    for (std::string file : files) {
+        std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx, autoplot);
+        if (data) {
+            m_csv_data.push_back(std::move(data));
+        } else {
+            std::abort();
+        }
+    }
+
     //---------- Initializations ----------
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -155,14 +165,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
     loadPreviousSessionSettings();
-
-    bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
-    for (std::string file : files) {
-        std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx, autoplot);
-        if (data) {
-            m_csv_data.push_back(std::move(data));
-        }
-    }
 
     // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
     // if window is not visible so only 1 pixel is visible to have correct layout.
