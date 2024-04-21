@@ -358,6 +358,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         return nullptr;
     }
     std::string third_last_line = std::string(csv_lines[csv_lines.size() - 3]);
+    trim(third_last_line);
     if (third_last_line.empty()) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return nullptr;
@@ -389,6 +390,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     int header_line_idx = 0;
     for (std::string_view line_sv : csv_lines) {
         std::string line(line_sv);
+        trim(line);
         if (splitSv(line, delimiter).size() == element_count) {
             break;
         }
