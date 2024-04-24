@@ -58,7 +58,7 @@ const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 void CsvPlotter::showVectorPlots() {
     for (int i = 0; i < m_vector_plot_cnt; ++i) {
         auto& plot = m_vector_plots[i];
-        ImGui::Begin(std::format("Vector plot {}", i).c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        ImGui::Begin(std::format("Vector plot {}", i).c_str(), NULL, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoDocking);
 
         if (plot.autofit_next_frame) {
             ImPlot::SetNextAxesToFit();
