@@ -345,7 +345,6 @@ void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
 
 std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
     std::vector<SymbolValue> snapshot;
-    auto module_info = getCurrentModuleInfo();
     std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
         // Add symbol value to snapshot
         VariantSymbol::Type type = sym->getType();
@@ -353,12 +352,11 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
             snapshot.push_back({sym, sym->read()});
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
-            MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
-            // Set pointer only if it points to something else within this module
-            bool pointed_address_ok = pointed_address_offset < module_info.size;
+            VariantSymbol* pointed_symbol = sym->getPointedSymbol();
+            // Set pointer only if it points to some other global
             if (pointed_address == NULL) {
-                snapshot.push_back({sym, MemoryAddress(0)});
-            } else if (pointed_address_ok) {
+                snapshot.push_back({sym, MemoryAddress(NULL)});
+            } else if (pointed_symbol) {
                 snapshot.push_back({sym, sym->getPointedAddress()});
             }
         }
