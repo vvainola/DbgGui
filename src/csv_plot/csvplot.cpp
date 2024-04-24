@@ -179,6 +179,11 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         int ypos = 0;
         glfwGetWindowSize(m_window, &xpos, &ypos);
         glfwSetWindowPos(m_window, 0, -ypos + 1);
+        // Set window minimum size to 1 to hide the signals window which is docked
+        // to the main dock. Signals window has to be included because docking some
+        // plot to the main dock will make it the wrong size https://github.com/ocornut/imgui/issues/6095
+        auto& style = ImGui::GetStyle();
+        style.WindowMinSize.x = 1;
     }
 
     //---------- Actual update loop ----------
@@ -193,9 +198,9 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 
         //---------- Main windows ----------
         if (image_filepath.empty()) {
-            showSignalWindow();
             showVectorPlots();
         }
+        showSignalWindow();
         showScalarPlots();
 
         // Settings are not saved when creating image because the window
@@ -427,8 +432,8 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         // Add signal to plot automatically if name was given from cmd line
         if (name_and_plot_idx.contains(signal_name)) {
             csv_signals.back().plot_idx = name_and_plot_idx[signal_name];
-        // Skip first signal in auto layout
         } else if (autoplot && plot_idx > 0) {
+            // Skip first signal in auto layout
             csv_signals.back().plot_idx = plot_idx - 1;
         }
         ++plot_idx;
@@ -930,11 +935,11 @@ void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals) {
     main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
     ImGuiID docks[MAX_PLOTS][MAX_PLOTS]{};
     ImGuiID dock_signals = 0;
-    // Skip signals node if only creating image
+    // Make width of signals node 0 if only creating image.
     if (include_signals) {
-        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Left, 0.15f, &dock_signals, &docks[0][0]);
+        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 0.85f, &docks[0][0], &dock_signals);
     } else {
-        docks[0][0] = main_dock;
+        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 1.0f, &docks[0][0], &dock_signals);
     }
     // Split the grid nodes
     for (int row = 0; row < rows; ++row) {
