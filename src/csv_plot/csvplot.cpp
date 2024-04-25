@@ -66,7 +66,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
                                           std::map<std::string, int> name_and_plot_idx = {},
                                           bool autoplot = false);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
-void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals);
+void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::tuple<int, int> getAutoLayout(int signal_count);
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
@@ -184,6 +184,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         // plot to the main dock will make it the wrong size https://github.com/ocornut/imgui/issues/6095
         auto& style = ImGui::GetStyle();
         style.WindowMinSize.x = 1;
+        m_signals_window_width = 0;
     }
 
     //---------- Actual update loop ----------
@@ -209,7 +210,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             updateSavedSettings();
         }
 
-        setLayout(main_dock, m_rows, m_cols, image_filepath.empty());
+        setLayout(main_dock, m_rows, m_cols, m_signals_window_width);
 
         //---------- Rendering ----------
         ImGui::Render();
@@ -276,6 +277,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             for (auto scale : settings["scales"].items()) {
                 m_signal_scales[scale.key()] = scale.value();
             }
+            m_signals_window_width = settings["window"]["signals_window_width"];
 
             int xpos = std::max(0, int(settings["window"]["xpos"]));
             int ypos = std::max(0, int(settings["window"]["ypos"]));
@@ -316,6 +318,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["theme"] = m_options.theme;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
+    settings["window"]["signals_window_width"] = m_signals_window_width;
     for (auto& [name, scale] : m_signal_scales) {
         settings["scales"][name] = scale;
     }
@@ -481,6 +484,22 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
 
 void CsvPlotter::showSignalWindow() {
     ImGui::Begin("Signals");
+
+    // Adjust window size only when something is being changed and when the actual size is close to the
+    // wanted size because in full screen mode the requested size is not fulfilled and if the requested
+    // is updated to match actual, the signals window will always expand to take the full screen.
+    if (ImGui::IsAnyMouseDown()) {
+        ImVec2 size = ImGui::GetWindowSize();
+        int width;
+        int height;
+        glfwGetWindowSize(m_window, &width, &height);
+        // The width has to be rounded because otherwise the window size will slide down to zero when
+        // holding mouse down
+        float rel_width = std::round(size.x * 100.0f / width) / 100.0f;
+        if (abs(m_signals_window_width - rel_width) < 0.03) {
+            m_signals_window_width = std::min(rel_width, 0.5f);
+        }
+    }
 
     ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
@@ -928,19 +947,14 @@ std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
     return csv_datas;
 }
 
-void setLayout(ImGuiID main_dock, int rows, int cols, bool include_signals) {
+void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width) {
     // Remove the existing main dock node and all its subnodes to be able to split it
     ImGui::DockBuilderRemoveNode(main_dock);
     // Create new main dock
     main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
     ImGuiID docks[MAX_PLOTS][MAX_PLOTS]{};
     ImGuiID dock_signals = 0;
-    // Make width of signals node 0 if only creating image.
-    if (include_signals) {
-        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 0.85f, &docks[0][0], &dock_signals);
-    } else {
-        ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 1.0f, &docks[0][0], &dock_signals);
-    }
+    ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 1.0f - signals_window_width, &docks[0][0], &dock_signals);
     // Split the grid nodes
     for (int row = 0; row < rows; ++row) {
         float row_height = 1.0f / (rows - row);
