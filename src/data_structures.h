@@ -24,6 +24,7 @@
 
 #include "symbols/dbghelp_symbols_lookup.h"
 #include "imgui.h"
+#include "spectrum.h"
 
 #include <numeric>
 #include <vector>
@@ -245,20 +246,9 @@ struct SpectrumPlot : Window {
     MinMax y_axis = {-0.1, 1.1};
     MinMax x_axis = {-1000, 1000};
 
-    struct Spectrum {
-        std::vector<double> freq;
-        std::vector<double> mag;
-    };
     Spectrum spectrum;
+    SpectrumWindow window;
     std::future<Spectrum> spectrum_calculation;
-
-    enum Window {
-        None,
-        Hann,
-        Hamming,
-        FlatTop
-    };
-    Window window;
 
     void addSignalToPlot(Vector2D* new_signal) {
         vector = new_signal;
