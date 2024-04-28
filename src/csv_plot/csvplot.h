@@ -88,6 +88,7 @@ class CsvPlotter {
     void showSignalWindow();
     void showScalarPlots();
     void showVectorPlots();
+    std::vector<double> getVisibleSamples(CsvSignal const& signal);
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();

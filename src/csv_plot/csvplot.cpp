@@ -68,6 +68,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::tuple<int, int> getAutoLayout(int signal_count);
+std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -97,6 +98,31 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double 
     start_idx = std::max(start_idx, 0);
     end_idx = std::min(end_idx, (int32_t)time.size() - 1);
     return {start_idx, end_idx};
+}
+
+std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
+    std::vector<double> const& all_samples = signal.samples;
+
+    std::pair<int32_t, int32_t> indices;
+    if (!m_options.first_signal_as_x) {
+        indices = {std::max(0, (int)std::floor(m_x_axis.min)),
+                   std::min((int)all_samples.size(), (int)std::ceil(m_x_axis.max))};
+    } else {
+        indices = getTimeIndices(signal.file->signals[0].samples, m_x_axis.min, m_x_axis.max);
+    }
+
+    std::vector<double> plotted_samples(all_samples.begin() + indices.first, all_samples.begin() + indices.second);
+    // Scale samples. Set default scale if signal has no scale
+    double& scale = m_signal_scales[signal.name];
+    if (scale == 0) {
+        scale = 1;
+    }
+
+    for (double& sample : plotted_samples) {
+        sample *= scale;
+    }
+
+    return plotted_samples;
 }
 
 static void glfw_error_callback(int error, const char* description) {
