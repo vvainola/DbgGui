@@ -226,6 +226,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         //---------- Main windows ----------
         if (image_filepath.empty()) {
             showVectorPlots();
+            showSpectrumPlots();
         }
         showSignalWindow();
         showScalarPlots();
@@ -292,6 +293,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_rows = int(settings["window"]["rows"]);
             m_cols = int(settings["window"]["cols"]);
             m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);
+            m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
             m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];
@@ -336,6 +338,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["rows"] = m_rows;
     settings["window"]["cols"] = m_cols;
     settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
+    settings["window"]["spectrum_plot_cnt"] = m_spectrum_plot_cnt;
     settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
@@ -566,11 +569,15 @@ void CsvPlotter::showSignalWindow() {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(75);
     ImGui::InputInt("Columns", &m_cols, 1);
-    ImGui::SetNextItemWidth(183);
+    ImGui::SetNextItemWidth(185);
     ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
+    ImGui::SetNextItemWidth(185);
+    ImGui::InputInt("Spectrum plots", &m_spectrum_plot_cnt, 1);
+    m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
+    m_spectrum_plot_cnt = std::clamp(m_spectrum_plot_cnt, 0, MAX_PLOTS);
     m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
     m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
-    m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
+
     themeCombo(m_options.theme, m_window);
     if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
         ImPlot::SetNextAxesToFit();

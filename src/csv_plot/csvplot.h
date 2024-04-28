@@ -23,10 +23,12 @@
 
 #include "themes.h"
 #include "imgui.h"
+#include "spectrum.h"
 #include <string>
 #include <filesystem>
 #include <map>
 #include <array>
+#include <future>
 
 struct MinMax {
     double min;
@@ -77,6 +79,18 @@ struct VectorPlot {
     bool autofit_next_frame = false;
 };
 
+struct SpectrumPlot {
+    CsvSignal* real = nullptr;
+    CsvSignal* imag = nullptr;
+    Spectrum spectrum;
+    SpectrumWindow window = SpectrumWindow::None;
+    std::future<Spectrum> spectrum_calculation;
+    bool logarithmic_y_axis = false;
+    MinMax x_axis;
+    MinMax y_axis;
+    MinMax prev_x_range = {0, 0};
+};
+
 class CsvPlotter {
   public:
     CsvPlotter(std::vector<std::string> files = {},
@@ -88,6 +102,8 @@ class CsvPlotter {
     void showSignalWindow();
     void showScalarPlots();
     void showVectorPlots();
+    void showSpectrumPlots();
+
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
 
     void updateSavedSettings();
@@ -99,6 +115,7 @@ class CsvPlotter {
     int m_rows = 1;
     int m_cols = 1;
     int m_vector_plot_cnt = 0;
+    int m_spectrum_plot_cnt = 0;
     int m_fit_plot_idx = -1;
     float m_signals_window_width = 0.15f;
     struct {
@@ -117,4 +134,5 @@ class CsvPlotter {
 
     CsvSignal* m_selected_signals[2] = {};
     std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
+    std::array<SpectrumPlot, MAX_PLOTS> m_spectrum_plots;
 };

@@ -31,6 +31,7 @@
 #include <kissfft/kissfft.hh>
 #include <future>
 
+constexpr double LOG_AXIS_Y_MIN = 1e-12;
 constexpr double PI = 3.1415926535897;
 constexpr int SCALAR_PLOT_POINT_COUNT = 2000;
 
@@ -492,10 +493,9 @@ void DbgGui::showSpectrumPlots() {
             ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis.min, &plot.x_axis.max);
             if (plot.logarithmic_y_axis) {
                 ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-                if (plot.y_axis.min < 0) {
-                    plot.y_axis.min = std::max(1e-6, plot.y_axis.min);
-                    plot.y_axis.max = std::max(plot.y_axis.min + 1, plot.y_axis.max);
-                    ImPlot::SetupAxisLimits(ImAxis_Y1, plot.y_axis.min, plot.y_axis.max, ImPlotCond_Always);
+                // Limit y-axis minimum with log axis because auto-zoom will otherwise always zoom out min to 1e-300
+                if (plot.y_axis.min < LOG_AXIS_Y_MIN) {
+                    ImPlot::SetupAxisLimits(ImAxis_Y1, LOG_AXIS_Y_MIN, plot.y_axis.max, ImPlotCond_Always);
                 }
             }
 
