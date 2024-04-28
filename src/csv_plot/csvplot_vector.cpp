@@ -35,8 +35,6 @@
 
 constexpr double PI = 3.1415926535897;
 
-std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
-
 template <typename T>
 struct XY {
     T x;
@@ -87,39 +85,8 @@ void CsvPlotter::showVectorPlots() {
             std::pair<CsvSignal*, CsvSignal*>* signal_to_remove = nullptr;
             // Plot signals
             for (auto& signals : plot.signals) {
-                std::vector<double> const& all_x_values = signals.first->samples;
-                std::vector<double> const& all_y_values = signals.second->samples;
-
-                std::pair<int32_t, int32_t> x_indices;
-                std::pair<int32_t, int32_t> y_indices;
-                if (!m_options.first_signal_as_x) {
-                    x_indices = {std::max(0, (int)std::floor(m_x_axis.min)),
-                                 std::min((int)all_x_values.size(), (int)std::ceil(m_x_axis.max))};
-                    y_indices = {std::max(0, (int)std::floor(m_x_axis.min)),
-                                 std::min((int)all_y_values.size(), (int)std::ceil(m_x_axis.max))};
-                } else {
-                    x_indices = getTimeIndices(signals.first->file->signals[0].samples, m_x_axis.min, m_x_axis.max);
-                    y_indices = getTimeIndices(signals.second->file->signals[0].samples, m_x_axis.min, m_x_axis.max);
-                }
-
-                std::vector<double> plotted_x(all_x_values.begin() + x_indices.first, all_x_values.begin() + x_indices.second);
-                std::vector<double> plotted_y(all_y_values.begin() + y_indices.first, all_y_values.begin() + y_indices.second);
-                // Scale samples. Set default scale if signal has no scale
-                double& x_scale = m_signal_scales[signals.first->name];
-                double& y_scale = m_signal_scales[signals.second->name];
-                if (x_scale == 0) {
-                    x_scale = 1;
-                }
-                if (y_scale == 0) {
-                    y_scale = 1;
-                }
-                for (double& x_sample : plotted_x) {
-                    x_sample *= x_scale;
-                }
-                for (double& y_sample : plotted_y) {
-                    y_sample *= y_scale;
-                }
-
+                std::vector<double> plotted_x = getVisibleSamples(*signals.first);
+                std::vector<double> plotted_y = getVisibleSamples(*signals.second);
                 std::string displayed_signal_name = std::format("{} | {}", signals.first->name, signals.first->file->displayed_name);
                 ImPlot::PlotLine(displayed_signal_name.c_str(),
                                  plotted_x.data(),
