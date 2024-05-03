@@ -112,7 +112,6 @@ ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32
             else if (size == 8)
                 return (double*)address;
     }
-    assert(0);
     return (uint32_t*)address;
 }
 
