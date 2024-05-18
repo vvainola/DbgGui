@@ -233,9 +233,10 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
                 // Members by default have no address, the address is offset relative to parent
                 child->offset_to_parent = offset_to_parent;
 
-                // Skip stdlib objects e.g. std::default_delete
+                // Skip stdlib objects e.g. std::default_delete and symbols with reserved identifier "underscore + uppercase letter"
                 std::string child_name = child->info.Name;
-                if (!startsWith(child_name, "std::")) {
+                if (!startsWith(child_name, "std::")
+                    && !(child_name.size() > 2 && child_name[0] == '_' && isupper(child_name[1]))) {
                     addChildrenToSymbol(*child, reference_symbols);
                     parent.children.push_back(std::move(child));
                 }
