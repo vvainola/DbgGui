@@ -243,6 +243,10 @@ void DbgGui::updateLoop() {
             ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_4)) {
             ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+            saveSnapshot();
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
+            loadSnapshot();
         }
         addPopupModal(str::ADD_SCALAR_PLOT);
         addPopupModal(str::ADD_VECTOR_PLOT);

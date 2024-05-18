@@ -105,16 +105,11 @@ class DbgGui {
     void addSymbolContextMenu(VariantSymbol const& sym);
     void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);
+    void saveSnapshot();
+    void loadSnapshot();
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
-
-    GLFWwindow* m_window = nullptr;
-
-    DbgHelpSymbols const& m_dbghelp_symbols;
-    std::vector<VariantSymbol*> m_symbol_search_results;
-    char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
-    std::set<std::string> m_hidden_symbols;
 
     Scalar* getScalar(uint64_t id) {
         for (auto& scalar : m_scalars) {
@@ -124,13 +119,6 @@ class DbgGui {
         }
         return nullptr;
     }
-    ScrollingBuffer m_sampler{0};
-    std::vector<std::unique_ptr<Scalar>> m_scalars;
-    std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
-    std::vector<std::unique_ptr<Vector2D>> m_vectors;
-    std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
-    MinMax m_linked_scalar_x_axis_limits = {0, 1};
-    double m_linked_scalar_x_axis_range = 1;
 
     Vector2D* getVector(uint64_t id) {
         for (auto& vector : m_vectors) {
@@ -141,6 +129,21 @@ class DbgGui {
         return nullptr;
     }
 
+    DbgHelpSymbols const& m_dbghelp_symbols;
+    std::vector<VariantSymbol*> m_symbol_search_results;
+    char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
+    std::set<std::string> m_hidden_symbols;
+    std::vector<SymbolValue> m_saved_snapshot;
+
+    ScrollingBuffer m_sampler{0};
+    std::vector<std::unique_ptr<Scalar>> m_scalars;
+    std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
+    std::vector<std::unique_ptr<Vector2D>> m_vectors;
+    std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
+    MinMax m_linked_scalar_x_axis_limits = {0, 1};
+    double m_linked_scalar_x_axis_range = 1;
+
+    GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;

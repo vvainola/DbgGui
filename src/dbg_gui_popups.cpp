@@ -137,3 +137,25 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
         assert(0);
     }
 }
+
+void DbgGui::saveSnapshot() {
+    // Pause during snapshot saving so that all symbols are from same time instant
+    bool paused = m_paused;
+    m_paused = true;
+    // Wait until main thread goes to pause state
+    while (m_next_sync_timestamp > 0) {
+    }
+    m_saved_snapshot = m_dbghelp_symbols.saveSnapshotToMemory();
+    m_paused = paused;
+}
+
+void DbgGui::loadSnapshot() {
+    // Pause during snapshot loading so that the execution continues from point when load button was pressed
+    bool paused = m_paused;
+    m_paused = true;
+    // Wait until main thread goes to pause state
+    while (m_next_sync_timestamp > 0) {
+    }
+    m_dbghelp_symbols.loadSnapshotFromMemory(m_saved_snapshot);
+    m_paused = paused;
+}
