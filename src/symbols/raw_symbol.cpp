@@ -35,6 +35,8 @@ RawSymbol::RawSymbol(SymbolInfo const& symbol)
         basic_type = getBasicType(*this);
         if (basic_type == BasicType::btUInt
             || basic_type == BasicType::btInt
+            || basic_type == BasicType::btLong
+            || basic_type == BasicType::btULong
             || basic_type == BasicType::btBool) {
             bitfield_position = getBitPosition(*this);
         }
