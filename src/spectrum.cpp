@@ -173,23 +173,28 @@ Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
     if (!one_sided) {
         // Negative side
         for (int i = 0; i < mid; ++i) {
-            double mag = mag_coeff * std::abs(cplx_spec[mid + i]) * amplitude_inv;
+            std::complex<double> bin = cplx_spec[mid + i];
+            double mag = mag_coeff * std::abs(bin) * amplitude_inv;
             if (mag > mag_min) {
                 spec.freq.push_back((-mid + i) * resolution);
                 spec.mag.push_back(mag);
+                spec.angle.push_back(atan2(bin.imag(), bin.real()));
             }
         }
     }
     // DC
     spec.freq.push_back(0);
     spec.mag.push_back(std::abs(cplx_spec[0]) * amplitude_inv);
+    spec.angle.push_back(atan2(cplx_spec[0].imag(), cplx_spec[0].real()));
 
     // Positive side
     for (int i = 1; i < mid; ++i) {
-        double mag = mag_coeff * std::abs(cplx_spec[i]) * amplitude_inv;
+        std::complex<double> bin = cplx_spec[i];
+        double mag = mag_coeff * std::abs(bin) * amplitude_inv;
         if (mag > mag_min) {
             spec.freq.push_back(i * resolution);
             spec.mag.push_back(mag);
+            spec.angle.push_back(atan2(bin.imag(), bin.real()));
         }
     }
 

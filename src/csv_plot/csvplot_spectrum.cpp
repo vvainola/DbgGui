@@ -33,7 +33,9 @@
 #include <format>
 #include <span>
 
+constexpr double PI = 3.1415926535897;
 constexpr double LOG_AXIS_Y_MIN = 1e-12;
+constexpr double RAD_TO_DEG = 180.0 / PI;
 
 std::vector<std::complex<double>> realImagToComplex(std::vector<double> const& real, std::vector<double> const& imag) {
     if (real.size() != imag.size()) {
@@ -84,6 +86,7 @@ void CsvPlotter::showSpectrumPlots() {
                     ImGui::BeginTooltip();
                     ImGui::Text(std::format("x : {:10f}", plot.spectrum.freq[idx]).c_str());
                     ImGui::Text(std::format("y : {:10f}", plot.spectrum.mag[idx]).c_str());
+                    ImGui::Text(std::format("< : {:10.2f}", plot.spectrum.angle[idx] * RAD_TO_DEG).c_str());
                     ImGui::EndTooltip();
                 }
             }

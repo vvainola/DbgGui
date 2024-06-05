@@ -27,6 +27,7 @@
 struct Spectrum {
     std::vector<double> freq;
     std::vector<double> mag;
+    std::vector<double> angle; // [rad]
 };
 
 enum SpectrumWindow {
