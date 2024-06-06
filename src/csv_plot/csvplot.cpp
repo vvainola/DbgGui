@@ -101,14 +101,17 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double 
 }
 
 std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
+    std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal.file->signals[0].samples : ASCENDING_NUMBERS;
     std::vector<double> const& all_samples = signal.samples;
+    double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
+    x_offset -= signal.file->x_axis_shift;
 
     std::pair<int32_t, int32_t> indices;
     if (!m_options.first_signal_as_x) {
         indices = {std::max(0, (int)std::floor(m_x_axis.min)),
                    std::min((int)all_samples.size(), (int)std::ceil(m_x_axis.max))};
     } else {
-        indices = getTimeIndices(signal.file->signals[0].samples, m_x_axis.min, m_x_axis.max);
+        indices = getTimeIndices(signal.file->signals[0].samples, m_x_axis.min + x_offset, m_x_axis.max + x_offset);
     }
 
     std::vector<double> plotted_samples(all_samples.begin() + indices.first, all_samples.begin() + indices.second);
