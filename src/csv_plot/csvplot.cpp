@@ -854,11 +854,15 @@ void CsvPlotter::showScalarPlots() {
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
+                indices.second = std::min(all_y_values.size() - 1, (size_t)indices.second);
                 std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
                 std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {
                     x_samples_in_range = all_x_values;
                     y_samples_in_range = all_y_values;
+                    if (y_samples_in_range.size() < x_samples_in_range.size()) {
+                        x_samples_in_range.resize(y_samples_in_range.size());
+                    }
                 }
 
                 // Scale samples. Set default scale if signal has no scale
