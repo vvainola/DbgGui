@@ -152,10 +152,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
 
-    std::unique_ptr<CsvFileData> csv_data = std::make_unique<CsvFileData>();
-    csv_data->name = "Custom signals";
-    csv_data->displayed_name = "Custom signals";
-    m_csv_data.push_back(std::move(csv_data));
 
     bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
     for (std::string file : files) {

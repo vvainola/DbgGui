@@ -71,7 +71,7 @@ struct CsvSignal {
     std::vector<double> samples;
     int plot_idx = NOT_VISIBLE;
     ImVec4 color{NO_COLOR};
-    CsvFileData const* file;
+    CsvFileData* file;
 };
 
 struct VectorPlot {
