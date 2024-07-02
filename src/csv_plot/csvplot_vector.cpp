@@ -124,13 +124,11 @@ void CsvPlotter::showVectorPlots() {
 
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {
-                assert(m_selected_signals[0] != nullptr);
-                assert(m_selected_signals[1] != nullptr);
+                assert(m_selected_signals.size() == 2);
                 CsvSignal* signal_x = m_selected_signals[0];
                 CsvSignal* signal_y = m_selected_signals[1];
                 plot.signals.push_back({signal_x, signal_y});
-                m_selected_signals[0] = nullptr;
-                m_selected_signals[1] = nullptr;
+                m_selected_signals.clear();
             }
             ImGui::EndDragDropTarget();
         }

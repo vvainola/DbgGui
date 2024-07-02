@@ -51,6 +51,7 @@
 #include <iostream>
 #include <filesystem>
 #include <span>
+#include <stdexcept>
 
 inline constexpr ImVec4 COLOR_TOOLTIP_LINE = ImVec4(0.7f, 0.7f, 0.7f, 0.6f);
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
@@ -69,6 +70,16 @@ std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
+
+template <typename T>
+inline bool contains(std::vector<T>& v, const T& item_to_search) {
+    for (auto const& item : v) {
+        if (item == item_to_search) {
+            return true;
+        }
+    }
+    return false;
+}
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -140,6 +151,11 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.min = std::min(xlimits.min, xlimits.max);
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
+
+    std::unique_ptr<CsvFileData> csv_data = std::make_unique<CsvFileData>();
+    csv_data->name = "Custom signals";
+    csv_data->displayed_name = "Custom signals";
+    m_csv_data.push_back(std::move(csv_data));
 
     bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
     for (std::string file : files) {
@@ -231,6 +247,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             showVectorPlots();
             showSpectrumPlots();
         }
+        showErrorModal();
         showSignalWindow();
         showScalarPlots();
 
@@ -514,6 +531,22 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     return std::move(csv_data);
 }
 
+void CsvPlotter::showErrorModal() {
+    if (!m_error_message.empty()) {
+        ImGui::OpenPopup("Error");
+    }
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+    if (ImGui::BeginPopupModal("Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            m_error_message.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::Text(m_error_message.c_str());
+        ImGui::EndPopup();
+    }
+}
+
 void CsvPlotter::showSignalWindow() {
     ImGui::Begin("Signals");
 
@@ -567,36 +600,46 @@ void CsvPlotter::showSignalWindow() {
         ImGui::SetClipboardText(std::format("--names {} --plots {}", ss_signals.str(), ss_plots.str()).c_str());
     }
 
-    ImGui::SetNextItemWidth(75);
-    ImGui::InputInt("Rows", &m_rows, 1);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(75);
-    ImGui::InputInt("Columns", &m_cols, 1);
-    ImGui::SetNextItemWidth(185);
-    ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
-    ImGui::SetNextItemWidth(185);
-    ImGui::InputInt("Spectrum plots", &m_spectrum_plot_cnt, 1);
-    m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
-    m_spectrum_plot_cnt = std::clamp(m_spectrum_plot_cnt, 0, MAX_PLOTS);
-    m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
-    m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
+    if (ImGui::CollapsingHeader("Options")) {
+        ImGui::SetNextItemWidth(75);
+        ImGui::InputInt("Rows", &m_rows, 1);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(75);
+        ImGui::InputInt("Columns", &m_cols, 1);
+        ImGui::SetNextItemWidth(185);
+        ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
+        ImGui::SetNextItemWidth(185);
+        ImGui::InputInt("Spectrum plots", &m_spectrum_plot_cnt, 1);
+        m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
+        m_spectrum_plot_cnt = std::clamp(m_spectrum_plot_cnt, 0, MAX_PLOTS);
+        m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
+        m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
 
-    themeCombo(m_options.theme, m_window);
-    if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
-        ImPlot::SetNextAxesToFit();
+        themeCombo(m_options.theme, m_window);
+        if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
+            ImPlot::SetNextAxesToFit();
+        }
+        ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
+        ImGui::Checkbox("Link x-axis", &m_options.link_axis);
+        ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
+        ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
+        ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
+        ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
     }
-    ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
-    ImGui::Checkbox("Link x-axis", &m_options.link_axis);
-    ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
-    ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
-    ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
-    ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
 
     static char signal_name_filter[256] = "";
+    if (ImGui::CollapsingHeader("Create custom signal")) {
+        showCustomSignalCreator();
+    }
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
+    ImGui::Separator();
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
     for (auto& file : m_csv_data) {
+        if (file->signals.size() == 0) {
+            continue;
+        }
+
         // Reload file if it has been rewritten. Wait that file has not been modified in the last 2 seconds
         // in case it is still being written
         if (std::filesystem::exists(file->name)) {
@@ -666,19 +709,13 @@ void CsvPlotter::showSignalWindow() {
                     signal_scale = 1;
                 }
                 ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? ImGui::GetStyle().Colors[ImGuiCol_Text] : COLOR_GRAY);
-                bool selected = signal.plot_idx != NOT_VISIBLE
-                             || m_selected_signals[0] == &signal
-                             || m_selected_signals[1] == &signal;
+                bool selected = signal.plot_idx != NOT_VISIBLE || contains(m_selected_signals, &signal);
                 if (ImGui::Selectable(signal.name.c_str(), &selected)) {
                     // Select two signals with ctrl-click for dragging to vector plot
-                    static bool selected_idx = 0;
                     if (ImGui::GetIO().KeyCtrl) {
-                        m_selected_signals[selected_idx] = &signal;
-                        selected_idx = !selected_idx;
+                        m_selected_signals.push_back(&signal);
                     } else {
-                        selected_idx = 0;
-                        m_selected_signals[0] = nullptr;
-                        m_selected_signals[1] = nullptr;
+                        m_selected_signals.clear();
                         signal.plot_idx = NOT_VISIBLE;
                         signal.color = NO_COLOR;
                     }
@@ -702,8 +739,7 @@ void CsvPlotter::showSignalWindow() {
                     ImGui::EndDragDropSource();
                 }
 
-                if (m_selected_signals[0] != nullptr
-                    && m_selected_signals[1] != nullptr
+                if (m_selected_signals.size() == 2
                     && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     // Payload is not used
                     ImGui::SetDragDropPayload("CSV_Vector", NULL, 0);

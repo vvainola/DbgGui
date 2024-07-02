@@ -140,6 +140,7 @@ csv_plotter_icon = windows.compile_resources('src/csv_plot/icon.rc',
 csv_plotter = executable('csv_plotter',
     sources : [
         'src/csv_plot/csv_helpers.cpp',
+        'src/csv_plot/csvplot_custom_signal.cpp',
         'src/csv_plot/csvplot_main.cpp',
         'src/csv_plot/csvplot_spectrum.cpp',
         'src/csv_plot/csvplot_vector.cpp',

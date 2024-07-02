@@ -99,6 +99,8 @@ class CsvPlotter {
                std::string const& image_filepath = "");
 
   private:
+    void showErrorModal();
+    void showCustomSignalCreator();
     void showSignalWindow();
     void showScalarPlots();
     void showVectorPlots();
@@ -131,8 +133,9 @@ class CsvPlotter {
     MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
+    std::string m_error_message;
 
-    CsvSignal* m_selected_signals[2] = {};
+    std::vector<CsvSignal*> m_selected_signals;
     std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
     std::array<SpectrumPlot, MAX_PLOTS> m_spectrum_plots;
 };
