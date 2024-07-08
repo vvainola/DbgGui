@@ -135,7 +135,7 @@ class DbgGui {
     std::set<std::string> m_hidden_symbols;
     std::vector<SymbolValue> m_saved_snapshot;
 
-    ScrollingBuffer m_sampler{0};
+    ScrollingBuffer m_sampler{int(1e6)};
     std::vector<std::unique_ptr<Scalar>> m_scalars;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
     std::vector<std::unique_ptr<Vector2D>> m_vectors;
