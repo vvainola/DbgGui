@@ -261,6 +261,8 @@ void CsvPlotter::showCustomSignalCreator() {
     }
 
     ImGui::InputText("Equation", custom_signal_eq.data(), MAX_CUSTOM_EQ_LENGTH);
+    ImGui::SameLine();
+    HelpMarker("Curly brackets in the equation are replaced with the selected signals in the same order. Same signal cann be selected multiple times.\nSupports sqrt,+-*/ and parenthesis. Example:\n-({} + sqrt({}))");
     ImGui::InputText("Name", custom_signal_name.data(), MAX_CUSTOM_EQ_NAME);
     if (ImGui::Button("Add")) {
         custom_signal_eq = custom_signal_eq.data();
