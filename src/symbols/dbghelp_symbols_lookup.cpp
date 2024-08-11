@@ -246,25 +246,18 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
 }
 
 void DbgHelpSymbols::loadSymbolsFromPdb() {
-    // Symbols are not loaded until a reference is made requiring the symbols be loaded.
-    // This is the fastest, most efficient way to use the symbol handler.
-    SymSetOptions(SYMOPT_DEFERRED_LOADS);
-
-    HANDLE current_process = GetCurrentProcess();
-    if (!SymInitialize(current_process, NULL, TRUE)) {
-        std::cerr << "SymInitialize failed with error:\n";
-        printLastError();
-        std::cerr << "Unable to load symbols from PDB file.\n";
+    ScopedSymbolHandler symbol_handler;
+    if (!symbol_handler.initialized()) {
         return;
     }
 
     // Collect symbol infos into vector
     std::vector<SymbolInfo> symbols;
-    if (SymEnumSymbols(current_process, // Process handle from SymInitialize.
-                       0,               // Base address of module.
-                       "*!*",           // Name of symbols to match.
-                       storeSymbols,    // Symbol handler procedure.
-                       &symbols))       // User context.
+    if (SymEnumSymbols(symbol_handler.getCurrentProcess(), // Process handle from SymInitialize.
+                       0,                                  // Base address of module.
+                       "*!*",                              // Name of symbols to match.
+                       storeSymbols,                       // Symbol handler procedure.
+                       &symbols))                          // User context.
     {
         // SymEnumSymbols succeeded
     } else {
@@ -300,7 +293,6 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
         addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));
     }
-    SymCleanup(current_process);
 }
 
 void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
@@ -344,6 +336,8 @@ void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
 }
 
 std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
+    ScopedSymbolHandler scoped_symbol_handler;
+
     std::vector<SymbolValue> snapshot;
     std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
         // Add symbol value to snapshot
@@ -358,6 +352,12 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
                 snapshot.push_back({sym, MemoryAddress(NULL)});
             } else if (pointed_symbol) {
                 snapshot.push_back({sym, sym->getPointedAddress()});
+            } else {
+                // Try finding the symbol with directly from address with symbol handler
+                auto raw_sym = getSymbolFromAddress(pointed_address);
+                if (raw_sym) {
+                    snapshot.push_back({sym, pointed_address});
+                }
             }
         }
         // Add all children
@@ -368,6 +368,7 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
     for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
         save_symbol_to_snapshot(sym.get());
     }
+
     return snapshot;
 }
 

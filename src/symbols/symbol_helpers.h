@@ -25,6 +25,7 @@
 #include <optional>
 #include <memory>
 #include <map>
+#include <iostream>
 
 using ModuleBase = ULONG64;
 using TypeIndex = ULONG;
@@ -69,3 +70,36 @@ std::string readFile(std::string const& filename);
 
 // Currently unused helpers
 DataKind getDataKind(RawSymbol const& sym);
+
+class ScopedSymbolHandler {
+  public:
+    ScopedSymbolHandler() {
+        // Symbols are not loaded until a reference is made requiring the symbols be loaded.
+        // This is the fastest, most efficient way to use the symbol handler.
+        SymSetOptions(SYMOPT_DEFERRED_LOADS);
+        m_symbol_handler_initialized = SymInitialize(m_current_process, NULL, TRUE);
+        if (!m_symbol_handler_initialized) {
+            std::cerr << "SymInitialize failed with error:\n";
+            printLastError();
+            std::cerr << "Unable to load symbols from PDB file.\n";
+        }
+    }
+
+    bool initialized() {
+        return m_symbol_handler_initialized;
+    }
+
+    HANDLE getCurrentProcess() {
+        return m_current_process;
+    }
+
+    ~ScopedSymbolHandler() {
+        if (m_symbol_handler_initialized) {
+            SymCleanup(m_current_process);
+        }
+    }
+
+  private:
+    bool m_symbol_handler_initialized = false;
+    HANDLE m_current_process = GetCurrentProcess();
+};

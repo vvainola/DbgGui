@@ -219,11 +219,7 @@ std::string VariantSymbol::valueAsStr() const {
                 return it->second;
             }
 
-            SymSetOptions(SYMOPT_DEFERRED_LOADS);
-            bool symbol_handler_initialized = SymInitialize(GetCurrentProcess(), NULL, TRUE);
-            if (!symbol_handler_initialized) {
-                printLastError();
-            }
+            ScopedSymbolHandler scoped_symbol_handler;
             auto sym = getSymbolFromAddress(pointed_address);
             std::string name = "??";
             if (sym) {
@@ -235,9 +231,6 @@ std::string VariantSymbol::valueAsStr() const {
                     name = getUndecoratedSymbolName(decorated_name);
                 }
                 symbol_addresses[pointed_address] = name;
-            }
-            if (symbol_handler_initialized) {
-                SymCleanup(GetCurrentProcess());
             }
             return name;
         }
