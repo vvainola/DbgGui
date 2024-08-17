@@ -785,7 +785,11 @@ void DbgGui::updateSavedSettings() {
         if (!std::filesystem::exists(settings_dir)) {
             std::filesystem::create_directories(settings_dir);
         }
-        std::ofstream(settings_dir + "settings.json") << std::setw(4) << m_settings;
+        // Write settings to tmp file first to avoid corrupting the file if program is closed mid-write
+        std::ofstream(settings_dir + "settings.json.tmp") << std::setw(4) << m_settings;
+        std::filesystem::copy_file(settings_dir + "settings.json.tmp",
+                                   settings_dir + "settings.json",
+                                   std::filesystem::copy_options::overwrite_existing);
     }
 }
 

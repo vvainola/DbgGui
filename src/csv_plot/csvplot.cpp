@@ -370,7 +370,11 @@ void CsvPlotter::updateSavedSettings() {
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         settings_saved = settings;
-        std::ofstream(settings_dir + "settings.json") << std::setw(4) << settings;
+        // Write settings to tmp file first to avoid corrupting the file if program is closed mid-write
+        std::ofstream(settings_dir + "settings.json.tmp") << std::setw(4) << settings;
+        std::filesystem::copy_file(settings_dir + "settings.json.tmp",
+                                   settings_dir + "settings.json",
+                                   std::filesystem::copy_options::overwrite_existing);
     }
 }
 
