@@ -189,14 +189,16 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
+    loadPreviousSessionSettings();
+
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
+    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, m_options.font_size);
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, 13.0f);
+    io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, m_options.font_size);
+    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
 
-    loadPreviousSessionSettings();
     m_initialized = true;
 
     //---------- Actual update loop ----------
@@ -357,8 +359,9 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.show_latest_message_on_main_menu_bar = m_settings["options"]["show_latest_message_on_main_menu_bar"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
         TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
+        TRY(m_options.font_size = m_settings["options"]["font_size"];)
         TRY(m_options.theme = m_settings["options"]["theme"];)
-        ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
+
         m_sampler.setBufferSize(m_options.sampling_buffer_size);
         setTheme(m_options.theme, m_window);
 
@@ -499,14 +502,14 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         TRY(for (auto script_window_data : m_settings["script_windows"]) {
-              ScriptWindow& script_window = m_script_windows.emplace_back();
-              script_window.name = script_window_data["name"];
-              script_window.focus.initial_focus = script_window_data["initial_focus"];
-              script_window.id = script_window_data["id"];
-              script_window.loop = script_window_data["loop"];
-              std::string text = script_window_data["text"];
-              std::memcpy((void*)script_window.text, (void*)text.data(), text.size());
-              script_window.text[text.size()] = '\0';
+            ScriptWindow& script_window = m_script_windows.emplace_back();
+            script_window.name = script_window_data["name"];
+            script_window.focus.initial_focus = script_window_data["initial_focus"];
+            script_window.id = script_window_data["id"];
+            script_window.loop = script_window_data["loop"];
+            std::string text = script_window_data["text"];
+            std::memcpy((void*)script_window.text, (void*)text.data(), text.size());
+            script_window.text[text.size()] = '\0';
         })
 
         TRY(for (std::string hidden_symbol
@@ -576,6 +579,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
+    m_settings["options"]["font_size"] = m_options.font_size;
     m_settings["options"]["theme"] = m_options.theme;
     m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
     m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;

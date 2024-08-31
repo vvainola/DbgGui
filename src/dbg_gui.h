@@ -185,6 +185,7 @@ class DbgGui {
         FontSelection font_selection = COUSINE_REGULAR;
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
+        float font_size = 13.0f;
     } m_options;
 
     std::jthread m_gui_thread;

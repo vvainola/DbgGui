@@ -395,6 +395,10 @@ void DbgGui::showMainMenuBar() {
             ImGui::SameLine();
             HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
 
+            ImGui::InputFloat("Font size", &m_options.font_size, 0, 0, "%.1f");
+            ImGui::SameLine();
+            HelpMarker("Changing requires restart to take effect. Default = 13.0");
+
             ImGui::Separator();
 
             if (ImGui::Button("Clear saved settings") && ImGui::GetIO().KeyCtrl) {
