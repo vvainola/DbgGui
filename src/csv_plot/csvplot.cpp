@@ -202,10 +202,11 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
+    loadPreviousSessionSettings();
+
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, 13.0f);
-    loadPreviousSessionSettings();
+    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, m_options.font_size);
 
     // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
     // if window is not visible so only 1 pixel is visible to have correct layout.
@@ -317,6 +318,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
             m_options.theme = settings["window"]["theme"];
+            m_options.font_size = settings["window"]["font_size"];
             setTheme(m_options.theme, m_window);
             for (auto scale : settings["scales"].items()) {
                 m_signal_scales[scale.key()] = scale.value();
@@ -362,6 +364,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["theme"] = m_options.theme;
+    settings["window"]["font_size"] = m_options.font_size;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     settings["window"]["signals_window_width"] = m_signals_window_width;
     for (auto& [name, scale] : m_signal_scales) {
@@ -625,6 +628,7 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
         ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
+        ImGui::InputFloat("Font size", &m_options.font_size, 0, 0, "%.1f");
     }
 
     static char signal_name_filter[256] = "";
