@@ -404,18 +404,18 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
         csv_filename = basename + ".csv";
     }
 
-    std::string csv_str = readFile(csv_filename);
-    if (csv_str.empty()) {
-        std::cerr << "Unable to open file " + csv_filename << std::endl;
+    std::expected<std::string, std::string> csv_str = str::readFile(csv_filename);
+    if (!csv_str.has_value()) {
+        std::cerr << csv_str.error() << std::endl;
         return nullptr;
     }
-    std::vector<std::string_view> csv_lines = splitSv(csv_str, '\n');
+    std::vector<std::string_view> csv_lines = str::splitSv(csv_str.value(), '\n');
     if (csv_lines.size() < 3) {
         std::cerr << "File " + csv_filename << " has less than 3 lines of data" << std::endl;
         return nullptr;
     }
     std::string third_last_line = std::string(csv_lines[csv_lines.size() - 3]);
-    trim(third_last_line);
+    str::trim(third_last_line);
     if (third_last_line.empty()) {
         std::cerr << "No data in file " + csv_filename << std::endl;
         return nullptr;
@@ -425,9 +425,9 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     // Use third last line in case the last line gets modified suddenly
     char delimiter = '\0';
     size_t element_count = 0;
-    std::vector<std::string> values_comma = split(third_last_line, ',');
-    std::vector<std::string> values_semicolon = split(third_last_line, ';');
-    std::vector<std::string> values_tab = split(third_last_line, '\t');
+    std::vector<std::string> values_comma = str::split(third_last_line, ',');
+    std::vector<std::string> values_semicolon = str::split(third_last_line, ';');
+    std::vector<std::string> values_tab = str::split(third_last_line, '\t');
     if (values_comma.size() > values_semicolon.size() && values_comma.size() > values_tab.size()) {
         delimiter = ',';
         element_count = values_comma.size();
@@ -447,15 +447,15 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     int header_line_idx = 0;
     for (std::string_view line_sv : csv_lines) {
         std::string line(line_sv);
-        trim(line);
-        if (splitSv(line, delimiter).size() == element_count) {
+        str::trim(line);
+        if (str::splitSv(line, delimiter).size() == element_count) {
             break;
         }
         ++header_line_idx;
     }
     std::string header_line(csv_lines[header_line_idx]);
-    trim(header_line);
-    std::vector<std::string> signal_names = split(header_line, delimiter);
+    str::trim(header_line);
+    std::vector<std::string> signal_names = str::split(header_line, delimiter);
 
     // Count number of instances with same name
     std::map<std::string, int> signal_name_count;
@@ -492,8 +492,8 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
         std::string line(csv_lines[i]);
-        trim(line);
-        std::vector<std::string_view> values = splitSv(line, delimiter, (int)csv_signals.size());
+        str::trim(line);
+        std::vector<std::string_view> values = str::splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;
         }

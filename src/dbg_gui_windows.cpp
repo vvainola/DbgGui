@@ -54,16 +54,6 @@ static void HelpMarker(const char* desc) {
     }
 }
 
-inline std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> elems;
-    std::istringstream iss(s);
-    std::string item;
-    while (std::getline(iss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-
 int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
     ImGuiKey* pressed_key = (ImGuiKey*)data->UserData;
     if (*pressed_key == ImGuiKey_None) {
@@ -472,7 +462,7 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std:
       [&](SignalGroup<Scalar> const& group, std::string const& filter) {
           // Check if this or any of the parent groups matches the filter
           if (!filter.empty()) {
-              for (std::string const& g : split(group.full_name, '|')) {
+              for (std::string const& g : str::split(group.full_name, '|')) {
                   group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
               }
           }
@@ -646,7 +636,7 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& top_level_group, st
     std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
       [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
           // Check if this or any of the parent groups matches the filter
-          for (std::string const& g : split(group.full_name, '|')) {
+          for (std::string const& g : str::split(group.full_name, '|')) {
               group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
           }
 

@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "dbghelp_symbols_lookup.h"
+#include "str_helpers.h"
 
 #pragma warning(push, 0)
 #define FTS_FUZZY_MATCH_IMPLEMENTATION
@@ -117,7 +118,7 @@ std::vector<size_t> getArrayIndices(std::string const& s) {
 }
 
 VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
-    std::vector<std::string> split_name = split(name, '.');
+    std::vector<std::string> split_name = str::split(name, '.');
     std::vector<std::unique_ptr<VariantSymbol>> const* container = &m_root_symbols;
     for (size_t i = 0; i < split_name.size(); ++i) {
         bool last_section = (i == split_name.size() - 1);

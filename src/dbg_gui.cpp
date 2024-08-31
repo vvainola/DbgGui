@@ -58,16 +58,6 @@ uint64_t hashWithTime(const std::string& str) {
                             str));
 }
 
-inline std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> elems;
-    std::istringstream iss(s);
-    std::string item;
-    while (std::getline(iss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
@@ -934,7 +924,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->scale = scale;
     new_scalar->offset = offset;
     restoreScalarSettings(new_scalar.get());
-    std::vector<std::string> groups = split(new_scalar->group, '|');
+    std::vector<std::string> groups = str::split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
     added_group->name = groups[0];
     added_group->full_name = added_group->name;
@@ -976,7 +966,7 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     new_vector->x->offset = offset;
     new_vector->y->scale = scale;
     new_vector->y->offset = offset;
-    std::vector<std::string> groups = split(new_vector->group, '|');
+    std::vector<std::string> groups = str::split(new_vector->group, '|');
     SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
     added_group->name = groups[0];
     added_group->full_name = added_group->name;

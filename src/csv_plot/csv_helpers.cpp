@@ -38,49 +38,6 @@ T inline max(T a, T b) {
     return a > b ? a : b;
 }
 
-std::string& ltrim(std::string& str) {
-    auto it2 = std::find_if(str.begin(), str.end(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
-    str.erase(str.begin(), it2);
-    return str;
-}
-
-std::string& rtrim(std::string& str) {
-    auto it1 = std::find_if(str.rbegin(), str.rend(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
-    str.erase(it1.base(), str.end());
-    return str;
-}
-
-std::string& trim(std::string& str) {
-    return ltrim(rtrim(str));
-}
-
-std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> elems;
-    std::istringstream iss(s);
-    std::string item;
-    while (std::getline(iss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count) {
-    std::vector<std::string_view> elems;
-    elems.reserve(expected_column_count);
-    int32_t pos_start = 0;
-    for (int i = 0; i < s.size(); ++i) {
-        if (s[i] == delim) {
-            elems.push_back(std::string_view(&s[pos_start], &s[i]));
-            pos_start = i + 1;
-        }
-    }
-    // Add the last value if there is no trailing delimiter
-    if (s.back() != delim) {
-        elems.push_back(std::string_view(&s[pos_start]));
-    }
-    return elems;
-}
-
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count) {
     std::vector<std::string_view> elems;
     elems.reserve(expected_column_count);
@@ -165,14 +122,14 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     // only from the first file
     std::ifstream& out_file1 = out_files[0];
     while (std::getline(out_file1, line)) {
-        trim(line);
+        str::trim(line);
         std::vector<std::string_view> values = splitWhitespace(line, 11);
         for (int i = 0; i < values.size(); ++i) {
             csv_file << values[i] << ",";
         }
         for (int i = 1; i < out_files.size(); ++i) {
             std::getline(out_files[i], line);
-            trim(line);
+            str::trim(line);
             values = splitWhitespace(line, 11);
             for (int j = 1; j < values.size(); ++j) {
                 csv_file << values[j] << ",";
@@ -214,53 +171,4 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     decimated_values.y_min.push_back(y.back());
     decimated_values.y_max.push_back(y.back());
     return decimated_values;
-}
-
-std::string readFile(const std::string& filename) {
-    HANDLE file_handle = CreateFileA(
-      filename.c_str(),
-      GENERIC_READ,
-      FILE_SHARE_READ,
-      nullptr,
-      OPEN_EXISTING,
-      FILE_ATTRIBUTE_NORMAL,
-      nullptr);
-
-    if (file_handle == INVALID_HANDLE_VALUE) {
-        std::cerr << "Error opening file: " << filename << std::endl;
-        return "";
-    }
-
-    LARGE_INTEGER file_size;
-    if (!GetFileSizeEx(file_handle, &file_size)) {
-        std::cerr << "Error getting file size: " << filename << std::endl;
-        CloseHandle(file_handle);
-        return "";
-    }
-
-    HANDLE file_mapping = CreateFileMapping(file_handle, nullptr, PAGE_READONLY, 0, 0, nullptr);
-    if (file_mapping == nullptr) {
-        std::cerr << "Error creating file mapping: " << filename << std::endl;
-        CloseHandle(file_handle);
-        return "";
-    }
-
-    char* file_contents = static_cast<char*>(MapViewOfFile(file_mapping, FILE_MAP_READ, 0, 0, file_size.QuadPart));
-    if (file_contents == nullptr) {
-        std::cerr << "Error mapping file to memory: " << filename << std::endl;
-        CloseHandle(file_mapping);
-        CloseHandle(file_handle);
-        return "";
-    }
-
-    std::string result(file_contents, file_size.QuadPart);
-
-    if (!UnmapViewOfFile(file_contents)) {
-        std::cerr << "Error unmapping file: " << filename << std::endl;
-    }
-
-    CloseHandle(file_mapping);
-    CloseHandle(file_handle);
-
-    return result;
 }

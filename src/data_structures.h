@@ -23,6 +23,7 @@
 #pragma once
 
 #include "symbols/dbghelp_symbols_lookup.h"
+#include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
 #include "spectrum.h"
 
@@ -32,6 +33,7 @@
 #include <future>
 #include <string>
 #include <format>
+#include <map>
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 

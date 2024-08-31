@@ -28,6 +28,7 @@
 #include "imgui.h"
 #include "nlohmann/json.hpp"
 #include "themes.h"
+#include "str_helpers.h"
 
 #include <mutex>
 #include <thread>
