@@ -1102,3 +1102,43 @@ void DbgGui::showSymbolsWindow() {
     }
     ImGui::End();
 }
+
+
+void DbgGui::showScriptWindow() {
+    for (ScriptWindow& script_window : m_script_windows) {
+        if (!script_window.open) {
+            continue;
+        }
+
+        script_window.focus.focused = ImGui::Begin(script_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+        script_window.closeOnMiddleClick();
+        script_window.contextMenu();
+        if (!script_window.focus.focused) {
+            ImGui::End();
+            continue;
+        }
+
+        script_window.processScript(m_plot_timestamp);
+
+        if (ImGui::Button("Run")) {
+            m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Loop", &script_window.loop);
+
+        // Stop button only visible if running
+        if (script_window.running()) {
+
+            ImGui::SameLine();
+            if (ImGui::Button("Stop")) {
+                script_window.stopScript();
+            }
+            ImGui::SameLine();
+            ImGui::Text(std::format("{:g}", script_window.getTime(m_plot_timestamp)).c_str());
+        }
+
+        ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16), NULL);
+
+        ImGui::End();
+    }
+}

@@ -233,6 +233,8 @@ void DbgGui::updateLoop() {
             ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_4)) {
             ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_5)) {
+            ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
             saveSnapshot();
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
@@ -242,6 +244,7 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_VECTOR_PLOT);
         addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
+        addPopupModal(str::ADD_SCRIPT_WINDOW);
         addPopupModal(str::PAUSE_AFTER);
         addPopupModal(str::PAUSE_AT);
 
@@ -252,12 +255,14 @@ void DbgGui::updateLoop() {
             m_sampler.emptyTempBuffers();
         }
         showDockSpaces();
+        showErrorModal();
         showMainMenuBar();
         showLogWindow();
         showScalarWindow();
         showVectorWindow();
         showCustomWindow();
         showSymbolsWindow();
+        showScriptWindow();
         showScalarPlots();
         showVectorPlots();
         showSpectrumPlots();
@@ -493,6 +498,17 @@ void DbgGui::loadPreviousSessionSettings() {
               custom_window.id = custom_window_data["id"];)
         }
 
+        TRY(for (auto script_window_data : m_settings["script_windows"]) {
+              ScriptWindow& script_window = m_script_windows.emplace_back();
+              script_window.name = script_window_data["name"];
+              script_window.focus.initial_focus = script_window_data["initial_focus"];
+              script_window.id = script_window_data["id"];
+              script_window.loop = script_window_data["loop"];
+              std::string text = script_window_data["text"];
+              std::memcpy((void*)script_window.text, (void*)text.data(), text.size());
+              script_window.text[text.size()] = '\0';
+        })
+
         TRY(for (std::string hidden_symbol
                  : m_settings["hidden_symbols"]) {
             m_hidden_symbols.insert(hidden_symbol);
@@ -702,6 +718,21 @@ void DbgGui::updateSavedSettings() {
                 m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"][scalar->group + " " + scalar->name] = scalar->id;
             }
         }
+    }
+
+    for (ScriptWindow& script_window : m_script_windows) {
+        if (!script_window.open) {
+            m_settings["script_windows"].erase(std::to_string(script_window.id));
+            continue;
+        }
+        if (script_window.id == 0) {
+            script_window.id = hashWithTime(script_window.name);
+        }
+        m_settings["script_windows"][std::to_string(script_window.id)]["name"] = script_window.name;
+        m_settings["script_windows"][std::to_string(script_window.id)]["id"] = script_window.id;
+        m_settings["script_windows"][std::to_string(script_window.id)]["loop"] = script_window.loop;
+        m_settings["script_windows"][std::to_string(script_window.id)]["initial_focus"] = script_window.focus.focused;
+        m_settings["script_windows"][std::to_string(script_window.id)]["text"] = script_window.text;
     }
 
     // Remove deleted scalars from scalar groups

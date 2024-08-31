@@ -78,6 +78,19 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             };
             ImGui::EndPopup();
         }
+    } else if (modal_name == str::ADD_SCRIPT_WINDOW) {
+        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("Script window name",
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_script_windows.push_back(ScriptWindow{window_or_plot_name, hashWithTime(window_or_plot_name)});
+                strcpy_s(window_or_plot_name, "");
+                ImGui::CloseCurrentPopup();
+            };
+            ImGui::EndPopup();
+        }
     } else if (modal_name == str::ADD_SPECTRUM_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
@@ -158,4 +171,34 @@ void DbgGui::loadSnapshot() {
     }
     m_dbghelp_symbols.loadSnapshotFromMemory(m_saved_snapshot);
     m_paused = paused;
+}
+
+void DbgGui::showErrorModal() {
+    if (!m_error_message.empty()) {
+        ImGui::OpenPopup("Error");
+    }
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+    if (ImGui::BeginPopupModal("Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || m_error_message.empty()) {
+            m_error_message.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::Text(m_error_message.c_str());
+        ImGui::EndPopup();
+    }
+
+    if (!m_info_message.empty()) {
+        ImGui::OpenPopup("Info");
+    }
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+    if (ImGui::BeginPopupModal("Info", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || m_info_message.empty()) {
+            m_info_message.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::Text(m_info_message.c_str());
+        ImGui::EndPopup();
+    }
 }

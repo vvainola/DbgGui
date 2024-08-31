@@ -47,6 +47,7 @@ inline constexpr const char* ADD_SCALAR_PLOT = "Add scalar plot";
 inline constexpr const char* ADD_VECTOR_PLOT = "Add vector plot";
 inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
+inline constexpr const char* ADD_SCRIPT_WINDOW = "Add script window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
 inline constexpr const char* PAUSE_AT = "Pause at";
@@ -87,12 +88,14 @@ class DbgGui {
   private:
     void updateLoop();
     void showDockSpaces();
+    void showErrorModal();
     void showMainMenuBar();
     void showLogWindow();
     void showScalarWindow();
     void showSymbolsWindow();
     void showVectorWindow();
     void showCustomWindow();
+    void showScriptWindow();
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showScalarPlots();
     void showVectorPlots();
@@ -146,6 +149,7 @@ class DbgGui {
 
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
+    std::vector<ScriptWindow> m_script_windows;
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
@@ -168,6 +172,8 @@ class DbgGui {
 
     std::deque<std::string> m_message_queue;
     std::string m_all_messages;
+    std::string m_error_message;
+    std::string m_info_message;
 
     struct OptionalSettings {
         bool x_tick_labels = true;

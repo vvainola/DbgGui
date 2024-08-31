@@ -285,3 +285,34 @@ enum FontSelection {
     COUSINE_REGULAR,
     CALIBRI
 };
+
+struct ScriptWindow : Window {
+  public:
+    ScriptWindow() {
+        text[0] = '\0';
+    }
+    ScriptWindow(std::string const& name_, uint64_t id_) {
+        text[0] = '\0';
+        name = name_;
+        id = id_;
+    }
+
+    char text[1024 * 16];
+    bool loop = false;
+
+    std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
+    void processScript(double timestamp);
+    void stopScript();
+    bool running();
+    double getTime(double timestamp);
+
+  private:
+    struct Operation {
+        double time;
+        Scalar* scalar = nullptr;
+        double value;
+    };
+    std::vector<Operation> m_operations;
+    int m_idx = -1;
+    double m_start_time;
+};
