@@ -51,6 +51,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         for (auto& scalar : scalars) {
             if (scalar->name == line_split[1]) {
                 op.scalar = scalar.get();
+                break;
             }
         }
         if (op.scalar == nullptr) {
