@@ -332,6 +332,14 @@ void DbgGui::showMainMenuBar() {
                 HelpMarker("Hotkey to add new custom window is ctrl+shift+4");
                 addPopupModal(str::ADD_CUSTOM_WINDOW);
 
+                // Script window
+                if (ImGui::Button("Script window")) {
+                    ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
+                }
+                ImGui::SameLine();
+                HelpMarker("Hotkey to add new script window is ctrl+shift+5");
+                addPopupModal(str::ADD_SCRIPT_WINDOW);
+
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
                     ImGui::OpenPopup(str::ADD_DOCKSPACE);
