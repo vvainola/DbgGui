@@ -106,6 +106,8 @@ class DbgGui {
     void synchronizeSpeed();
     void saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar);
+    void addScalarScaleInput(Scalar* scalar);
+    void addScalarOffsetInput(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol const& sym);
     void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);

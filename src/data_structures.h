@@ -26,6 +26,7 @@
 #include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
 #include "spectrum.h"
+#include "str_helpers.h"
 
 #include <numeric>
 #include <vector>
@@ -106,8 +107,6 @@ struct Scalar {
     bool hide_from_scalars_window = false;
     bool deleted = false;
     Scalar* replacement = nullptr;
-    double scale = 1;
-    double offset = 0;
 
     double getValue() const {
         return getSourceValue(src);
@@ -118,12 +117,48 @@ struct Scalar {
     }
 
     double getScaledValue() const {
-        return getValue() * scale + offset;
+        return getValue() * m_scale + m_offset;
     }
 
     void setScaledValue(double value) {
-        setValue((value - offset) / scale);
+        setValue((value - m_offset) / m_scale);
     }
+
+    void setScaleStr(std::string const& scale) {
+        m_scale = *str::evaluateExpression(scale);
+        m_scale_str = scale;
+    }
+
+    double getScale() const {
+        return m_scale;
+    }
+
+    std::string const& getScaleStr() const {
+        return m_scale_str;
+    }
+
+    void setOffsetStr(std::string const& offset) {
+        m_offset = *str::evaluateExpression(offset);
+        m_offset_str = offset;
+    }
+
+    double getOffset() const {
+        return m_offset;
+    }
+
+    std::string const& getOffsetStr() const {
+        return m_offset_str;
+    }
+
+    bool customScaleOrOffset() const {
+        return m_scale != 1 || m_offset != 0;
+    }
+
+  private:
+    std::string m_scale_str;
+    double m_scale;
+    std::string m_offset_str;
+    double m_offset;
 };
 
 class PauseTrigger {

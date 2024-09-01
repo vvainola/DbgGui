@@ -132,8 +132,8 @@ void DbgGui::showScalarPlots() {
                 ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(signal,
                                                                                      time_idx,
                                                                                      SCALAR_PLOT_POINT_COUNT,
-                                                                                     signal->scale,
-                                                                                     signal->offset);
+                                                                                     signal->getScale(),
+                                                                                     signal->getOffset());
                 std::string label_id = std::format("{}###{}", signal->alias_and_group, signal->name_and_group);
                 ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
@@ -166,11 +166,13 @@ void DbgGui::showScalarPlots() {
                         m_pause_triggers.push_back(PauseTrigger(signal, current_value));
                         ImGui::CloseCurrentPopup();
                     }
-                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Scale", &signal->scale, 0, 0, "%g");
-                    ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Offset", &signal->offset, 0, 0, "%g");
+                    addScalarScaleInput(signal);
+                    addScalarOffsetInput(signal);
                     if (ImGui::Button("Copy name")) {
+                        ImGui::SetClipboardText(signal->alias.c_str());
+                        ImGui::CloseCurrentPopup();
+                    }
+                    if (ImGui::Button("Copy alias")) {
                         ImGui::SetClipboardText(signal->alias.c_str());
                         ImGui::CloseCurrentPopup();
                     }
@@ -227,8 +229,8 @@ void DbgGui::showScalarPlots() {
                     ScrollingBuffer::DecimatedValues value = m_sampler.getValuesInRange(signal,
                                                                                         mouse_time_idx,
                                                                                         1,
-                                                                                        signal->scale,
-                                                                                        signal->offset);
+                                                                                        signal->getScale(),
+                                                                                        signal->getOffset());
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
                     ss << signal->alias_and_group << " : " << tooltip_value;
@@ -355,13 +357,13 @@ void DbgGui::showVectorPlots() {
                 ScrollingBuffer::DecimatedValues values_x = m_sampler.getValuesInRange(signal->x,
                                                                                        time_idx,
                                                                                        ALL_SAMPLES,
-                                                                                       signal->x->scale,
-                                                                                       signal->x->offset);
+                                                                                       signal->x->getScale(),
+                                                                                       signal->x->getOffset());
                 ScrollingBuffer::DecimatedValues values_y = m_sampler.getValuesInRange(signal->y,
                                                                                        time_idx,
                                                                                        ALL_SAMPLES,
-                                                                                       signal->y->scale,
-                                                                                       signal->y->offset);
+                                                                                       signal->y->getScale(),
+                                                                                       signal->y->getOffset());
                 // Rotate samples
                 if (frame_rotation_vectors.size() > 0) {
                     for (size_t i = 0; i < values_x.y_max.size(); ++i) {
@@ -564,13 +566,13 @@ void DbgGui::showSpectrumPlots() {
             ScrollingBuffer::DecimatedValues samples_x = m_sampler.getValuesInRange(plot.vector->x,
                                                                                     time_idx,
                                                                                     ALL_SAMPLES,
-                                                                                    plot.vector->x->scale,
-                                                                                    plot.vector->x->offset);
+                                                                                    plot.vector->x->getScale(),
+                                                                                    plot.vector->x->getOffset());
             ScrollingBuffer::DecimatedValues samples_y = m_sampler.getValuesInRange(plot.vector->y,
                                                                                     time_idx,
                                                                                     ALL_SAMPLES,
-                                                                                    plot.vector->y->scale,
-                                                                                    plot.vector->y->offset);
+                                                                                    plot.vector->y->getScale(),
+                                                                                    plot.vector->y->getOffset());
             std::vector<std::complex<double>> samples = collectFftSamples(samples_x.time,
                                                                           samples_x.y_min,
                                                                           samples_y.y_min,
@@ -585,8 +587,8 @@ void DbgGui::showSpectrumPlots() {
             ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(plot.scalar,
                                                                                  time_idx,
                                                                                  ALL_SAMPLES,
-                                                                                 plot.scalar->scale,
-                                                                                 plot.scalar->offset);
+                                                                                 plot.scalar->getScale(),
+                                                                                 plot.scalar->getOffset());
             std::vector<double> zeros(values.time.size(), 0);
             std::vector<std::complex<double>> samples = collectFftSamples(values.time,
                                                                           values.y_min,
@@ -633,8 +635,8 @@ void DbgGui::saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_l
             values.push_back(m_sampler.getValuesInRange(signal,
                                                         time_idx,
                                                         ALL_SAMPLES,
-                                                        signal->scale,
-                                                        signal->offset));
+                                                        signal->getScale(),
+                                                        signal->getOffset()));
         }
         csv << "\n";
         if (values.size() == 0) {

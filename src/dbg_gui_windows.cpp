@@ -137,20 +137,24 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
             m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
             ImGui::CloseCurrentPopup();
         }
-        ImGui::InputDouble("Scale", &scalar->scale, 0, 0, "%g", ImGuiInputTextFlags_CharsScientific);
-        ImGui::InputDouble("Offset", &scalar->offset, 0, 0, "%g", ImGuiInputTextFlags_CharsScientific);
+        addScalarScaleInput(scalar);
+        addScalarOffsetInput(scalar);
 
         if (ImGui::Button("Copy name")) {
+            ImGui::SetClipboardText(scalar->name.c_str());
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::Button("Copy alias")) {
             ImGui::SetClipboardText(scalar->alias.c_str());
             ImGui::CloseCurrentPopup();
         }
-        if (ImGui::Button("Copy name and value")) {
+        if (ImGui::Button("Copy alias and value")) {
             ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
             ImGui::CloseCurrentPopup();
         }
 
         scalar->alias.reserve(MAX_NAME_LENGTH);
-        if (ImGui::InputText("Name##scalar_context_menu",
+        if (ImGui::InputText("Alias##scalar_context_menu",
                              scalar->alias.data(),
                              MAX_NAME_LENGTH)) {
             scalar->alias = std::string(scalar->alias.data());
@@ -160,6 +164,34 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
             scalar->alias_and_group = std::string(scalar->alias.data()) + " (" + scalar->group + ")";
         }
         ImGui::EndPopup();
+    }
+}
+
+void DbgGui::addScalarScaleInput(Scalar* scalar) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getScaleStr().data(), scalar->getScaleStr().size());
+    buffer[scalar->getScaleStr().size()] = '\0';
+    if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        auto scale = str::evaluateExpression(buffer);
+        if (scale.has_value()) {
+            scalar->setScaleStr(buffer);
+        } else {
+            m_error_message = scale.error();
+        }
+    }
+}
+
+void DbgGui::addScalarOffsetInput(Scalar* scalar) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getOffsetStr().data(), scalar->getOffsetStr().size());
+    buffer[scalar->getOffsetStr().size()] = '\0';
+    if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        auto offset = str::evaluateExpression(buffer);
+        if (offset.has_value()) {
+            scalar->setOffsetStr(buffer);
+        } else {
+            m_error_message = offset.error();
+        }
     }
 }
 
@@ -551,8 +583,8 @@ void DbgGui::showScalarWindow() {
                         if (scalar_symbol) {
                             Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
                             new_scalar->alias = scalar->alias;
-                            new_scalar->scale = scalar->scale;
-                            new_scalar->offset = scalar->offset;
+                            new_scalar->setScaleStr(scalar->getScaleStr());
+                            new_scalar->setOffsetStr(scalar->getOffsetStr());
                             scalar->deleted = true;
                             if (m_sampler.isSignalSampled(scalar)) {
                                 m_sampler.startSampling(new_scalar);
@@ -592,8 +624,7 @@ void DbgGui::showScalarWindow() {
                     // Show name. Text is used instead of selectable because the
                     // keyboard navigation in the table does not work properly
                     // and up/down changes columns
-                    bool custom_scale_or_offset = scalar->scale != 1 || scalar->offset != 0;
-                    if (custom_scale_or_offset) {
+                    if (scalar->customScaleOrOffset()) {
                         ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
                     } else {
                         ImGui::Text(scalar->alias.c_str());
@@ -612,7 +643,7 @@ void DbgGui::showScalarWindow() {
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->scale, scalar->offset);
+                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
                 }
 
                 ImGui::TreePop();
@@ -724,10 +755,10 @@ void DbgGui::showVectorWindow() {
                         VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
                         if (x && y) {
                             Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
-                            new_vector->x->scale = vector->x->scale;
-                            new_vector->x->offset = vector->x->offset;
-                            new_vector->y->scale = vector->y->scale;
-                            new_vector->y->offset = vector->y->offset;
+                            new_vector->x->setScaleStr(vector->x->getScaleStr());
+                            new_vector->y->setScaleStr(vector->y->getScaleStr());
+                            new_vector->x->setOffsetStr(vector->x->getOffsetStr());
+                            new_vector->y->setOffsetStr(vector->y->getOffsetStr());
                             if (m_sampler.isSignalSampled(vector->x) || m_sampler.isSignalSampled(vector->y)) {
                                 m_sampler.startSampling(new_vector);
                                 m_sampler.copySamples(*vector, *new_vector);
@@ -780,8 +811,7 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    bool custom_x_scale_or_offset = signal->x->scale != 1 || signal->x->offset != 0;
-                    if (custom_x_scale_or_offset) {
+                    if (signal->x->customScaleOrOffset()) {
                         ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->x->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
@@ -797,8 +827,7 @@ void DbgGui::showVectorWindow() {
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    bool custom_y_scale_or_offset = signal->y->scale != 1 || signal->y->offset != 0;
-                    if (custom_y_scale_or_offset) {
+                    if (signal->y->customScaleOrOffset()) {
                         ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->y->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
@@ -888,8 +917,7 @@ void DbgGui::showCustomWindow() {
                 // Show name. Text is used instead of selectable because the
                 // keyboard navigation in the table does not work properly
                 // and up/down changes columns
-                bool custom_scale_or_offset = scalar->scale != 1 || scalar->offset != 0;
-                if (custom_scale_or_offset) {
+                if (scalar->customScaleOrOffset()) {
                     ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
                 } else {
                     ImGui::Text(scalar->alias_and_group.c_str());
@@ -909,7 +937,7 @@ void DbgGui::showCustomWindow() {
 
                 // Show value
                 ImGui::TableNextColumn();
-                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group, scalar->scale, scalar->offset);
+                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
             }
             ImGui::EndTable();
         }
@@ -1114,7 +1142,6 @@ void DbgGui::showSymbolsWindow() {
     }
     ImGui::End();
 }
-
 
 void DbgGui::showScriptWindow() {
     for (ScriptWindow& script_window : m_script_windows) {

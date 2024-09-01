@@ -27,6 +27,7 @@
 #include <format>
 #include <sstream>
 #include <iomanip>
+#include <stack>
 
 namespace str {
 
@@ -136,5 +137,137 @@ std::string& str::trim(std::string& str) {
     return ltrim(rtrim(str));
 }
 
+static bool isOperator(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '^';
+}
+
+static int getPrecedence(char op) {
+    if (op == '+' || op == '-') {
+        return 1;
+    } else if (op == '*' || op == '/') {
+        return 2;
+    } else if (op == '^') {
+        return 3;
+    }
+    return 0; // Default precedence for non-operators
+}
+
+static double applyOperator(double operand1, double operand2, char op) {
+    switch (op) {
+        case '+': return operand1 + operand2;
+        case '-': return operand1 - operand2;
+        case '*': return operand1 * operand2;
+        case '/': return operand1 / operand2;
+        case '^': return pow(operand1, operand2);
+        default:
+            throw std::runtime_error(std::format("Invalid operator {}", op));
+    }
+}
+
+static double evaluateExpression(std::istringstream& iss) {
+    std::stack<double> operand_stack;
+    std::stack<char> operator_stack;
+    std::stack<char> full_stack;
+
+    auto evaluateOperatorStack = [&]() {
+        char top_operator = operator_stack.top();
+        operator_stack.pop();
+
+        if (operand_stack.size() < 2) {
+            throw std::runtime_error(std::format("Unexpected operand stack size {} when evaluating operators", operand_stack.size()));
+        }
+        double operand2 = operand_stack.top();
+        operand_stack.pop();
+        double operand1 = operand_stack.top();
+        operand_stack.pop();
+
+        double result = applyOperator(operand1, operand2, top_operator);
+        operand_stack.push(result);
+    };
+
+    char current_char;
+    while (iss.get(current_char)) {
+        // Digit
+        // Unary operator
+        // Unary operator preceded by operator e.g. "1 + -2" or "1 / -(2)"
+        if (isdigit(current_char)
+            || (current_char == '-' && operand_stack.empty() && (isdigit(iss.peek()) || iss.peek() == '('))
+            || (current_char == '-' && !full_stack.empty() && isOperator(full_stack.top()) && (isdigit(iss.peek()) || iss.peek() == '('))) {
+            // Parse a number
+            double operand;
+            if (iss.peek() == '(') {
+                iss.get(); // Remove opening parenthesis
+                operand = -evaluateExpression(iss);
+            } else {
+                iss.putback(current_char);
+                iss >> operand;
+            }
+            operand_stack.push(operand);
+            // Don't care about the value in full stack but it has to be distinguishable from operator
+            full_stack.push('0');
+        }
+        // sqrt
+        else if (current_char == 's') {
+            if (iss.get() != 'q' && iss.get() == 'r' && iss.get() == 'r' && iss.get() == '(') {
+                throw std::runtime_error(std::format("sqrt is the only supported special operation"));
+            }
+            double operand = evaluateExpression(iss);
+            operand_stack.push(sqrt(operand));
+            full_stack.push('0');
+        } else if (isOperator(current_char)) {
+            // Token is an operator
+            char current_operator = current_char;
+
+            while (!operator_stack.empty() && getPrecedence(operator_stack.top()) >= getPrecedence(current_operator)) {
+                // Apply higher or equal precedence operators on top of the operator stack
+                evaluateOperatorStack();
+            }
+
+            // Push the current operator onto the stack
+            operator_stack.push(current_operator);
+            full_stack.push(current_operator);
+        } else if (current_char == '(') {
+            // Token is an opening parenthesis, evaluate the expression inside the parenthesis
+            double result = evaluateExpression(iss);
+            operand_stack.push(result);
+            // Don't care about the value in full stack but it has to be distinguishable from operator
+            full_stack.push('0');
+        } else if (current_char == ')') {
+            // Token is a closing parenthesis, evaluate the expression
+            while (!operator_stack.empty()) {
+                evaluateOperatorStack();
+            }
+            if (operand_stack.size() != 1) {
+                throw std::runtime_error(std::format("Unexpected operand stack size {} after evaluating operators", operand_stack.size()));
+            }
+            return operand_stack.top();
+        } else {
+            throw std::runtime_error(std::format("Invalid character: {}", current_char));
+        }
+    }
+
+    // Process the remaining operators in the stack
+    while (!operator_stack.empty()) {
+        evaluateOperatorStack();
+    }
+
+    // The final result is on top of the operand stack
+    if (operand_stack.size() == 1) {
+        return operand_stack.top();
+    } else {
+        throw std::runtime_error("Invalid expression : Too many operands");
+    }
+}
+
+std::expected<double, std::string> str::evaluateExpression(std::string expression) {
+    // Remove whitespace
+    expression.erase(std::remove_if(expression.begin(), expression.end(), isspace), expression.end());
+    std::istringstream iss(expression);
+    try {
+        return evaluateExpression(iss);
+    } catch (std::runtime_error e) {
+        return std::unexpected(e.what());
+    }
+}
 
 } // namespace str

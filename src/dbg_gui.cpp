@@ -24,6 +24,7 @@
 
 #include "dbg_gui.h"
 #include "themes.h"
+#include "str_helpers.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -41,7 +42,7 @@ constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 #define TRY(expression)                       \
     try {                                     \
         expression                            \
-    } catch (nlohmann::json::exception err) { \
+    } catch (std::exception err) {            \
         std::cerr << err.what() << std::endl; \
     }
 
@@ -307,11 +308,10 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
              : m_settings["scalars"]) {
         uint64_t id = scalar_data["id"];
         if (id == scalar->id) {
-            bool manually_added_custom_scale = scalar->scale != 1;
-            if (!manually_added_custom_scale) {
-                scalar->scale = scalar_data["scale"];
-            }
-            scalar->offset = scalar_data["offset"];
+            std::string scale = scalar_data["scale"];
+            scalar->setScaleStr(scale);
+            std::string offset = scalar_data["offset"];
+            scalar->setOffsetStr(offset);
             scalar->alias = scalar_data["alias"];
             scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
             break;
@@ -476,11 +476,10 @@ void DbgGui::loadPreviousSessionSettings() {
               uint64_t id = scalar_data["id"];
               Scalar* scalar = getScalar(id);
               if (scalar) {
-                  bool manually_added_custom_scale = scalar->scale != 1;
-                  if (!manually_added_custom_scale) {
-                      scalar->scale = scalar_data["scale"];
-                  }
-                  scalar->offset = scalar_data["offset"];
+                  std::string scale = scalar_data["scale"];
+                  scalar->setScaleStr(scale);
+                  std::string offset = scalar_data["offset"];
+                  scalar->setOffsetStr(offset);
                   scalar->alias = scalar_data["alias"];
                   scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
               };)
@@ -791,8 +790,8 @@ void DbgGui::updateSavedSettings() {
             remove(m_scalars, scalar);
         } else {
             m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
-            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->scale;
-            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->offset;
+            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->getScaleStr();
+            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->getOffsetStr();
             m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
         }
     }
@@ -956,8 +955,8 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->name_and_group = name + " (" + new_scalar->group + ")";
     new_scalar->alias_and_group = new_scalar->name_and_group;
     new_scalar->id = id;
-    new_scalar->scale = scale;
-    new_scalar->offset = offset;
+    new_scalar->setScaleStr(std::to_string(scale));
+    new_scalar->setOffsetStr(std::to_string(offset));
     restoreScalarSettings(new_scalar.get());
     std::vector<std::string> groups = str::split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
@@ -997,10 +996,10 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     new_vector->x->hide_from_scalars_window = true;
     new_vector->y = addScalar(y, group, name_y);
     new_vector->y->hide_from_scalars_window = true;
-    new_vector->x->scale = scale;
-    new_vector->x->offset = offset;
-    new_vector->y->scale = scale;
-    new_vector->y->offset = offset;
+    new_vector->x->setScaleStr(std::to_string(scale));
+    new_vector->x->setOffsetStr(std::to_string(offset));
+    new_vector->y->setScaleStr(std::to_string(scale));
+    new_vector->y->setOffsetStr(std::to_string(offset));
     std::vector<std::string> groups = str::split(new_vector->group, '|');
     SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
     added_group->name = groups[0];
