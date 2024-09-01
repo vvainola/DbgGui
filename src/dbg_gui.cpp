@@ -215,7 +215,7 @@ void DbgGui::updateLoop() {
         //---------- Hotkeys ----------
         if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
             m_pause_at_time = std::numeric_limits<double>::epsilon();
             m_paused = false;
         } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) && !ImGui::IsAnyItemActive()) {
