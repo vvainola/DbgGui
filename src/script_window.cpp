@@ -37,7 +37,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
 
         auto line_split = str::split(line, ';');
         if (line_split.size() != 3) {
-            return "Each line must be splittable into 3 'time;symbol;value'. Example '1;test_symbol;3'";
+            return std::format("Error in line {}. Each line must be splittable into 3 'time;symbol;value'. Example '1;test_symbol;3'", i);
         }
 
         Operation op;

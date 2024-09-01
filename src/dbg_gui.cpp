@@ -874,6 +874,13 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
+    for (ScriptWindow& script_window : m_script_windows) {
+        ImGui::Begin(script_window.title().c_str());
+        if (script_window.focus.initial_focus) {
+            ImGui::SetWindowFocus(script_window.title().c_str());
+        }
+        ImGui::End();
+    }
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
