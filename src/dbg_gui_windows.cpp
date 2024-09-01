@@ -1152,12 +1152,12 @@ void DbgGui::showScriptWindow() {
         script_window.focus.focused = ImGui::Begin(script_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         script_window.closeOnMiddleClick();
         script_window.contextMenu();
+        script_window.processScript(m_plot_timestamp);
         if (!script_window.focus.focused) {
             ImGui::End();
             continue;
         }
 
-        script_window.processScript(m_plot_timestamp);
 
         if (ImGui::Button("Run")) {
             m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
