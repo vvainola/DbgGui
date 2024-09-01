@@ -125,7 +125,11 @@ struct Scalar {
     }
 
     void setScaleStr(std::string const& scale) {
-        m_scale = *str::evaluateExpression(scale);
+        auto scale_v = str::evaluateExpression(scale);
+        if (!scale_v.has_value()) {
+            throw std::runtime_error(std::format("Scale expression '{}' could not be evaluated", scale));
+        }
+        m_scale = scale_v.value();
         m_scale_str = scale;
     }
 
@@ -138,6 +142,11 @@ struct Scalar {
     }
 
     void setOffsetStr(std::string const& offset) {
+        auto offset_v = str::evaluateExpression(offset);
+        if (!offset_v.has_value()) {
+            throw std::runtime_error(std::format("Offset expression '{}' could not be evaluated", offset));
+        }
+        m_offset = offset_v.value();
         m_offset = *str::evaluateExpression(offset);
         m_offset_str = offset;
     }
@@ -155,10 +164,10 @@ struct Scalar {
     }
 
   private:
-    std::string m_scale_str;
-    double m_scale;
-    std::string m_offset_str;
-    double m_offset;
+    std::string m_scale_str = "1";
+    double m_scale = 1;
+    std::string m_offset_str = "0";
+    double m_offset = 0;
 };
 
 class PauseTrigger {
