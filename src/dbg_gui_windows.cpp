@@ -97,9 +97,9 @@ std::optional<ImGuiKey> pressedNumber() {
     return std::nullopt;
 }
 
-void addInputScalar(ValueSource const& signal_src, std::string const& label, double scale = 1, double offset = 0) {
-    if (std::get_if<ReadWriteFnCustomStr>(&signal_src)) {
-        ImGui::Text(getSourceValueStr(signal_src).c_str());
+void addInputScalar(ValueSource const& value_src, std::string const& label, double scale = 1, double offset = 0) {
+    if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
+        ImGui::Text(getSourceValueStr(value_src).c_str());
         ImGui::SameLine();
     }
 
@@ -107,14 +107,14 @@ void addInputScalar(ValueSource const& signal_src, std::string const& label, dou
                                    | ImGuiInputTextFlags_AutoSelectAll
                                    | ImGuiInputTextFlags_CharsScientific
                                    | ImGuiInputTextFlags_CallbackAlways;
-    double scaled_value = getSourceValue(signal_src) * scale + offset;
+    double scaled_value = getSourceValue(value_src) * scale + offset;
     char value[20];
     strcpy_s(value, numberAsStr(scaled_value).c_str());
     ImGui::SetNextItemWidth(-FLT_MIN);
     static ImGuiKey pressed_number = ImGuiKey_None;
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
         try {
-            setSourceValue(signal_src, (std::stod(value) - offset) / scale);
+            setSourceValue(value_src, (std::stod(value) - offset) / scale);
         } catch (std::exception const& err) {
             std::cerr << err.what() << std::endl;
         }
@@ -385,11 +385,11 @@ void DbgGui::showMainMenuBar() {
             }
 
             if (ImGui::Button("Save all plots as csv")) {
-                std::vector<Scalar*> signals;
+                std::vector<Scalar*> scalars;
                 for (auto const& scalar : m_scalars) {
-                    signals.push_back(scalar.get());
+                    scalars.push_back(scalar.get());
                 }
-                saveSignalsAsCsv(signals, m_linked_scalar_x_axis_limits);
+                saveScalarsAsCsv(scalars, m_linked_scalar_x_axis_limits);
             }
 
             if (ImGui::Button("Save snapshot")) {
@@ -586,7 +586,7 @@ void DbgGui::showScalarWindow() {
                             new_scalar->setScaleStr(scalar->getScaleStr());
                             new_scalar->setOffsetStr(scalar->getOffsetStr());
                             scalar->deleted = true;
-                            if (m_sampler.isSignalSampled(scalar)) {
+                            if (m_sampler.isScalarSampled(scalar)) {
                                 m_sampler.startSampling(new_scalar);
                                 m_sampler.copySamples(*scalar, *new_scalar);
                             }
@@ -759,7 +759,7 @@ void DbgGui::showVectorWindow() {
                             new_vector->y->setScaleStr(vector->y->getScaleStr());
                             new_vector->x->setOffsetStr(vector->x->getOffsetStr());
                             new_vector->y->setOffsetStr(vector->y->getOffsetStr());
-                            if (m_sampler.isSignalSampled(vector->x) || m_sampler.isSignalSampled(vector->y)) {
+                            if (m_sampler.isScalarSampled(vector->x) || m_sampler.isScalarSampled(vector->y)) {
                                 m_sampler.startSampling(new_vector);
                                 m_sampler.copySamples(*vector, *new_vector);
                             }
@@ -777,11 +777,11 @@ void DbgGui::showVectorWindow() {
                     show_vector_group(subgroup.second, delete_entire_group);
                 }
 
-                // All signals in a group are shown if the group name matches filter
+                // All vectors in a group are shown if the group name matches filter
                 bool group_matches_filter = fts::fuzzy_match_simple(vector_name_filter.c_str(), group.full_name.c_str());
-                for (Vector2D* signal : vectors) {
+                for (Vector2D* vector : vectors) {
                     if (!vector_name_filter.empty()
-                        && !fts::fuzzy_match_simple(vector_name_filter.c_str(), signal->name.c_str())
+                        && !fts::fuzzy_match_simple(vector_name_filter.c_str(), vector->name.c_str())
                         && !group_matches_filter) {
                         continue;
                     }
@@ -789,50 +789,50 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     // Show name
-                    ImGui::Text(signal->name.c_str());
+                    ImGui::Text(vector->name.c_str());
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("VECTOR_ID", &signal->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("VECTOR_ID", &vector->id, sizeof(uint64_t));
                         ImGui::Text("Drag to vector plot");
                         ImGui::EndDragDropSource();
                     }
 
-                    // Mark signal as deleted
+                    // Mark vector as deleted
                     if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                        signal->deleted = true;
+                        vector->deleted = true;
                     }
 
                     // Show x-value
                     ImGui::TableNextColumn();
-                    ImGui::Selectable(std::format("##{}x", signal->x->name_and_group).c_str());
+                    ImGui::Selectable(std::format("##{}x", vector->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->x->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->x->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    if (signal->x->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->x->getScaledValue()).c_str());
+                    if (vector->x->customScaleOrOffset()) {
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->x->getScaledValue()).c_str());
                     } else {
-                        ImGui::Text(numberAsStr(signal->x->getValue()).c_str());
+                        ImGui::Text(numberAsStr(vector->x->getValue()).c_str());
                     }
-                    addScalarContextMenu(signal->x);
+                    addScalarContextMenu(vector->x);
 
                     // Show y-value
                     ImGui::TableNextColumn();
-                    ImGui::Selectable(std::format("##{}y", signal->y->name_and_group).c_str());
+                    ImGui::Selectable(std::format("##{}y", vector->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &signal->y->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->y->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
-                    if (signal->y->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(signal->y->getScaledValue()).c_str());
+                    if (vector->y->customScaleOrOffset()) {
+                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->y->getScaledValue()).c_str());
                     } else {
-                        ImGui::Text(numberAsStr(signal->y->getValue()).c_str());
+                        ImGui::Text(numberAsStr(vector->y->getValue()).c_str());
                     }
-                    addScalarContextMenu(signal->y);
+                    addScalarContextMenu(vector->y);
                 }
                 ImGui::TreePop();
             }
@@ -904,7 +904,7 @@ void DbgGui::showCustomWindow() {
             ImGui::End();
             continue;
         }
-        Scalar* signal_to_remove = nullptr;
+        Scalar* scalar_to_remove = nullptr;
 
         if (ImGui::BeginTable("custom_table",
                               2,
@@ -931,7 +931,7 @@ void DbgGui::showCustomWindow() {
                 }
                 // Hide symbol on delete
                 if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
-                    signal_to_remove = scalar;
+                    scalar_to_remove = scalar;
                 }
                 addScalarContextMenu(scalar);
 
@@ -945,9 +945,9 @@ void DbgGui::showCustomWindow() {
         ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
         addCustomWindowDragAndDrop(custom_window);
 
-        if (signal_to_remove) {
-            remove(custom_window.scalars, signal_to_remove);
-            size_t signals_removed = m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(signal_to_remove->group + " " + signal_to_remove->name);
+        if (scalar_to_remove) {
+            remove(custom_window.scalars, scalar_to_remove);
+            size_t signals_removed = m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar_to_remove->group + " " + scalar_to_remove->name);
             assert(signals_removed > 0);
         }
 

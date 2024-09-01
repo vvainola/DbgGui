@@ -104,7 +104,7 @@ class DbgGui {
     void updateSavedSettings();
     void setInitialFocus();
     void synchronizeSpeed();
-    void saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits);
+    void saveScalarsAsCsv(std::vector<Scalar*> const& scalars, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar);
     void addScalarScaleInput(Scalar* scalar);
     void addScalarOffsetInput(Scalar* scalar);

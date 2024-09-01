@@ -123,7 +123,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         return;
     }
 
-    { // Sample signals
+    { // Sample scalars
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
         if (timestamp < m_sample_timestamp) {
             m_sampler.shiftTime(timestamp - m_sample_timestamp);
@@ -331,7 +331,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
         for (uint64_t id : scalar_plot_data["signals"]) {
             if (plot != nullptr && id == scalar->id) {
                 m_sampler.startSampling(scalar);
-                plot->addSignalToPlot(scalar);
+                plot->addScalarToPlot(scalar);
             }
         }
     })
@@ -420,7 +420,7 @@ void DbgGui::loadPreviousSessionSettings() {
                   Scalar* scalar = getScalar(id);
                   if (scalar) {
                       m_sampler.startSampling(scalar);
-                      plot.addSignalToPlot(scalar);
+                      plot.addScalarToPlot(scalar);
                   }
               };
               plot.focus.initial_focus = scalar_plot_data["initial_focus"];
@@ -437,7 +437,7 @@ void DbgGui::loadPreviousSessionSettings() {
                   Vector2D* vec = getVector(id);
                   if (vec) {
                       m_sampler.startSampling(vec);
-                      plot.addSignalToPlot(vec);
+                      plot.addVectorToPlot(vec);
                   }
               };
               plot.focus.initial_focus = vector_plot_data["initial_focus"];
@@ -461,10 +461,10 @@ void DbgGui::loadPreviousSessionSettings() {
                   Vector2D* vector = getVector(id);
                   if (scalar) {
                       m_sampler.startSampling(scalar);
-                      plot.addSignalToPlot(scalar);
+                      plot.addScalarToPlot(scalar);
                   } else if (vector) {
                       m_sampler.startSampling(vector);
-                      plot.addSignalToPlot(vector);
+                      plot.addVectorToPlot(vector);
                   }
               };
               plot.focus.initial_focus = spec_plot_data["initial_focus"];
@@ -624,14 +624,14 @@ void DbgGui::updateSavedSettings() {
             m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_min"] = scalar_plot.y_axis.min;
             m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_max"] = scalar_plot.y_axis.max;
         }
-        for (int i = int(scalar_plot.signals.size() - 1); i >= 0; --i) {
-            Scalar* scalar = scalar_plot.signals[i];
+        for (int i = int(scalar_plot.scalars.size() - 1); i >= 0; --i) {
+            Scalar* scalar = scalar_plot.scalars[i];
             if (scalar->deleted) {
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar->name_and_group);
                 if (scalar->replacement != nullptr) {
-                    scalar_plot.addSignalToPlot(scalar->replacement);
+                    scalar_plot.addScalarToPlot(scalar->replacement);
                 }
-                remove(scalar_plot.signals, scalar);
+                remove(scalar_plot.scalars, scalar);
             } else {
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"][scalar->name_and_group] = scalar->id;
             }
@@ -650,14 +650,14 @@ void DbgGui::updateSavedSettings() {
         m_settings["vector_plots"][std::to_string(vector_plot.id)]["id"] = vector_plot.id;
         m_settings["vector_plots"][std::to_string(vector_plot.id)]["initial_focus"] = vector_plot.focus.focused;
         m_settings["vector_plots"][std::to_string(vector_plot.id)]["time_range"] = vector_plot.time_range;
-        for (int i = int(vector_plot.signals.size() - 1); i >= 0; --i) {
-            Vector2D* vector = vector_plot.signals[i];
+        for (int i = int(vector_plot.vectors.size() - 1); i >= 0; --i) {
+            Vector2D* vector = vector_plot.vectors[i];
             if (vector->deleted || vector->x->deleted || vector->y->deleted) {
                 if (vector->deleted && vector->replacement != nullptr) {
-                    vector_plot.addSignalToPlot(vector->replacement);
+                    vector_plot.addVectorToPlot(vector->replacement);
                 }
                 m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(vector->name_and_group);
-                remove(vector_plot.signals, vector);
+                remove(vector_plot.vectors, vector);
             } else {
                 m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"][vector->name_and_group] = vector->id;
             }

@@ -52,7 +52,7 @@ void DbgGui::showScalarPlots() {
         if (!scalar_plot.open) {
             continue;
         }
-        Scalar* signal_to_remove = nullptr;
+        Scalar* scalar_to_remove = nullptr;
 
         scalar_plot.focus.focused = ImGui::Begin(scalar_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         scalar_plot.closeOnMiddleClick();
@@ -69,11 +69,11 @@ void DbgGui::showScalarPlots() {
         if (ImGui::BeginPopup("##Menu")) {
             if (ImGui::Button("Save as csv")) {
                 MinMax time_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
-                saveSignalsAsCsv(scalar_plot.signals, time_limits);
+                saveScalarsAsCsv(scalar_plot.scalars, time_limits);
                 ImGui::CloseCurrentPopup();
             }
             if (ImGui::Button("Remove all")) {
-                scalar_plot.signals.clear();
+                scalar_plot.scalars.clear();
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].clear();
                 ImGui::CloseCurrentPopup();
             }
@@ -128,13 +128,13 @@ void DbgGui::showScalarPlots() {
             x_range = std::max(1e-6, x_range);
 
             auto time_idx = m_sampler.getTimeIndices(x_limits.min, x_limits.max);
-            for (Scalar* signal : scalar_plot.signals) {
-                ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(signal,
+            for (Scalar* scalar : scalar_plot.scalars) {
+                ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(scalar,
                                                                                      time_idx,
                                                                                      SCALAR_PLOT_POINT_COUNT,
-                                                                                     signal->getScale(),
-                                                                                     signal->getOffset());
-                std::string label_id = std::format("{}###{}", signal->alias_and_group, signal->name_and_group);
+                                                                                     scalar->getScale(),
+                                                                                     scalar->getOffset());
+                std::string label_id = std::format("{}###{}", scalar->alias_and_group, scalar->name_and_group);
                 ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
@@ -152,39 +152,39 @@ void DbgGui::showScalarPlots() {
                                    values.y_max.data(),
                                    int(values.time.size()),
                                    ImPlotLineFlags_None);
-                // Same signal may be in multiple plots with different color so always
+                // Same scalar may be in multiple plots with different color so always
                 // update color for tooltip
-                signal->color = ImPlot::GetLastItemColor();
+                scalar->color = ImPlot::GetLastItemColor();
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(label_id.c_str())) {
-                    double current_value = signal->getScaledValue();
+                    double current_value = scalar->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::Text(signal->alias_and_group.c_str());
+                    ImGui::Text(scalar->alias_and_group.c_str());
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        m_pause_triggers.push_back(PauseTrigger(signal, current_value));
+                        m_pause_triggers.push_back(PauseTrigger(scalar, current_value));
                         ImGui::CloseCurrentPopup();
                     }
-                    addScalarScaleInput(signal);
-                    addScalarOffsetInput(signal);
+                    addScalarScaleInput(scalar);
+                    addScalarOffsetInput(scalar);
                     if (ImGui::Button("Copy name")) {
-                        ImGui::SetClipboardText(signal->alias.c_str());
+                        ImGui::SetClipboardText(scalar->alias.c_str());
                         ImGui::CloseCurrentPopup();
                     }
                     if (ImGui::Button("Copy alias")) {
-                        ImGui::SetClipboardText(signal->alias.c_str());
+                        ImGui::SetClipboardText(scalar->alias.c_str());
                         ImGui::CloseCurrentPopup();
                     }
                     if (ImGui::Button("Remove")) {
-                        signal_to_remove = signal;
+                        scalar_to_remove = scalar;
                     };
                     ImPlot::EndLegendPopup();
                 }
 
-                // Legend items can be dragged to other plots to move the signal.
+                // Legend items can be dragged to other plots to move the scalar.
                 if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
-                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = {&scalar_plot, signal};
+                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = {&scalar_plot, scalar};
                     ImGui::SetDragDropPayload("PLOT_AND_SCALAR", &plot_and_scalar, sizeof(plot_and_scalar));
                     ImGui::Text("Drag to move another plot");
                     ImPlot::EndDragDropSource();
@@ -196,23 +196,23 @@ void DbgGui::showScalarPlots() {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
-                    scalar_plot.addSignalToPlot(scalar);
+                    scalar_plot.addScalarToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                     m_sampler.startSampling(scalar);
-                    scalar_plot.addSignalToPlot(scalar);
+                    scalar_plot.addScalarToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_SCALAR")) {
                     std::pair<ScalarPlot*, Scalar*> plot_and_scalar = *(std::pair<ScalarPlot*, Scalar*>*)payload->Data;
                     ScalarPlot* original_plot = plot_and_scalar.first;
                     Scalar* scalar = plot_and_scalar.second;
                     if (original_plot != &scalar_plot) {
-                        remove(original_plot->signals, scalar);
+                        remove(original_plot->scalars, scalar);
                         size_t signals_removed = m_settings["scalar_plots"][std::to_string(original_plot->id)]["signals"].erase(scalar->name_and_group);
                         assert(signals_removed > 0);
-                        scalar_plot.addSignalToPlot(scalar);
+                        scalar_plot.addScalarToPlot(scalar);
                     }
                 }
                 ImPlot::EndDragDropTarget();
@@ -225,39 +225,39 @@ void DbgGui::showScalarPlots() {
                 ImPlot::PopStyleColor(1);
                 ImGui::BeginTooltip();
                 auto mouse_time_idx = m_sampler.getTimeIndices(mouse.x, mouse.x);
-                for (Scalar* signal : scalar_plot.signals) {
-                    ScrollingBuffer::DecimatedValues value = m_sampler.getValuesInRange(signal,
+                for (Scalar* scalar : scalar_plot.scalars) {
+                    ScrollingBuffer::DecimatedValues value = m_sampler.getValuesInRange(scalar,
                                                                                         mouse_time_idx,
                                                                                         1,
-                                                                                        signal->getScale(),
-                                                                                        signal->getOffset());
+                                                                                        scalar->getScale(),
+                                                                                        scalar->getOffset());
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
-                    ss << signal->alias_and_group << " : " << tooltip_value;
+                    ss << scalar->alias_and_group << " : " << tooltip_value;
                     // Write enum value as string if not closing in destructor and it is not possible to write anymore
-                    if (std::get_if<ReadWriteFnCustomStr>(&signal->src) && !m_closing) {
+                    if (std::get_if<ReadWriteFnCustomStr>(&scalar->src) && !m_closing) {
                         // Retrieving the enum value on every iteration is slow so the values are cached.
                         static std::map<std::pair<Scalar*, double>, std::string> enum_str_cache;
-                        std::pair<Scalar*, double> signal_and_value{signal, tooltip_value};
-                        if (!enum_str_cache.contains(signal_and_value)) {
+                        std::pair<Scalar*, double> scalar_and_value{scalar, tooltip_value};
+                        if (!enum_str_cache.contains(scalar_and_value)) {
                             bool paused = m_paused;
                             m_paused = true;
                             // Wait until main thread goes to pause state
                             while (m_next_sync_timestamp > 0) {
                             }
-                            double current_value = getSourceValue(signal->src);
-                            // Write the tooltip value to the signal to retrieve the enum value as str
-                            setSourceValue(signal->src, tooltip_value);
-                            enum_str_cache[signal_and_value] = getSourceValueStr(signal->src);
+                            double current_value = getSourceValue(scalar->src);
+                            // Write the tooltip value to the scalar to retrieve the enum value as str
+                            setSourceValue(scalar->src, tooltip_value);
+                            enum_str_cache[scalar_and_value] = getSourceValueStr(scalar->src);
                             // Write the original value back
-                            setSourceValue(signal->src, current_value);
+                            setSourceValue(scalar->src, current_value);
                             m_paused = paused;
                         }
-                        std::string enum_str = enum_str_cache[signal_and_value];
+                        std::string enum_str = enum_str_cache[scalar_and_value];
                         ss << " (" << enum_str << ")";
                     }
 
-                    ImGui::PushStyleColor(ImGuiCol_Text, signal->color);
+                    ImGui::PushStyleColor(ImGuiCol_Text, scalar->color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
                 }
@@ -270,9 +270,9 @@ void DbgGui::showScalarPlots() {
         ImPlot::PopStyleVar();
         ImGui::End();
 
-        if (signal_to_remove) {
-            remove(scalar_plot.signals, signal_to_remove);
-            size_t signals_removed = m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
+        if (scalar_to_remove) {
+            remove(scalar_plot.scalars, scalar_to_remove);
+            size_t signals_removed = m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
     }
@@ -353,17 +353,17 @@ void DbgGui::showVectorPlots() {
             }
 
             // Plot vectors
-            for (Vector2D* signal : vector_plot.signals) {
-                ScrollingBuffer::DecimatedValues values_x = m_sampler.getValuesInRange(signal->x,
+            for (Vector2D* vector : vector_plot.vectors) {
+                ScrollingBuffer::DecimatedValues values_x = m_sampler.getValuesInRange(vector->x,
                                                                                        time_idx,
                                                                                        ALL_SAMPLES,
-                                                                                       signal->x->getScale(),
-                                                                                       signal->x->getOffset());
-                ScrollingBuffer::DecimatedValues values_y = m_sampler.getValuesInRange(signal->y,
+                                                                                       vector->x->getScale(),
+                                                                                       vector->x->getOffset());
+                ScrollingBuffer::DecimatedValues values_y = m_sampler.getValuesInRange(vector->y,
                                                                                        time_idx,
                                                                                        ALL_SAMPLES,
-                                                                                       signal->y->getScale(),
-                                                                                       signal->y->getOffset());
+                                                                                       vector->y->getScale(),
+                                                                                       vector->y->getOffset());
                 // Rotate samples
                 if (frame_rotation_vectors.size() > 0) {
                     for (size_t i = 0; i < values_x.y_max.size(); ++i) {
@@ -374,7 +374,7 @@ void DbgGui::showVectorPlots() {
                     }
                 }
                 size_t count = std::min(values_x.y_min.size(), values_y.y_min.size());
-                ImPlot::PlotLine(signal->name_and_group.c_str(),
+                ImPlot::PlotLine(vector->name_and_group.c_str(),
                                  values_x.y_min.data(),
                                  values_y.y_min.data(),
                                  int(count),
@@ -382,38 +382,38 @@ void DbgGui::showVectorPlots() {
                 // Plot line from origin to latest sample
                 double x_to_latest[2] = {0, values_x.y_min.back()};
                 double y_to_latest[2] = {0, values_y.y_min.back()};
-                ImPlot::PlotLine(signal->name_and_group.c_str(),
+                ImPlot::PlotLine(vector->name_and_group.c_str(),
                                  x_to_latest,
                                  y_to_latest,
                                  2,
                                  ImPlotLineFlags_None);
 
                 // Legend right-click
-                if (ImPlot::BeginLegendPopup(signal->name_and_group.c_str())) {
+                if (ImPlot::BeginLegendPopup(vector->name_and_group.c_str())) {
 
-                    if (signal == vector_plot.reference_frame_vector) {
+                    if (vector == vector_plot.reference_frame_vector) {
                         if (ImGui::Button("Remove reference frame")) {
                             vector_plot.reference_frame_vector = nullptr;
                         }
                     } else {
                         if (ImGui::Button("Set as reference frame")) {
-                            vector_plot.reference_frame_vector = signal;
+                            vector_plot.reference_frame_vector = vector;
                         };
                     }
                     if (ImGui::Button("Copy name")) {
-                        ImGui::SetClipboardText(signal->name.c_str());
+                        ImGui::SetClipboardText(vector->name.c_str());
                         ImGui::CloseCurrentPopup();
                     }
                     if (ImGui::Button("Remove")) {
-                        signal_to_remove = signal;
+                        signal_to_remove = vector;
                     };
 
                     ImPlot::EndLegendPopup();
                 }
 
-                // Legend items can be dragged to other plots to move the signal.
-                if (ImPlot::BeginDragDropSourceItem(signal->name_and_group.c_str(), ImGuiDragDropFlags_None)) {
-                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = {&vector_plot, signal};
+                // Legend items can be dragged to other plots to move the vector.
+                if (ImPlot::BeginDragDropSourceItem(vector->name_and_group.c_str(), ImGuiDragDropFlags_None)) {
+                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = {&vector_plot, vector};
                     ImGui::SetDragDropPayload("PLOT_AND_VECTOR", &plot_and_vector, sizeof(plot_and_vector));
                     ImGui::Text("Drag to move another plot");
                     ImPlot::EndDragDropSource();
@@ -425,24 +425,24 @@ void DbgGui::showVectorPlots() {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
                     m_sampler.startSampling(vector);
-                    vector_plot.addSignalToPlot(vector);
+                    vector_plot.addVectorToPlot(vector);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
                     VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
                     Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
                     m_sampler.startSampling(vector);
-                    vector_plot.addSignalToPlot(vector);
+                    vector_plot.addVectorToPlot(vector);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_VECTOR")) {
                     std::pair<VectorPlot*, Vector2D*> plot_and_vector = *(std::pair<VectorPlot*, Vector2D*>*)payload->Data;
                     VectorPlot* original_plot = plot_and_vector.first;
                     Vector2D* vector = plot_and_vector.second;
                     if (original_plot != &vector_plot) {
-                        remove(original_plot->signals, vector);
+                        remove(original_plot->vectors, vector);
                         size_t signals_removed = m_settings["vector_plots"][std::to_string(original_plot->id)]["signals"].erase(vector->name_and_group);
                         assert(signals_removed > 0);
-                        vector_plot.addSignalToPlot(vector);
+                        vector_plot.addVectorToPlot(vector);
                     }
                 }
                 ImPlot::EndDragDropTarget();
@@ -453,7 +453,7 @@ void DbgGui::showVectorPlots() {
         ImGui::End();
 
         if (signal_to_remove) {
-            remove(vector_plot.signals, signal_to_remove);
+            remove(vector_plot.vectors, signal_to_remove);
             size_t signals_removed = m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
@@ -517,26 +517,26 @@ void DbgGui::showSpectrumPlots() {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
-                    plot.addSignalToPlot(scalar);
+                    plot.addScalarToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                     m_sampler.startSampling(scalar);
-                    plot.addSignalToPlot(scalar);
+                    plot.addScalarToPlot(scalar);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
                     m_sampler.startSampling(vector);
-                    plot.addSignalToPlot(vector);
+                    plot.addVectorToPlot(vector);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
                     VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
                     Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
                     m_sampler.startSampling(vector);
-                    plot.addSignalToPlot(vector);
+                    plot.addVectorToPlot(vector);
                 }
                 ImPlot::EndDragDropTarget();
             }
@@ -606,7 +606,7 @@ void DbgGui::showSpectrumPlots() {
     }
 }
 
-void DbgGui::saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_limits) {
+void DbgGui::saveScalarsAsCsv(std::vector<Scalar*> const& scalars, MinMax time_limits) {
     nfdchar_t* out_path = NULL;
     auto cwd = std::filesystem::current_path();
     nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
@@ -627,16 +627,16 @@ void DbgGui::saveSignalsAsCsv(std::vector<Scalar*> const& signals, MinMax time_l
         csv << "time,";
         std::vector<ScrollingBuffer::DecimatedValues> values;
         auto time_idx = m_sampler.getTimeIndices(time_limits.min, time_limits.max);
-        for (auto const& signal : signals) {
-            if (!m_sampler.isSignalSampled(signal)) {
+        for (auto const& scalar : scalars) {
+            if (!m_sampler.isScalarSampled(scalar)) {
                 continue;
             }
-            csv << signal->name_and_group << ",";
-            values.push_back(m_sampler.getValuesInRange(signal,
+            csv << scalar->name_and_group << ",";
+            values.push_back(m_sampler.getValuesInRange(scalar,
                                                         time_idx,
                                                         ALL_SAMPLES,
-                                                        signal->getScale(),
-                                                        signal->getOffset()));
+                                                        scalar->getScale(),
+                                                        scalar->getOffset()));
         }
         csv << "\n";
         if (values.size() == 0) {

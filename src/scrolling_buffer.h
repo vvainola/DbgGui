@@ -185,8 +185,8 @@ class ScrollingBuffer {
         return {start_idx, end_idx};
     }
 
-    bool isSignalSampled(Scalar* signal) {
-        return m_scalar_buffers.contains(signal);
+    bool isScalarSampled(Scalar* scalar) {
+        return m_scalar_buffers.contains(scalar);
     }
 
   private:

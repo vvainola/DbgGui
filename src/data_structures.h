@@ -239,36 +239,36 @@ struct Window {
 };
 
 struct ScalarPlot : Window {
-    std::vector<Scalar*> signals;
+    std::vector<Scalar*> scalars;
     MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp;
     bool autofit_y = true;
 
-    void addSignalToPlot(Scalar* new_signal) {
-        // Add signal if it is not already in the plot
-        auto it = std::find_if(signals.begin(), signals.end(), [=](Scalar* sig) {
-            return sig->id == new_signal->id;
+    void addScalarToPlot(Scalar* new_scalar) {
+        // Add scalar if it is not already in the plot
+        auto it = std::find_if(scalars.begin(), scalars.end(), [=](Scalar* sig) {
+            return sig->id == new_scalar->id;
         });
-        if (it == signals.end()) {
-            signals.push_back(new_signal);
+        if (it == scalars.end()) {
+            scalars.push_back(new_scalar);
         }
     }
 };
 
 struct VectorPlot : Window {
-    std::vector<Vector2D*> signals;
+    std::vector<Vector2D*> vectors;
     Vector2D* reference_frame_vector;
     float time_range = 20e-3f;
 
-    void addSignalToPlot(Vector2D* new_signal) {
-        // Add signal if it is not already in the plot
-        auto it = std::find_if(signals.begin(), signals.end(), [=](Vector2D* sig) {
-            return sig->id == new_signal->id;
+    void addVectorToPlot(Vector2D* new_vector) {
+        // Add vector if it is not already in the plot
+        auto it = std::find_if(vectors.begin(), vectors.end(), [=](Vector2D* sig) {
+            return sig->id == new_vector->id;
         });
-        if (it == signals.end()) {
-            signals.push_back(new_signal);
+        if (it == vectors.end()) {
+            vectors.push_back(new_vector);
         }
     }
 };
@@ -287,13 +287,13 @@ struct SpectrumPlot : Window {
     SpectrumWindow window;
     std::future<Spectrum> spectrum_calculation;
 
-    void addSignalToPlot(Vector2D* new_signal) {
-        vector = new_signal;
+    void addVectorToPlot(Vector2D* new_vector) {
+        vector = new_vector;
         scalar = nullptr;
     }
 
-    void addSignalToPlot(Scalar* new_signal) {
-        scalar = new_signal;
+    void addScalarToPlot(Scalar* new_scalar) {
+        scalar = new_scalar;
         vector = nullptr;
     }
 };
