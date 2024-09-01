@@ -80,13 +80,15 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
 
 void ScriptWindow::processScript(double timestamp) {
     if (m_idx >= 0 && m_idx < m_operations.size()) {
-        Operation& op = m_operations[m_idx];
-        if (timestamp > m_start_time + op.time) {
-            op.scalar->setScaledValue(op.value);
+        Operation* op = &m_operations[m_idx];
+        while (timestamp > m_start_time + op->time) {
+            op->scalar->setScaledValue(op->value);
             m_idx++;
             if (m_idx >= m_operations.size()) {
                 m_start_time = timestamp;
                 m_idx = loop ? 0 : -1;
+            } else {
+                op = &m_operations[m_idx];
             }
         }
     }
