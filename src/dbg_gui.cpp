@@ -42,6 +42,8 @@ constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 #define TRY(expression)                       \
     try {                                     \
         expression                            \
+    } catch (nlohmann::json::exception err) { \
+        std::cerr << err.what() << std::endl; \
     } catch (std::exception err) {            \
         std::cerr << err.what() << std::endl; \
     }
