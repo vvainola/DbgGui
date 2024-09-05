@@ -478,9 +478,19 @@ void DbgGui::loadPreviousSessionSettings() {
               uint64_t id = scalar_data["id"];
               Scalar* scalar = getScalar(id);
               if (scalar) {
-                  std::string scale = scalar_data["scale"];
+                  std::string scale;
+                  if (scalar_data["scale"].is_number()) {
+                      scale = std::format("{:g}", double(scalar_data["scale"]));
+                  } else {
+                      scale = scalar_data["scale"];
+                  }
                   scalar->setScaleStr(scale);
-                  std::string offset = scalar_data["offset"];
+                  std::string offset;
+                  if (scalar_data["offset"].is_number()) {
+                      offset = std::format("{:g}", double(scalar_data["offset"]));
+                  } else {
+                      offset = scalar_data["offset"];
+                  }
                   scalar->setOffsetStr(offset);
                   scalar->alias = scalar_data["alias"];
                   scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
