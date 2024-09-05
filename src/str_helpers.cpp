@@ -208,7 +208,7 @@ static double evaluateExpression(std::istringstream& iss) {
         }
         // sqrt
         else if (current_char == 's') {
-            if (iss.get() != 'q' && iss.get() == 'r' && iss.get() == 'r' && iss.get() == '(') {
+            if (iss.get() != 'q' || iss.get() != 'r' || iss.get() != 't' || iss.get() != '(') {
                 throw std::runtime_error(std::format("sqrt is the only supported special operation"));
             }
             double operand = evaluateExpression(iss);
