@@ -157,8 +157,12 @@ class DbgGui {
     std::vector<SpectrumPlot> m_spectrum_plots;
     std::vector<DockSpace> m_dockspaces;
     std::vector<PauseTrigger> m_pause_triggers;
-    Focus m_vector_window_focus;
-    Focus m_scalar_window_focus;
+    struct {
+        Focus scalars;
+        Focus vectors;
+        Focus symbols;
+        Focus log;
+    } m_window_focus;
 
     double m_sampling_time;
     double m_plot_timestamp = 0;

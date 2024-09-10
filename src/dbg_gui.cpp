@@ -372,8 +372,10 @@ void DbgGui::loadPreviousSessionSettings() {
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
 
-        TRY(m_scalar_window_focus.initial_focus = m_settings["initial_focus"]["scalars"];)
-        TRY(m_vector_window_focus.initial_focus = m_settings["initial_focus"]["vectors"];)
+        TRY(m_window_focus.scalars.initial_focus = m_settings["initial_focus"]["scalars"];)
+        TRY(m_window_focus.vectors.initial_focus = m_settings["initial_focus"]["vectors"];)
+        TRY(m_window_focus.symbols.initial_focus = m_settings["initial_focus"]["symbols"];)
+        TRY(m_window_focus.log.initial_focus = m_settings["initial_focus"]["log"];)
 
         for (auto symbol : m_settings["scalar_symbols"]) {
             TRY(
@@ -592,8 +594,10 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
     m_settings["options"]["font_size"] = m_options.font_size;
     m_settings["options"]["theme"] = m_options.theme;
-    m_settings["initial_focus"]["scalars"] = m_scalar_window_focus.focused;
-    m_settings["initial_focus"]["vectors"] = m_vector_window_focus.focused;
+    m_settings["initial_focus"]["scalars"] = m_window_focus.scalars.focused;
+    m_settings["initial_focus"]["vectors"] = m_window_focus.vectors.focused;
+    m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
+    m_settings["initial_focus"]["log"] = m_window_focus.log.focused;
 
     // If vector is deleted, mark the scalars as also deleted but don't delete them for real
     // yet before they are removed from all other structures
@@ -840,14 +844,24 @@ void DbgGui::setInitialFocus() {
     }
     m_initial_focus_set = true;
 
-    if (m_scalar_window_focus.initial_focus) {
+    if (m_window_focus.scalars.initial_focus) {
         ImGui::Begin("Scalars");
         ImGui::SetWindowFocus("Scalars");
         ImGui::End();
     }
-    if (m_vector_window_focus.initial_focus) {
+    if (m_window_focus.vectors.initial_focus) {
         ImGui::Begin("Vectors");
         ImGui::SetWindowFocus("Vectors");
+        ImGui::End();
+    }
+    if (m_window_focus.symbols.initial_focus) {
+        ImGui::Begin("Symbols");
+        ImGui::SetWindowFocus("Symbols");
+        ImGui::End();
+    }
+    if (m_window_focus.log.initial_focus) {
+        ImGui::Begin("Log");
+        ImGui::SetWindowFocus("Log");
         ImGui::End();
     }
 

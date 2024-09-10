@@ -490,12 +490,16 @@ void DbgGui::showMainMenuBar() {
 }
 
 void DbgGui::showLogWindow() {
-    if (ImGui::Begin("Log", NULL, ImGuiWindowFlags_NoNavFocus)) {
-        ImGui::TextUnformatted(m_all_messages.c_str());
-        // Autoscroll
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-            ImGui::SetScrollHereY(1.0f);
-        }
+    m_window_focus.log.focused = ImGui::Begin("Log", NULL, ImGuiWindowFlags_NoNavFocus);
+    if (!m_window_focus.log.focused) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextUnformatted(m_all_messages.c_str());
+    // Autoscroll
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+        ImGui::SetScrollHereY(1.0f);
     }
     ImGui::End();
 }
@@ -532,8 +536,8 @@ bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std:
 }
 
 void DbgGui::showScalarWindow() {
-    m_scalar_window_focus.focused = ImGui::Begin("Scalars", NULL, ImGuiWindowFlags_NoNavFocus);
-    if (!m_scalar_window_focus.focused) {
+    m_window_focus.scalars.focused = ImGui::Begin("Scalars", NULL, ImGuiWindowFlags_NoNavFocus);
+    if (!m_window_focus.scalars.focused) {
         ImGui::End();
         return;
     }
@@ -702,8 +706,8 @@ bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& top_level_group, st
 }
 
 void DbgGui::showVectorWindow() {
-    m_vector_window_focus.focused = ImGui::Begin("Vectors", NULL, ImGuiWindowFlags_NoNavFocus);
-    if (!m_vector_window_focus.focused) {
+    m_window_focus.vectors.focused = ImGui::Begin("Vectors", NULL, ImGuiWindowFlags_NoNavFocus);
+    if (!m_window_focus.vectors.focused) {
         ImGui::End();
         return;
     }
@@ -956,10 +960,12 @@ void DbgGui::showCustomWindow() {
 }
 
 void DbgGui::showSymbolsWindow() {
-    if (!ImGui::Begin("Symbols", NULL, ImGuiWindowFlags_NoNavFocus)) {
+    m_window_focus.symbols.focused = ImGui::Begin("Symbols", NULL, ImGuiWindowFlags_NoNavFocus);
+    if (!m_window_focus.symbols.focused) {
         ImGui::End();
         return;
     }
+
     static bool recursive_symbol_search = false;
     static bool recursive_search_toggled = false;
     static bool show_hidden_symbols = false;
@@ -1157,7 +1163,6 @@ void DbgGui::showScriptWindow() {
             ImGui::End();
             continue;
         }
-
 
         if (ImGui::Button("Run")) {
             m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
