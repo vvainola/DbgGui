@@ -566,12 +566,29 @@ void DbgGui::showScalarWindow() {
             // manually before.
             if (!scalar_name_filter.empty()) {
                 ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-            } else if (!group.opened_manually) {
-                ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+            } else {
+                ImGui::SetNextItemOpen(group.opened_manually, ImGuiCond_Always);
             }
             bool group_opened = ImGui::TreeNode(group.name.c_str());
             if (scalar_name_filter.empty()) {
                 group.opened_manually = group_opened;
+            }
+
+            // Right click context menu
+            if (ImGui::BeginPopupContextItem((group.name + "_context_menu").c_str())) {
+                std::function<void(SignalGroup<Scalar>&, bool)> fold_all = [&](SignalGroup<Scalar>& group, bool fold) {
+                    group.opened_manually = fold;
+                    for (auto& subgroup : group.subgroups) {
+                        fold_all(subgroup.second, fold);
+                    }
+                };
+                if (ImGui::Button("Unfold all")) {
+                    fold_all(group, true);
+                }
+                if (ImGui::Button("Fold all")) {
+                    fold_all(group, false);
+                }
+                ImGui::EndPopup();
             }
 
             // Symbols can be dragged from one group to another for easier reorganizing if symbol
