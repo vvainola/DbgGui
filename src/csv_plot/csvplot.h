@@ -113,7 +113,7 @@ class CsvPlotter {
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
-    std::map<std::string, double> m_signal_scales;
+    std::map<std::string, std::string> m_signal_scales;
     int m_rows = 1;
     int m_cols = 1;
     int m_vector_plot_cnt = 0;

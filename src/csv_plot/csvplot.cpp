@@ -126,14 +126,14 @@ std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
     }
 
     std::vector<double> plotted_samples(all_samples.begin() + indices.first, all_samples.begin() + indices.second);
-    // Scale samples. Set default scale if signal has no scale
-    double& scale = m_signal_scales[signal.name];
-    if (scale == 0) {
-        scale = 1;
+    // Scale samples. Use default scale if signal has no scale
+    double signal_scale = 1;
+    if (m_signal_scales.contains(signal.name)) {
+        signal_scale = *str::evaluateExpression(m_signal_scales.at(signal.name));
     }
 
     for (double& sample : plotted_samples) {
-        sample *= scale;
+        sample *= signal_scale;
     }
 
     return plotted_samples;
@@ -321,7 +321,12 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_options.font_size = settings["window"]["font_size"];
             setTheme(m_options.theme, m_window);
             for (auto scale : settings["scales"].items()) {
-                m_signal_scales[scale.key()] = scale.value();
+                if (scale.value().is_number()) {
+                    double value = scale.value();
+                    m_signal_scales[scale.key()] = std::format("{:g}", value);
+                } else {
+                    m_signal_scales[scale.key()] = scale.value();
+                }
             }
             m_signals_window_width = settings["window"]["signals_window_width"];
 
@@ -707,10 +712,10 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
 
-                double& signal_scale = m_signal_scales[signal.name];
-                // Set default scale if signal has no scale
-                if (signal_scale == 0) {
-                    signal_scale = 1;
+                // Use default scale if signal has no scale
+                double signal_scale = 1;
+                if (m_signal_scales.contains(signal.name)) {
+                    signal_scale = *str::evaluateExpression(m_signal_scales.at(signal.name));
                 }
                 ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? ImGui::GetStyle().Colors[ImGuiCol_Text] : COLOR_GRAY);
                 bool selected = signal.plot_idx != NOT_VISIBLE || contains(m_selected_signals, &signal);
@@ -752,7 +757,21 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
-                    ImGui::InputDouble("Scale", &signal_scale);
+                    std::string scale_str = "1";
+                    if (m_signal_scales.contains(signal.name)) {
+                        scale_str = m_signal_scales.at(signal.name);
+                    }
+                    scale_str.reserve(1024);
+                    if (ImGui::InputText("Scale", scale_str.data(), scale_str.capacity(), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        scale_str = std::string(scale_str.data());
+                        auto scale = str::evaluateExpression(scale_str);
+                        if (scale.has_value()) {
+                            m_signal_scales[signal.name] = scale_str;
+                        } else {
+                            m_error_message = scale.error();
+                        }
+                    }
+
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
                         ImGui::CloseCurrentPopup();
@@ -822,7 +841,10 @@ void CsvPlotter::showScalarPlots() {
                     std::vector<double> const& all_y_values = signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
-                    double signal_scale = m_signal_scales[signal->name];
+                    double signal_scale = 1;
+                    if (m_signal_scales.contains(signal->name)) {
+                        signal_scale = *str::evaluateExpression(m_signal_scales.at(signal->name));
+                    }
                     double y1 = all_y_values[idx1] * signal_scale;
                     double y2 = all_y_values[idx2] * signal_scale;
 
@@ -906,9 +928,9 @@ void CsvPlotter::showScalarPlots() {
                 }
 
                 // Scale samples. Set default scale if signal has no scale
-                double& signal_scale = m_signal_scales[signal->name];
-                if (signal_scale == 0) {
-                    signal_scale = 1;
+                double signal_scale = 1;
+                if (m_signal_scales.contains(signal->name)) {
+                    signal_scale = *str::evaluateExpression(m_signal_scales.at(signal->name));
                 }
                 // Shift x-axis and scale y-axis
                 for (int i = 0; i < y_samples_in_range.size(); ++i) {
