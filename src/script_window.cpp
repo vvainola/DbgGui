@@ -58,10 +58,11 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
             return std::format("No matching signal found for {} at line {}", line_split[1], i);
         }
         // Get value
-        try {
-            op.value = std::stod(line_split[2]);
-        } catch (std::exception e) {
-            return std::format("Error in value: {} at line {}", e.what(), i);
+        std::expected<double, std::string> value = str::evaluateExpression(line_split[2]);
+        if (value.has_value()) {
+            op.value = value.value();
+        } else {
+            return std::format("Value error in line {}: {}", i, value.error());
         }
         m_operations.push_back(op);
     }
