@@ -796,19 +796,24 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
+     for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
+        if (m_settings["scalars"].contains(std::to_string(scalar->id))
+            || scalar->alias != scalar->name
+            || scalar->getScale() != 1
+            || scalar->getOffset() != 0) {
+            m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
+            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->getScaleStr();
+            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->getOffsetStr();
+            m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
+        }
+
         if (scalar->deleted) {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_sampler.stopSampling(scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
             remove(m_scalars, scalar);
-        } else {
-            m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
-            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->getScaleStr();
-            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->getOffsetStr();
-            m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
         }
     }
 
