@@ -34,12 +34,14 @@
 #include <cstdint> // uint8_t
 #include <ctype.h> // ::tolower, ::toupper
 #include <cstring> // memcpy
+#include <string_view>
 
 #include <cstdio>
 
 // Public interface
 namespace fts {
     bool fuzzy_match_simple(char const * pattern, char const * str);
+    bool fuzzy_match_simple(char const* pattern, std::string_view str);
     bool fuzzy_match(char const * pattern, char const * str, int & outScore);
     bool fuzzy_match(char const * pattern, char const * str, int & outScore, uint8_t * matches, int maxMatches);
 }
@@ -64,6 +66,17 @@ namespace fts {
         }
 
         return *pattern == '\0' ? true : false;
+    }
+
+    bool fuzzy_match_simple(char const* pattern, std::string_view str) {
+        int i = 0;
+        while (*pattern != '\0' && i < str.size()) {
+            if (tolower(*pattern) == tolower(str[i]))
+                ++pattern;
+            ++i;
+        }
+
+        return *pattern == '\0';
     }
 
     bool fuzzy_match(char const * pattern, char const * str, int & outScore) {
