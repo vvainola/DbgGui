@@ -171,26 +171,37 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
 }
 
 std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string const& name,
-                                                                bool recursive,
+                                                                int recursion_depth,
                                                                 int max_count) const {
     std::vector<VariantSymbol*> matching_symbols;
-    // Find from all symbols, can be pretty slow
-    if (recursive) {
-        std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
+    if (recursion_depth > 1) {
+        VariantSymbol* root_symbol = nullptr;
+        std::function<bool(VariantSymbol*, int)> find_matching_recursively = [&](VariantSymbol* sym, int depth) -> bool {
+            if (depth > recursion_depth) {
+                return false;
+            }
             // Exact match is shown first
             if (name == sym->getFullName()) {
-                matching_symbols.insert(matching_symbols.begin(), sym);
-            } else if (matching_symbols.size() < max_count
-                       && fts::fuzzy_match_simple(name.c_str(), sym->getFullName().c_str())) {
-                matching_symbols.push_back(sym);
+                matching_symbols.insert(matching_symbols.begin(), root_symbol);
+                return true;
+            } else if (fts::fuzzy_match_simple(name.c_str(), sym->getFullName().c_str())) {
+
+                matching_symbols.push_back(root_symbol);
+                return true;
             }
             // Find children
             for (std::unique_ptr<VariantSymbol> const& child : sym->getChildren()) {
-                find_matching_recursively(child.get());
+                bool found = find_matching_recursively(child.get(), depth + 1);
+                if (found) {
+                    return true;
+                }
             }
+            return false;
         };
+
         for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
-            find_matching_recursively(sym.get());
+            root_symbol = sym.get();
+            find_matching_recursively(sym.get(), 0);
         }
         return matching_symbols;
     }

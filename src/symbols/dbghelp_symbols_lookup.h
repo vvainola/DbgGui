@@ -58,11 +58,11 @@ class DbgHelpSymbols {
     /// always the first element. Members of a symbol are searched if the parent name is an exact
     /// match
     /// @param search_string Full or partial part of symbol name
-    /// @param recursive Search also members of all symbols
+    /// @param recursion_depth Search also members of all symbols up to this depth
     /// @param max_count Maximum number of results
     /// @return Matching symbols
     std::vector<VariantSymbol*> findMatchingSymbols(std::string const& search_string,
-                                                    bool recursive = false,
+                                                    int recursion_depth = 0,
                                                     int max_count = 1000) const;
 
     /// @brief Search for symbol that has exactly the given name.

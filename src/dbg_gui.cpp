@@ -363,6 +363,7 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
         TRY(m_options.font_size = m_settings["options"]["font_size"];)
         TRY(m_options.theme = m_settings["options"]["theme"];)
+        TRY(m_options.symbol_search_recursion_depth = m_settings["options"]["symbol_search_recursion_depth"];)
 
         m_sampler.setBufferSize(m_options.sampling_buffer_size);
         setTheme(m_options.theme, m_window);
@@ -594,6 +595,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
     m_settings["options"]["font_size"] = m_options.font_size;
     m_settings["options"]["theme"] = m_options.theme;
+    m_settings["options"]["symbol_search_recursion_depth"] = m_options.symbol_search_recursion_depth;
     m_settings["initial_focus"]["scalars"] = m_window_focus.scalars.focused;
     m_settings["initial_focus"]["vectors"] = m_window_focus.vectors.focused;
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
@@ -796,7 +798,7 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-     for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
+    for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (m_settings["scalars"].contains(std::to_string(scalar->id))
             || scalar->alias != scalar->name

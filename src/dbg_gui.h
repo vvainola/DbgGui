@@ -113,6 +113,11 @@ class DbgGui {
     void addPopupModal(std::string const& modal_name);
     void saveSnapshot();
     void loadSnapshot();
+    void showSymbolItem(VariantSymbol* sym,
+                        bool show_hidden,
+                        std::string const& symbol_filter,
+                        int recursion_depth,
+                        int fold_idx);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
@@ -192,6 +197,7 @@ class DbgGui {
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
         float font_size = 13.0f;
+        int symbol_search_recursion_depth = 0;
     } m_options;
 
     std::jthread m_gui_thread;

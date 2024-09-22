@@ -921,7 +921,6 @@ void DbgGui::showSymbolsWindow() {
         return;
     }
 
-    static bool recursive_symbol_search = false;
     static bool recursive_search_toggled = false;
     static bool show_hidden_symbols = false;
 
@@ -930,8 +929,9 @@ void DbgGui::showSymbolsWindow() {
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
     static char symbols_to_search[MAX_NAME_LENGTH];
     if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
+        recursive_search_toggled = false;
         if (std::string(symbols_to_search).size() > 2) {
-            m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
+            m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search, m_options.symbol_search_recursion_depth);
             auto begin_it = m_symbol_search_results.begin();
             // Don't sort first element if it is an exact match
             if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
@@ -951,8 +951,18 @@ void DbgGui::showSymbolsWindow() {
     ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
     // Recursive checkbox
     ImGui::SameLine();
+    static int fold_idx = -1;
+    if (fold_idx >= 0) {
+        --fold_idx;
+    }
     if (ImGui::BeginMenu("Menu")) {
-        recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
+        if (ImGui::Button("Fold all")) {
+            // The tree nodes have to be folded from bottom up. 10 node depth folding should be enough
+            fold_idx = 10;
+        }
+        if (ImGui::InputInt("Recursion depth", &m_options.symbol_search_recursion_depth, 0, 0)) {
+            recursive_search_toggled = true;
+        }
         ImGui::Checkbox("Show hidden", &show_hidden_symbols);
         ImGui::EndMenu();
     }
@@ -963,141 +973,7 @@ void DbgGui::showSymbolsWindow() {
                                        | ImGuiTableFlags_NoSavedSettings;
     if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
         for (VariantSymbol* symbol : m_symbol_search_results) {
-            // Recursive lambda for displaying children in the table
-            std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
-                // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
-                if (sym == nullptr) {
-                    assert(false);
-                    return;
-                }
-
-                // Skip hidden symbols
-                bool hidden = m_hidden_symbols.contains(sym->getFullName());
-                if (!show_hidden_symbols && hidden) {
-                    return;
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                // Full name has to be displayed with recursive search
-                std::string symbol_name = recursive_symbol_search ? sym->getFullName() : sym->getName();
-                std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
-                if (children.size() > 0) {
-                    // Object/array
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strcpy_s(symbol_name_buffer, sym->getFullName().data());
-                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
-                        ImGui::Text("Drag to custom window to add all children");
-                        ImGui::EndDragDropSource();
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        for (std::unique_ptr<VariantSymbol>& child : children) {
-                            show_children(child.get());
-                        }
-                        ImGui::TreePop();
-                    }
-                } else if (sym->getType() == VariantSymbol::Type::Pointer) {
-                    // Pointer
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-                    VariantSymbol* pointed_symbol = sym->getPointedSymbol();
-                    if (!pointed_symbol) {
-                        flags |= ImGuiTreeNodeFlags_Leaf;
-                    }
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    addSymbolContextMenu(*sym);
-
-                    // Add symbol to scalar window on double click. The pointer can be null pointer or
-                    // point to function scope static or something but in that case it will not be
-                    // dereferenced and will show only NAN as value
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
-
-                    if (ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        if (pointed_symbol) {
-                            show_children(pointed_symbol);
-                        }
-                        ImGui::TreePop();
-                    }
-                } else {
-                    // Rest
-                    static bool selected_symbol_idx = 0;
-                    static VariantSymbol* selected_symbols[2] = {nullptr, nullptr};
-                    bool selected = (sym == selected_symbols[0]) || (sym == selected_symbols[1]);
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
-                    if (selected) {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    ImGui::TreePop();
-                    if (ImGui::IsItemClicked()) {
-                        if (ImGui::GetIO().KeyCtrl) {
-                            // Clear if already selected
-                            if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
-                                selected_symbol_idx = 0;
-                                selected_symbols[0] = nullptr;
-                                selected_symbols[1] = nullptr;
-                            } else {
-                                selected_symbols[selected_symbol_idx] = sym;
-                                selected_symbol_idx = (selected_symbol_idx + 1) % 2;
-                            }
-                        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
-                            // Clear if clicking something else than the selected
-                            selected_symbol_idx = 0;
-                            selected_symbols[0] = nullptr;
-                            selected_symbols[1] = nullptr;
-                        }
-                    }
-
-                    bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
-                                           || sym->getType() == VariantSymbol::Type::Enum;
-                    if (selected_symbols[0] != nullptr && selected_symbols[1] != nullptr) {
-                        // drag-and-droppable to vector plot
-                        if (ImGui::BeginDragDropSource()) {
-                            ImGui::SetDragDropPayload("VECTOR_SYMBOL", &selected_symbols[0], sizeof(VariantSymbol*) * 2);
-                            ImGui::Text("Drag to vector plot");
-                            ImGui::EndDragDropSource();
-                        }
-                    } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    // Add symbol to scalar window on double click
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    // Add value
-                    ImGui::TableNextColumn();
-                    if (arithmetic_or_enum) {
-                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName());
-                    } else {
-                        ImGui::Text(sym->valueAsStr().c_str());
-                    }
-                }
-                ImGui::PopStyleColor();
-            };
-            show_children(symbol);
+            showSymbolItem(symbol, show_hidden_symbols, symbols_to_search, 0, fold_idx);
         }
         ImGui::EndTable();
     }
@@ -1140,4 +1016,171 @@ void DbgGui::showScriptWindow() {
 
         ImGui::End();
     }
+}
+
+bool symbolIsVisible(VariantSymbol* sym, std::string const& filter) {
+    if (fts::fuzzy_match_simple(filter.c_str(), sym->getFullName())) {
+        return true;
+    }
+    for (auto& child : sym->getChildren()) {
+        bool visible = symbolIsVisible(child.get(), filter);
+        if (visible) {
+            return true;
+        }
+    }
+    return false;
+};
+
+void DbgGui::showSymbolItem(VariantSymbol* sym,
+                            bool show_hidden,
+                            std::string const& symbol_filter,
+                            int recursion_depth,
+                            int fold_idx) {
+    // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
+    if (sym == nullptr) {
+        assert(false);
+        return;
+    }
+
+    // Skip hidden symbols
+    bool hidden = m_hidden_symbols.contains(sym->getFullName());
+    if (!show_hidden && hidden) {
+        return;
+    }
+    if (!symbol_filter.empty() && !symbolIsVisible(sym, symbol_filter)) {
+        return;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    // Full name has to be displayed with recursive search
+    std::string symbol_name = sym->getName();
+    std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
+    if (children.size() > 0) {
+        if (recursion_depth < m_options.symbol_search_recursion_depth
+            && fts::fuzzy_match_simple(symbol_filter.c_str(), sym->getFullName())) {
+            // Don't open children if symbol already matches filter
+            recursion_depth = m_options.symbol_search_recursion_depth;
+        } else if (recursion_depth < m_options.symbol_search_recursion_depth
+                   && symbolIsVisible(sym, symbol_filter)) {
+            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+        }
+
+        if (recursion_depth == fold_idx) {
+            ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+        }
+
+        // Object/array
+        bool open = ImGui::TreeNodeEx(symbol_name.c_str());
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            static char symbol_name_buffer[MAX_NAME_LENGTH];
+            strcpy_s(symbol_name_buffer, sym->getFullName().data());
+            ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
+            ImGui::Text("Drag to custom window to add all children");
+            ImGui::EndDragDropSource();
+        }
+        addSymbolContextMenu(*sym);
+
+        ImGui::TableNextColumn();
+        ImGui::Text(sym->valueAsStr().c_str());
+        if (open) {
+            for (std::unique_ptr<VariantSymbol>& child : children) {
+                showSymbolItem(child.get(), show_hidden, symbol_filter, recursion_depth + 1, fold_idx);
+            }
+            ImGui::TreePop();
+        }
+    } else if (sym->getType() == VariantSymbol::Type::Pointer) {
+        // Pointer
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+        VariantSymbol* pointed_symbol = sym->getPointedSymbol();
+        if (!pointed_symbol) {
+            flags |= ImGuiTreeNodeFlags_Leaf;
+        }
+        bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+        addSymbolContextMenu(*sym);
+
+        // Add symbol to scalar window on double click. The pointer can be null pointer or
+        // point to function scope static or something but in that case it will not be
+        // dereferenced and will show only NAN as value
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+            addScalarSymbol(sym, m_group_to_add_symbols);
+        }
+
+        if (ImGui::BeginDragDropSource()) {
+            // drag-and-droppable to scalar plot
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+            ImGui::Text("Drag to plot");
+            ImGui::EndDragDropSource();
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::Text(sym->valueAsStr().c_str());
+        if (open) {
+            if (pointed_symbol) {
+                showSymbolItem(pointed_symbol, show_hidden, symbol_filter, recursion_depth + 1, fold_idx);
+            }
+            ImGui::TreePop();
+        }
+    } else {
+        // Rest
+        static bool selected_symbol_idx = 0;
+        static VariantSymbol* selected_symbols[2] = {nullptr, nullptr};
+        bool selected = (sym == selected_symbols[0]) || (sym == selected_symbols[1]);
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
+        if (selected) {
+            flags |= ImGuiTreeNodeFlags_Selected;
+        }
+        ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+        ImGui::TreePop();
+        if (ImGui::IsItemClicked()) {
+            if (ImGui::GetIO().KeyCtrl) {
+                // Clear if already selected
+                if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
+                    selected_symbol_idx = 0;
+                    selected_symbols[0] = nullptr;
+                    selected_symbols[1] = nullptr;
+                } else {
+                    selected_symbols[selected_symbol_idx] = sym;
+                    selected_symbol_idx = (selected_symbol_idx + 1) % 2;
+                }
+            } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
+                // Clear if clicking something else than the selected
+                selected_symbol_idx = 0;
+                selected_symbols[0] = nullptr;
+                selected_symbols[1] = nullptr;
+            }
+        }
+
+        bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
+                               || sym->getType() == VariantSymbol::Type::Enum;
+        if (selected_symbols[0] != nullptr && selected_symbols[1] != nullptr) {
+            // drag-and-droppable to vector plot
+            if (ImGui::BeginDragDropSource()) {
+                ImGui::SetDragDropPayload("VECTOR_SYMBOL", &selected_symbols[0], sizeof(VariantSymbol*) * 2);
+                ImGui::Text("Drag to vector plot");
+                ImGui::EndDragDropSource();
+            }
+        } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
+            // drag-and-droppable to scalar plot
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+            ImGui::Text("Drag to plot");
+            ImGui::EndDragDropSource();
+        }
+
+        // Add symbol to scalar window on double click
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
+            addScalarSymbol(sym, m_group_to_add_symbols);
+        }
+        addSymbolContextMenu(*sym);
+
+        // Add value
+        ImGui::TableNextColumn();
+        if (arithmetic_or_enum) {
+            addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName());
+        } else {
+            ImGui::Text(sym->valueAsStr().c_str());
+        }
+    }
+    ImGui::PopStyleColor();
 }
