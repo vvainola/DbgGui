@@ -323,6 +323,12 @@ struct SignalGroup {
     std::vector<T*> signals;
     std::map<std::string, SignalGroup<T>> subgroups;
     bool opened_manually = false;
+
+    bool hasVisibleItems(std::string const& filter);
+
+  private:
+    std::string m_filter_prev;
+    bool m_has_visible_items = true;
 };
 
 enum FontSelection {

@@ -69,6 +69,7 @@ inc += include_directories(
     'src/imgui/implot',
     'src/imgui/backend',
     'src/nativefiledialog/include',
+    'src/symbols',
     'include'
 )
 
@@ -96,6 +97,7 @@ lib_symbols = static_library('symbols',
 
 lib_gui = static_library('dbg_gui',
     sources : [
+        'src/data_structures.cpp',
         'src/dbg_gui_plots.cpp',
         'src/dbg_gui_popups.cpp',
         'src/dbg_gui_windows.cpp',

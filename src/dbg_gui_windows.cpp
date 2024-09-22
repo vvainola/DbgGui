@@ -504,37 +504,6 @@ void DbgGui::showLogWindow() {
     ImGui::End();
 }
 
-bool scalarGroupHasVisibleItems(SignalGroup<Scalar> const& top_level_group, std::string const& filter) {
-    bool group_has_visible_items = false;
-    std::function<void(SignalGroup<Scalar> const&, std::string const&)> check_group_for_visible_items =
-      [&](SignalGroup<Scalar> const& group, std::string const& filter) {
-          // Check if this or any of the parent groups matches the filter
-          if (!filter.empty()) {
-              for (std::string const& g : str::split(group.full_name, '|')) {
-                  group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
-              }
-          }
-          for (Scalar* scalar : group.signals) {
-              if (group_has_visible_items) {
-                  // No need to check further
-                  return;
-              } else if (filter.empty()) {
-                  group_has_visible_items |= !scalar->hide_from_scalars_window;
-              } else if (!scalar->hide_from_scalars_window) {
-                  group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), scalar->alias.c_str());
-              }
-          }
-          for (auto const& subgroup : group.subgroups) {
-              check_group_for_visible_items(subgroup.second, filter);
-          }
-      };
-    check_group_for_visible_items(top_level_group, filter);
-    for (auto const& subgroup : top_level_group.subgroups) {
-        check_group_for_visible_items(subgroup.second, filter);
-    }
-    return group_has_visible_items;
-}
-
 void DbgGui::showScalarWindow() {
     m_window_focus.scalars.focused = ImGui::Begin("Scalars", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.scalars.focused) {
@@ -555,7 +524,7 @@ void DbgGui::showScalarWindow() {
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
             // Do not show group if there are no visible items in it
-            if (!scalarGroupHasVisibleItems(group, scalar_name_filter)) {
+            if (!group.hasVisibleItems(scalar_name_filter)) {
                 return;
             }
             ImGui::TableNextRow();
@@ -691,37 +660,6 @@ void DbgGui::showScalarWindow() {
     ImGui::End();
 }
 
-bool vectorGroupHasVisibleItems(SignalGroup<Vector2D> const& top_level_group, std::string const& filter) {
-    if (filter.empty()) {
-        return true;
-    }
-
-    bool group_has_visible_items = false;
-    std::function<void(SignalGroup<Vector2D> const&, std::string const&)> check_group_for_visible_items =
-      [&](SignalGroup<Vector2D> const& group, std::string const& filter) {
-          // Check if this or any of the parent groups matches the filter
-          for (std::string const& g : str::split(group.full_name, '|')) {
-              group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), g.c_str());
-          }
-
-          // Check if this or any of the parent groups matches the filter
-          for (Vector2D* vector : group.signals) {
-              if (group_has_visible_items) {
-                  return;
-              }
-              group_has_visible_items |= fts::fuzzy_match_simple(filter.c_str(), vector->name.c_str());
-          }
-          for (auto const& subgroup : group.subgroups) {
-              check_group_for_visible_items(subgroup.second, filter);
-          }
-      };
-    check_group_for_visible_items(top_level_group, filter);
-    for (auto const& subgroup : top_level_group.subgroups) {
-        check_group_for_visible_items(subgroup.second, filter);
-    }
-    return group_has_visible_items;
-}
-
 void DbgGui::showVectorWindow() {
     m_window_focus.vectors.focused = ImGui::Begin("Vectors", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.vectors.focused) {
@@ -743,7 +681,7 @@ void DbgGui::showVectorWindow() {
 
         std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
             std::vector<Vector2D*> const& vectors = group.signals;
-            if (!vectorGroupHasVisibleItems(group, vector_name_filter)) {
+            if (!group.hasVisibleItems(vector_name_filter)) {
                 return;
             }
 
