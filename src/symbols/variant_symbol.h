@@ -40,14 +40,18 @@ class VariantSymbol {
     };
 
     std::string const& getName() const { return m_name; }
-    std::string getFullName() const {
-        if (m_parent && m_parent->getType() == Type::Array) {
-            return m_parent->getFullName() + m_name.substr(m_name.rfind('['));
-        } else if (m_parent) {
-            return m_parent->getFullName() + "." + m_name;
-        } else {
-            return m_name;
+    std::string getFullName() {
+        if (!m_full_name.empty()) {
+            return m_full_name;
         }
+        if (m_parent && m_parent->getType() == Type::Array) {
+            m_full_name = m_parent->getFullName() + m_name.substr(m_name.rfind('['));
+        } else if (m_parent) {
+            m_full_name = m_parent->getFullName() + "." + m_name;
+        } else {
+            m_full_name = m_name;
+        }
+        return m_full_name;
     }
     VariantSymbol::Type getType() const { return m_type; }
     std::vector<std::unique_ptr<VariantSymbol>>& getChildren() { return m_children; }
@@ -68,6 +72,7 @@ class VariantSymbol {
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;
     std::string m_name;
+    std::string m_full_name;
     MemoryAddress m_address;
     std::optional<ArithmeticSymbol> m_arithmetic_symbol = std::nullopt;
     std::vector<std::pair<int32_t, std::string>> m_enum_mappings;

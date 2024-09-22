@@ -108,7 +108,7 @@ class DbgGui {
     void addScalarContextMenu(Scalar* scalar);
     void addScalarScaleInput(Scalar* scalar);
     void addScalarOffsetInput(Scalar* scalar);
-    void addSymbolContextMenu(VariantSymbol const& sym);
+    void addSymbolContextMenu(VariantSymbol& sym);
     void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);
     void saveSnapshot();

@@ -195,7 +195,7 @@ void DbgGui::addScalarOffsetInput(Scalar* scalar) {
     }
 }
 
-void DbgGui::addSymbolContextMenu(VariantSymbol const& sym) {
+void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
         if (ImGui::Button("Copy name")) {
