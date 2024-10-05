@@ -117,7 +117,8 @@ class DbgGui {
                         bool show_hidden,
                         std::string const& symbol_filter,
                         int recursion_depth,
-                        int fold_idx);
+                        int fold_idx,
+                        int& current_symbol_count);
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);

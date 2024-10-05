@@ -28,6 +28,8 @@
 #include "imgui_internal.h"
 #include "themes.h"
 
+constexpr int MAX_SYMBOL_COUNT = 1000;
+
 std::string getSourceValueStr(ValueSource src) {
     return std::visit(
       [=](auto&& src) {
@@ -972,8 +974,9 @@ void DbgGui::showSymbolsWindow() {
                                        | ImGuiTableFlags_Resizable
                                        | ImGuiTableFlags_NoSavedSettings;
     if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
+        int current_symbol_count = 0;
         for (VariantSymbol* symbol : m_symbol_search_results) {
-            showSymbolItem(symbol, show_hidden_symbols, symbols_to_search, 0, fold_idx);
+            showSymbolItem(symbol, show_hidden_symbols, symbols_to_search, 0, fold_idx, current_symbol_count);
         }
         ImGui::EndTable();
     }
@@ -1035,7 +1038,14 @@ void DbgGui::showSymbolItem(VariantSymbol* sym,
                             bool show_hidden,
                             std::string const& symbol_filter,
                             int recursion_depth,
-                            int fold_idx) {
+                            int fold_idx,
+                            int& current_symbol_count) {
+    // Avoid getting stuck due to too deep recursion setting
+    current_symbol_count++;
+    if (current_symbol_count > MAX_SYMBOL_COUNT) {
+        return;
+    }
+
     // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
     if (sym == nullptr) {
         assert(false);
@@ -1086,7 +1096,7 @@ void DbgGui::showSymbolItem(VariantSymbol* sym,
         ImGui::Text(sym->valueAsStr().c_str());
         if (open) {
             for (std::unique_ptr<VariantSymbol>& child : children) {
-                showSymbolItem(child.get(), show_hidden, symbol_filter, recursion_depth + 1, fold_idx);
+                showSymbolItem(child.get(), show_hidden, symbol_filter, recursion_depth + 1, fold_idx, current_symbol_count);
             }
             ImGui::TreePop();
         }
@@ -1118,7 +1128,7 @@ void DbgGui::showSymbolItem(VariantSymbol* sym,
         ImGui::Text(sym->valueAsStr().c_str());
         if (open) {
             if (pointed_symbol) {
-                showSymbolItem(pointed_symbol, show_hidden, symbol_filter, recursion_depth + 1, fold_idx);
+                showSymbolItem(pointed_symbol, show_hidden, symbol_filter, recursion_depth + 1, fold_idx, current_symbol_count);
             }
             ImGui::TreePop();
         }
