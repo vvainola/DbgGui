@@ -798,7 +798,7 @@ void DbgGui::updateSavedSettings() {
 
      for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
-        if (m_settings["scalars"].contains(std::to_string(scalar->id))
+        if (m_settings["scalars"].contains(scalar->name_and_group)
             || scalar->alias != scalar->name
             || scalar->getScale() != 1
             || scalar->getOffset() != 0) {
