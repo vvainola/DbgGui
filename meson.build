@@ -1,4 +1,5 @@
 project('DbgGui', ['cpp', 'c'],
+    meson_version: '>=1.1.0',
     default_options : [
         'b_vscrt=md',
         'cpp_std=c++latest',
@@ -14,7 +15,6 @@ add_project_arguments([
         '-Zc:preprocessor',
     ], language : ['c', 'cpp'])
 
-python = import('python3').find_python()
 cpp = meson.get_compiler('cpp')
 windows = import('windows')
 
