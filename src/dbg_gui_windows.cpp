@@ -1122,6 +1122,10 @@ void DbgGui::showScriptWindow() {
         if (ImGui::Button("Run")) {
             m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
         }
+        if (ImGui::BeginPopupContextItem("Run_context_menu")) {
+            ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(500, ImGui::GetTextLineHeight() * 16), NULL);
+            ImGui::EndPopup();
+        }
         ImGui::SameLine();
         ImGui::Checkbox("Loop", &script_window.loop);
 
@@ -1133,10 +1137,8 @@ void DbgGui::showScriptWindow() {
                 script_window.stopScript();
             }
             ImGui::SameLine();
-            ImGui::Text(std::format("{:g}", script_window.getTime(m_plot_timestamp)).c_str());
+            ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
         }
-
-        ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16), NULL);
 
         ImGui::End();
     }
