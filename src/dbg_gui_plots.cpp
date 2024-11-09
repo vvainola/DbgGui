@@ -303,13 +303,6 @@ void DbgGui::showVectorPlots() {
         ImGui::SliderFloat("Time range", &time_range_ms, 0, 100, "%.0f ms");
         vector_plot.time_range = time_range_ms * 1e-3f;
 
-        ImGui::SameLine();
-        static float time_offset = 0;
-        float time_offset_ms = time_offset * 1e3f;
-        ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-        ImGui::SliderFloat("Offset", &time_offset_ms, 0, 500, "%.0f ms");
-        time_offset = time_offset_ms * 1e-3f;
-
         static ImPlotAxisFlags flags = ImPlotAxisFlags_None;
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
@@ -334,11 +327,10 @@ void DbgGui::showVectorPlots() {
                              2 * sizeof(double));
             ImPlot::PopStyleColor();
 
-            if (!m_paused) {
-                time_offset = 0;
-            }
-            double last_sample_time = m_plot_timestamp - time_offset;
-            auto time_idx = m_sampler.getTimeIndices(last_sample_time - vector_plot.time_range, last_sample_time);
+            // Use time range from the scalar plots
+            double last_sample_time = m_linked_scalar_x_axis_limits.max;
+            double first_sample_time = max(last_sample_time - vector_plot.time_range, m_linked_scalar_x_axis_limits.min);
+            auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
 
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;
