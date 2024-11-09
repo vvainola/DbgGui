@@ -353,7 +353,6 @@ void DbgGui::loadPreviousSessionSettings() {
             ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
         }
 
-        TRY(m_options.x_tick_labels = m_settings["options"]["x_tick_labels"];)
         TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
         TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
@@ -584,7 +583,6 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
-    m_settings["options"]["x_tick_labels"] = m_options.x_tick_labels;
     m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
     m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;

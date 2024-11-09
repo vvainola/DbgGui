@@ -113,9 +113,6 @@ void DbgGui::showScalarPlots() {
             if (running || (scalar_plot.last_frame_timestamp < m_plot_timestamp)) {
                 scalar_plot.last_frame_timestamp = m_plot_timestamp;
                 ImPlot::SetupAxisLimits(ImAxis_X1, m_plot_timestamp - x_range, m_plot_timestamp, ImGuiCond_Always);
-                if (!m_options.x_tick_labels) {
-                    x_flags |= ImPlotAxisFlags_NoTickLabels;
-                }
             } else if (time_range_changed) {
                 double mid = 0.5 * (x_limits.max + x_limits.min);
                 ImPlot::SetupAxisLimits(ImAxis_X1,

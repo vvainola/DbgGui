@@ -408,7 +408,6 @@ void DbgGui::showMainMenuBar() {
             // Options
             ImGui::Text("Options");
             ImGui::Checkbox("Link scalar x-axis", &m_options.link_scalar_x_axis);
-            ImGui::Checkbox("Scalar plot x-tick labels", &m_options.x_tick_labels);
 
             ImGui::Checkbox("Scalar plot tooltip", &m_options.scalar_plot_tooltip);
             ImGui::SameLine();

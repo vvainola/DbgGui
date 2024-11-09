@@ -182,7 +182,6 @@ class DbgGui {
     std::string m_info_message;
 
     struct OptionalSettings {
-        bool x_tick_labels = true;
         bool pause_on_close = false;
         bool link_scalar_x_axis = false;
         bool scalar_plot_tooltip = true;
