@@ -60,6 +60,7 @@ inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 inline int MAX_PLOT_SAMPLE_COUNT = 3000;
+constexpr int CUSTOM_SIGNAL_CAPACITY = 10;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::optional<int> pressedNumber();
@@ -536,6 +537,9 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     for (CsvSignal& signal : csv_data->signals) {
         signal.file = csv_data.get();
     }
+    // Add extra capacity to the vector so that it does not get reallocated when adding custom signals which invalidates
+    // pointers to the signals in vector & spectrum plots
+    csv_data->signals.reserve(csv_data->signals.size() + CUSTOM_SIGNAL_CAPACITY);
     return std::move(csv_data);
 }
 
