@@ -790,6 +790,21 @@ void CsvPlotter::showSignalWindow() {
     ImGui::End();
 
     if (file_to_remove) {
+        // Remove signals from vector & spectrum plots if they point to the signals that are being removed
+        for (VectorPlot& vector_plot : m_vector_plots) {
+            for (int i = vector_plot.signals.size() - 1; i >= 0; --i) {
+                auto& signal = vector_plot.signals[i];
+                if (signal.first && signal.first->file == file_to_remove->get()) {
+                    remove(vector_plot.signals, signal);
+                }
+            }
+        }
+        for (SpectrumPlot& spectrum_plot : m_spectrum_plots) {
+            if (spectrum_plot.real && spectrum_plot.real->file == file_to_remove->get()) {
+                spectrum_plot.real = nullptr;
+                spectrum_plot.imag = nullptr;
+            }
+        }
         remove(m_csv_data, *file_to_remove);
     }
 }
