@@ -49,7 +49,7 @@ RawSymbol::RawSymbol(nlohmann::json const& field) {
     static ModuleInfo module_info = getCurrentModuleInfo();
 
     info.Name = field["name"];
-    info.Address = module_info.base_address + field["address"];
+    info.Address = module_info.base_address + size_t(field["address"]);
     info.Size = field["size"];
     info.Value = field["value"];
 
