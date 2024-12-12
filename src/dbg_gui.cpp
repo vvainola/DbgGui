@@ -337,6 +337,24 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
             }
         }
     })
+
+    // Restore scalar to custom window
+    TRY(for (auto custom_window_data : m_settings["custom_windows"]) {
+        CustomWindow* custom = nullptr;
+        for (auto& custom_window : m_custom_windows) {
+            if (custom_window.name == custom_window_data["name"]) {
+                custom = &custom_window;
+                break;
+            }
+        }
+        if (custom != nullptr) {
+            for (uint64_t id : custom_window_data["signals"]) {
+                if (id == scalar->id) {
+                    custom->addScalar(scalar);
+                }
+            }
+        }
+    })
 }
 
 void DbgGui::loadPreviousSessionSettings() {
@@ -726,7 +744,7 @@ void DbgGui::updateSavedSettings() {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
                 if (scalar->replacement != nullptr) {
-                    custom_window.scalars.push_back(scalar->replacement);
+                    custom_window.addScalar(scalar->replacement);
                 }
                 remove(custom_window.scalars, scalar);
                 m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar->group + " " + scalar->name);

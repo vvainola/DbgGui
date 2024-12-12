@@ -201,21 +201,6 @@ class DbgGui {
 };
 
 template <typename T>
-inline void remove(std::vector<T>& v, const T& item) {
-    v.erase(std::remove(v.begin(), v.end(), item), v.end());
-}
-
-template <typename T>
-inline bool contains(std::vector<T>& v, const T& item_to_search) {
-    for (auto const& item : v) {
-        if (item == item_to_search) {
-            return true;
-        }
-    }
-    return false;
-}
-
-template <typename T>
 inline std::string numberAsStr(T number) {
     return std::format("{:g}", double(number));
 }

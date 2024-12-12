@@ -51,6 +51,21 @@ T inline max(T a, T b) {
     return a > b ? a : b;
 }
 
+template <typename T>
+inline void remove(std::vector<T>& v, const T& item) {
+    v.erase(std::remove(v.begin(), v.end(), item), v.end());
+}
+
+template <typename T>
+inline bool contains(std::vector<T>& v, const T& item_to_search) {
+    for (auto const& item : v) {
+        if (item == item_to_search) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline double getSourceValue(ValueSource src) {
     return std::visit(
       [=](auto&& src) {
@@ -309,6 +324,24 @@ struct SpectrumPlot : Window {
 
 struct CustomWindow : Window {
     std::vector<Scalar*> scalars;
+
+    void addScalar(Scalar* scalar) {
+        if (!contains(scalars, scalar)) {
+            scalars.push_back(scalar);
+            sortSignals();
+        }
+    }
+
+  private:
+    void sortSignals() {
+        std::sort(scalars.begin(), scalars.end(), [](Scalar* l, Scalar* r) {
+            if (l->group == r->group) {
+                return l->name < r->name;
+            } else {
+                return l->group < r->group;
+            }
+        });
+    }
 };
 
 struct DockSpace : Window {
