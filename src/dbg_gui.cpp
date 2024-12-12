@@ -993,8 +993,6 @@ Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std
 Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name, double scale, double offset) {
     if (group.empty()) {
         group = "debug";
-    } else {
-        group = group;
     }
     uint64_t id = hash(name + " (" + group + ")");
     Scalar* existing_scalar = getScalar(id);
@@ -1033,8 +1031,6 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
 Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {
     if (group.empty()) {
         group = "debug";
-    } else {
-        group = group;
     }
     uint64_t id = hash(name_x + " (" + group + ")");
     Vector2D* existing_vector = getVector(id);
