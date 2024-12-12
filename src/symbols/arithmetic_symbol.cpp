@@ -30,8 +30,7 @@ ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
                                    MemoryAddress address,
                                    uint32_t size_in_bytes,
                                    int bitfield_idx)
-    : m_address(address),
-      m_bitfield_idx(bitfield_idx) {
+    : m_bitfield_idx(bitfield_idx) {
     if (m_bitfield_idx >= 0) {
         m_bf_size = size_in_bytes;
         size_in_bytes = (size_in_bytes - 1 + m_bitfield_idx) / 8 + 1;

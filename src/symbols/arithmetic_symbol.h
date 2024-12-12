@@ -58,7 +58,6 @@ class ArithmeticSymbol {
   private:
     double getAddressValue() const;
 
-    MemoryAddress m_address;
     int m_bitfield_idx;
     uint32_t m_bf_size = 0;
     ValueSource m_value;
