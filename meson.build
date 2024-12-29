@@ -70,6 +70,7 @@ inc += include_directories(
     'src/imgui/backend',
     'src/nativefiledialog/include',
     'src/symbols',
+    'src/third_party',
     'include'
 )
 

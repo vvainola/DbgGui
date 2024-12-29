@@ -29,6 +29,7 @@
 #include <map>
 #include <array>
 #include <future>
+#include <kdbindings/signal.h>
 
 struct MinMax {
     double min;
@@ -67,6 +68,7 @@ struct CsvFileData {
 };
 
 struct CsvSignal {
+    KDBindings::Signal<> deleted;
     std::string name;
     std::vector<double> samples;
     int plot_idx = NOT_VISIBLE;

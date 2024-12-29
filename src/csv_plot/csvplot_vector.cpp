@@ -129,6 +129,13 @@ void CsvPlotter::showVectorPlots() {
                 CsvSignal* signal_y = m_selected_signals[1];
                 plot.signals.push_back({signal_x, signal_y});
                 m_selected_signals.clear();
+
+                signal_x->deleted.connect([&plot, signal_x, signal_y]() {
+                    remove(plot.signals, {signal_x, signal_y});
+                });
+                signal_y->deleted.connect([&plot, signal_x, signal_y]() {
+                    remove(plot.signals, {signal_x, signal_y});
+                });
             }
             ImGui::EndDragDropTarget();
         }

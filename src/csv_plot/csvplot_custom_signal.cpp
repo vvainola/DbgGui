@@ -298,7 +298,7 @@ void CsvPlotter::showCustomSignalCreator() {
                 std::string expr = getFormattedEqForSample(custom_signal_eq, m_selected_signals, i);
                 c.samples.push_back(evaluateExpression(expr));
             }
-            m_selected_signals[0]->file->signals.push_back(c);
+            m_selected_signals[0]->file->signals.push_back(std::move(c));
 
         } catch (std::runtime_error e) {
             m_error_message = e.what();

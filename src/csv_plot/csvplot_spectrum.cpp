@@ -100,6 +100,12 @@ void CsvPlotter::showSpectrumPlots() {
                 plot.real = sig;
                 plot.imag = nullptr;
                 plot.prev_x_range = {0, 0};
+
+                sig->deleted.connect([&plot, sig]() {
+                    if (plot.real == sig) {
+                        plot.real = nullptr;
+                    }
+                });
             }
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {
                 assert(m_selected_signals.size() == 2);
@@ -109,6 +115,19 @@ void CsvPlotter::showSpectrumPlots() {
                 plot.imag = signal_y;
                 m_selected_signals.clear();
                 plot.prev_x_range = {0, 0};
+
+                signal_x->deleted.connect([&plot, signal_x, signal_y]() {
+                    if (plot.real == signal_x || plot.imag == signal_y) {
+                        plot.real = nullptr;
+                        plot.imag = nullptr;
+                    }
+                });
+                signal_y->deleted.connect([&plot, signal_x, signal_y]() {
+                    if (plot.real == signal_x || plot.imag == signal_y) {
+                        plot.real = nullptr;
+                        plot.imag = nullptr;
+                    }
+                });
             }
             ImGui::EndDragDropTarget();
         }

@@ -153,7 +153,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
 
-
     bool autoplot = !image_filepath.empty() && name_and_plot_idx.empty();
     for (std::string file : files) {
         std::unique_ptr<CsvFileData> data = parseCsvData(file, name_and_plot_idx, autoplot);
@@ -532,7 +531,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename,
     std::unique_ptr<CsvFileData> csv_data = std::make_unique<CsvFileData>();
     csv_data->name = std::filesystem::relative(filename).string();
     csv_data->displayed_name = std::filesystem::relative(filename).string();
-    csv_data->signals = csv_signals;
+    csv_data->signals = std::move(csv_signals);
     csv_data->write_time = std::filesystem::last_write_time(filename);
     for (CsvSignal& signal : csv_data->signals) {
         signal.file = csv_data.get();
@@ -790,21 +789,10 @@ void CsvPlotter::showSignalWindow() {
     ImGui::End();
 
     if (file_to_remove) {
-        // Remove signals from vector & spectrum plots if they point to the signals that are being removed
-        for (VectorPlot& vector_plot : m_vector_plots) {
-            for (int i = vector_plot.signals.size() - 1; i >= 0; --i) {
-                auto& signal = vector_plot.signals[i];
-                if (signal.first && signal.first->file == file_to_remove->get()) {
-                    remove(vector_plot.signals, signal);
-                }
-            }
+        for (CsvSignal& signal : file_to_remove->get()->signals) {
+            signal.deleted.emit();
         }
-        for (SpectrumPlot& spectrum_plot : m_spectrum_plots) {
-            if (spectrum_plot.real && spectrum_plot.real->file == file_to_remove->get()) {
-                spectrum_plot.real = nullptr;
-                spectrum_plot.imag = nullptr;
-            }
-        }
+
         remove(m_csv_data, *file_to_remove);
     }
 }
