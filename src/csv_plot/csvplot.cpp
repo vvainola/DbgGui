@@ -302,7 +302,6 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_options.link_axis = settings["window"]["link_axis"];
             m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
-            m_options.fit_after_drag_and_drop = settings["window"]["fit_on_drag_and_drop"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
             m_options.theme = settings["window"]["theme"];
             m_options.font_size = settings["window"]["font_size"];
@@ -353,7 +352,6 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
-    settings["window"]["fit_on_drag_and_drop"] = m_options.fit_after_drag_and_drop;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["theme"] = m_options.theme;
     settings["window"]["font_size"] = m_options.font_size;
@@ -605,7 +603,6 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
         ImGui::Checkbox("Link x-axis", &m_options.link_axis);
         ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
-        ImGui::Checkbox("Fit after drag and drop", &m_options.fit_after_drag_and_drop);
         ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
         ImGui::InputFloat("Font size", &m_options.font_size, 0, 0, "%.1f");
@@ -702,9 +699,6 @@ void CsvPlotter::showSignalWindow() {
                     std::optional<int> pressed_number = pressedNumber();
                     if (pressed_number) {
                         m_scalar_plots[*pressed_number].addSignal(&signal);
-                        if (m_options.fit_after_drag_and_drop) {
-                            m_scalar_plots[*pressed_number].autofit_next_frame = true;
-                        }
                     }
 
                     // Select two signals with ctrl-click for dragging to vector plot
@@ -871,9 +865,6 @@ void CsvPlotter::showScalarPlots() {
                     if (&plot != original_plot) {
                         plot.addSignal(signal);
                         original_plot->removeSignal(signal);
-                        if (m_options.fit_after_drag_and_drop) {
-                            plot.autofit_next_frame = true;
-                        }
                     }
                 }
                 ImPlot::EndDragDropTarget();
