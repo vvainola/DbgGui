@@ -85,5 +85,10 @@ int main(int argc, char** argv) {
         name_and_plot_idx[names[i]] = plots[i];
     }
 
-    CsvPlotter plotter(files, name_and_plot_idx, {xlimits[0], xlimits[1]}, image_filepath);
+    try {
+        CsvPlotter plotter(files, name_and_plot_idx, {xlimits[0], xlimits[1]}, image_filepath);
+    } catch (std::exception& e) {
+        std::cerr << "[ERROR] " << e.what() << std::endl;
+        std::abort();
+    }
 }
