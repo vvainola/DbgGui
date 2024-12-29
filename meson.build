@@ -65,13 +65,13 @@ imgui_src = files([
 ])
 inc = []
 inc += include_directories(
+    'include',
+    'src',
     'src/imgui',
-    'src/imgui/implot',
     'src/imgui/backend',
+    'src/imgui/implot',
     'src/nativefiledialog/include',
     'src/symbols',
-    'src/third_party',
-    'include'
 )
 
 imgui_lib = static_library('imgui',
