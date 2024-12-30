@@ -11,6 +11,7 @@ setup build *opts:
     uv venv
     .venv/scripts/activate
     $Env:PKG_CONFIG_PATH="{{build}}\\conan"
+    $Env:PKG_CONFIG = (Join-Path (Get-Location) "\\{{build}}\\conan\\bin\\pkgconf.exe")
     uv run conan install . --build missing --install-folder {{build}}\conan
     uv run meson setup {{build}} {{opts}} -Dtests=true
     uv run ..\meson-ninja-vs\ninja_vs.py -b {{build}}
