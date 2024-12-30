@@ -911,7 +911,7 @@ void CsvPlotter::showScalarPlots() {
 
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
-                std::string label_id = std::format("{}###{}", ss.str(), signal->name);
+                std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
                 ImPlot::PlotLine(label_id.c_str(),
                                  plotted_values.x.data(),
                                  plotted_values.y_min.data(),
