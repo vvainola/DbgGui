@@ -52,3 +52,7 @@ struct DecimatedValues {
     std::vector<double> y_max;
 };
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
+
+void saveAsCsv(std::string const& filename,
+               std::vector<std::string> const& header,
+               std::vector<std::vector<double>> const& data);
