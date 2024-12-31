@@ -564,6 +564,13 @@ void CsvPlotter::showSignalWindow() {
             plot.clear();
         }
     }
+
+    // The flag is active for only a single frame
+    m_flags.reset_colors = false;
+    if (ImGui::Button("Reset colors")) {
+        m_flags.reset_colors = true;
+    }
+
     if (ImGui::Button("Copy signals to clipboard")) {
         std::stringstream ss_signals;
         std::stringstream ss_plots;
@@ -858,7 +865,7 @@ void CsvPlotter::showScalarPlots() {
         }
 
         // Reset plot colors if there are no signals in it
-        if (plot.signals.size() == 0) {
+        if (plot.signals.size() == 0 || m_flags.reset_colors) {
             ImPlot::BustColorCache("##DND");
         }
 

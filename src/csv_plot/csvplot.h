@@ -183,6 +183,10 @@ class CsvPlotter {
     double m_drag_x2 = 0;
     std::string m_error_message;
 
+    struct {
+        bool reset_colors;
+    } m_flags;
+
     std::vector<CsvSignal*> m_selected_signals;
     std::array<ScalarPlot, MAX_PLOTS * MAX_PLOTS> m_scalar_plots;
     std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
