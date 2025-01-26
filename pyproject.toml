@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "conan==1.59.0",
+    "cmake>=3.31.2",
+    "conan>=2.0",
     "meson>=1.5.2",
 ]

@@ -36,6 +36,16 @@ inline void remove(std::vector<T>& v, const T& item) {
     v.erase(std::remove(v.begin(), v.end(), item), v.end());
 }
 
+template <typename T>
+inline bool contains(std::vector<T>& v, const T& item_to_search) {
+    for (auto const& item : v) {
+        if (item == item_to_search) {
+            return true;
+        }
+    }
+    return false;
+}
+
 struct DecimatedValues {
     std::vector<double> x;
     std::vector<double> y_min;
@@ -43,4 +53,6 @@ struct DecimatedValues {
 };
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
 
-
+void saveAsCsv(std::string const& filename,
+               std::vector<std::string> const& header,
+               std::vector<std::vector<double>> const& data);
