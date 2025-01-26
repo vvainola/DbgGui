@@ -162,7 +162,6 @@ struct Scalar {
             throw std::runtime_error(std::format("Offset expression '{}' could not be evaluated", offset));
         }
         m_offset = offset_v.value();
-        m_offset = *str::evaluateExpression(offset);
         m_offset_str = offset;
     }
 
