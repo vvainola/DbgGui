@@ -8,7 +8,7 @@ catch2/3.3.2
 pkgconf/1.9.3
 
 [generators]
-pkg_config
+PkgConfigDeps
 
 [imports]
 ., license* -> ./licenses @ folder=True, ignore_case=True
