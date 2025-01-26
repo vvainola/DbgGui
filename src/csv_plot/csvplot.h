@@ -29,6 +29,7 @@
 #include <map>
 #include <array>
 #include <future>
+#include "csv_helpers.h"
 
 struct MinMax {
     double min;
@@ -69,14 +70,49 @@ struct CsvFileData {
 struct CsvSignal {
     std::string name;
     std::vector<double> samples;
-    int plot_idx = NOT_VISIBLE;
-    ImVec4 color{NO_COLOR};
     CsvFileData* file;
+};
+
+struct ScalarPlot {
+    std::vector<CsvSignal*> signals;
+    bool autofit_next_frame = false;
+
+    void addSignal(CsvSignal* signal) {
+        if (contains(signals, signal)) {
+            return;
+        }
+        signals.push_back(signal);
+    }
+
+    void removeSignal(CsvSignal* signal) {
+        if (!contains(signals, signal)) {
+            return;
+        }
+        remove(signals, signal);
+    }
+
+    void clear() {
+        for (int i = signals.size() - 1; i >= 0; --i) {
+            removeSignal(signals[i]);
+        }
+    }
 };
 
 struct VectorPlot {
     std::vector<std::pair<CsvSignal*, CsvSignal*>> signals;
     bool autofit_next_frame = false;
+
+    void addSignal(std::pair<CsvSignal*, CsvSignal*> signal) {
+        signals.push_back(signal);
+    }
+
+    void removeSignal(CsvSignal* signal) {
+        for (int i = signals.size() - 1; i >= 0; --i) {
+            if (signals[i].first == signal || signals[i].second == signal) {
+                signals.erase(signals.begin() + i);
+            }
+        }
+    }
 };
 
 struct SpectrumPlot {
@@ -89,6 +125,13 @@ struct SpectrumPlot {
     MinMax x_axis;
     MinMax y_axis;
     MinMax prev_x_range = {0, 0};
+
+    void removeSignal(CsvSignal* signal) {
+        if (real == signal || imag == signal) {
+            real = nullptr;
+            imag = nullptr;
+        }
+    }
 };
 
 class CsvPlotter {
@@ -118,14 +161,12 @@ class CsvPlotter {
     int m_cols = 1;
     int m_vector_plot_cnt = 0;
     int m_spectrum_plot_cnt = 0;
-    int m_fit_plot_idx = -1;
     float m_signals_window_width = 0.15f;
     struct {
         bool first_signal_as_x = true;
         bool shift_samples_to_start_from_zero = true;
         bool link_axis = true;
         bool autofit_y_axis = true;
-        bool fit_after_drag_and_drop = true;
         bool keep_old_signals_on_reload = true;
         bool cursor_measurements = false;
         Theme theme;
@@ -136,11 +177,15 @@ class CsvPlotter {
     double m_drag_x2 = 0;
     std::string m_error_message;
 
+    struct {
+        bool reset_colors;
+    } m_flags;
+
     std::vector<CsvSignal*> m_selected_signals;
+    std::array<ScalarPlot, MAX_PLOTS * MAX_PLOTS> m_scalar_plots;
     std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
     std::array<SpectrumPlot, MAX_PLOTS> m_spectrum_plots;
 };
-
 
 inline void HelpMarker(const char* desc) {
     ImGui::TextDisabled("(?)");
