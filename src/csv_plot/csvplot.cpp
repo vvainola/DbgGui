@@ -695,6 +695,25 @@ void CsvPlotter::showSignalWindow() {
             if (ImGui::Button("Remove")) {
                 file_to_remove = &file;
             }
+            if (ImGui::Button("Save as CSV")) {
+                nfdchar_t* out_path = NULL;
+                auto cwd = std::filesystem::current_path();
+                nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+                if (result == NFD_OKAY) {
+                    std::string out(out_path);
+                    if (!out.ends_with(".csv")) {
+                        out += ".csv";
+                    }
+                    free(out_path);
+                    std::vector<std::string> header;
+                    std::vector<std::vector<double>> samples;
+                    for (CsvSignal& signal : file->signals) {
+                        header.push_back(signal.name);
+                        samples.push_back(signal.samples);
+                    }
+                    saveAsCsv(out, header, samples);
+                }
+            }
             ImGui::EndPopup();
         }
 

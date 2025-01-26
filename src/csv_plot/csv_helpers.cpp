@@ -172,3 +172,35 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     decimated_values.y_max.push_back(y.back());
     return decimated_values;
 }
+
+void saveAsCsv(std::string const& filename,
+               std::vector<std::string> const& header,
+               std::vector<std::vector<double>> const& data) {
+    std::ofstream csv_file(filename);
+    if (!csv_file.is_open()) {
+        std::cerr << "Unable to open file " + filename << std::endl;
+        return;
+    }
+
+    // Write header row
+    for (int i = 0; i < header.size(); i++) {
+        csv_file << header[i];
+        if (i < header.size() - 1) {
+            csv_file << ",";
+        }
+    }
+    csv_file << ",\n";
+
+    // Write data
+    for (int i = 0; i < data[0].size(); i++) {
+        for (int j = 0; j < data.size(); j++) {
+            csv_file << data[j][i];
+            if (j < data.size() - 1) {
+                csv_file << ",";
+            }
+        }
+        csv_file << "\n";
+    }
+
+    csv_file.close();
+}
