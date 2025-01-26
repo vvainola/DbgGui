@@ -36,6 +36,16 @@ inline void remove(std::vector<T>& v, const T& item) {
     v.erase(std::remove(v.begin(), v.end(), item), v.end());
 }
 
+template <typename T>
+inline bool contains(std::vector<T>& v, const T& item_to_search) {
+    for (auto const& item : v) {
+        if (item == item_to_search) {
+            return true;
+        }
+    }
+    return false;
+}
+
 struct DecimatedValues {
     std::vector<double> x;
     std::vector<double> y_min;

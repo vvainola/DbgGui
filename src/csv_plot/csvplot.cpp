@@ -72,16 +72,6 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
 std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
-template <typename T>
-inline bool contains(std::vector<T>& v, const T& item_to_search) {
-    for (auto const& item : v) {
-        if (item == item_to_search) {
-            return true;
-        }
-    }
-    return false;
-}
-
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
