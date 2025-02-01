@@ -198,6 +198,7 @@ class DbgGui {
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
+    std::filesystem::file_time_type m_last_settings_write_time;
 };
 
 template <typename T>

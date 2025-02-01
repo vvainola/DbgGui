@@ -37,6 +37,11 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
+#ifdef _WIN32
+constexpr std::string USER_SETTINGS_LOCATION = "USERPROFILE";
+#else
+constexpr std::string USER_SETTINGS_LOCATION = "HOME";
+#endif
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
 #define TRY(expression)                       \
@@ -59,6 +64,16 @@ uint64_t hashWithTime(const std::string& str) {
     return hash(std::format("{}{}",
                             std::chrono::system_clock::now().time_since_epoch().count(),
                             str));
+}
+
+template <typename T>
+T& getOrCreateWindow(std::vector<T>& vec, uint64_t id) {
+    for (auto& elem : vec) {
+        if (elem.id == id) {
+            return elem;
+        }
+    }
+    return vec.emplace_back();
 }
 
 static void glfw_error_callback(int error, const char* description) {
@@ -306,8 +321,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
     }
 
     // Restore settings of the scalar signal
-    TRY(for (auto& scalar_data
-             : m_settings["scalars"]) {
+    TRY(for (auto& scalar_data : m_settings["scalars"]) {
         uint64_t id = scalar_data["id"];
         if (id == scalar->id) {
             std::string scale = scalar_data["scale"];
@@ -321,8 +335,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
     })
 
     // Restore scalar to plots
-    TRY(for (auto scalar_plot_data
-             : m_settings["scalar_plots"]) {
+    TRY(for (auto scalar_plot_data : m_settings["scalar_plots"]) {
         ScalarPlot* plot = nullptr;
         for (auto& scalar_plot : m_scalar_plots) {
             if (scalar_plot.name == scalar_plot_data["name"]) {
@@ -358,9 +371,11 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 }
 
 void DbgGui::loadPreviousSessionSettings() {
-    std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
-    std::ifstream f(settings_dir + "settings.json");
+    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
+    std::string settings_path = settings_dir + "settings.json";
+    std::ifstream f(settings_path);
     if (f.is_open()) {
+        m_last_settings_write_time = std::filesystem::last_write_time(settings_path);
         TRY(m_settings = nlohmann::json::parse(f);
             m_settings_saved = m_settings;)
 
@@ -381,13 +396,18 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.font_size = m_settings["options"]["font_size"];)
         TRY(m_options.theme = m_settings["options"]["theme"];)
 
-        m_sampler.setBufferSize(m_options.sampling_buffer_size);
         setTheme(m_options.theme, m_window);
 
-        TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
-            int ypos = std::max(0, int(m_settings["window"]["ypos"]));
-            glfwSetWindowPos(m_window, xpos, ypos);
-            glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
+        // Buffer size and window position are set only once and not synchronized with multiple processes
+        static bool once = false;
+        if (!once) {
+            once = true;
+            m_sampler.setBufferSize(m_options.sampling_buffer_size);
+            TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
+                int ypos = std::max(0, int(m_settings["window"]["ypos"]));
+                glfwSetWindowPos(m_window, xpos, ypos);)
+        }
+        TRY(glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
 
         TRY(m_window_focus.scalars.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_window_focus.vectors.initial_focus = m_settings["initial_focus"]["vectors"];)
@@ -416,7 +436,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto dockspace_data : m_settings["dockspaces"]) {
             TRY(
-              DockSpace& dockspace = m_dockspaces.emplace_back();
+              DockSpace& dockspace = getOrCreateWindow(m_dockspaces, dockspace_data["id"]);
               dockspace.name = dockspace_data["name"];
               dockspace.id = dockspace_data["id"];
               dockspace.focus.initial_focus = dockspace_data["initial_focus"];)
@@ -424,9 +444,9 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
             TRY(
-              ScalarPlot& plot = m_scalar_plots.emplace_back();
+              ScalarPlot& plot = getOrCreateWindow(m_scalar_plots, scalar_plot_data["id"]);
+              plot.scalars.clear();
               plot.name = scalar_plot_data["name"];
-
               plot.x_axis.min = 0;
               plot.x_axis.max = scalar_plot_data["x_range"];
               plot.autofit_y = scalar_plot_data["autofit_y"];
@@ -436,8 +456,7 @@ void DbgGui::loadPreviousSessionSettings() {
               };
               plot.x_range = scalar_plot_data["x_range"];
 
-              for (uint64_t id
-                   : scalar_plot_data["signals"]) {
+              for (uint64_t id : scalar_plot_data["signals"]) {
                   Scalar* scalar = getScalar(id);
                   if (scalar) {
                       m_sampler.startSampling(scalar);
@@ -450,11 +469,11 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto vector_plot_data : m_settings["vector_plots"]) {
             TRY(
-              VectorPlot& plot = m_vector_plots.emplace_back();
+              VectorPlot& plot = getOrCreateWindow(m_vector_plots, vector_plot_data["id"]);
+              plot.vectors.clear();
               plot.name = vector_plot_data["name"];
               plot.time_range = vector_plot_data["time_range"];
-              for (uint64_t id
-                   : vector_plot_data["signals"]) {
+              for (uint64_t id : vector_plot_data["signals"]) {
                   Vector2D* vec = getVector(id);
                   if (vec) {
                       m_sampler.startSampling(vec);
@@ -467,7 +486,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto spec_plot_data : m_settings["spec_plots"]) {
             TRY(
-              SpectrumPlot& plot = m_spectrum_plots.emplace_back();
+              SpectrumPlot& plot = getOrCreateWindow(m_spectrum_plots, spec_plot_data["id"]);
               plot.name = spec_plot_data["name"];
               plot.time_range = spec_plot_data["time_range"];
               plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
@@ -518,13 +537,13 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto custom_window_data : m_settings["custom_windows"]) {
             TRY(
-              CustomWindow& custom_window = m_custom_windows.emplace_back();
+              CustomWindow& custom_window = getOrCreateWindow(m_custom_windows, custom_window_data["id"]);
+              custom_window.scalars.clear();
               custom_window.name = custom_window_data["name"];
-              for (uint64_t id
-                   : custom_window_data["signals"]) {
+              for (uint64_t id : custom_window_data["signals"]) {
                   Scalar* scalar = getScalar(id);
                   if (scalar) {
-                      custom_window.scalars.push_back(scalar);
+                      custom_window.addScalar(scalar);
                   }
               };
               custom_window.focus.initial_focus = custom_window_data["initial_focus"];
@@ -532,7 +551,7 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         TRY(for (auto script_window_data : m_settings["script_windows"]) {
-            ScriptWindow& script_window = m_script_windows.emplace_back();
+            ScriptWindow& script_window = getOrCreateWindow(m_script_windows, script_window_data["id"]);
             script_window.name = script_window_data["name"];
             script_window.focus.initial_focus = script_window_data["initial_focus"];
             script_window.id = script_window_data["id"];
@@ -542,8 +561,7 @@ void DbgGui::loadPreviousSessionSettings() {
             script_window.text[text.size()] = '\0';
         })
 
-        TRY(for (std::string hidden_symbol
-                 : m_settings["hidden_symbols"]) {
+        TRY(for (std::string hidden_symbol : m_settings["hidden_symbols"]) {
             m_hidden_symbols.insert(hidden_symbol);
         };)
 
@@ -586,6 +604,16 @@ void DbgGui::updateSavedSettings() {
                 m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
                 m_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
             }
+        }
+    }
+
+    // Read current settings from json if there is a parallel process in which they have changed
+    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
+    std::string settings_path = settings_dir + "settings.json";
+    if (std::filesystem::exists(settings_path)) {
+        auto current_write_time = std::filesystem::last_write_time(settings_path);
+        if (current_write_time != m_last_settings_write_time) {
+            loadPreviousSessionSettings();
         }
     }
 
@@ -812,7 +840,7 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-     for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
+    for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (m_settings["scalars"].contains(scalar->name_and_group)
             || scalar->alias != scalar->name
@@ -835,22 +863,25 @@ void DbgGui::updateSavedSettings() {
 
     m_settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
+    // Settings are only saved if window is focused so that there is no competition which process is writing
     bool closing = glfwWindowShouldClose(m_window);
+    bool focused = (bool)glfwGetWindowAttrib(m_window, GLFW_FOCUSED);
     bool settings_changed = (m_settings != m_settings_saved);
     if (!closing
+        && focused
         && m_initial_focus_set
         && settings_changed) {
         m_settings_saved = m_settings;
 
-        std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.dbg_gui\\");
         if (!std::filesystem::exists(settings_dir)) {
             std::filesystem::create_directories(settings_dir);
         }
         // Write settings to tmp file first to avoid corrupting the file if program is closed mid-write
-        std::ofstream(settings_dir + "settings.json.tmp") << std::setw(4) << m_settings;
-        std::filesystem::copy_file(settings_dir + "settings.json.tmp",
-                                   settings_dir + "settings.json",
+        std::ofstream(settings_path + ".tmp") << std::setw(4) << m_settings;
+        std::filesystem::copy_file(settings_path + ".tmp",
+                                   settings_path,
                                    std::filesystem::copy_options::overwrite_existing);
+        m_last_settings_write_time = std::filesystem::last_write_time(settings_path);
     }
 }
 
