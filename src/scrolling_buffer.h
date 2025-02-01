@@ -167,7 +167,8 @@ class ScrollingBuffer {
     }
 
     std::pair<int32_t, int32_t> getTimeIndices(double start_time, double end_time) {
-        end_time = std::min(m_time[max(0, m_idx - 1)], end_time);
+        double latest_sample_time = (m_idx == 0) ? m_time[m_buffer_size - 1] : m_time[m_idx - 1];
+        end_time = std::min(latest_sample_time, end_time);
         int32_t start_idx = m_idx;
         int32_t end_idx = m_idx - 1 + m_buffer_size;
         if (!m_full_buffer_looped) {
