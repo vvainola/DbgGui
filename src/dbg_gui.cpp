@@ -66,16 +66,6 @@ uint64_t hashWithTime(const std::string& str) {
                             str));
 }
 
-template <typename T>
-T& getOrCreateWindow(std::vector<T>& vec, uint64_t id) {
-    for (auto& elem : vec) {
-        if (elem.id == id) {
-            return elem;
-        }
-    }
-    return vec.emplace_back();
-}
-
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
@@ -434,18 +424,19 @@ void DbgGui::loadPreviousSessionSettings() {
               };)
         }
 
+        m_dockspaces.clear();
         for (auto dockspace_data : m_settings["dockspaces"]) {
             TRY(
-              DockSpace& dockspace = getOrCreateWindow(m_dockspaces, dockspace_data["id"]);
+              DockSpace& dockspace = m_dockspaces.emplace_back();
               dockspace.name = dockspace_data["name"];
               dockspace.id = dockspace_data["id"];
               dockspace.focus.initial_focus = dockspace_data["initial_focus"];)
         }
 
+        m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
             TRY(
-              ScalarPlot& plot = getOrCreateWindow(m_scalar_plots, scalar_plot_data["id"]);
-              plot.scalars.clear();
+              ScalarPlot& plot = m_scalar_plots.emplace_back();
               plot.name = scalar_plot_data["name"];
               plot.x_axis.min = 0;
               plot.x_axis.max = scalar_plot_data["x_range"];
@@ -467,10 +458,10 @@ void DbgGui::loadPreviousSessionSettings() {
               plot.id = scalar_plot_data["id"];)
         }
 
+        m_vector_plots.clear();
         for (auto vector_plot_data : m_settings["vector_plots"]) {
             TRY(
-              VectorPlot& plot = getOrCreateWindow(m_vector_plots, vector_plot_data["id"]);
-              plot.vectors.clear();
+              VectorPlot& plot = m_vector_plots.emplace_back();
               plot.name = vector_plot_data["name"];
               plot.time_range = vector_plot_data["time_range"];
               for (uint64_t id : vector_plot_data["signals"]) {
@@ -484,9 +475,10 @@ void DbgGui::loadPreviousSessionSettings() {
               plot.id = vector_plot_data["id"];)
         }
 
+        m_spectrum_plots.clear();
         for (auto spec_plot_data : m_settings["spec_plots"]) {
             TRY(
-              SpectrumPlot& plot = getOrCreateWindow(m_spectrum_plots, spec_plot_data["id"]);
+              SpectrumPlot& plot = m_spectrum_plots.emplace_back();
               plot.name = spec_plot_data["name"];
               plot.time_range = spec_plot_data["time_range"];
               plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
@@ -535,10 +527,10 @@ void DbgGui::loadPreviousSessionSettings() {
               };)
         }
 
+        m_custom_windows.clear();
         for (auto custom_window_data : m_settings["custom_windows"]) {
             TRY(
-              CustomWindow& custom_window = getOrCreateWindow(m_custom_windows, custom_window_data["id"]);
-              custom_window.scalars.clear();
+              CustomWindow& custom_window = m_custom_windows.emplace_back();
               custom_window.name = custom_window_data["name"];
               for (uint64_t id : custom_window_data["signals"]) {
                   Scalar* scalar = getScalar(id);
@@ -550,8 +542,9 @@ void DbgGui::loadPreviousSessionSettings() {
               custom_window.id = custom_window_data["id"];)
         }
 
+        m_script_windows.clear();
         TRY(for (auto script_window_data : m_settings["script_windows"]) {
-            ScriptWindow& script_window = getOrCreateWindow(m_script_windows, script_window_data["id"]);
+            ScriptWindow& script_window = m_script_windows.emplace_back();
             script_window.name = script_window_data["name"];
             script_window.focus.initial_focus = script_window_data["initial_focus"];
             script_window.id = script_window_data["id"];
