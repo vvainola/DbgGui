@@ -328,7 +328,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
     TRY(for (auto scalar_plot_data : m_settings["scalar_plots"]) {
         ScalarPlot* plot = nullptr;
         for (auto& scalar_plot : m_scalar_plots) {
-            if (scalar_plot.name == scalar_plot_data["name"]) {
+            if (scalar_plot.id == scalar_plot_data["id"]) {
                 plot = &scalar_plot;
                 break;
             }
@@ -345,7 +345,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
     TRY(for (auto custom_window_data : m_settings["custom_windows"]) {
         CustomWindow* custom = nullptr;
         for (auto& custom_window : m_custom_windows) {
-            if (custom_window.name == custom_window_data["name"]) {
+            if (custom_window.id == custom_window_data["id"]) {
                 custom = &custom_window;
                 break;
             }
