@@ -855,8 +855,8 @@ void CsvPlotter::showScalarPlots() {
                     CsvSignal* signal = plot.signals[i];
                     std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
                     std::vector<double> const& all_y_values = signal->samples;
-                    int idx1 = binarySearch(all_x_values, m_drag_x1, 0, int(all_x_values.size() - 1));
-                    int idx2 = binarySearch(all_x_values, m_drag_x2, 0, int(all_x_values.size() - 1));
+                    int idx1 = binarySearch(all_x_values, m_drag_x1 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
+                    int idx2 = binarySearch(all_x_values, m_drag_x2 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
                     double signal_scale = 1;
                     if (m_signal_scales.contains(signal->name)) {
                         signal_scale = *str::evaluateExpression(m_signal_scales.at(signal->name));
