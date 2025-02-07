@@ -473,8 +473,7 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename) {
         }
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
-        std::string line(csv_lines[i]);
-        str::trim(line);
+        std::string line = str::removeWhitespace(csv_lines[i]);
         std::vector<std::string_view> values = str::splitSv(line, delimiter, (int)csv_signals.size());
         if (values.size() != signal_names.size()) {
             break;

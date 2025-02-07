@@ -119,6 +119,17 @@ std::string str::replaceAll(
     return result;
 }
 
+std::string removeWhitespace(std::string_view str) {
+    std::string result;
+    result.reserve(str.size());
+    for (char c : str) {
+        if (!std::isspace(c)) {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
 std::string& str::ltrim(std::string& str) {
     auto it2 = std::find_if(str.begin(), str.end(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
     str.erase(str.begin(), it2);

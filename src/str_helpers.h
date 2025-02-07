@@ -35,6 +35,7 @@ std::vector<std::string> split(const std::string& s, char delim);
 std::string replaceAll(const std::string& str,
                        const std::string& find,
                        const std::string& replace);
+std::string removeWhitespace(std::string_view str);
 
 std::string& ltrim(std::string& str);
 std::string& rtrim(std::string& str);
