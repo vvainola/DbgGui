@@ -23,6 +23,8 @@
 #pragma once
 
 #include "data_structures.h"
+inline double EPSILON = 1e-12;
+//#define STAIR_PLOTS
 
 // utility structure for realtime plot
 class ScrollingBuffer {
@@ -35,7 +37,6 @@ class ScrollingBuffer {
         assert(m_scalar_buffers.size() == 0);
         m_buffer_size = buffer_size;
         m_time.resize(2 * buffer_size);
-
     }
 
     void sample(double time) {
@@ -59,10 +60,16 @@ class ScrollingBuffer {
         int32_t start_idx = m_idx;
         for (size_t i = 0; i < m_time_temp.size(); ++i) {
             double time = m_time_temp[i];
+#if defined(STAIR_PLOTS)
+            m_time[m_idx] = time - EPSILON;
+            m_time[m_idx + m_buffer_size] = time - EPSILON;
+            m_idx = (m_idx + 1) % m_buffer_size;
+#endif
+
             m_time[m_idx] = time;
             m_time[m_idx + m_buffer_size] = time;
-
             m_idx = (m_idx + 1) % m_buffer_size;
+
             if (m_idx == 0) {
                 m_full_buffer_looped = true;
             }
@@ -75,6 +82,12 @@ class ScrollingBuffer {
             int32_t idx = start_idx;
             for (size_t i = 0; i < temp_buffer.size(); ++i) {
                 double value = temp_buffer[i];
+#if defined(STAIR_PLOTS)
+                buffer[idx] = buffer[idx - 1];
+                buffer[idx + m_buffer_size] = buffer[idx + m_buffer_size - 1];
+                idx = (idx + 1) % m_buffer_size;
+#endif
+
                 buffer[idx] = value;
                 buffer[idx + m_buffer_size] = value;
                 idx = (idx + 1) % m_buffer_size;
