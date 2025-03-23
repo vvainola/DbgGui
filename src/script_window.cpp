@@ -43,7 +43,11 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         Operation op;
         // Get time
         try {
+            bool use_prev_time = line_split[0].front() == '+';
             op.time = std::stod(line_split[0]);
+            if (use_prev_time && m_operations.size() > 0) {
+                op.time += m_operations.back().time;
+            }
         } catch (std::exception e) {
             return std::format("Error in time: {} at line {}", e.what(), i);
         }
@@ -64,6 +68,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         } else {
             return std::format("Value error in line {}: {}", i, value.error());
         }
+        op.line = i;
         m_operations.push_back(op);
     }
     double prev_time = 0;
@@ -98,6 +103,13 @@ void ScriptWindow::processScript(double timestamp) {
 void ScriptWindow::stopScript() {
     m_idx = -1;
     m_operations.clear();
+}
+
+int ScriptWindow::currentLine() {
+    if (m_idx >= 0) {
+        return m_operations[m_idx].line;
+    }
+    return 0;
 }
 
 bool ScriptWindow::running() {

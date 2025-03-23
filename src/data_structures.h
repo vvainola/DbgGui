@@ -370,9 +370,6 @@ enum FontSelection {
 
 struct ScriptWindow : Window {
   public:
-    ScriptWindow() {
-        text[0] = '\0';
-    }
     ScriptWindow(std::string const& name_, uint64_t id_) {
         text[0] = '\0';
         name = name_;
@@ -381,10 +378,12 @@ struct ScriptWindow : Window {
 
     char text[1024 * 16];
     bool loop = false;
+    bool text_edit_open = false;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
     void processScript(double timestamp);
     void stopScript();
+    int currentLine();
     bool running();
     double getTime(double timestamp);
 
@@ -393,8 +392,9 @@ struct ScriptWindow : Window {
         double time;
         Scalar* scalar = nullptr;
         double value;
+        int line;
     };
     std::vector<Operation> m_operations;
     int m_idx = -1;
-    double m_start_time;
+    double m_start_time = 0;
 };

@@ -1116,7 +1116,7 @@ void DbgGui::showScriptWindow() {
             m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
         }
         if (ImGui::BeginPopupContextItem("Run_context_menu")) {
-            ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(500, ImGui::GetTextLineHeight() * 16), NULL);
+            script_window.text_edit_open = true;
             ImGui::EndPopup();
         }
         ImGui::SameLine();
@@ -1134,5 +1134,45 @@ void DbgGui::showScriptWindow() {
         }
 
         ImGui::End();
+
+        // Open text edit in a separate window
+        if (script_window.text_edit_open) {
+            ImGui::SetNextWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
+            ImGui::Begin(std::format("{}##editor", script_window.name).c_str(), &script_window.text_edit_open);
+            // Close on middle click like other windows
+            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+                script_window.text_edit_open = false;
+            }
+
+            if (ImGui::Button("Run")) {
+                m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
+            }
+
+            ImGui::SameLine();
+            ImGui::Checkbox("Loop", &script_window.loop);
+            // Stop button only visible if running
+            if (script_window.running()) {
+                ImGui::SameLine();
+                if (ImGui::Button("Stop")) {
+                    script_window.stopScript();
+                }
+                ImGui::SameLine();
+                ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
+
+                // Show progress of the script by adding a separator where it is currently waiting
+                std::vector<std::string> lines = str::split(script_window.text, '\n');
+                for (int i = 0; i < script_window.currentLine(); ++i) {
+                    ImGui::Text(lines[i].c_str());
+                }
+                ImGui::Separator();
+                for (int i = script_window.currentLine(); i < lines.size(); ++i) {
+                    ImGui::Text(lines[i].c_str());
+                }
+            } else {
+                ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y));
+            }
+
+            ImGui::End();
+        }
     }
 }
