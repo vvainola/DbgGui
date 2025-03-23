@@ -22,6 +22,17 @@
 
 #include "data_structures.h"
 #include "str_helpers.h"
+#include "dbghelp_symbols_lookup.h"
+#include "variant_symbol.h"
+
+#include <regex>
+
+ScriptWindow::ScriptWindow(DbgHelpSymbols const& symbols, std::string const& name_, uint64_t id_)
+    : m_symbols(symbols) {
+    text[0] = '\0';
+    name = name_;
+    id = id_;
+}
 
 std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_ptr<Scalar>> const& scalars) {
     m_operations.clear();
@@ -37,10 +48,11 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
 
         auto line_split = str::split(line, ';');
         if (line_split.size() != 3) {
-            return std::format("Error in line {}. Each line must be splittable into 3 'time;symbol;value'. Example '1;test_symbol;3'", i);
+            return std::format("Line {} is invalid.\n{}. Each line must be splittable into 3 'time;symbol;value'. Example '1;test_symbol;3'", i, line);
         }
 
         Operation op;
+        //--------------
         // Get time
         try {
             bool use_prev_time = line_split[0].front() == '+';
@@ -51,22 +63,61 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         } catch (std::exception e) {
             return std::format("Error in time: {} at line {}", e.what(), i);
         }
+        //--------------
         // Get scalar to write
-        for (auto& scalar : scalars) {
-            if (scalar->name == line_split[1]) {
-                op.scalar = scalar.get();
+        Scalar* scalar = nullptr;
+        for (auto& s : scalars) {
+            if (s->name == str::trim(line_split[1])) {
+                scalar = s.get();
                 break;
             }
         }
-        if (op.scalar == nullptr) {
-            return std::format("No matching signal found for {} at line {}", line_split[1], i);
+        if (scalar == nullptr) {
+            return std::format("No matching signal found for \"{}\" at line {}.\n{}", line_split[1], i, line);
         }
-        // Get value
-        std::expected<double, std::string> value = str::evaluateExpression(line_split[2]);
+
+        //--------------
+        // Parse if the value refers to other symbols
+        std::vector<VariantSymbol*> value_symbols;
+        std::string value_orig = str::trim(line_split[2]);
+        // Parse value for symbols that match $name regex
+        std::regex scalar_regex(R"(\$([\w\[\]:\.<>]+))");
+        std::smatch match;
+        std::string value_str = value_orig;
+        while (std::regex_search(value_str, match, scalar_regex)) {
+            std::string scalar_name = match[1].str();
+            VariantSymbol* value_symbol = m_symbols.getSymbol(scalar_name);
+            if (value_symbol
+                && (value_symbol->getType() == VariantSymbol::Type::Arithmetic
+                    || value_symbol->getType() == VariantSymbol::Type::Enum)) {
+                value_symbols.push_back(value_symbol);
+                value_str = match.suffix().str();
+                continue;
+            } else {
+                return std::format("No matching symbol found for \"{}\" at line {}.\n{}", scalar_name, i, line);
+            }
+        }
+        // Try evaluating the expression that it is valid
+        std::string value_replaced = value_orig;
+        for (auto& s : value_symbols) {
+            value_replaced = str::replaceAll(value_replaced, std::format("${}", s->getFullName()), std::format("{}", s->read()));
+        }
+        std::expected<double, std::string> value = str::evaluateExpression(value_replaced);
+
+        //--------------
+        // Set action if value is valid
         if (value.has_value()) {
-            op.value = value.value();
+            op.action = [=](double timestamp) {
+                (void)timestamp;
+                // Replace value_str with the actual values of the scalars
+                std::string value_replaced = value_orig;
+                for (auto& s : value_symbols) {
+                    value_replaced = str::replaceAll(value_replaced, std::format("${}", s->getFullName()), std::format("{}", s->read()));
+                }
+                scalar->setValue(*str::evaluateExpression(value_replaced));
+            };
         } else {
-            return std::format("Value error in line {}: {}", i, value.error());
+            return std::format("Value error in line {}.\nOriginal: {}\nReplaced: {}\n{}", i, value_orig, value_replaced, value.error());
         }
         op.line = i;
         m_operations.push_back(op);
@@ -88,7 +139,7 @@ void ScriptWindow::processScript(double timestamp) {
     if (m_idx >= 0 && m_idx < m_operations.size()) {
         Operation* op = &m_operations[m_idx];
         while (timestamp > m_start_time + op->time) {
-            op->scalar->setScaledValue(op->value);
+            op->action(timestamp);
             m_idx++;
             if (m_idx >= m_operations.size()) {
                 m_start_time = timestamp;

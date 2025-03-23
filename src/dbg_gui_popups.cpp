@@ -85,7 +85,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  window_or_plot_name,
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_script_windows.push_back(ScriptWindow{window_or_plot_name, hashWithTime(window_or_plot_name)});
+                m_script_windows.push_back(ScriptWindow{m_dbghelp_symbols, window_or_plot_name, hashWithTime(window_or_plot_name)});
                 strcpy_s(window_or_plot_name, "");
                 ImGui::CloseCurrentPopup();
             };

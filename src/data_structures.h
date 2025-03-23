@@ -41,6 +41,8 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 uint64_t hash(const std::string& str);
 uint64_t hashWithTime(const std::string& str);
 
+class DbgHelpSymbols;
+
 template <typename T>
 T inline min(T a, T b) {
     return a < b ? a : b;
@@ -370,11 +372,7 @@ enum FontSelection {
 
 struct ScriptWindow : Window {
   public:
-    ScriptWindow(std::string const& name_, uint64_t id_) {
-        text[0] = '\0';
-        name = name_;
-        id = id_;
-    }
+    ScriptWindow(DbgHelpSymbols const& symbols, std::string const& name_, uint64_t id_);
 
     char text[1024 * 16];
     bool loop = false;
@@ -390,11 +388,11 @@ struct ScriptWindow : Window {
   private:
     struct Operation {
         double time;
-        Scalar* scalar = nullptr;
-        double value;
+        std::function<void(double)> action;
         int line;
     };
     std::vector<Operation> m_operations;
     int m_idx = -1;
     double m_start_time = 0;
+    DbgHelpSymbols const& m_symbols;
 };

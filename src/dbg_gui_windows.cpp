@@ -1116,7 +1116,8 @@ void DbgGui::showScriptWindow() {
             m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
         }
         if (ImGui::BeginPopupContextItem("Run_context_menu")) {
-            script_window.text_edit_open = true;
+            // Toggling the text edit window will cause it reapper if it's hidden behind other windows
+            script_window.text_edit_open = !script_window.text_edit_open;
             ImGui::EndPopup();
         }
         ImGui::SameLine();
