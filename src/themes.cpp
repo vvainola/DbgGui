@@ -65,6 +65,7 @@ void setTheme(Theme theme, GLFWwindow* window) {
     setTheme(theme);
 
     auto& style = ImGui::GetStyle();
+    style.WindowMinSize = ImVec2(50, 50);
     style.WindowPadding.x = 1;
     style.WindowPadding.y = 5;
     style.FramePadding.x = 6;
