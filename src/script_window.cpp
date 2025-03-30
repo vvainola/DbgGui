@@ -81,7 +81,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         std::vector<VariantSymbol*> value_symbols;
         std::string value_orig = str::trim(line_split[2]);
         // Parse value for symbols that match $name regex
-        std::regex scalar_regex(R"(\$([\w\[\]:\.<>]+))");
+        std::regex scalar_regex(R"(\{([\w\[\]:\.<>|]+)\})");
         std::smatch match;
         std::string value_str = value_orig;
         while (std::regex_search(value_str, match, scalar_regex)) {
@@ -100,7 +100,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         // Try evaluating the expression that it is valid
         std::string value_replaced = value_orig;
         for (auto& s : value_symbols) {
-            value_replaced = str::replaceAll(value_replaced, std::format("${}", s->getFullName()), std::format("{}", s->read()));
+            value_replaced = str::replaceAll(value_replaced, std::format("{{{}}}", s->getFullName()), std::format("{}", s->read()));
         }
         std::expected<double, std::string> value = str::evaluateExpression(value_replaced);
 
@@ -112,7 +112,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
                 // Replace value_str with the actual values of the scalars
                 std::string value_replaced = value_orig;
                 for (auto& s : value_symbols) {
-                    value_replaced = str::replaceAll(value_replaced, std::format("${}", s->getFullName()), std::format("{}", s->read()));
+                    value_replaced = str::replaceAll(value_replaced, std::format("{{{}}}", s->getFullName()), std::format("{}", s->read()));
                 }
                 scalar->setValue(*str::evaluateExpression(value_replaced));
             };
