@@ -109,7 +109,7 @@ class DbgGui {
     void updateSavedSettings();
     void setInitialFocus();
     void synchronizeSpeed();
-    void saveScalarsAsCsv(std::vector<Scalar*> const& scalars, MinMax time_limits);
+    void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar);
     void addScalarScaleInput(Scalar* scalar);
     void addScalarOffsetInput(Scalar* scalar);
@@ -205,6 +205,8 @@ class DbgGui {
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
     std::filesystem::file_time_type m_last_settings_write_time;
+
+    friend struct ScriptWindow;
 };
 
 template <typename T>

@@ -397,7 +397,7 @@ void DbgGui::showMainMenuBar() {
                 for (auto const& scalar : m_scalars) {
                     scalars.push_back(scalar.get());
                 }
-                saveScalarsAsCsv(scalars, m_linked_scalar_x_axis_limits);
+                saveScalarsAsCsv(getFilenameToSave(), scalars, m_linked_scalar_x_axis_limits);
             }
 
             if (ImGui::Button("Save snapshot")) {

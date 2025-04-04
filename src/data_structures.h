@@ -44,8 +44,6 @@ uint64_t hashWithTime(const std::string& str);
 std::string getFilenameToSave(std::string const& filter = "csv", std::string default_path = "");
 std::string getFilenameToOpen(std::string const& filter, std::string default_path = "");
 
-class DbgHelpSymbols;
-
 template <typename T>
 T inline min(T a, T b) {
     return a < b ? a : b;
@@ -398,9 +396,10 @@ struct SignalGroup {
     bool m_has_visible_items = true;
 };
 
+class DbgGui;
 struct ScriptWindow : Window {
   public:
-    ScriptWindow(DbgHelpSymbols const& symbols, std::string const& name_, uint64_t id_);
+    ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_);
 
     char text[1024 * 16];
     bool loop = false;
@@ -422,5 +421,7 @@ struct ScriptWindow : Window {
     std::vector<Operation> m_operations;
     int m_idx = -1;
     double m_start_time = 0;
-    DbgHelpSymbols const& m_symbols;
+    DbgGui* m_gui;
+
+    std::expected<Operation, std::string> parseSpecialOperation(std::string const& operation_name, std::string line, int line_number);
 };

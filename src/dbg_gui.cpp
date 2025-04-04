@@ -545,7 +545,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         m_script_windows.clear();
         TRY(for (auto script_window_data : m_settings["script_windows"]) {
-            ScriptWindow& script_window = m_script_windows.emplace_back(m_dbghelp_symbols, script_window_data["name"], script_window_data["id"]);
+            ScriptWindow& script_window = m_script_windows.emplace_back(this, script_window_data["name"], script_window_data["id"]);
             script_window.focus.initial_focus = script_window_data["initial_focus"];
             script_window.loop = script_window_data["loop"];
             std::string text = script_window_data["text"];
