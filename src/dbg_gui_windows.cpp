@@ -372,6 +372,12 @@ void DbgGui::showMainMenuBar() {
                 HelpMarker("Hotkey to add new script window is ctrl+shift+5");
                 addPopupModal(str::ADD_SCRIPT_WINDOW);
 
+                // Grid window
+                if (ImGui::Button("Grid window")) {
+                    ImGui::OpenPopup(str::ADD_GRID_WINDOW);
+                }
+                addPopupModal(str::ADD_GRID_WINDOW);
+
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
                     ImGui::OpenPopup(str::ADD_DOCKSPACE);
@@ -422,21 +428,14 @@ void DbgGui::showMainMenuBar() {
             // Theme
             themeCombo(m_options.theme, m_window);
 
-            // Order here must match the order in which fonts were added
-            if (ImGui::RadioButton("Cousine regular", reinterpret_cast<int*>(&m_options.font_selection), 0)) {
-                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[0];
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton("Calibri", reinterpret_cast<int*>(&m_options.font_selection), 1)) {
-                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
-            }
             ImGui::InputInt("Sampling buffer size", &m_options.sampling_buffer_size, 0);
             ImGui::SameLine();
             HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
 
-            ImGui::InputFloat("Font size", &m_options.font_size, 0, 0, "%.1f");
-            ImGui::SameLine();
-            HelpMarker("Changing requires restart to take effect. Default = 13.0");
+            if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE - 1);
+                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_size];
+            }
 
             ImGui::Separator();
 
@@ -1175,5 +1174,108 @@ void DbgGui::showScriptWindow() {
 
             ImGui::End();
         }
+    }
+}
+
+void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col) {
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
+            uint64_t id = *(uint64_t*)payload->Data;
+            Scalar* dropped_scalar = getScalar(id);
+            grid_window.scalars[row][col] = dropped_scalar->id;
+        }
+        ImGui::EndDragDropTarget();
+    }
+}
+
+void DbgGui::showGridWindow() {
+    for (GridWindow& grid_window : m_grid_windows) {
+        if (!grid_window.open) {
+            continue;
+        }
+        grid_window.focus.focused = ImGui::Begin(grid_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoScrollbar);
+        grid_window.closeOnMiddleClick();
+        grid_window.contextMenu();
+        if (!grid_window.focus.focused) {
+            ImGui::End();
+            continue;
+        }
+        // Calculate text & value font sizes. Not accurate but seems to be roughly correct
+        auto const& style = ImGui::GetStyle();
+        float padding = style.FramePadding.y + style.CellPadding.y + style.ItemSpacing.y * 0.5;
+        float row_font_size = ((ImGui::GetContentRegionAvail().y - style.WindowPadding.y) / grid_window.rows - padding);
+        row_font_size = (float)std::clamp((int)(row_font_size), MIN_FONT_SIZE, MAX_FONT_SIZE - 1);
+        float text_font_size = grid_window.text_to_value_ratio * row_font_size;
+        float value_font_size = (1.0f - grid_window.text_to_value_ratio) * row_font_size;
+
+        if (ImGui::BeginTable("grid_table",
+                              grid_window.columns,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
+            for (int row = 0; row < grid_window.rows; ++row) {
+                for (int col = 0; col < grid_window.columns; ++col) {
+                    ImGui::TableNextColumn();
+
+                    Scalar* scalar = getScalar(grid_window.scalars[row][col]);
+                    if (scalar) {
+                        // Resize text so that it fits the cell
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
+                        ImVec2 text_size = ImGui::CalcTextSize(scalar->alias.c_str());
+                        float available_x = ImGui::GetContentRegionAvail().x;
+                        float available_y = ImGui::GetContentRegionAvail().y;
+
+                        if (available_x < text_size.x) {
+                            ImGui::PopFont();
+                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available_x / text_size.x) - 1)]);
+                        }
+                        if (available_y < text_size.y * 2) {
+                            ImGui::PopFont();
+                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available_y / (2 * text_size.y)) - 1)]);
+                        }
+
+                        // Name
+                        if (scalar->customScaleOrOffset()) {
+                            ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
+                        } else {
+                            ImGui::Text(scalar->alias.c_str());
+                        }
+                        addScalarContextMenu(scalar);
+                        // Hide symbol on delete
+                        if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                            grid_window.scalars[row][col] = NULL;
+                        }
+                        ImGui::PopFont();
+                        // Make text drag-and-droppable
+                        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                            uint64_t id = scalar->id;
+                            ImGui::SetDragDropPayload("SCALAR_ID", &id, sizeof(uint64_t));
+                            ImGui::Text("Drag to plot");
+                            ImGui::EndDragDropSource();
+                        }
+
+                        // Value
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)value_font_size]);
+                        addInputScalar(scalar->src, "##grid_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                        ImGui::PopFont();
+                    } else {
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
+                        ImGui::Text("");
+                        ImGui::PopFont();
+
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)value_font_size]);
+                        ImGui::Text("-");
+                        ImGui::PopFont();
+                    }
+                    addGridWindowDragAndDrop(grid_window, row, col);
+
+                    // Make the empty space also valid drop target
+                    ImGui::SameLine();
+                    ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), value_font_size));
+                    addGridWindowDragAndDrop(grid_window, row, col);
+                }
+            }
+
+            ImGui::EndTable();
+        }
+        ImGui::End();
     }
 }

@@ -91,6 +91,19 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             };
             ImGui::EndPopup();
         }
+    } else if (modal_name == str::ADD_GRID_WINDOW) {
+        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("Grid window name",
+                                 window_or_plot_name,
+                                 IM_ARRAYSIZE(window_or_plot_name),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_grid_windows.emplace_back(GridWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
+                strcpy_s(window_or_plot_name, "");
+                ImGui::CloseCurrentPopup();
+            };
+            ImGui::EndPopup();
+        }
     } else if (modal_name == str::ADD_SPECTRUM_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();

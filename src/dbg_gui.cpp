@@ -199,13 +199,13 @@ void DbgGui::updateLoop() {
 
     loadPreviousSessionSettings();
 
-    extern unsigned int cousine_regular_compressed_size;
-    extern unsigned int cousine_regular_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, m_options.font_size);
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, m_options.font_size);
-    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_selection];
+    io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, MIN_FONT_SIZE);
+    for (int i = MIN_FONT_SIZE; i <= MAX_FONT_SIZE; ++i) {
+        io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, i);
+    }
+    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[(int)m_options.font_size];
 
     m_initialized = true;
 
@@ -255,6 +255,7 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_SCRIPT_WINDOW);
+        addPopupModal(str::ADD_GRID_WINDOW);
         addPopupModal(str::PAUSE_AFTER);
         addPopupModal(str::PAUSE_AT);
 
@@ -273,6 +274,7 @@ void DbgGui::updateLoop() {
         showCustomWindow();
         showSymbolsWindow();
         showScriptWindow();
+        showGridWindow();
         showScalarPlots();
         showVectorPlots();
         showSpectrumPlots();
@@ -379,7 +381,6 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
         TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
         TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
-        TRY(m_options.font_selection = m_settings["options"]["font_selection"];)
         TRY(m_options.show_latest_message_on_main_menu_bar = m_settings["options"]["show_latest_message_on_main_menu_bar"];)
         TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
         TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
@@ -552,6 +553,19 @@ void DbgGui::loadPreviousSessionSettings() {
             script_window.text[text.size()] = '\0';
         })
 
+        m_grid_windows.clear();
+        for (auto grid_window_data : m_settings["grid_windows"]) {
+            GridWindow& grid_window = m_grid_windows.emplace_back(std::string(grid_window_data["name"]), grid_window_data["id"]);
+            TRY(grid_window.focus.initial_focus = grid_window_data["initial_focus"];)
+            TRY(grid_window.rows = grid_window_data["rows"];)
+            TRY(grid_window.columns = grid_window_data["columns"];)
+            TRY(grid_window.text_to_value_ratio = grid_window_data["text_to_value_ratio"];)
+            std::vector<uint64_t> signal_ids = grid_window_data["signals"];
+            for (int i = 0; i < std::min((int)signal_ids.size(), GridWindow::MAX_ROWS * GridWindow::MAX_COLUMNS); ++i) {
+                grid_window.scalars[i / GridWindow::MAX_COLUMNS][i % GridWindow::MAX_COLUMNS] = signal_ids[i];
+            }
+        }
+
         TRY(for (std::string hidden_symbol : m_settings["hidden_symbols"]) {
             m_hidden_symbols.insert(hidden_symbol);
         };)
@@ -624,7 +638,6 @@ void DbgGui::updateSavedSettings() {
     m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
     m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;
     m_settings["options"]["show_latest_message_on_main_menu_bar"] = m_options.show_latest_message_on_main_menu_bar;
-    m_settings["options"]["font_selection"] = m_options.font_selection;
     m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
     m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
     m_settings["options"]["font_size"] = m_options.font_size;
@@ -789,6 +802,29 @@ void DbgGui::updateSavedSettings() {
         m_settings["script_windows"][std::to_string(script_window.id)]["text"] = script_window.text;
     }
 
+    for (GridWindow& grid_window : m_grid_windows) {
+        if (!grid_window.open) {
+            m_settings["grid_windows"].erase(std::to_string(grid_window.id));
+            continue;
+        }
+        if (grid_window.id == 0) {
+            grid_window.id = hashWithTime(grid_window.name);
+        }
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["name"] = grid_window.name;
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["id"] = grid_window.id;
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["initial_focus"] = grid_window.focus.focused;
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["rows"] = grid_window.rows;
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["columns"] = grid_window.columns;
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["text_to_value_ratio"] = grid_window.text_to_value_ratio;
+        std::vector<uint64_t> signal_ids;
+        for (int row = 0; row < GridWindow::MAX_ROWS; ++row) {
+            for (int col = 0; col < GridWindow::MAX_COLUMNS; ++col) {
+                signal_ids.push_back(grid_window.scalars[row][col]);
+            }
+        }
+        m_settings["grid_windows"][std::to_string(grid_window.id)]["signals"] = signal_ids;
+    }
+
     // Remove deleted scalars from scalar groups
     for (auto& scalar_group : m_scalar_groups) {
         std::function<void(SignalGroup<Scalar>&)> remove_scalar_group_deleted_signals = [&](SignalGroup<Scalar>& group) {
@@ -947,6 +983,13 @@ void DbgGui::setInitialFocus() {
         ImGui::Begin(script_window.title().c_str());
         if (script_window.focus.initial_focus) {
             ImGui::SetWindowFocus(script_window.title().c_str());
+        }
+        ImGui::End();
+    }
+    for (GridWindow& grid_window : m_grid_windows) {
+        ImGui::Begin(grid_window.title().c_str());
+        if (grid_window.focus.initial_focus) {
+            ImGui::SetWindowFocus(grid_window.title().c_str());
         }
         ImGui::End();
     }

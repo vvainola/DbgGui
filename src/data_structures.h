@@ -27,6 +27,7 @@
 #include "imgui.h"
 #include "spectrum.h"
 #include "str_helpers.h"
+#include "nlohmann/json.hpp"
 
 #include <numeric>
 #include <vector>
@@ -345,6 +346,36 @@ struct CustomWindow : Window {
     }
 };
 
+struct GridWindow : Window {
+    GridWindow(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
+    static const int MAX_ROWS = 20;
+    static const int MAX_COLUMNS = 10;
+    std::array<std::array<uint64_t, MAX_COLUMNS>, MAX_ROWS> scalars;
+    int rows = 1;
+    int columns = 1;
+    float text_to_value_ratio = 0.3f;
+
+    void contextMenu() {
+        rows = std::clamp(rows, 1, MAX_ROWS);
+        columns = std::clamp(columns, 1, MAX_COLUMNS);
+        if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
+            name.reserve(MAX_NAME_LENGTH);
+            if (ImGui::InputText("Name##window_context_menu",
+                                 name.data(),
+                                 MAX_NAME_LENGTH)) {
+                name = std::string(name.data());
+            }
+            ImGui::InputInt("Rows", &rows, 0, 0);
+            ImGui::InputInt("Columms", &columns, 0, 0);
+            ImGui::InputFloat("Text to value ratio", &text_to_value_ratio, 0, 0, "%.2f");
+            ImGui::EndPopup();
+        }
+    }
+};
+
 struct DockSpace : Window {
     unsigned int dock_id = 0;
 };
@@ -363,11 +394,6 @@ struct SignalGroup {
   private:
     std::string m_filter_prev;
     bool m_has_visible_items = true;
-};
-
-enum FontSelection {
-    COUSINE_REGULAR,
-    CALIBRI
 };
 
 struct ScriptWindow : Window {
