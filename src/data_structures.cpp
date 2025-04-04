@@ -22,6 +22,7 @@
 
 #include "data_structures.h"
 #include "fts_fuzzy_match.h"
+#include "nfd.h"
 
 template <>
 bool SignalGroup<Scalar>::hasVisibleItems(std::string const& filter) {
@@ -78,4 +79,39 @@ bool SignalGroup<Vector2D>::hasVisibleItems(std::string const& filter) {
     }
 
     return m_has_visible_items;
+}
+
+std::string getFilenameToSave(std::string const& filter, std::string default_path) {
+    nfdchar_t* out_path = NULL;
+    if (default_path.empty()) {
+        default_path = std::filesystem::current_path().string();
+    }
+#if _WIN32
+    default_path = str::replaceAll(default_path, "/", "\\");
+#endif
+    nfdresult_t result = NFD_SaveDialog(filter.c_str(), default_path.c_str(), &out_path);
+    if (result == NFD_OKAY) {
+        std::string out(out_path);
+        free(out_path);
+        if (!out.ends_with("." + filter)) {
+            out.append("." + filter);
+        }
+        return out;
+    }
+    return "";
+}
+
+std::string getFilenameToOpen(std::string const& filter, std::string default_path) {
+    nfdchar_t* out_path = NULL;
+    if (default_path.empty()) {
+        default_path = std::filesystem::current_path().string();
+    }
+#if _WIN32
+    default_path = str::replaceAll(default_path, "/", "\\");
+#endif
+    nfdresult_t result = NFD_OpenDialog(filter.c_str(), default_path.c_str(), &out_path);
+    if (result == NFD_OKAY) {
+        return out_path;
+    }
+    return "";
 }

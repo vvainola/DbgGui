@@ -41,6 +41,8 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
 uint64_t hash(const std::string& str);
 uint64_t hashWithTime(const std::string& str);
+std::string getFilenameToSave(std::string const& filter = "csv", std::string default_path = "");
+std::string getFilenameToOpen(std::string const& filter, std::string default_path = "");
 
 class DbgHelpSymbols;
 

@@ -23,10 +23,12 @@
 #include "dbg_gui.h"
 #include "imgui.h"
 #include "symbols/fts_fuzzy_match.h"
-#include <format>
-#include <iostream>
 #include "imgui_internal.h"
 #include "themes.h"
+
+#include <format>
+#include <iostream>
+#include <fstream>
 
 std::string getSourceValueStr(ValueSource src) {
     return std::visit(
@@ -438,6 +440,23 @@ void DbgGui::showMainMenuBar() {
             }
 
             ImGui::Separator();
+
+            std::string settings_dir = std::format("{}/.dbg_gui/", std::getenv("USERPROFILE"));
+            if (ImGui::Button("Save settings")) {
+                std::string out_path = getFilenameToSave("json", settings_dir);
+                if (!out_path.empty()) {
+                    std::ofstream(out_path) << std::setw(4) << m_settings;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load settings")) {
+                std::string out_path = getFilenameToOpen("json", settings_dir);
+                if (!out_path.empty()) {
+                    // Overwrite existing settings. The file will be reloaded in updateSavedSettings
+                    std::string settings_path = std::format("{}/settings.json", settings_dir);
+                    std::filesystem::copy_file(out_path, settings_path, std::filesystem::copy_options::overwrite_existing);
+                }
+            }
 
             if (ImGui::Button("Clear saved settings") && ImGui::GetIO().KeyCtrl) {
                 m_options.clear_saved_settings = true;
