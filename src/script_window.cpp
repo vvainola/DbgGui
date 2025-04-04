@@ -80,8 +80,8 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         // Parse if the value refers to other symbols
         std::vector<VariantSymbol*> value_symbols;
         std::string value_orig = str::trim(line_split[2]);
-        // Parse value for symbols that match $name regex
-        std::regex scalar_regex(R"(\{([\w\[\]:\.<>|]+)\})");
+        // Parse value for symbols that match {name} regex
+        std::regex scalar_regex(R"(\{([^{}]+)\})");
         std::smatch match;
         std::string value_str = value_orig;
         while (std::regex_search(value_str, match, scalar_regex)) {
