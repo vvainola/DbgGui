@@ -363,6 +363,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 }
 
 void DbgGui::loadPreviousSessionSettings() {
+    m_initial_focus_set = false;
     std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
     std::string settings_path = settings_dir + "settings.json";
     std::ifstream f(settings_path);
