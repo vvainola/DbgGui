@@ -1227,6 +1227,14 @@ void DbgGui::showGridWindow() {
         float text_font_size = grid_window.text_to_value_ratio * row_font_size;
         float value_font_size = (1.0f - grid_window.text_to_value_ratio) * row_font_size;
 
+        float available_y = ImGui::GetContentRegionAvail().y;
+        float needed_y = (padding * 2 + row_font_size) * grid_window.rows;
+        if (available_y < needed_y) {
+            float scale = available_y / needed_y;
+            text_font_size *= scale;
+            value_font_size *= scale;
+        }
+
         if (ImGui::BeginTable("grid_table",
                               grid_window.columns,
                               ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
@@ -1239,16 +1247,10 @@ void DbgGui::showGridWindow() {
                         // Resize text so that it fits the cell
                         ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
                         ImVec2 text_size = ImGui::CalcTextSize(scalar->alias.c_str());
-                        float available_x = ImGui::GetContentRegionAvail().x;
-                        float available_y = ImGui::GetContentRegionAvail().y;
-
-                        if (available_x < text_size.x) {
+                        ImVec2 available = ImGui::GetContentRegionAvail();
+                        if (available.x < text_size.x) {
                             ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available_x / text_size.x) - 1)]);
-                        }
-                        if (available_y < text_size.y * 2) {
-                            ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available_y / (2 * text_size.y)) - 1)]);
+                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available.x / text_size.x) - 1)]);
                         }
 
                         // Name
