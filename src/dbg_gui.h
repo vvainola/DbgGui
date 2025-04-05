@@ -192,11 +192,32 @@ class DbgGui {
         bool pause_on_close = false;
         bool link_scalar_x_axis = false;
         bool scalar_plot_tooltip = true;
-        bool clear_saved_settings = false;
         bool show_latest_message_on_main_menu_bar = true;
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
         int font_size = 13;
+
+        nlohmann::json toJson() {
+            nlohmann::json j;
+            j["pause_on_close"] = pause_on_close;
+            j["link_scalar_x_axis"] = link_scalar_x_axis;
+            j["scalar_plot_tooltip"] = scalar_plot_tooltip;
+            j["show_latest_message_on_main_menu_bar"] = show_latest_message_on_main_menu_bar;
+            j["theme"] = theme;
+            j["sampling_buffer_size"] = sampling_buffer_size;
+            j["font_size"] = font_size;
+            return j;
+        }
+
+        void fromJson(nlohmann::json const& j) {
+            pause_on_close = j.value("pause_on_close", pause_on_close);
+            link_scalar_x_axis = j.value("link_scalar_x_axis", link_scalar_x_axis);
+            scalar_plot_tooltip = j.value("scalar_plot_tooltip", scalar_plot_tooltip);
+            show_latest_message_on_main_menu_bar = j.value("show_latest_message_on_main_menu_bar", show_latest_message_on_main_menu_bar);
+            theme = j.value("theme", theme);
+            sampling_buffer_size = j.value("sampling_buffer_size", sampling_buffer_size);
+            font_size = j.value("font_size", font_size);
+        }
     } m_options;
 
     std::jthread m_gui_thread;
@@ -205,6 +226,7 @@ class DbgGui {
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
     std::filesystem::file_time_type m_last_settings_write_time;
+    bool m_clear_saved_settings = false;
 
     friend struct ScriptWindow;
 };

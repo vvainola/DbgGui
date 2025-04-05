@@ -470,7 +470,7 @@ void DbgGui::showMainMenuBar() {
             }
 
             if (ImGui::Button("Clear saved settings") && ImGui::GetIO().KeyCtrl) {
-                m_options.clear_saved_settings = true;
+                m_clear_saved_settings = true;
             }
             ImGui::SameLine();
             HelpMarker("Requires ctrl-click. Rewrite settings to contain only the current configuration. Removes all non-existing symbols and options.");

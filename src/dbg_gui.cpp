@@ -44,15 +44,6 @@ constexpr std::string USER_SETTINGS_LOCATION = "HOME";
 #endif
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
-#define TRY(expression)                       \
-    try {                                     \
-        expression                            \
-    } catch (nlohmann::json::exception err) { \
-        std::cerr << err.what() << std::endl; \
-    } catch (std::exception err) {            \
-        std::cerr << err.what() << std::endl; \
-    }
-
 uint64_t hash(const std::string& str) {
     uint64_t hash = 5381;
     for (size_t i = 0; i < str.size(); ++i)
@@ -379,15 +370,7 @@ void DbgGui::loadPreviousSessionSettings() {
             ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
         }
 
-        TRY(m_options.pause_on_close = m_settings["options"]["pause_on_close"];)
-        TRY(m_options.link_scalar_x_axis = m_settings["options"]["link_scalar_x_axis"];)
-        TRY(m_options.scalar_plot_tooltip = m_settings["options"]["scalar_plot_tooltip"];)
-        TRY(m_options.show_latest_message_on_main_menu_bar = m_settings["options"]["show_latest_message_on_main_menu_bar"];)
-        TRY(m_linked_scalar_x_axis_range = m_settings["options"]["linked_scalar_x_axis_range"];)
-        TRY(m_options.sampling_buffer_size = m_settings["options"]["sampling_buffer_size"];)
-        TRY(m_options.font_size = m_settings["options"]["font_size"];)
-        TRY(m_options.theme = m_settings["options"]["theme"];)
-
+        m_options.fromJson(m_settings["options"]);
         setTheme(m_options.theme, m_window);
 
         // Buffer size and window position are set only once and not synchronized with multiple processes
@@ -435,122 +418,72 @@ void DbgGui::loadPreviousSessionSettings() {
 
         m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
-            TRY(
-              ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data["name"], scalar_plot_data["id"]);
-              plot.x_axis.min = 0;
-              plot.x_axis.max = scalar_plot_data["x_range"];
-              plot.autofit_y = scalar_plot_data["autofit_y"];
-              if (!plot.autofit_y) {
-                  plot.y_axis.min = scalar_plot_data["y_min"];
-                  plot.y_axis.max = scalar_plot_data["y_max"];
-              };
-              plot.x_range = scalar_plot_data["x_range"];
-
-              for (uint64_t id : scalar_plot_data["signals"]) {
-                  Scalar* scalar = getScalar(id);
-                  if (scalar) {
-                      m_sampler.startSampling(scalar);
-                      plot.addScalarToPlot(scalar);
-                  }
-              };
-              plot.focus.initial_focus = scalar_plot_data["initial_focus"];)
+            ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data);
+            for (uint64_t id : scalar_plot_data["signals"]) {
+                Scalar* scalar = getScalar(id);
+                if (scalar) {
+                    m_sampler.startSampling(scalar);
+                    plot.addScalarToPlot(scalar);
+                }
+            };
         }
 
         m_vector_plots.clear();
         for (auto vector_plot_data : m_settings["vector_plots"]) {
-            TRY(
-              VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data["name"], vector_plot_data["id"]);
-              plot.time_range = vector_plot_data["time_range"];
-              for (uint64_t id : vector_plot_data["signals"]) {
-                  Vector2D* vec = getVector(id);
-                  if (vec) {
-                      m_sampler.startSampling(vec);
-                      plot.addVectorToPlot(vec);
-                  }
-              };
-              plot.focus.initial_focus = vector_plot_data["initial_focus"];)
+            VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data);
+            for (uint64_t id : vector_plot_data["signals"]) {
+                Vector2D* vec = getVector(id);
+                if (vec) {
+                    m_sampler.startSampling(vec);
+                    plot.addVectorToPlot(vec);
+                }
+            };
         }
 
         m_spectrum_plots.clear();
         for (auto spec_plot_data : m_settings["spec_plots"]) {
-            TRY(
-              SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data["name"], spec_plot_data["id"]);
-              plot.time_range = spec_plot_data["time_range"];
-              plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
-              plot.window = spec_plot_data["window"];
-              plot.x_axis.min = spec_plot_data["x_axis_min"];
-              plot.x_axis.max = spec_plot_data["x_axis_max"];
-              plot.y_axis.min = spec_plot_data["y_axis_min"];
-              plot.y_axis.max = spec_plot_data["y_axis_max"];
-              if (spec_plot_data.contains("signal_id")) {
-                  uint64_t id = spec_plot_data["signal_id"];
-                  Scalar* scalar = getScalar(id);
-                  Vector2D* vector = getVector(id);
-                  if (scalar) {
-                      m_sampler.startSampling(scalar);
-                      plot.addScalarToPlot(scalar);
-                  } else if (vector) {
-                      m_sampler.startSampling(vector);
-                      plot.addVectorToPlot(vector);
-                  }
-              };
-              plot.focus.initial_focus = spec_plot_data["initial_focus"];)
+            SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data);
+            if (spec_plot_data.contains("signal_id")) {
+                uint64_t id = spec_plot_data["signal_id"];
+                Scalar* scalar = getScalar(id);
+                Vector2D* vector = getVector(id);
+                if (scalar) {
+                    m_sampler.startSampling(scalar);
+                    plot.addScalarToPlot(scalar);
+                } else if (vector) {
+                    m_sampler.startSampling(vector);
+                    plot.addVectorToPlot(vector);
+                }
+            };
         }
 
         for (auto& scalar_data : m_settings["scalars"]) {
-            TRY(
-              uint64_t id = scalar_data["id"];
-              Scalar* scalar = getScalar(id);
-              if (scalar) {
-                  std::string scale;
-                  if (scalar_data["scale"].is_number()) {
-                      scale = std::format("{:g}", double(scalar_data["scale"]));
-                  } else {
-                      scale = scalar_data["scale"];
-                  }
-                  scalar->setScaleStr(scale);
-                  std::string offset;
-                  if (scalar_data["offset"].is_number()) {
-                      offset = std::format("{:g}", double(scalar_data["offset"]));
-                  } else {
-                      offset = scalar_data["offset"];
-                  }
-                  scalar->setOffsetStr(offset);
-                  scalar->alias = scalar_data["alias"];
-                  scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
-              };)
+            uint64_t id = scalar_data["id"];
+            Scalar* scalar = getScalar(id);
+            if (scalar) {
+                scalar->fromJson(scalar_data);
+            };
         }
 
         m_custom_windows.clear();
         for (auto custom_window_data : m_settings["custom_windows"]) {
-            TRY(
-              CustomWindow& custom_window = m_custom_windows.emplace_back(custom_window_data["name"], custom_window_data["id"]);
-              for (uint64_t id : custom_window_data["signals"]) {
-                  Scalar* scalar = getScalar(id);
-                  if (scalar) {
-                      custom_window.addScalar(scalar);
-                  }
-              };
-              custom_window.focus.initial_focus = custom_window_data["initial_focus"];)
+            CustomWindow& custom_window = m_custom_windows.emplace_back(custom_window_data);
+            for (uint64_t id : custom_window_data["signals"]) {
+                Scalar* scalar = getScalar(id);
+                if (scalar) {
+                    custom_window.addScalar(scalar);
+                }
+            };
         }
 
         m_script_windows.clear();
-        TRY(for (auto script_window_data : m_settings["script_windows"]) {
-            ScriptWindow& script_window = m_script_windows.emplace_back(this, script_window_data["name"], script_window_data["id"]);
-            script_window.focus.initial_focus = script_window_data["initial_focus"];
-            script_window.loop = script_window_data["loop"];
-            std::string text = script_window_data["text"];
-            std::memcpy((void*)script_window.text, (void*)text.data(), text.size());
-            script_window.text[text.size()] = '\0';
-        })
+        for (auto script_window_data : m_settings["script_windows"]) {
+            m_script_windows.emplace_back(this, script_window_data);
+        }
 
         m_grid_windows.clear();
         for (auto grid_window_data : m_settings["grid_windows"]) {
-            GridWindow& grid_window = m_grid_windows.emplace_back(std::string(grid_window_data["name"]), grid_window_data["id"]);
-            TRY(grid_window.focus.initial_focus = grid_window_data["initial_focus"];)
-            TRY(grid_window.rows = grid_window_data["rows"];)
-            TRY(grid_window.columns = grid_window_data["columns"];)
-            TRY(grid_window.text_to_value_ratio = grid_window_data["text_to_value_ratio"];)
+            GridWindow& grid_window = m_grid_windows.emplace_back(grid_window_data);
             std::vector<uint64_t> signal_ids = grid_window_data["signals"];
             for (int i = 0; i < std::min((int)signal_ids.size(), GridWindow::MAX_ROWS * GridWindow::MAX_COLUMNS); ++i) {
                 grid_window.scalars[i / GridWindow::MAX_COLUMNS][i % GridWindow::MAX_COLUMNS] = signal_ids[i];
@@ -579,8 +512,8 @@ void DbgGui::updateSavedSettings() {
     }
     last_check_time = now;
 
-    if (m_options.clear_saved_settings) {
-        m_options.clear_saved_settings = false;
+    if (m_clear_saved_settings) {
+        m_clear_saved_settings = false;
         m_settings.clear();
         m_settings_saved.clear();
         // Restore symbols
@@ -625,14 +558,7 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["height"] = height;
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
-    m_settings["options"]["pause_on_close"] = m_options.pause_on_close;
-    m_settings["options"]["link_scalar_x_axis"] = m_options.link_scalar_x_axis;
-    m_settings["options"]["scalar_plot_tooltip"] = m_options.scalar_plot_tooltip;
-    m_settings["options"]["show_latest_message_on_main_menu_bar"] = m_options.show_latest_message_on_main_menu_bar;
-    m_settings["options"]["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
-    m_settings["options"]["sampling_buffer_size"] = m_options.sampling_buffer_size;
-    m_settings["options"]["font_size"] = m_options.font_size;
-    m_settings["options"]["theme"] = m_options.theme;
+    m_settings["options"] = m_options.toJson();
     m_settings["initial_focus"]["scalars"] = m_window_focus.scalars.focused;
     m_settings["initial_focus"]["vectors"] = m_window_focus.vectors.focused;
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
@@ -655,9 +581,7 @@ void DbgGui::updateSavedSettings() {
             remove(m_dockspaces, dockspace);
             continue;
         }
-        m_settings["dockspaces"][std::to_string(i)]["name"] = dockspace.name;
-        m_settings["dockspaces"][std::to_string(i)]["id"] = dockspace.id;
-        m_settings["dockspaces"][std::to_string(i)]["initial_focus"] = dockspace.focus.focused;
+        dockspace.updateJson(m_settings["dockspaces"][std::to_string(i)]);
     }
 
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
@@ -668,27 +592,18 @@ void DbgGui::updateSavedSettings() {
         if (scalar_plot.id == 0) {
             scalar_plot.id = hashWithTime(scalar_plot.name);
         }
-        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["name"] = scalar_plot.name;
-        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["id"] = scalar_plot.id;
-        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["initial_focus"] = scalar_plot.focus.focused;
-        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["x_range"] = scalar_plot.x_range;
-        m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["autofit_y"] = scalar_plot.autofit_y;
-        // Update range only if autofit is not on because otherwise the file
-        // could be continously rewritten when autofit range changes
-        if (!scalar_plot.autofit_y) {
-            m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_min"] = scalar_plot.y_axis.min;
-            m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["y_max"] = scalar_plot.y_axis.max;
-        }
+        nlohmann::json& j = m_settings["scalar_plots"][std::to_string(scalar_plot.id)];
+        scalar_plot.updateJson(j);
         for (int i = int(scalar_plot.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = scalar_plot.scalars[i];
             if (scalar->deleted) {
-                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar->name_and_group);
+                j["signals"].erase(scalar->name_and_group);
                 if (scalar->replacement != nullptr) {
                     scalar_plot.addScalarToPlot(scalar->replacement);
                 }
                 remove(scalar_plot.scalars, scalar);
             } else {
-                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"][scalar->name_and_group] = scalar->id;
+                j["signals"][scalar->name_and_group] = scalar->id;
             }
         }
     }
@@ -701,20 +616,18 @@ void DbgGui::updateSavedSettings() {
         if (vector_plot.id == 0) {
             vector_plot.id = hashWithTime(vector_plot.name);
         }
-        m_settings["vector_plots"][std::to_string(vector_plot.id)]["name"] = vector_plot.name;
-        m_settings["vector_plots"][std::to_string(vector_plot.id)]["id"] = vector_plot.id;
-        m_settings["vector_plots"][std::to_string(vector_plot.id)]["initial_focus"] = vector_plot.focus.focused;
-        m_settings["vector_plots"][std::to_string(vector_plot.id)]["time_range"] = vector_plot.time_range;
+        nlohmann::json& j = m_settings["vector_plots"][std::to_string(vector_plot.id)];
+        vector_plot.updateJson(j);
         for (int i = int(vector_plot.vectors.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.vectors[i];
             if (vector->deleted || vector->x->deleted || vector->y->deleted) {
                 if (vector->deleted && vector->replacement != nullptr) {
                     vector_plot.addVectorToPlot(vector->replacement);
                 }
-                m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(vector->name_and_group);
+                j["signals"].erase(vector->name_and_group);
                 remove(vector_plot.vectors, vector);
             } else {
-                m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"][vector->name_and_group] = vector->id;
+                j["signals"][vector->name_and_group] = vector->id;
             }
         }
     }
@@ -727,27 +640,19 @@ void DbgGui::updateSavedSettings() {
         if (spec_plot.id == 0) {
             spec_plot.id = hashWithTime(spec_plot.name);
         }
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["name"] = spec_plot.name;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["id"] = spec_plot.id;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["initial_focus"] = spec_plot.focus.focused;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["time_range"] = spec_plot.time_range;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["logarithmic_y_axis"] = spec_plot.logarithmic_y_axis;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["window"] = spec_plot.window;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["x_axis_min"] = spec_plot.x_axis.min;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["x_axis_max"] = spec_plot.x_axis.max;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["y_axis_min"] = spec_plot.y_axis.min;
-        m_settings["spec_plots"][std::to_string(spec_plot.id)]["y_axis_max"] = spec_plot.y_axis.max;
+        nlohmann::json& j = m_settings["spec_plots"][std::to_string(spec_plot.id)];
+        spec_plot.updateJson(j);
         if (spec_plot.scalar) {
             if (spec_plot.scalar->deleted) {
                 spec_plot.scalar = spec_plot.scalar->replacement;
             } else {
-                m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.scalar->id;
+                j["signal_id"] = spec_plot.scalar->id;
             }
         } else if (spec_plot.vector) {
             if (spec_plot.vector->deleted) {
                 spec_plot.vector = spec_plot.vector->replacement;
             } else {
-                m_settings["spec_plots"][std::to_string(spec_plot.id)]["signal_id"] = spec_plot.vector->id;
+                j["signal_id"] = spec_plot.vector->id;
             }
         }
     }
@@ -760,9 +665,8 @@ void DbgGui::updateSavedSettings() {
         if (custom_window.id == 0) {
             custom_window.id = hashWithTime(custom_window.name);
         }
-        m_settings["custom_windows"][std::to_string(custom_window.id)]["name"] = custom_window.name;
-        m_settings["custom_windows"][std::to_string(custom_window.id)]["id"] = custom_window.id;
-        m_settings["custom_windows"][std::to_string(custom_window.id)]["initial_focus"] = custom_window.focus.focused;
+        nlohmann::json& j = m_settings["custom_windows"][std::to_string(custom_window.id)];
+        custom_window.updateJson(j);
         for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
@@ -770,10 +674,10 @@ void DbgGui::updateSavedSettings() {
                     custom_window.addScalar(scalar->replacement);
                 }
                 remove(custom_window.scalars, scalar);
-                m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar->group + " " + scalar->name);
+                j["signals"].erase(scalar->group + " " + scalar->name);
             } else {
                 // use group first in key so that the signals are sorted alphabetically by group
-                m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"][scalar->group + " " + scalar->name] = scalar->id;
+                j["signals"][scalar->group + " " + scalar->name] = scalar->id;
             }
         }
     }
@@ -786,11 +690,7 @@ void DbgGui::updateSavedSettings() {
         if (script_window.id == 0) {
             script_window.id = hashWithTime(script_window.name);
         }
-        m_settings["script_windows"][std::to_string(script_window.id)]["name"] = script_window.name;
-        m_settings["script_windows"][std::to_string(script_window.id)]["id"] = script_window.id;
-        m_settings["script_windows"][std::to_string(script_window.id)]["loop"] = script_window.loop;
-        m_settings["script_windows"][std::to_string(script_window.id)]["initial_focus"] = script_window.focus.focused;
-        m_settings["script_windows"][std::to_string(script_window.id)]["text"] = script_window.text;
+        script_window.updateJson(m_settings["script_windows"][std::to_string(script_window.id)]);
     }
 
     for (GridWindow& grid_window : m_grid_windows) {
@@ -801,19 +701,15 @@ void DbgGui::updateSavedSettings() {
         if (grid_window.id == 0) {
             grid_window.id = hashWithTime(grid_window.name);
         }
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["name"] = grid_window.name;
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["id"] = grid_window.id;
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["initial_focus"] = grid_window.focus.focused;
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["rows"] = grid_window.rows;
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["columns"] = grid_window.columns;
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["text_to_value_ratio"] = grid_window.text_to_value_ratio;
+        nlohmann::json& j = m_settings["grid_windows"][std::to_string(grid_window.id)];
+        grid_window.updateJson(j);
         std::vector<uint64_t> signal_ids;
         for (int row = 0; row < GridWindow::MAX_ROWS; ++row) {
             for (int col = 0; col < GridWindow::MAX_COLUMNS; ++col) {
                 signal_ids.push_back(grid_window.scalars[row][col]);
             }
         }
-        m_settings["grid_windows"][std::to_string(grid_window.id)]["signals"] = signal_ids;
+        j["signals"] = signal_ids;
     }
 
     // Remove deleted scalars from scalar groups
@@ -864,10 +760,7 @@ void DbgGui::updateSavedSettings() {
             || scalar->alias != scalar->name
             || scalar->getScale() != 1
             || scalar->getOffset() != 0) {
-            m_settings["scalars"][scalar->name_and_group]["id"] = scalar->id;
-            m_settings["scalars"][scalar->name_and_group]["scale"] = scalar->getScaleStr();
-            m_settings["scalars"][scalar->name_and_group]["offset"] = scalar->getOffsetStr();
-            m_settings["scalars"][scalar->name_and_group]["alias"] = scalar->alias;
+            scalar->updateJson(m_settings["scalars"][scalar->name_and_group]);
         }
 
         if (scalar->deleted) {

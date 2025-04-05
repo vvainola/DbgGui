@@ -37,6 +37,15 @@
 #include <format>
 #include <map>
 
+#define TRY(expression)                       \
+    try {                                     \
+        expression                            \
+    } catch (nlohmann::json::exception err) { \
+        std::cerr << err.what() << std::endl; \
+    } catch (std::exception err) {            \
+        std::cerr << err.what() << std::endl; \
+    }
+
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
 uint64_t hash(const std::string& str);
@@ -125,6 +134,33 @@ struct Scalar {
     bool hide_from_scalars_window = false;
     bool deleted = false;
     Scalar* replacement = nullptr;
+
+    void fromJson(nlohmann::json const& j) {
+        std::string scale = "1";
+        if (j["scale"].is_number()) {
+            scale = std::format("{:g}", double(j["scale"]));
+        } else {
+            scale = j.value("scale", scale);
+        }
+        setScaleStr(scale);
+        std::string offset = "0";
+        if (j["offset"].is_number()) {
+            offset = std::format("{:g}", double(j["offset"]));
+        } else {
+            offset = j.value("offset", offset);
+        }
+        setOffsetStr(offset);
+        alias = j.value("alias", alias);
+        alias_and_group = alias + " (" + group + ")";
+    }
+
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        j["id"] = id;
+        j["scale"] = getScaleStr();
+        j["offset"] = getOffsetStr();
+        j["alias"] = alias;
+        return j;
+    }
 
     double getValue() const {
         return getSourceValue(src);
@@ -235,9 +271,20 @@ struct Window {
     Window(std::string const& name_, uint64_t id_)
         : name(name_), id(id_) {
     }
+    Window(nlohmann::json const& j) {
+        name = j.value("name", name);
+        id = j.value("id", id);
+        focus.initial_focus = j.value("initial_focus", focus.initial_focus);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        j["name"] = name;
+        j["id"] = id;
+        j["initial_focus"] = focus.focused;
+        return j;
+    }
 
-    std::string name;
-    uint64_t id;
+    std::string name = "";
+    uint64_t id = 0;
     Focus focus;
     bool open = true;
 
@@ -272,6 +319,29 @@ struct ScalarPlot : Window {
     ScalarPlot(std::string const& name, uint64_t id)
         : Window(name, id) {
     }
+    ScalarPlot(nlohmann::json const& j)
+        : Window(j) {
+        x_range = j.value("x_range", x_range);
+        x_axis.min = 0;
+        x_axis.max = x_range;
+        autofit_y = j.value("autofit_y", autofit_y);
+        if (!autofit_y) {
+            y_axis.min = j.value("y_min", y_axis.min);
+            y_axis.max = j.value("y_max", y_axis.max);
+        }
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        // Update range only if autofit is not on because otherwise the file
+        // could be continously rewritten when autofit range changes
+        if (!autofit_y) {
+            j["y_min"] = y_axis.min;
+            j["y_max"] = y_axis.max;
+        }
+        j["x_range"] = x_range;
+        j["autofit_y"] = autofit_y;
+        return j;
+    }
 
     std::vector<Scalar*> scalars;
     MinMax y_axis = {-1, 1};
@@ -295,6 +365,15 @@ struct VectorPlot : Window {
     VectorPlot(std::string const& name, uint64_t id)
         : Window(name, id) {
     }
+    VectorPlot(nlohmann::json const& j)
+        : Window(j) {
+        time_range = j.value("time_range", time_range);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        j["time_range"] = time_range;
+        return j;
+    }
 
     std::vector<Vector2D*> vectors;
     Vector2D* reference_frame_vector = nullptr;
@@ -314,6 +393,26 @@ struct VectorPlot : Window {
 struct SpectrumPlot : Window {
     SpectrumPlot(std::string const& name, uint64_t id)
         : Window(name, id) {
+    }
+    SpectrumPlot(nlohmann::json const& j)
+        : Window(j) {
+        time_range = j.value("time_range", time_range);
+        logarithmic_y_axis = j.value("logarithmic_y_axis", logarithmic_y_axis);
+        y_axis.min = j.value("y_axis_min", y_axis.min);
+        y_axis.max = j.value("y_axis_max", y_axis.max);
+        x_axis.min = j.value("x_axis_min", x_axis.min);
+        x_axis.max = j.value("x_axis_max", x_axis.max);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        j["time_range"] = time_range;
+        j["logarithmic_y_axis"] = logarithmic_y_axis;
+        j["window"] = static_cast<int>(window);
+        j["x_axis_min"] = x_axis.min;
+        j["x_axis_max"] = x_axis.max;
+        j["y_axis_min"] = y_axis.min;
+        j["y_axis_max"] = y_axis.max;
+        return j;
     }
 
     // Source is either scalar or vector
@@ -344,6 +443,9 @@ struct CustomWindow : Window {
     CustomWindow(std::string const& name, uint64_t id)
         : Window(name, id) {
     }
+    CustomWindow(nlohmann::json const& j)
+        : Window(j) {
+    }
 
     std::vector<Scalar*> scalars;
 
@@ -369,6 +471,19 @@ struct CustomWindow : Window {
 struct GridWindow : Window {
     GridWindow(std::string const& name, uint64_t id)
         : Window(name, id) {
+    }
+    GridWindow(nlohmann::json const& j)
+        : Window(j) {
+        rows = j.value("rows", rows);
+        columns = j.value("columns", columns);
+        text_to_value_ratio = j.value("text_to_value_ratio", text_to_value_ratio);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        j["rows"] = rows;
+        j["columns"] = columns;
+        j["text_to_value_ratio"] = text_to_value_ratio;
+        return j;
     }
 
     static const int MAX_ROWS = 20;
@@ -424,6 +539,19 @@ class DbgGui;
 struct ScriptWindow : Window {
   public:
     ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_);
+    ScriptWindow(DbgGui* gui, nlohmann::json const& j)
+        : Window(j), m_gui(gui) {
+        std::string json_text = j.value("text", "");
+        std::memcpy((void*)text, (void*)json_text.data(), json_text.size());
+        text[json_text.size()] = '\0';
+        loop = j.value("loop", loop);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        j["text"] = text;
+        j["loop"] = loop;
+        return j;
+    }
 
     char text[1024 * 16];
     bool loop = false;
