@@ -1257,7 +1257,7 @@ void DbgGui::showGridWindow() {
                     if (scalar) {
                         // Resize text so that it fits the cell
                         ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
-                        ImVec2 text_size = ImGui::CalcTextSize(scalar->alias.c_str());
+                        ImVec2 text_size = ImGui::CalcTextSize(scalar->alias_and_group.c_str());
                         ImVec2 available = ImGui::GetContentRegionAvail();
                         if (available.x < text_size.x) {
                             ImGui::PopFont();
@@ -1266,9 +1266,9 @@ void DbgGui::showGridWindow() {
 
                         // Name
                         if (scalar->customScaleOrOffset()) {
-                            ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
+                            ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
                         } else {
-                            ImGui::Text(scalar->alias.c_str());
+                            ImGui::Text(scalar->alias_and_group.c_str());
                         }
                         addScalarContextMenu(scalar);
                         // Hide symbol on delete
