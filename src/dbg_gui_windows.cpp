@@ -101,7 +101,18 @@ std::optional<ImGuiKey> pressedNumber() {
 
 void addInputScalar(ValueSource const& value_src, std::string const& label, double scale = 1, double offset = 0) {
     if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
-        ImGui::Text(getSourceValueStr(value_src).c_str());
+        // Scale text to fit
+        ImVec2 available = ImGui::GetContentRegionAvail();
+        std::string value_str = getSourceValueStr(value_src);
+        ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
+        if (available.x < text_size.x) {
+            float current_font_size = ImGui::GetFontSize();
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(current_font_size * (available.x / text_size.x) - 1)]);
+            ImGui::Text(value_str.c_str());
+            ImGui::PopFont();
+        } else {
+            ImGui::Text(value_str.c_str());
+        }
         ImGui::SameLine();
     }
 

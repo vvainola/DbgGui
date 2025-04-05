@@ -105,7 +105,7 @@ enum EnumWithNeg {
     first = -1,
     second = 1,
     third = 3,
-    value_with_long_name = 4,
+    value_with_very_very_very_very_very_very_long_name = 4,
 };
 EnumWithNeg enum_with_neg = first;
 
