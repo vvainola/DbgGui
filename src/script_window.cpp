@@ -66,7 +66,7 @@ std::expected<std::vector<VariantSymbol*>, std::string> getValueSymbols(std::str
 }
 
 ScriptWindow::ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_)
-    : m_gui(gui) {
+    : Window(name_, id_), m_gui(gui) {
     text[0] = '\0';
     name = name_;
     id = id_;
@@ -227,8 +227,6 @@ std::expected<ScriptWindow::Operation, std::string> ScriptWindow::parseSpecialOp
         }
 
         op.action = [=](double timestamp) {
-
-
             (void)timestamp;
             std::string filename = line_split[2];
             str::trim(filename);

@@ -232,6 +232,10 @@ struct Vector2D {
 };
 
 struct Window {
+    Window(std::string const& name_, uint64_t id_)
+        : name(name_), id(id_) {
+    }
+
     std::string name;
     uint64_t id;
     Focus focus;
@@ -265,11 +269,15 @@ struct Window {
 };
 
 struct ScalarPlot : Window {
+    ScalarPlot(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
     std::vector<Scalar*> scalars;
     MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
-    double last_frame_timestamp;
+    double last_frame_timestamp = 0;
     bool autofit_y = true;
 
     void addScalarToPlot(Scalar* new_scalar) {
@@ -284,8 +292,12 @@ struct ScalarPlot : Window {
 };
 
 struct VectorPlot : Window {
+    VectorPlot(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
     std::vector<Vector2D*> vectors;
-    Vector2D* reference_frame_vector;
+    Vector2D* reference_frame_vector = nullptr;
     float time_range = 20e-3f;
 
     void addVectorToPlot(Vector2D* new_vector) {
@@ -300,9 +312,13 @@ struct VectorPlot : Window {
 };
 
 struct SpectrumPlot : Window {
+    SpectrumPlot(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
     // Source is either scalar or vector
-    Scalar* scalar;
-    Vector2D* vector;
+    Scalar* scalar = nullptr;
+    Vector2D* vector = nullptr;
 
     double time_range = 1;
     bool logarithmic_y_axis = false;
@@ -310,7 +326,7 @@ struct SpectrumPlot : Window {
     MinMax x_axis = {-1000, 1000};
 
     Spectrum spectrum;
-    SpectrumWindow window;
+    SpectrumWindow window = SpectrumWindow::None;
     std::future<Spectrum> spectrum_calculation;
 
     void addVectorToPlot(Vector2D* new_vector) {
@@ -325,6 +341,10 @@ struct SpectrumPlot : Window {
 };
 
 struct CustomWindow : Window {
+    CustomWindow(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
     std::vector<Scalar*> scalars;
 
     void addScalar(Scalar* scalar) {
@@ -353,7 +373,7 @@ struct GridWindow : Window {
 
     static const int MAX_ROWS = 20;
     static const int MAX_COLUMNS = 10;
-    std::array<std::array<uint64_t, MAX_COLUMNS>, MAX_ROWS> scalars;
+    std::array<std::array<uint64_t, MAX_COLUMNS>, MAX_ROWS> scalars = {};
     int rows = 1;
     int columns = 1;
     float text_to_value_ratio = 0.3f;
@@ -377,6 +397,10 @@ struct GridWindow : Window {
 };
 
 struct DockSpace : Window {
+    DockSpace(std::string const& name, uint64_t id)
+        : Window(name, id) {
+    }
+
     unsigned int dock_id = 0;
 };
 

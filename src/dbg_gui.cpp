@@ -429,17 +429,14 @@ void DbgGui::loadPreviousSessionSettings() {
         m_dockspaces.clear();
         for (auto dockspace_data : m_settings["dockspaces"]) {
             TRY(
-              DockSpace& dockspace = m_dockspaces.emplace_back();
-              dockspace.name = dockspace_data["name"];
-              dockspace.id = dockspace_data["id"];
+              DockSpace& dockspace = m_dockspaces.emplace_back(dockspace_data["name"], dockspace_data["id"]);
               dockspace.focus.initial_focus = dockspace_data["initial_focus"];)
         }
 
         m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
             TRY(
-              ScalarPlot& plot = m_scalar_plots.emplace_back();
-              plot.name = scalar_plot_data["name"];
+              ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data["name"], scalar_plot_data["id"]);
               plot.x_axis.min = 0;
               plot.x_axis.max = scalar_plot_data["x_range"];
               plot.autofit_y = scalar_plot_data["autofit_y"];
@@ -456,15 +453,13 @@ void DbgGui::loadPreviousSessionSettings() {
                       plot.addScalarToPlot(scalar);
                   }
               };
-              plot.focus.initial_focus = scalar_plot_data["initial_focus"];
-              plot.id = scalar_plot_data["id"];)
+              plot.focus.initial_focus = scalar_plot_data["initial_focus"];)
         }
 
         m_vector_plots.clear();
         for (auto vector_plot_data : m_settings["vector_plots"]) {
             TRY(
-              VectorPlot& plot = m_vector_plots.emplace_back();
-              plot.name = vector_plot_data["name"];
+              VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data["name"], vector_plot_data["id"]);
               plot.time_range = vector_plot_data["time_range"];
               for (uint64_t id : vector_plot_data["signals"]) {
                   Vector2D* vec = getVector(id);
@@ -473,15 +468,13 @@ void DbgGui::loadPreviousSessionSettings() {
                       plot.addVectorToPlot(vec);
                   }
               };
-              plot.focus.initial_focus = vector_plot_data["initial_focus"];
-              plot.id = vector_plot_data["id"];)
+              plot.focus.initial_focus = vector_plot_data["initial_focus"];)
         }
 
         m_spectrum_plots.clear();
         for (auto spec_plot_data : m_settings["spec_plots"]) {
             TRY(
-              SpectrumPlot& plot = m_spectrum_plots.emplace_back();
-              plot.name = spec_plot_data["name"];
+              SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data["name"], spec_plot_data["id"]);
               plot.time_range = spec_plot_data["time_range"];
               plot.logarithmic_y_axis = spec_plot_data["logarithmic_y_axis"];
               plot.window = spec_plot_data["window"];
@@ -501,8 +494,7 @@ void DbgGui::loadPreviousSessionSettings() {
                       plot.addVectorToPlot(vector);
                   }
               };
-              plot.focus.initial_focus = spec_plot_data["initial_focus"];
-              plot.id = spec_plot_data["id"];)
+              plot.focus.initial_focus = spec_plot_data["initial_focus"];)
         }
 
         for (auto& scalar_data : m_settings["scalars"]) {
@@ -532,16 +524,14 @@ void DbgGui::loadPreviousSessionSettings() {
         m_custom_windows.clear();
         for (auto custom_window_data : m_settings["custom_windows"]) {
             TRY(
-              CustomWindow& custom_window = m_custom_windows.emplace_back();
-              custom_window.name = custom_window_data["name"];
+              CustomWindow& custom_window = m_custom_windows.emplace_back(custom_window_data["name"], custom_window_data["id"]);
               for (uint64_t id : custom_window_data["signals"]) {
                   Scalar* scalar = getScalar(id);
                   if (scalar) {
                       custom_window.addScalar(scalar);
                   }
               };
-              custom_window.focus.initial_focus = custom_window_data["initial_focus"];
-              custom_window.id = custom_window_data["id"];)
+              custom_window.focus.initial_focus = custom_window_data["initial_focus"];)
         }
 
         m_script_windows.clear();
