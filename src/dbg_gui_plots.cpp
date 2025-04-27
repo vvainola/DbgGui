@@ -83,7 +83,7 @@ void DbgGui::showScalarPlots() {
         // Selection between common x-axis or separate
         MinMax& x_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
         MinMax& y_limits = scalar_plot.y_axis;
-        double& x_range = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_range : scalar_plot.x_range;
+        double& x_range = m_options.link_scalar_x_axis ? m_options.m_linked_scalar_x_axis_range : scalar_plot.x_range;
 
         // Time range slider
         ImGui::SameLine();

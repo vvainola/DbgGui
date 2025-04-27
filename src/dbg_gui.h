@@ -153,7 +153,6 @@ class DbgGui {
     std::vector<std::unique_ptr<Vector2D>> m_vectors;
     std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
-    double m_linked_scalar_x_axis_range = 1;
 
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
@@ -196,6 +195,7 @@ class DbgGui {
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
         int font_size = 13;
+        double m_linked_scalar_x_axis_range = 1;
 
         nlohmann::json toJson() {
             nlohmann::json j;
@@ -206,6 +206,7 @@ class DbgGui {
             j["theme"] = theme;
             j["sampling_buffer_size"] = sampling_buffer_size;
             j["font_size"] = font_size;
+            j["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
             return j;
         }
 
@@ -217,6 +218,7 @@ class DbgGui {
             theme = j.value("theme", theme);
             sampling_buffer_size = j.value("sampling_buffer_size", sampling_buffer_size);
             font_size = j.value("font_size", font_size);
+            m_linked_scalar_x_axis_range = j.value("linked_scalar_x_axis_range", m_linked_scalar_x_axis_range);
         }
     } m_options;
 
