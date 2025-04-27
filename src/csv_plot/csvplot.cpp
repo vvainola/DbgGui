@@ -337,8 +337,6 @@ void CsvPlotter::updateSavedSettings() {
         return;
     }
 
-    std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
-
     nlohmann::json settings;
     settings["window"]["width"] = width;
     settings["window"]["height"] = height;
@@ -363,6 +361,11 @@ void CsvPlotter::updateSavedSettings() {
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
         settings_saved = settings;
+
+        std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
+        if (!std::filesystem::exists(settings_dir)) {
+            std::filesystem::create_directories(settings_dir);
+        }
         // Write settings to tmp file first to avoid corrupting the file if program is closed mid-write
         std::ofstream(settings_dir + "settings.json.tmp") << std::setw(4) << settings;
         std::filesystem::copy_file(settings_dir + "settings.json.tmp",
