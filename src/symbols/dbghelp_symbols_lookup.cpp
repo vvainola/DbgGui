@@ -432,7 +432,7 @@ void DbgHelpSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snaps
                       sym->setPointedAddress(new_pointed_address);
                   }
               } else {
-                  if (sym->read() != value) {
+                  if (sym->read() != value && !std::isnan(value)) {
                       sym->write(value);
                   }
               }
