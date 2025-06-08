@@ -814,6 +814,7 @@ void CsvPlotter::showSignalWindow() {
 }
 
 void CsvPlotter::showScalarPlots() {
+    bool aligned = ImPlot::BeginAlignedPlots("AlignedGroup");
     for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
         ScalarPlot& plot = m_scalar_plots[plot_idx];
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
@@ -1040,6 +1041,9 @@ void CsvPlotter::showScalarPlots() {
         }
         ImPlot::PopStyleVar();
         ImGui::End();
+    }
+    if (aligned) {
+        ImPlot::EndAlignedPlots();
     }
 }
 
