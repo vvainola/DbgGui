@@ -105,6 +105,7 @@ class DbgGui {
     void showScalarPlots();
     void showVectorPlots();
     void showSpectrumPlots();
+    void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
     void setInitialFocus();
@@ -147,6 +148,7 @@ class DbgGui {
     std::set<std::string> m_hidden_symbols;
     std::vector<SymbolValue> m_saved_snapshot;
     std::vector<VariantSymbol*> m_selected_symbols;
+    bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
     std::vector<std::unique_ptr<Scalar>> m_scalars;
@@ -240,3 +242,4 @@ inline std::string numberAsStr(T number) {
 }
 
 std::string getSourceValueStr(ValueSource src);
+void HelpMarker(const char* desc);

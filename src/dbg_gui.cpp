@@ -25,6 +25,7 @@
 #include "dbg_gui.h"
 #include "themes.h"
 #include "str_helpers.h"
+#include "custom_signal.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -269,6 +270,7 @@ void DbgGui::updateLoop() {
         showScalarPlots();
         showVectorPlots();
         showSpectrumPlots();
+        showCustomSignalCreator();
         setInitialFocus();
         updateSavedSettings();
 
@@ -407,6 +409,36 @@ void DbgGui::loadPreviousSessionSettings() {
               if (sym_x && sym_y) {
                   addVectorSymbol(sym_x, sym_y, symbol["group"]);
               };)
+        }
+
+        for (auto custom_signal : m_settings["custom_signals"]) {
+            std::string eq = custom_signal["equation"];
+            std::string name = custom_signal["name"];
+            std::string group = custom_signal["group"];
+            std::vector<VariantSymbol*> selected_symbols;
+            bool all_symbols_exist = true;
+            for (auto& symbol_name : custom_signal["symbols"]) {
+                VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
+                if (sym) {
+                    selected_symbols.push_back(sym);
+                } else {
+                    all_symbols_exist = false;
+                }
+            }
+            if (!all_symbols_exist) {
+                continue;
+            }
+
+            ReadWriteFn eq_fn = [selected_symbols, eq](std::optional<double> /*write*/) {
+                std::vector<double> values;
+                for (VariantSymbol* symbol : selected_symbols) {
+                    values.push_back(getSourceValue(symbol->getValueSource()));
+                }
+                std::expected<double, std::string> expr_value = str::evaluateExpression(getFormattedEqForSample(eq, values));
+                assert(expr_value.has_value());
+                return expr_value.value();
+            };
+            addScalar(eq_fn, group, name);
         }
 
         m_dockspaces.clear();
@@ -768,6 +800,7 @@ void DbgGui::updateSavedSettings() {
             m_sampler.stopSampling(scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
+            m_settings["custom_signals"].erase(scalar->name_and_group);
             remove(m_scalars, scalar);
         }
     }

@@ -45,7 +45,7 @@ std::string getSourceValueStr(ValueSource src) {
       src);
 }
 
-static void HelpMarker(const char* desc) {
+void HelpMarker(const char* desc) {
     ImGui::TextDisabled("(?)");
     if (ImGui::IsItemHovered()) {
         ImGui::BeginTooltip();
@@ -1068,11 +1068,10 @@ void DbgGui::showSymbolsWindow() {
                     ImGui::TreePop();
                     if (ImGui::IsItemClicked()) {
                         if (ImGui::GetIO().KeyCtrl) {
-                            if (selected) {
-                                // Remove if already selected
-                                remove(m_selected_symbols, sym);
-                            } else {
-                                m_selected_symbols.push_back(sym);
+                            m_selected_symbols.push_back(sym);
+                            // Show custom signal creator if ctrl+shift is pressed
+                            if (ImGui::GetIO().KeyShift) {
+                                m_show_custom_signal_creator = true;
                             }
                         } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
                             // Clear if clicking something else than the selected

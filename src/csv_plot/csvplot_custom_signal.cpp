@@ -22,99 +22,11 @@
 
 #include "csvplot.h"
 #include "str_helpers.h"
+#include "custom_signal.hpp"
 
 #include <stack>
 #include <stdexcept>
 #include <format>
-
-inline int MAX_CUSTOM_SIGNALS_IN_EQ = 10;
-inline int MAX_CUSTOM_EQ_LENGTH = 1000;
-inline int MAX_CUSTOM_EQ_NAME = 256;
-
-static std::string getFormattedEqForSample(std::string_view fmt, std::vector<CsvSignal*> const& signals, int i) {
-    switch (signals.size()) {
-        case 0:
-            return std::vformat(fmt, std::make_format_args());
-        case 1:
-            return std::vformat(fmt, std::make_format_args(signals[0]->samples[i]));
-        case 2:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i]));
-        case 3:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i]));
-        case 4:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i]));
-        case 5:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i]));
-        case 6:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i],
-                                                      signals[5]->samples[i]));
-        case 7:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i],
-                                                      signals[5]->samples[i],
-                                                      signals[6]->samples[i]));
-        case 8:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i],
-                                                      signals[5]->samples[i],
-                                                      signals[6]->samples[i],
-                                                      signals[7]->samples[i]));
-        case 9:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i],
-                                                      signals[5]->samples[i],
-                                                      signals[6]->samples[i],
-                                                      signals[7]->samples[i],
-                                                      signals[8]->samples[i]));
-        case 10:
-            return std::vformat(fmt,
-                                std::make_format_args(signals[0]->samples[i],
-                                                      signals[1]->samples[i],
-                                                      signals[2]->samples[i],
-                                                      signals[3]->samples[i],
-                                                      signals[4]->samples[i],
-                                                      signals[5]->samples[i],
-                                                      signals[6]->samples[i],
-                                                      signals[7]->samples[i],
-                                                      signals[8]->samples[i],
-                                                      signals[9]->samples[i]));
-        default:
-            throw std::runtime_error("Too many selected signals");
-            break;
-    }
-    return "";
-}
 
 void CsvPlotter::showCustomSignalCreator() {
     static std::string custom_signal_eq;
@@ -161,7 +73,12 @@ void CsvPlotter::showCustomSignalCreator() {
             c.name = custom_signal_name;
             c.file = m_selected_signals[0]->file;
             for (int i = 0; i < m_selected_signals[0]->samples.size(); ++i) {
-                std::string expr = getFormattedEqForSample(custom_signal_eq, m_selected_signals, i);
+                std::vector<double> samples;
+                for (CsvSignal* signal : m_selected_signals) {
+                    samples.push_back(signal->samples[i]);
+                }
+
+                std::string expr = getFormattedEqForSample(custom_signal_eq, samples);
                 auto expr_value = str::evaluateExpression(expr);
                 if (!expr_value.has_value()) {
                     m_error_message = expr_value.error();
