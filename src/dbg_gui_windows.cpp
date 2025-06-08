@@ -1059,9 +1059,7 @@ void DbgGui::showSymbolsWindow() {
                     }
                 } else {
                     // Rest
-                    static bool selected_symbol_idx = 0;
-                    static VariantSymbol* selected_symbols[2] = {nullptr, nullptr};
-                    bool selected = (sym == selected_symbols[0]) || (sym == selected_symbols[1]);
+                    bool selected = contains(m_selected_symbols, sym);
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
                     if (selected) {
                         flags |= ImGuiTreeNodeFlags_Selected;
@@ -1070,29 +1068,24 @@ void DbgGui::showSymbolsWindow() {
                     ImGui::TreePop();
                     if (ImGui::IsItemClicked()) {
                         if (ImGui::GetIO().KeyCtrl) {
-                            // Clear if already selected
-                            if (selected_symbols[0] == sym || selected_symbols[1] == sym) {
-                                selected_symbol_idx = 0;
-                                selected_symbols[0] = nullptr;
-                                selected_symbols[1] = nullptr;
+                            if (selected) {
+                                // Remove if already selected
+                                remove(m_selected_symbols, sym);
                             } else {
-                                selected_symbols[selected_symbol_idx] = sym;
-                                selected_symbol_idx = (selected_symbol_idx + 1) % 2;
+                                m_selected_symbols.push_back(sym);
                             }
                         } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
                             // Clear if clicking something else than the selected
-                            selected_symbol_idx = 0;
-                            selected_symbols[0] = nullptr;
-                            selected_symbols[1] = nullptr;
+                            m_selected_symbols.clear();
                         }
                     }
 
                     bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
                                            || sym->getType() == VariantSymbol::Type::Enum;
-                    if (selected_symbols[0] != nullptr && selected_symbols[1] != nullptr) {
+                    if (m_selected_symbols.size() == 2) {
                         // drag-and-droppable to vector plot
                         if (ImGui::BeginDragDropSource()) {
-                            ImGui::SetDragDropPayload("VECTOR_SYMBOL", &selected_symbols[0], sizeof(VariantSymbol*) * 2);
+                            ImGui::SetDragDropPayload("VECTOR_SYMBOL", m_selected_symbols.data(), sizeof(VariantSymbol*) * 2);
                             ImGui::Text("Drag to vector plot");
                             ImGui::EndDragDropSource();
                         }
