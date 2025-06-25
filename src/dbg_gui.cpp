@@ -27,6 +27,7 @@
 #include "str_helpers.h"
 #include "custom_signal.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
@@ -194,10 +195,7 @@ void DbgGui::updateLoop() {
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, MIN_FONT_SIZE);
-    for (int i = MIN_FONT_SIZE; i <= MAX_FONT_SIZE; ++i) {
-        io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, i);
-    }
-    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[(int)m_options.font_size];
+    ImGui::PushFont(ImGui::GetDefaultFont(), m_options.font_size);
 
     m_initialized = true;
 
@@ -207,7 +205,7 @@ void DbgGui::updateLoop() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
         // ImGui::ShowDemoWindow();
         // ImPlot::ShowDemoWindow();
 

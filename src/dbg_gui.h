@@ -42,7 +42,7 @@ inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.6f, 0.6f, 0.6f, 1);
 inline constexpr ImVec4 COLOR_TEAL = ImVec4(0.0f, 1.0f, 1.0f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
-inline constexpr int32_t MIN_FONT_SIZE = 1;
+inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
 
 namespace str {

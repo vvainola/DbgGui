@@ -83,14 +83,14 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
 }
 
 std::optional<ImGuiKey> pressedNumber() {
-    for (ImGuiKey key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
-        if (ImGui::IsKeyPressed(key)) {
-            return key;
+    for (int key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
+        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
+            return ImGuiKey(key);
         }
     }
-    for (ImGuiKey key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
-        if (ImGui::IsKeyPressed(key)) {
-            return key;
+    for (int key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
+        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
+            return ImGuiKey(key);
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
@@ -107,7 +107,7 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
         ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
         if (available.x < text_size.x) {
             float current_font_size = ImGui::GetFontSize();
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(current_font_size * (available.x / text_size.x) - 1)]);
+            ImGui::PushFont(ImGui::GetDefaultFont(), (current_font_size * (available.x / text_size.x) - 1));
             ImGui::Text(value_str.c_str());
             ImGui::PopFont();
         } else {
@@ -447,7 +447,7 @@ void DbgGui::showMainMenuBar() {
 
             if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE - 1);
-                ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[m_options.font_size];
+                ImGui::GetStyle()._NextFrameFontSizeBase = m_options.font_size;
             }
 
             ImGui::Separator();
@@ -617,7 +617,7 @@ void DbgGui::showScalarWindow() {
 
             // Show values inside the group
             if (group_opened) {
-                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
                     delete_entire_group = true;
                 }
 
@@ -654,7 +654,7 @@ void DbgGui::showScalarWindow() {
                         ImGui::EndDragDropSource();
                     }
                     // Mark signal as deleted
-                    if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete))) {
+                    if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
                     addScalarContextMenu(scalar);
@@ -785,7 +785,7 @@ void DbgGui::showVectorWindow() {
                     }
 
                     // Mark vector as deleted
-                    if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                    if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
                         vector->deleted = true;
                     }
 
@@ -911,7 +911,7 @@ void DbgGui::showCustomWindow() {
                     ImGui::EndDragDropSource();
                 }
                 // Hide symbol on delete
-                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
                     scalar_to_remove = scalar;
                 }
                 addScalarContextMenu(scalar);
@@ -1248,12 +1248,12 @@ void DbgGui::showGridWindow() {
                     Scalar* scalar = getScalar(grid_window.scalars[row][col]);
                     if (scalar) {
                         // Resize text so that it fits the cell
-                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
+                        ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);
                         ImVec2 text_size = ImGui::CalcTextSize(scalar->alias_and_group.c_str());
                         ImVec2 available = ImGui::GetContentRegionAvail();
                         if (available.x < text_size.x) {
                             ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)(text_font_size * (available.x / text_size.x) - 1)]);
+                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x) - 1));
                         }
 
                         // Name
@@ -1264,7 +1264,7 @@ void DbgGui::showGridWindow() {
                         }
                         addScalarContextMenu(scalar);
                         // Hide symbol on delete
-                        if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_::ImGuiKey_Delete)) {
+                        if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
                             grid_window.scalars[row][col] = NULL;
                         }
                         ImGui::PopFont();
@@ -1277,15 +1277,15 @@ void DbgGui::showGridWindow() {
                         }
 
                         // Value
-                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)value_font_size]);
+                        ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
                         addInputScalar(scalar->src, "##grid_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
                         ImGui::PopFont();
                     } else {
-                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)text_font_size]);
+                        ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);
                         ImGui::Text("");
                         ImGui::PopFont();
 
-                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[(int)value_font_size]);
+                        ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
                         ImGui::Text("-");
                         ImGui::PopFont();
                     }

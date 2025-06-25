@@ -53,6 +53,8 @@
 #include <span>
 #include <stdexcept>
 
+inline constexpr int32_t MIN_FONT_SIZE = 8;
+inline constexpr int32_t MAX_FONT_SIZE = 100;
 inline constexpr ImVec4 COLOR_TOOLTIP_LINE = ImVec4(0.7f, 0.7f, 0.7f, 0.6f);
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
@@ -200,6 +202,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, m_options.font_size);
+    ImGui::PushFont(ImGui::GetDefaultFont(), m_options.font_size);
 
     // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
     // if window is not visible so only 1 pixel is visible to have correct layout.
@@ -222,7 +225,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGuiID main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+        ImGuiID main_dock = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
         // ImGui::ShowDemoWindow();
         // ImPlot::ShowDemoWindow();
 
@@ -614,7 +617,10 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
         ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
-        ImGui::InputFloat("Font size", &m_options.font_size, 0, 0, "%.1f");
+        if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
+            ImGui::GetStyle()._NextFrameFontSizeBase = m_options.font_size;
+        }
     }
 
     static char signal_name_filter[256] = "";
@@ -1071,7 +1077,7 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
     // Remove the existing main dock node and all its subnodes to be able to split it
     ImGui::DockBuilderRemoveNode(main_dock);
     // Create new main dock
-    main_dock = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+    main_dock = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
     ImGuiID docks[MAX_PLOTS][MAX_PLOTS]{};
     ImGuiID dock_signals = 0;
     ImGui::DockBuilderSplitNode(main_dock, ImGuiDir_Right, 1.0f - signals_window_width, &docks[0][0], &dock_signals);
@@ -1101,13 +1107,13 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
 }
 
 std::optional<int> pressedNumber() {
-    for (ImGuiKey key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
-        if (ImGui::IsKeyDown(key)) {
+    for (int key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
+        if (ImGui::IsKeyDown(ImGuiKey(key))) {
             return key - ImGuiKey_0;
         }
     }
-    for (ImGuiKey key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
-        if (ImGui::IsKeyDown(key)) {
+    for (int key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
+        if (ImGui::IsKeyDown(ImGuiKey(key))) {
             return key - ImGuiKey_Keypad0;
         }
     }

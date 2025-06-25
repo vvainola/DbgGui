@@ -170,7 +170,7 @@ class CsvPlotter {
         bool keep_old_signals_on_reload = true;
         bool cursor_measurements = false;
         Theme theme;
-        float font_size = 13.0f;
+        int font_size = 13;
     } m_options;
     MinMax m_x_axis = AUTOFIT_AXIS;
     double m_drag_x1 = 0;
