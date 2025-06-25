@@ -1293,7 +1293,7 @@ void DbgGui::showGridWindow() {
 
                     // Make the empty space also valid drop target
                     ImGui::SameLine();
-                    ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), value_font_size));
+                    ImGui::InvisibleButton(std::format("##canvas_{}_{}", row, col).c_str(), ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), value_font_size));
                     addGridWindowDragAndDrop(grid_window, row, col);
                 }
             }
