@@ -107,7 +107,8 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
         ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
         if (available.x < text_size.x) {
             float current_font_size = ImGui::GetFontSize();
-            ImGui::PushFont(ImGui::GetDefaultFont(), (current_font_size * (available.x / text_size.x) - 1));
+            float font_size = max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
+            ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
             ImGui::Text(value_str.c_str());
             ImGui::PopFont();
         } else {
