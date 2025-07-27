@@ -515,8 +515,31 @@ struct DockSpace : Window {
     DockSpace(std::string const& name, uint64_t id)
         : Window(name, id) {
     }
+    DockSpace(nlohmann::json const& j)
+        : Window(j) {
+        even_split = j.value("even_split", even_split);
+    }
+    nlohmann::json updateJson(nlohmann::json& j) const {
+        Window::updateJson(j);
+        j["even_split"] = even_split;
+        return j;
+    }
+
+    void contextMenu() {
+        if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
+            name.reserve(MAX_NAME_LENGTH);
+            if (ImGui::InputText("Name##window_context_menu",
+                                 name.data(),
+                                 MAX_NAME_LENGTH)) {
+                name = std::string(name.data());
+            }
+            ImGui::Checkbox("Even split", &even_split);
+            ImGui::EndPopup();
+        }
+    }
 
     unsigned int dock_id = 0;
+    bool even_split = false;
 };
 
 template <typename T>

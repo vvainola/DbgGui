@@ -235,6 +235,8 @@ void DbgGui::updateLoop() {
             ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_5)) {
             ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_6)) {
+            ImGui::OpenPopup(str::ADD_DOCKSPACE);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
             saveSnapshot();
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
@@ -245,6 +247,7 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_SCRIPT_WINDOW);
+        addPopupModal(str::ADD_DOCKSPACE);
         addPopupModal(str::ADD_GRID_WINDOW);
         addPopupModal(str::PAUSE_AFTER);
         addPopupModal(str::PAUSE_AT);

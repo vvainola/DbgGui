@@ -304,7 +304,7 @@ void DbgGui::showDockSpaces() {
 
         // Create dockspace
         dockspace.dock_id = ImGui::GetID(std::format("Dockspace_{}", dockspace.id).c_str());
-        ImGui::DockSpace(dockspace.dock_id);
+        ImGui::DockSpace(dockspace.dock_id, ImVec2(0, 0), ImGuiDockNodeFlags_EvenSplit * dockspace.even_split);
 
         ImGui::End();
     }

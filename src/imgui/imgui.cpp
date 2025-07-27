@@ -19707,6 +19707,22 @@ void ImGui::DockNodeTreeUpdatePosSize(ImGuiDockNode* node, ImVec2 pos, ImVec2 si
         const ImGuiAxis axis = (ImGuiAxis)node->SplitAxis;
         const float size_avail = ImMax(size[axis] - spacing, 0.0f);
 
+        // =======================
+        // !!! LOCAL MODIFICATION !!!
+        // Even split flag
+        // =======================
+        if (size_avail > 0 && (child_0->SharedFlags & ImGuiDockNodeFlags_EvenSplit || child_1->SharedFlags & ImGuiDockNodeFlags_EvenSplit)) {
+            child_0->SizeRef[axis] = ImMax(child_0->SizeRef[axis], 5.0f);
+            child_1->SizeRef[axis] = ImMax(child_1->SizeRef[axis], 5.0f);
+
+            child_0->SizeRef[axis] = (child_0->SizeRef[axis] + child_1->SizeRef[axis]) / 2.0f;
+            child_1->SizeRef[axis] = child_0->SizeRef[axis];
+            child_0->Size[axis] = child_0->SizeRef[axis];
+            child_1->Size[axis] = child_0->Size[axis];
+            child_0->WantLockSizeOnce = true;
+            child_1->WantLockSizeOnce = false;
+        }
+
         // Size allocation policy
         // 1) The first 0..WindowMinSize[axis]*2 are allocated evenly to both windows.
         const float size_min_each = ImTrunc(ImMin(size_avail, g.Style.WindowMinSize[axis] * 2.0f) * 0.5f);
