@@ -1238,6 +1238,7 @@ void DbgGui::showGridWindow() {
             text_font_size *= scale;
             value_font_size *= scale;
         }
+        value_font_size = std::max(value_font_size, float(MIN_FONT_SIZE));
 
         if (ImGui::BeginTable("grid_table",
                               grid_window.columns,
