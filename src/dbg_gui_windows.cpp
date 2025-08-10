@@ -438,6 +438,7 @@ void DbgGui::showMainMenuBar() {
             HelpMarker("Pause when GUI is requested to close programmatically. Pressing start again will close the GUI.");
 
             ImGui::Checkbox("Show latest message on main menu bar", &m_options.show_latest_message_on_main_menu_bar);
+            ImGui::Checkbox("Show vertical line in all plots", &m_options.show_vertical_line_in_all_plots);
 
             // Theme
             themeCombo(m_options.theme, m_window);

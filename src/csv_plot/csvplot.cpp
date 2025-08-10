@@ -304,6 +304,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
             m_options.link_axis = settings["window"]["link_axis"];
             m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];
+            m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];
             m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
             m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
             m_options.theme = settings["window"]["theme"];
@@ -352,6 +353,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
+    settings["window"]["show_vertical_line_in_all_plots"] = m_options.show_vertical_line_in_all_plots;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["theme"] = m_options.theme;
@@ -617,6 +619,7 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
         ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
+        ImGui::Checkbox("Show vertical line in all plots", &m_options.show_vertical_line_in_all_plots);
         if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
             m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
             ImGui::GetStyle()._NextFrameFontSizeBase = m_options.font_size;
@@ -820,6 +823,10 @@ void CsvPlotter::showSignalWindow() {
 }
 
 void CsvPlotter::showScalarPlots() {
+    // Show vertical line at same time in all plots if mouse is hovered in any plot
+    static double vertical_line_time_next = 0;
+    double vertical_line_time = vertical_line_time_next;
+    vertical_line_time_next = NAN;
     bool aligned = ImPlot::BeginAlignedPlots("AlignedGroup");
     for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
         ScalarPlot& plot = m_scalar_plots[plot_idx];
@@ -991,6 +998,7 @@ void CsvPlotter::showScalarPlots() {
                     ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
+                    vertical_line_time_next = mouse.x;
                     ImGui::BeginTooltip();
                     int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
                     ss.str("");
@@ -999,6 +1007,10 @@ void CsvPlotter::showScalarPlots() {
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
                     ImGui::EndTooltip();
+                } else if (m_options.show_vertical_line_in_all_plots && !std::isnan(vertical_line_time)) {
+                    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
+                    ImPlot::PlotInfLines("##", &vertical_line_time, 1);
+                    ImPlot::PopStyleColor(1);
                 }
 
                 // Legend right click

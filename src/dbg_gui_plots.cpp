@@ -48,6 +48,10 @@ const std::array<XY<double>, 1000> UNIT_CIRCLE = unitCirclePoints(1.0);
 const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 
 void DbgGui::showScalarPlots() {
+    // Show vertical line at same time in all plots if mouse is hovered in any plot
+    static double vertical_line_time_next = 0;
+    double vertical_line_time = vertical_line_time_next;
+    vertical_line_time_next = NAN;
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
             continue;
@@ -220,6 +224,7 @@ void DbgGui::showScalarPlots() {
                 ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
                 ImPlot::PlotInfLines("##", &mouse.x, 1);
                 ImPlot::PopStyleColor(1);
+                vertical_line_time_next = mouse.x;
                 ImGui::BeginTooltip();
                 auto mouse_time_idx = m_sampler.getTimeIndices(mouse.x, mouse.x);
                 for (Scalar* scalar : scalar_plot.scalars) {
@@ -260,6 +265,10 @@ void DbgGui::showScalarPlots() {
                 }
 
                 ImGui::EndTooltip();
+            } else if (m_options.show_vertical_line_in_all_plots && !std::isnan(vertical_line_time)) {
+                ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
+                ImPlot::PlotInfLines("##", &vertical_line_time, 1);
+                ImPlot::PopStyleColor(1);
             }
 
             ImPlot::EndPlot();

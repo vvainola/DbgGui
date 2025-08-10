@@ -195,6 +195,7 @@ class DbgGui {
         bool link_scalar_x_axis = false;
         bool scalar_plot_tooltip = true;
         bool show_latest_message_on_main_menu_bar = true;
+        bool show_vertical_line_in_all_plots = true;
         Theme theme = Theme::DefaultDark;
         int sampling_buffer_size = (int)1e6;
         int font_size = 13;
@@ -210,6 +211,7 @@ class DbgGui {
             j["sampling_buffer_size"] = sampling_buffer_size;
             j["font_size"] = font_size;
             j["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
+            j["show_vertical_line_in_all_plots"] = show_vertical_line_in_all_plots;
             return j;
         }
 
@@ -222,6 +224,7 @@ class DbgGui {
             sampling_buffer_size = j.value("sampling_buffer_size", sampling_buffer_size);
             font_size = j.value("font_size", font_size);
             m_linked_scalar_x_axis_range = j.value("linked_scalar_x_axis_range", m_linked_scalar_x_axis_range);
+            show_vertical_line_in_all_plots = j.value("show_vertical_line_in_all_plots", show_vertical_line_in_all_plots);
         }
     } m_options;
 
