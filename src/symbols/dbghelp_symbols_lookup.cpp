@@ -59,6 +59,7 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
         || startsWith(symbol_name, "Catch::")
         || symbol_name == "GImGui"
         || symbol_name == "GImPlot"
+        || symbol_name == "g_ContextMap"
         || symbol_name == "imgl3wProcs"
         || symbol_name == "g_dbg_gui") {
         return TRUE;
