@@ -607,13 +607,18 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
+    // Remove first deleted dockspaces because are saved by index and index changes if any is removed
     for (int i = int(m_dockspaces.size() - 1); i >= 0; --i) {
         DockSpace const& dockspace = m_dockspaces[i];
         if (!dockspace.open) {
-            m_settings["dockspaces"].erase(std::to_string(i));
+            m_settings["dockspaces"].clear();
             remove(m_dockspaces, dockspace);
             continue;
         }
+    }
+    // Update the json for now existing dockspaces
+    for (int i = int(m_dockspaces.size() - 1); i >= 0; --i) {
+        DockSpace const& dockspace = m_dockspaces[i];
         dockspace.updateJson(m_settings["dockspaces"][std::to_string(i)]);
     }
 
