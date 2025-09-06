@@ -10,6 +10,7 @@ project('DbgGui', ['cpp', 'c'],
 
 project_root = meson.current_source_dir()
 add_project_arguments([
+        '-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR',
         '-DNOMINMAX',
         '-DJSON_DIAGNOSTICS=1',
         '-Zc:preprocessor',
