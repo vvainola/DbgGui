@@ -41,6 +41,8 @@ void DbgGui::showCustomSignalCreator() {
                 ImGui::End();
                 return;
             }
+            // Add parenthesis to all {} in the equation so that unary operators work correctly
+            custom_signal_eq = str::replaceAll(custom_signal_eq, "{}", "({})");
 
             // Try evaluate the equation
             std::vector<double> zeros(m_selected_symbols.size(), 0.0);
