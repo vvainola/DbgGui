@@ -688,8 +688,30 @@ void CsvPlotter::showSignalWindow() {
                 }
             }
             ImGui::InputDouble("X-axis shift", &file->x_axis_shift, 0, 0, "%g");
-            if (ImGui::Button("Remove")) {
-                file_to_remove = &file;
+            if (ImGui::Button("Add same signals to plots")) {
+                for (auto& signal : file->signals) {
+                    for (ScalarPlot& plot : m_scalar_plots) {
+                        for (CsvSignal* plot_signal : plot.signals) {
+                            if (plot_signal->name == signal.name) {
+                                plot.addSignal(&signal);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (ImGui::Button("Remove signals from plots")) {
+                for (auto& signal : file->signals) {
+                    for (ScalarPlot& plot : m_scalar_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                    for (VectorPlot& plot : m_vector_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                    for (SpectrumPlot& plot : m_spectrum_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                }
             }
             if (ImGui::Button("Save as CSV")) {
                 nfdchar_t* out_path = NULL;
@@ -709,6 +731,9 @@ void CsvPlotter::showSignalWindow() {
                     }
                     saveAsCsv(out, header, samples);
                 }
+            }
+            if (ImGui::Button("Remove file")) {
+                file_to_remove = &file;
             }
             ImGui::EndPopup();
         }
