@@ -271,6 +271,10 @@ static double evaluateExpression(std::istringstream& iss) {
 std::expected<double, std::string> str::evaluateExpression(std::string expression) {
     // Remove whitespace
     expression.erase(std::remove_if(expression.begin(), expression.end(), isspace), expression.end());
+    // Replace PI with its numerical value
+    expression = replaceAll(expression, "PI", "3.14159265358979323846");
+    expression = replaceAll(expression, "pi", "3.14159265358979323846");
+
     std::istringstream iss(expression);
     try {
         return evaluateExpression(iss);
