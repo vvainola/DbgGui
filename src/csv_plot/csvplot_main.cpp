@@ -35,6 +35,8 @@ int main(int argc, char** argv) {
         ("n,names" , "Names of signals to add to plots e.g. \"foo,bar\""                                     , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("p,plots" , "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"" , cxxopts::value<std::vector<int>>()->default_value("-1"))
         ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1,1"))
+        ("rows"    , "Number of plot rows."                                                                  , cxxopts::value<int>()->default_value("0"))
+        ("cols"    , "Number of plot columns."                                                               , cxxopts::value<int>()->default_value("0"))
         ("image"   , "Save plot as png image to given path and exit."                                        , cxxopts::value<std::string>()->default_value(""))
         ("h,help"  , "Show help and exit")
         ;
@@ -44,6 +46,8 @@ int main(int argc, char** argv) {
     std::vector<std::string> names;
     std::vector<int> plots;
     std::vector<double> xlimits;
+    int rows;
+    int cols;
     std::string image_filepath;
     try {
         parsed_options = options.parse(argc, argv);
@@ -51,6 +55,8 @@ int main(int argc, char** argv) {
         names = parsed_options["names"].as<std::vector<std::string>>();
         plots = parsed_options["plots"].as<std::vector<int>>();
         xlimits = parsed_options["xlim"].as<std::vector<double>>();
+        rows = parsed_options["rows"].as<int>();
+        cols = parsed_options["cols"].as<int>();
         image_filepath = parsed_options["image"].as<std::string>();
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
@@ -86,7 +92,7 @@ int main(int argc, char** argv) {
     }
 
     try {
-        CsvPlotter plotter(files, name_and_plot_idx, {xlimits[0], xlimits[1]}, image_filepath);
+        CsvPlotter plotter(files, name_and_plot_idx, {xlimits[0], xlimits[1]}, rows, cols, image_filepath);
     } catch (std::exception& e) {
         std::cerr << "[ERROR] " << e.what() << std::endl;
         std::abort();

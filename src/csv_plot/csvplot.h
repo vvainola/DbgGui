@@ -139,6 +139,8 @@ class CsvPlotter {
     CsvPlotter(std::vector<std::string> files = {},
                std::map<std::string, int> name_and_plot_idx = {},
                MinMax const& xlimits = AUTOFIT_AXIS,
+               int rows = 0,
+               int cols = 0,
                std::string const& image_filepath = "");
 
   private:

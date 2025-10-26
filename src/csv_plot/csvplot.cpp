@@ -137,6 +137,8 @@ static void glfw_error_callback(int error, const char* description) {
 CsvPlotter::CsvPlotter(std::vector<std::string> files,
                        std::map<std::string, int> name_and_plot_idx,
                        MinMax const& xlimits,
+                       int rows,
+                       int cols,
                        std::string const& image_filepath) {
     if (xlimits != AUTOFIT_AXIS) {
         m_x_axis.min = std::min(xlimits.min, xlimits.max);
@@ -209,6 +211,12 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     if (!image_filepath.empty()) {
         int xpos = 0;
         int ypos = 0;
+        if (rows > 0) {
+            m_rows = rows;
+        }
+        if (cols > 0) {
+            m_cols = cols;
+        }
         glfwGetWindowSize(m_window, &xpos, &ypos);
         glfwSetWindowPos(m_window, 0, -ypos + 1);
         // Set window minimum size to 1 to hide the signals window which is docked
@@ -592,7 +600,12 @@ void CsvPlotter::showSignalWindow() {
         }
         ss_signals << "\"";
         ss_plots << "\"";
-        ImGui::SetClipboardText(std::format("--names {} --plots {}", ss_signals.str(), ss_plots.str()).c_str());
+        ImGui::SetClipboardText(std::format("--names {} --plots {} --rows {} --cols {}",
+                                            ss_signals.str(),
+                                            ss_plots.str(),
+                                            std::to_string(m_rows),
+                                            std::to_string(m_cols))
+                                  .c_str());
     }
 
     if (ImGui::CollapsingHeader("Options")) {
