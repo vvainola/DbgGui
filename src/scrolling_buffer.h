@@ -50,6 +50,7 @@ class ScrollingBuffer {
             m_time[i] = current_time[i];
             m_time[i + buffer_size] = current_time[i];
         }
+        m_time.shrink_to_fit();
 
         // Copy scalar buffers
         for (auto& [_scalar, buffer] : m_scalar_buffers) {
@@ -69,6 +70,7 @@ class ScrollingBuffer {
                 buffer[i] = current_buffer[i];
                 buffer[i + buffer_size] = current_buffer[i];
             }
+            buffer.shrink_to_fit();
         }
 
         m_full_buffer_looped = current_time.size() >= buffer_size;
