@@ -32,10 +32,48 @@ class ScrollingBuffer {
           m_time(2 * buffer_size) {}
 
     void setBufferSize(int32_t buffer_size) {
-        assert(m_scalar_buffers.size() == 0);
-        m_buffer_size = buffer_size;
-        m_time.resize(2 * buffer_size);
+        // Copy the current data to temp buffer
+        std::vector<double> current_time;
+        if (m_full_buffer_looped) {
+            current_time = std::vector<double>(m_time.begin() + m_idx, m_time.begin() + m_idx + m_buffer_size);
+        } else {
+            current_time = std::vector<double>(m_time.begin(), m_time.begin() + m_idx);
+        }
+        // Keep newest up to buffer_size, drop oldest if necessary
+        if ((int32_t)current_time.size() > buffer_size) {
+            current_time = std::vector<double>(current_time.end() - buffer_size, current_time.end());
+        }
 
+        // Copy into new time buffer
+        m_time.assign(2 * buffer_size, NAN);
+        for (size_t i = 0; i < current_time.size(); ++i) {
+            m_time[i] = current_time[i];
+            m_time[i + buffer_size] = current_time[i];
+        }
+
+        // Copy scalar buffers
+        for (auto& [_scalar, buffer] : m_scalar_buffers) {
+            std::vector<double> current_buffer;
+            if (m_full_buffer_looped) {
+                current_buffer = std::vector<double>(buffer.begin() + m_idx, buffer.begin() + m_idx + m_buffer_size);
+            } else {
+                current_buffer = std::vector<double>(buffer.begin(), buffer.begin() + m_idx);
+            }
+            // Keep newest up to buffer_size, drop oldest if necessary
+            if ((int32_t)current_buffer.size() > buffer_size) {
+                current_buffer = std::vector<double>(current_buffer.end() - buffer_size, current_buffer.end());
+            }
+
+            buffer.assign(2 * buffer_size, NAN);
+            for (size_t i = 0; i < current_buffer.size(); ++i) {
+                buffer[i] = current_buffer[i];
+                buffer[i + buffer_size] = current_buffer[i];
+            }
+        }
+
+        m_full_buffer_looped = current_time.size() >= buffer_size;
+        m_idx = m_full_buffer_looped ? 0 : current_time.size();
+        m_buffer_size = buffer_size;
     }
 
     void sample(double time) {

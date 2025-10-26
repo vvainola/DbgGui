@@ -443,9 +443,12 @@ void DbgGui::showMainMenuBar() {
             // Theme
             themeCombo(m_options.theme, m_window);
 
-            ImGui::InputInt("Sampling buffer size", &m_options.sampling_buffer_size, 0);
-            ImGui::SameLine();
-            HelpMarker("Changing requires restart to take effect. Default = 1'000'000");
+            static int new_buffer_size = m_options.sampling_buffer_size;
+            if (ImGui::InputInt("Sampling buffer size", &new_buffer_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                m_options.sampling_buffer_size = new_buffer_size;
+                m_sampler.setBufferSize(new_buffer_size);
+            }
 
             if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE - 1);
