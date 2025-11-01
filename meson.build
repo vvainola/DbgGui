@@ -167,6 +167,16 @@ csv_plotter = executable('csv_plotter',
     override_options : override_options,
 )
 
+inf2csv = executable('inf2csv',
+    sources : [
+        'src/csv_plot/csv_helpers.cpp',
+        'src/csv_plot/inf2csv.cpp',
+        'src/str_helpers.cpp',
+    ],
+    include_directories : ['src'],
+    override_options : override_options,
+)
+
 lib_dbghelp_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
