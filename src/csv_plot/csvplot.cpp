@@ -1106,11 +1106,12 @@ void CsvPlotter::showScalarPlots() {
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
     nfdpathset_t path_set;
     std::vector<std::unique_ptr<CsvFileData>> csv_datas;
-    auto cwd = std::filesystem::current_path();
-    nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", cwd.string().c_str(), &path_set);
+    static std::filesystem::path dir = std::filesystem::current_path();
+    nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", dir.string().c_str(), &path_set);
     if (result == NFD_OKAY) {
         for (int i = 0; i < path_set.count; ++i) {
             std::string out(NFD_PathSet_GetPath(&path_set, i));
+            dir = std::filesystem::path(out).parent_path();
             auto csv_data = parseCsvData(out);
             if (csv_data) {
                 csv_datas.push_back(std::move(csv_data));
