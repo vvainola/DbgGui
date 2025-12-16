@@ -68,6 +68,7 @@ std::vector<double> ASCENDING_NUMBERS;
 std::optional<int> pressedNumber();
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
+std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
@@ -639,10 +640,32 @@ void CsvPlotter::showSignalWindow() {
         }
     }
 
-    static char signal_name_filter[256] = "";
+    if (ImGui::CollapsingHeader("Process .csv files into images")) {
+        static char config_buffer[20'000];
+        if (ImGui::InputText("Config", config_buffer, IM_ARRAYSIZE(config_buffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            for (std::string const& path : openDialogMultiple()) {
+                // Call the current process again with the config and file path
+                char exe_path[MAX_PATH] = {0};
+                if (GetModuleFileNameA(NULL, exe_path, MAX_PATH) == 0) {
+                    m_error_message = "Failed to get executable path";
+                    continue;
+                }
+                std::string exe = std::filesystem::path(exe_path).string();
+                std::string command = std::format("{} --image \"{}.png\" --files \"{}\" {}",
+                                                  exe,
+                                                  path,
+                                                  path,
+                                                  std::string(config_buffer));
+                system(command.c_str());
+            }
+        }
+        ImGui::SameLine();
+        HelpMarker("Use \"Copy signals to clipboard\" button to get the command line arguments for the current selection of signals and plots");
+    }
     if (ImGui::CollapsingHeader("Create custom signal")) {
         showCustomSignalCreator();
     }
+    static char signal_name_filter[256] = "";
     ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
     ImGui::Separator();
 
@@ -1103,23 +1126,31 @@ void CsvPlotter::showScalarPlots() {
     }
 }
 
-std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
+std::vector<std::string> openDialogMultiple() {
     nfdpathset_t path_set;
-    std::vector<std::unique_ptr<CsvFileData>> csv_datas;
     static std::filesystem::path dir = std::filesystem::current_path();
     nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", dir.string().c_str(), &path_set);
+    std::vector<std::string> paths;
     if (result == NFD_OKAY) {
         for (int i = 0; i < path_set.count; ++i) {
             std::string out(NFD_PathSet_GetPath(&path_set, i));
+            paths.push_back(out);
             dir = std::filesystem::path(out).parent_path();
-            auto csv_data = parseCsvData(out);
-            if (csv_data) {
-                csv_datas.push_back(std::move(csv_data));
-            }
         }
         NFD_PathSet_Free(&path_set);
     } else if (result == NFD_ERROR) {
         std::cerr << NFD_GetError() << std::endl;
+    }
+    return paths;
+}
+
+std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
+    std::vector<std::unique_ptr<CsvFileData>> csv_datas;
+    for (std::string const& path : openDialogMultiple()) {
+        std::unique_ptr<CsvFileData> csv_data = parseCsvData(path);
+        if (csv_data) {
+            csv_datas.push_back(std::move(csv_data));
+        }
     }
     return csv_datas;
 }
