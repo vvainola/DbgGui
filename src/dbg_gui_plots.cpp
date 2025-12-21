@@ -62,6 +62,7 @@ void DbgGui::showScalarPlots() {
         scalar_plot.closeOnMiddleClick();
         scalar_plot.contextMenu();
         if (!scalar_plot.focus.focused) {
+            scalar_plot.last_frame_timestamp = m_plot_timestamp;
             ImGui::End();
             continue;
         }
