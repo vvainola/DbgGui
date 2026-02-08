@@ -1282,9 +1282,23 @@ void DbgGui::showGridWindow() {
                             ImGui::EndDragDropSource();
                         }
 
-                        // Value
+                        // Value. Manual keyboard navigation because the text in the same cell messes up default navigation.
                         ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
+                        if (grid_window.isCellFocused({row, col})) {
+                            ImGui::SetKeyboardFocusHere();
+                        }
                         addInputScalar(scalar->src, "##grid_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                        if (ImGui::IsItemFocused()) {
+                            if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_DownArrow)) {
+                                grid_window.focusCell({std::min(row + 1, grid_window.rows - 1), col});
+                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_UpArrow)) {
+                                grid_window.focusCell({std::max(row - 1, 0), col});
+                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_RightArrow)) {
+                                grid_window.focusCell({row, std::min(col + 1, grid_window.columns - 1)});
+                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_LeftArrow)) {
+                                grid_window.focusCell({row, std::max(col - 1, 0)});
+                            }
+                        }
                         ImGui::PopFont();
                     } else {
                         ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);

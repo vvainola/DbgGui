@@ -493,6 +493,23 @@ struct GridWindow : Window {
     int columns = 1;
     float text_to_value_ratio = 0.3f;
 
+    using Cell = std::pair<int, int>;
+
+    void focusCell(Cell cell) {
+        m_focus_cell = cell;
+    }
+
+    bool isCellFocused(Cell cell) {
+        if (m_focus_cell) {
+            bool is_focused = m_focus_cell->first == cell.first && m_focus_cell->second == cell.second;
+            if (is_focused) {
+                m_focus_cell = std::nullopt;
+                return true;
+            }
+        }
+        return false;
+    }
+
     void contextMenu() {
         rows = std::clamp(rows, 1, MAX_ROWS);
         columns = std::clamp(columns, 1, MAX_COLUMNS);
@@ -509,6 +526,10 @@ struct GridWindow : Window {
             ImGui::EndPopup();
         }
     }
+
+  private:
+    std::optional<Cell> m_focus_cell = std::nullopt;
+
 };
 
 struct DockSpace : Window {
