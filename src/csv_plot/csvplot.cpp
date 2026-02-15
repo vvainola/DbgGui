@@ -41,6 +41,7 @@
 #include "save_image.h"
 #include "csv_helpers.h"
 #include "stb_image.h"
+#include "version.h"
 
 #include <nfd.h>
 #include <nlohmann/json.hpp>
@@ -170,7 +171,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     // Create window with graphics context
-    m_window = glfwCreateWindow(1280, 720, "CSV Plotter", NULL, NULL);
+    m_window = glfwCreateWindow(1280, 720, std::format("CSV Plotter {}", SW_VERSION).c_str(), NULL, NULL);
     if (m_window == NULL)
         std::abort();
     glfwMakeContextCurrent(m_window);
