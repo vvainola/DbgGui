@@ -40,7 +40,8 @@ enum SpectrumWindow {
 Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
                            double sampling_time,
                            SpectrumWindow window,
-                           bool one_sided);
+                           bool one_sided,
+                           double bin_threshold);
 
 std::vector<std::complex<double>> collectFftSamples(std::vector<double> const& time,
                                                     std::vector<double> const& samples_x,

@@ -132,7 +132,8 @@ void CsvPlotter::showSpectrumPlots() {
                                                    samples,
                                                    sampling_time,
                                                    plot.window,
-                                                   one_sided);
+                                                   one_sided,
+                                                   0);
         } else if (m_x_axis != plot.prev_x_range
                    && plot.real
                    && !plot.spectrum_calculation.valid()) {
@@ -147,7 +148,8 @@ void CsvPlotter::showSpectrumPlots() {
                                                    samples,
                                                    sampling_time,
                                                    plot.window,
-                                                   one_sided);
+                                                   one_sided,
+                                                   0);
         }
         ImGui::End();
     }

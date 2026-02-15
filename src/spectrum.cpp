@@ -26,7 +26,6 @@
 #include <future>
 
 constexpr double PI = 3.1415926535897;
-constexpr double MAG_MIN_OF_MAX = 2e-3;
 constexpr double APPROX_LIMIT = 1e-7;
 
 std::vector<std::complex<double>> collectFftSamples(std::vector<double> const& time,
@@ -95,26 +94,32 @@ size_t reduceSampleCountForFFT(size_t n) {
     }
 
     size_t original_n = n;
-    while (n % 2 == 0) {
-        n = n / 2;
+    size_t reduced_n = n;
+    while (n > 0) {
+        while (n % 2 == 0) {
+            n = n / 2;
+        }
+        while (n % 3 == 0) {
+            n = n / 3;
+        }
+        while (n % 5 == 0) {
+            n = n / 5;
+        }
+        if (n == 1) {
+            return reduced_n;
+        } else {
+            reduced_n -= 1;
+            n = reduced_n;
+        }
     }
-    while (n % 3 == 0) {
-        n = n / 3;
-    }
-    while (n % 5 == 0) {
-        n = n / 5;
-    }
-    if (n == 1) {
-        return original_n;
-    } else {
-        return reduceSampleCountForFFT(original_n - 1);
-    }
+    return 1;
 }
 
 Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
                            double sampling_time,
                            SpectrumWindow window,
-                           bool one_sided) {
+                           bool one_sided,
+                           double bin_threshold) {
     // Push one zero if odd number of samples so that 1 second sampling time does not get
     // truncated down due to floating point inaccuracies when collecting samples (1 sample is missing)
     if (samples.size() % 2 == 1) {
@@ -165,7 +170,10 @@ Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
     for (std::complex<double> x : cplx_spec) {
         abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
     }
-    double mag_min = abs_max * MAG_MIN_OF_MAX;
+    double mag_min = abs_max * bin_threshold;
+    if (bin_threshold == 0) {
+        mag_min = 0;
+    }
 
     int mid = int(cplx_spec.size() / 2);
     double resolution = 1.0 / (sampling_time * cplx_spec.size());

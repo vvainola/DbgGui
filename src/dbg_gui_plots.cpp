@@ -474,14 +474,20 @@ void DbgGui::showSpectrumPlots() {
         }
 
         double time_range_ms = plot.time_range * 1e3;
-        ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
         double min = 1;
         double max = 10000;
+        ImGui::SetNextItemWidth(ImGui::CalcTextSize("10000 ms").x * 2);
         ImGui::SliderScalar("Time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms");
         plot.time_range = time_range_ms * 1e-3;
 
         ImGui::SameLine();
         ImGui::Checkbox("Logarithmic y-axis", &plot.logarithmic_y_axis);
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::CalcTextSize(" 0.001 % ").x);
+        ImGui::InputDouble("Bin Threshold [%]", &m_options.spectrum_plot_threshold, 0, 0, "%.3f");
+        ImGui::SameLine();
+        HelpMarker("Minimum magnitude of spectral bins shown in percentage of the largest bin. Set to 0 to include all bins but then the double-click auto-zoom will always zoom out up to Nyquist frequency.");
 
         ImGui::SameLine();
         ImGui::PushItemWidth(80);
@@ -581,7 +587,8 @@ void DbgGui::showSpectrumPlots() {
                                                    samples,
                                                    m_sampling_time,
                                                    plot.window,
-                                                   one_sided);
+                                                   one_sided,
+                                                   m_options.spectrum_plot_threshold / 100.0);
         } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
             ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(plot.scalar,
                                                                                  time_idx,
@@ -598,7 +605,8 @@ void DbgGui::showSpectrumPlots() {
                                                    samples,
                                                    m_sampling_time,
                                                    plot.window,
-                                                   one_sided);
+                                                   one_sided,
+                                                   m_options.spectrum_plot_threshold / 100.0);
         }
 
         ImGui::End();

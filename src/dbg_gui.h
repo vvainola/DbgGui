@@ -200,6 +200,7 @@ class DbgGui {
         int sampling_buffer_size = (int)1e6;
         int font_size = 13;
         double m_linked_scalar_x_axis_range = 1;
+        double spectrum_plot_threshold = 0;
 
         nlohmann::json toJson() {
             nlohmann::json j;
@@ -212,6 +213,7 @@ class DbgGui {
             j["font_size"] = font_size;
             j["linked_scalar_x_axis_range"] = m_linked_scalar_x_axis_range;
             j["show_vertical_line_in_all_plots"] = show_vertical_line_in_all_plots;
+            j["spectrum_plot_threshold"] = spectrum_plot_threshold;
             return j;
         }
 
@@ -225,6 +227,7 @@ class DbgGui {
             font_size = j.value("font_size", font_size);
             m_linked_scalar_x_axis_range = j.value("linked_scalar_x_axis_range", m_linked_scalar_x_axis_range);
             show_vertical_line_in_all_plots = j.value("show_vertical_line_in_all_plots", show_vertical_line_in_all_plots);
+            spectrum_plot_threshold = j.value("spectrum_plot_threshold", spectrum_plot_threshold);
         }
     } m_options;
 
