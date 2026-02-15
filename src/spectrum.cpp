@@ -171,9 +171,6 @@ Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
         abs_max = std::max(abs_max, amplitude_inv * std::abs(x));
     }
     double mag_min = abs_max * bin_threshold;
-    if (bin_threshold == 0) {
-        mag_min = 0;
-    }
 
     int mid = int(cplx_spec.size() / 2);
     double resolution = 1.0 / (sampling_time * cplx_spec.size());
