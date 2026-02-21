@@ -130,6 +130,7 @@ void DbgGui::showScalarPlots() {
             x_range = std::max(1e-6, x_range);
 
             auto time_idx = m_sampler.getTimeIndices(x_limits.min, x_limits.max);
+            std::unordered_map<Scalar*, bool> scalar_visible;
             for (Scalar* scalar : scalar_plot.scalars) {
                 ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(scalar,
                                                                                      time_idx,
@@ -137,11 +138,12 @@ void DbgGui::showScalarPlots() {
                                                                                      scalar->getScale(),
                                                                                      scalar->getOffset());
                 std::string label_id = std::format("{}###{}", scalar->alias_and_group, scalar->name_and_group);
-                ImPlot::PlotLine(label_id.c_str(),
+                bool visible = ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
                                  values.y_min.data(),
                                  int(values.time.size()),
                                  ImPlotLineFlags_None);
+                scalar_visible[scalar] = visible;
                 ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
                                  values.y_max.data(),
@@ -226,7 +228,9 @@ void DbgGui::showScalarPlots() {
                 ImPlot::PlotInfLines("##", &mouse.x, 1);
                 ImPlot::PopStyleColor(1);
                 vertical_line_time_next = mouse.x;
-                ImGui::BeginTooltip();
+
+                // Add small point to the sample location
+                std::vector<ScrollingBuffer::DecimatedValues> scalar_values_in_tooltip;
                 auto mouse_time_idx = m_sampler.getTimeIndices(mouse.x, mouse.x);
                 for (Scalar* scalar : scalar_plot.scalars) {
                     ScrollingBuffer::DecimatedValues value = m_sampler.getValuesInRange(scalar,
@@ -234,6 +238,20 @@ void DbgGui::showScalarPlots() {
                                                                                         1,
                                                                                         scalar->getScale(),
                                                                                         scalar->getOffset());
+                    scalar_values_in_tooltip.push_back(value);
+                    if (scalar_visible[scalar]) {
+                        ImPlot::PushStyleColor(ImPlotCol_Line, scalar->color);
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
+                        ImPlot::PlotScatter(("##Point" + scalar->name_and_group).c_str(), &value.time.front(), &value.y_min.front(), 1);
+                        ImPlot::PopStyleColor();
+                    }
+                }
+
+                // Show tooltip with values of all scalars at the hovered time
+                ImGui::BeginTooltip();
+                for (size_t i = 0; i < scalar_plot.scalars.size(); ++i) {
+                    Scalar* scalar = scalar_plot.scalars[i];
+                    ScrollingBuffer::DecimatedValues value = scalar_values_in_tooltip[i];
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
                     ss << scalar->alias_and_group << " : " << tooltip_value;

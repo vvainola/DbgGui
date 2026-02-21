@@ -223,6 +223,8 @@ class ScrollingBuffer {
             end_idx = binarySearch(end_time, start_idx, end_idx);
         }
         end_idx = std::max(end_idx, start_idx);
+        // Add one more sample so that there isn't a gap at the end of the plot
+        end_idx = std::min(end_idx + 1, m_idx - 1 + m_buffer_size);
         return {start_idx, end_idx};
     }
 

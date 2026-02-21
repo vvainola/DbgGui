@@ -1035,11 +1035,13 @@ void CsvPlotter::showScalarPlots() {
                 std::stringstream ss;
                 ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
                 std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
-                ImPlot::PlotLine(label_id.c_str(),
+                std::unordered_map<CsvSignal*, bool> signal_visible;
+                bool visible = ImPlot::PlotLine(label_id.c_str(),
                                  plotted_values.x.data(),
                                  plotted_values.y_min.data(),
                                  int(plotted_values.x.size()),
                                  ImPlotLineFlags_None);
+                signal_visible[signal] = visible;
                 ImVec4 line_color = ImPlot::GetLastItemColor();
                 ImPlot::PlotLine(label_id.c_str(),
                                  plotted_values.x.data(),
@@ -1060,9 +1062,17 @@ void CsvPlotter::showScalarPlots() {
                     ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
                     ImPlot::PlotInfLines("##", &mouse.x, 1);
                     ImPlot::PopStyleColor();
+
+                    int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
+                    if (signal_visible[signal]) {
+                        ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
+                        ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &x_samples_in_range[idx], &y_samples_in_range[idx], 1);
+                        ImPlot::PopStyleColor();
+                    }
+
                     vertical_line_time_next = mouse.x;
                     ImGui::BeginTooltip();
-                    int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
                     ss.str("");
                     ss << signal->name << " : " << y_samples_in_range[idx];
                     ImGui::PushStyleColor(ImGuiCol_Text, line_color);

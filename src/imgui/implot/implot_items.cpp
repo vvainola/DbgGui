@@ -1570,11 +1570,11 @@ void RenderMarkers(const _Getter& getter, ImPlotMarker marker, float size, bool 
 //-----------------------------------------------------------------------------
 
 template <typename _Getter>
-void PlotLineEx(const char* label_id, const _Getter& getter, ImPlotLineFlags flags) {
+bool PlotLineEx(const char* label_id, const _Getter& getter, ImPlotLineFlags flags) {
     if (BeginItemEx(label_id, Fitter1<_Getter>(getter), flags, ImPlotCol_Line)) {
         if (getter.Count <= 0) {
             EndItem();
-            return;
+            return false;
         }
         const ImPlotNextItemData& s = GetItemData();
         if (getter.Count > 1) {
@@ -1613,24 +1613,26 @@ void PlotLineEx(const char* label_id, const _Getter& getter, ImPlotLineFlags fla
             RenderMarkers<_Getter>(getter, s.Marker, s.MarkerSize, s.RenderMarkerFill, col_fill, s.RenderMarkerLine, col_line, s.MarkerWeight);
         }
         EndItem();
+        return true;
     }
+    return false;
 }
 
 template <typename T>
-void PlotLine(const char* label_id, const T* values, int count, double xscale, double x0, ImPlotLineFlags flags, int offset, int stride) {
+bool PlotLine(const char* label_id, const T* values, int count, double xscale, double x0, ImPlotLineFlags flags, int offset, int stride) {
     GetterXY<IndexerLin,IndexerIdx<T>> getter(IndexerLin(xscale,x0),IndexerIdx<T>(values,count,offset,stride),count);
-    PlotLineEx(label_id, getter, flags);
+    return PlotLineEx(label_id, getter, flags);
 }
 
 template <typename T>
-void PlotLine(const char* label_id, const T* xs, const T* ys, int count, ImPlotLineFlags flags, int offset, int stride) {
+bool PlotLine(const char* label_id, const T* xs, const T* ys, int count, ImPlotLineFlags flags, int offset, int stride) {
     GetterXY<IndexerIdx<T>,IndexerIdx<T>> getter(IndexerIdx<T>(xs,count,offset,stride),IndexerIdx<T>(ys,count,offset,stride),count);
-    PlotLineEx(label_id, getter, flags);
+    return PlotLineEx(label_id, getter, flags);
 }
 
 #define INSTANTIATE_MACRO(T) \
-    template IMPLOT_API void PlotLine<T> (const char* label_id, const T* values, int count, double xscale, double x0, ImPlotLineFlags flags, int offset, int stride); \
-    template IMPLOT_API void PlotLine<T>(const char* label_id, const T* xs, const T* ys, int count, ImPlotLineFlags flags, int offset, int stride);
+    template IMPLOT_API bool PlotLine<T> (const char* label_id, const T* values, int count, double xscale, double x0, ImPlotLineFlags flags, int offset, int stride); \
+    template IMPLOT_API bool PlotLine<T>(const char* label_id, const T* xs, const T* ys, int count, ImPlotLineFlags flags, int offset, int stride);
 CALL_INSTANTIATE_FOR_NUMERIC_TYPES()
 #undef INSTANTIATE_MACRO
 
