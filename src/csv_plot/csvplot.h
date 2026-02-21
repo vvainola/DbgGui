@@ -172,6 +172,7 @@ class CsvPlotter {
         bool keep_old_signals_on_reload = true;
         bool cursor_measurements = false;
         bool show_vertical_line_in_all_plots = true;
+        bool interpolate_tooltip = false;
         Theme theme;
         int font_size = 13;
     } m_options;

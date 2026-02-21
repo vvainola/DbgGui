@@ -46,13 +46,20 @@
 #include <nfd.h>
 #include <nlohmann/json.hpp>
 #include <vector>
-#include <iterator>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <filesystem>
 #include <span>
-#include <stdexcept>
+
+#define TRY(expression)                       \
+    try {                                     \
+        expression                            \
+    } catch (nlohmann::json::exception err) { \
+        std::cerr << err.what() << std::endl; \
+    } catch (std::exception err) {            \
+        std::cerr << err.what() << std::endl; \
+    }
 
 inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
@@ -307,18 +314,19 @@ void CsvPlotter::loadPreviousSessionSettings() {
                 ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
             }
 
-            m_rows = int(settings["window"]["rows"]);
-            m_cols = int(settings["window"]["cols"]);
-            m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);
-            m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);
-            m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];
-            m_options.link_axis = settings["window"]["link_axis"];
-            m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];
-            m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];
-            m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];
-            m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];
-            m_options.theme = settings["window"]["theme"];
-            m_options.font_size = settings["window"]["font_size"];
+            TRY(m_rows = int(settings["window"]["rows"]);)
+            TRY(m_cols = int(settings["window"]["cols"]);)
+            TRY(m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);)
+            TRY(m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);)
+            TRY(m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];)
+            TRY(m_options.link_axis = settings["window"]["link_axis"];)
+            TRY(m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];)
+            TRY(m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];)
+            TRY(m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];)
+            TRY(m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];)
+            TRY(m_options.interpolate_tooltip = settings["window"]["interpolate_tooltip"];)
+            TRY(m_options.theme = settings["window"]["theme"];)
+            TRY(m_options.font_size = settings["window"]["font_size"];)
             setTheme(m_options.theme, m_window);
             for (auto scale : settings["scales"].items()) {
                 if (scale.value().is_number()) {
@@ -328,7 +336,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     m_signal_scales[scale.key()] = scale.value();
                 }
             }
-            m_signals_window_width = settings["window"]["signals_window_width"];
+            TRY(m_signals_window_width = settings["window"]["signals_window_width"];)
 
             int xpos = std::max(0, int(settings["window"]["xpos"]));
             int ypos = std::max(0, int(settings["window"]["ypos"]));
@@ -366,6 +374,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["show_vertical_line_in_all_plots"] = m_options.show_vertical_line_in_all_plots;
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
+    settings["window"]["interpolate_tooltip"] = m_options.interpolate_tooltip;
     settings["window"]["theme"] = m_options.theme;
     settings["window"]["font_size"] = m_options.font_size;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
@@ -635,6 +644,7 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Keep old signals on reload", &m_options.keep_old_signals_on_reload);
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
         ImGui::Checkbox("Show vertical line in all plots", &m_options.show_vertical_line_in_all_plots);
+        ImGui::Checkbox("Interpolate tooltip values", &m_options.interpolate_tooltip);
         if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
             m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
             ImGui::GetStyle()._NextFrameFontSizeBase = m_options.font_size;
@@ -1037,10 +1047,10 @@ void CsvPlotter::showScalarPlots() {
                 std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
                 std::unordered_map<CsvSignal*, bool> signal_visible;
                 bool visible = ImPlot::PlotLine(label_id.c_str(),
-                                 plotted_values.x.data(),
-                                 plotted_values.y_min.data(),
-                                 int(plotted_values.x.size()),
-                                 ImPlotLineFlags_None);
+                                                plotted_values.x.data(),
+                                                plotted_values.y_min.data(),
+                                                int(plotted_values.x.size()),
+                                                ImPlotLineFlags_None);
                 signal_visible[signal] = visible;
                 ImVec4 line_color = ImPlot::GetLastItemColor();
                 ImPlot::PlotLine(label_id.c_str(),
@@ -1064,17 +1074,27 @@ void CsvPlotter::showScalarPlots() {
                     ImPlot::PopStyleColor();
 
                     int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
+                    int next_idx = std::min(idx + 1, (int)y_samples_in_range.size() - 1);
+                    double interpolated_value = std::lerp(y_samples_in_range[idx], y_samples_in_range[next_idx], (mouse.x - x_samples_in_range[idx]) / (x_samples_in_range[next_idx] - x_samples_in_range[idx]));
                     if (signal_visible[signal]) {
                         ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
                         ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
-                        ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &x_samples_in_range[idx], &y_samples_in_range[idx], 1);
+                        if (m_options.interpolate_tooltip) {
+                            ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &mouse.x, &interpolated_value, 1);
+                        } else {
+                            ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &x_samples_in_range[idx], &y_samples_in_range[idx], 1);
+                        }
                         ImPlot::PopStyleColor();
                     }
 
                     vertical_line_time_next = mouse.x;
                     ImGui::BeginTooltip();
                     ss.str("");
-                    ss << signal->name << " : " << y_samples_in_range[idx];
+                    if (m_options.interpolate_tooltip) {
+                        ss << signal->name << " : " << interpolated_value;
+                    } else {
+                        ss << signal->name << " : " << y_samples_in_range[idx];
+                    }
                     ImGui::PushStyleColor(ImGuiCol_Text, line_color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
