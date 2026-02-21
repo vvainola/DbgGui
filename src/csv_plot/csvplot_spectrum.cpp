@@ -57,7 +57,9 @@ void CsvPlotter::showSpectrumPlots() {
 
         ImGui::SameLine();
         ImGui::PushItemWidth(80);
-        ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
+        if (ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0")) {
+            plot.prev_x_range = {0, 0};
+        }
 
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
         if (ImPlot::BeginPlot("##Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
