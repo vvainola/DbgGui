@@ -806,7 +806,9 @@ void DbgGui::updateSavedSettings() {
             m_sampler.stopSampling(scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
-            m_settings["custom_signals"].erase(scalar->name_and_group);
+            if (m_settings["custom_signals"].contains(scalar->name_and_group)) {
+                m_settings["custom_signals"].erase(scalar->name_and_group);
+            }
             remove(m_scalars, scalar);
         }
     }
