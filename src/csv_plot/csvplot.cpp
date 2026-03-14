@@ -212,8 +212,8 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
-    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, m_options.font_size);
-    ImGui::PushFont(ImGui::GetDefaultFont(), m_options.font_size);
+    io.Fonts->AddFontFromMemoryCompressedTTF(cousine_regular_compressed_data, cousine_regular_compressed_size, (float)m_options.font_size);
+    ImGui::PushFont(ImGui::GetDefaultFont(), (float)m_options.font_size);
 
     // Move window out of sight if creating image to avoid popups. Docking layout sometimes does not get applied
     // if window is not visible so only 1 pixel is visible to have correct layout.
@@ -647,7 +647,7 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Interpolate tooltip values", &m_options.interpolate_tooltip);
         if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
             m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
-            ImGui::GetStyle()._NextFrameFontSizeBase = m_options.font_size;
+            ImGui::GetStyle()._NextFrameFontSizeBase = (float)m_options.font_size;
         }
     }
 
@@ -1017,7 +1017,7 @@ void CsvPlotter::showScalarPlots() {
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
-                indices.second = std::min(all_y_values.size() - 1, (size_t)indices.second);
+                indices.second = std::min((int32_t)all_y_values.size() - 1, indices.second);
                 std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
                 std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {

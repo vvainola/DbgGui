@@ -23,11 +23,23 @@
 
 #include <complex>
 #include <vector>
+#include <future>
 
-struct Spectrum {
+struct SpectrumData {
     std::vector<double> freq;
     std::vector<double> mag;
     std::vector<double> angle; // [rad]
+};
+
+template <typename T>
+struct Spectrum {
+    Spectrum(T* signal_x, T* signal_y)
+        : real(signal_x), imag(signal_y) {}
+
+    T* real;
+    T* imag;
+    SpectrumData data;
+    std::future<SpectrumData> calculation;
 };
 
 enum SpectrumWindow {
@@ -37,11 +49,11 @@ enum SpectrumWindow {
     FlatTop
 };
 
-Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
-                           double sampling_time,
-                           SpectrumWindow window,
-                           bool one_sided,
-                           double bin_threshold);
+SpectrumData calculateSpectrum(std::vector<std::complex<double>> samples,
+                               double sampling_time,
+                               SpectrumWindow window,
+                               bool one_sided,
+                               double bin_threshold);
 
 std::vector<std::complex<double>> collectFftSamples(std::vector<double> const& time,
                                                     std::vector<double> const& samples_x,

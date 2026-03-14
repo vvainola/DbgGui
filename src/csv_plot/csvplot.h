@@ -92,7 +92,7 @@ struct ScalarPlot {
     }
 
     void clear() {
-        for (int i = signals.size() - 1; i >= 0; --i) {
+        for (int i = (int)signals.size() - 1; i >= 0; --i) {
             removeSignal(signals[i]);
         }
     }
@@ -107,7 +107,7 @@ struct VectorPlot {
     }
 
     void removeSignal(CsvSignal* signal) {
-        for (int i = signals.size() - 1; i >= 0; --i) {
+        for (int i = (int)signals.size() - 1; i >= 0; --i) {
             if (signals[i].first == signal || signals[i].second == signal) {
                 signals.erase(signals.begin() + i);
             }
@@ -116,20 +116,27 @@ struct VectorPlot {
 };
 
 struct SpectrumPlot {
-    CsvSignal* real = nullptr;
-    CsvSignal* imag = nullptr;
-    Spectrum spectrum;
+    std::vector<Spectrum<CsvSignal>> spectrum;
     SpectrumWindow window = SpectrumWindow::None;
-    std::future<Spectrum> spectrum_calculation;
     bool logarithmic_y_axis = false;
     MinMax x_axis;
     MinMax y_axis;
     MinMax prev_x_range = {0, 0};
 
+    void addSignal(CsvSignal* real, CsvSignal* imag) {
+        for (auto& spec : spectrum) {
+            if (spec.real == real && spec.imag == imag) {
+                return;
+            }
+        }
+        spectrum.push_back(Spectrum<CsvSignal>(real, imag));
+    }
+
     void removeSignal(CsvSignal* signal) {
-        if (real == signal || imag == signal) {
-            real = nullptr;
-            imag = nullptr;
+        for (int i = (int)spectrum.size() - 1; i >= 0; --i) {
+            if (spectrum[i].real == signal || spectrum[i].imag == signal) {
+                spectrum.erase(spectrum.begin() + i);
+            }
         }
     }
 };

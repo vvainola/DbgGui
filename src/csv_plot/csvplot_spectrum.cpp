@@ -73,23 +73,33 @@ void CsvPlotter::showSpectrumPlots() {
                 }
                 ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
             }
-            std::string text = "Drag signal to calculate spectrum";
-            if (plot.real) {
-                text = plot.real->name;
+            for (auto& spec : plot.spectrum) {
+                ImPlot::PlotStems(spec.real->name.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
+
+                // Legend right-click
+                if (ImPlot::BeginLegendPopup(spec.real->name.c_str())) {
+                    if (ImGui::Button("Remove")) {
+                        plot.removeSignal(spec.real);
+                    };
+                    ImPlot::EndLegendPopup();
+                }
             }
-            ImPlot::PlotStems(text.c_str(), plot.spectrum.freq.data(), plot.spectrum.mag.data(), int(plot.spectrum.mag.size()));
 
             if (ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                int idx = closestSpectralBin(plot.spectrum.freq, plot.spectrum.mag, mouse.x, mouse.y);
-                if (idx != -1) {
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                    ImPlot::PlotStems("", &plot.spectrum.freq[idx], &plot.spectrum.mag[idx], 1);
-                    ImGui::BeginTooltip();
-                    ImGui::Text(std::format("x : {:10f}", plot.spectrum.freq[idx]).c_str());
-                    ImGui::Text(std::format("y : {:10f}", plot.spectrum.mag[idx]).c_str());
-                    ImGui::Text(std::format("< : {:10.2f}", plot.spectrum.angle[idx] * RAD_TO_DEG).c_str());
-                    ImGui::EndTooltip();
+                for (int i = 0; i < plot.spectrum.size(); ++i) {
+                    auto& spec = plot.spectrum[i];
+                    int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
+                    if (idx != -1) {
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+                        ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
+                        ImGui::BeginTooltip();
+                        ImVec4 color = ImPlot::GetColormapColor(i);
+                        ImGui::TextColored(color, std::format("{} x : {:10f}", spec.real->name.c_str(), spec.data.freq[idx]).c_str());
+                        ImGui::TextColored(color, std::format("{} y : {:10f}", spec.real->name.c_str(), spec.data.mag[idx]).c_str());
+                        ImGui::TextColored(color, std::format("{} < : {:10.2f}", spec.real->name.c_str(), spec.data.angle[idx] * RAD_TO_DEG).c_str());
+                        ImGui::EndTooltip();
+                    }
                 }
             }
 
@@ -99,59 +109,56 @@ void CsvPlotter::showSpectrumPlots() {
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
                 CsvSignal* sig = *(CsvSignal**)payload->Data;
-                plot.real = sig;
-                plot.imag = nullptr;
+                plot.addSignal(sig, nullptr);
                 plot.prev_x_range = {0, 0};
             }
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {
                 assert(m_selected_signals.size() == 2);
                 CsvSignal* signal_x = m_selected_signals[0];
                 CsvSignal* signal_y = m_selected_signals[1];
-                plot.real = signal_x;
-                plot.imag = signal_y;
+                plot.addSignal(signal_x, signal_y);
                 m_selected_signals.clear();
                 plot.prev_x_range = {0, 0};
             }
             ImGui::EndDragDropTarget();
         }
 
-        bool one_sided = (plot.imag == nullptr);
-        if (plot.spectrum_calculation.valid()
-            && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            plot.spectrum = plot.spectrum_calculation.get();
-        } else if (m_x_axis != plot.prev_x_range
-                   && plot.real
-                   && plot.imag
-                   && !plot.spectrum_calculation.valid()) {
-            double sampling_time = plot.real->file->signals[0].samples[1] - plot.real->file->signals[0].samples[0];
-            std::vector<double> real = getVisibleSamples(*plot.real);
-            std::vector<double> imag = getVisibleSamples(*plot.imag);
-            std::vector<std::complex<double>> samples = realImagToComplex(real, imag);
-            // Store used x-range so that spectrum is not recalculated over and over if samples are not changing
-            plot.prev_x_range = m_x_axis;
-            plot.spectrum_calculation = std::async(std::launch::async,
-                                                   calculateSpectrum,
-                                                   samples,
-                                                   sampling_time,
-                                                   plot.window,
-                                                   one_sided,
-                                                   0);
-        } else if (m_x_axis != plot.prev_x_range
-                   && plot.real
-                   && !plot.spectrum_calculation.valid()) {
-            double sampling_time = plot.real->file->signals[0].samples[1] - plot.real->file->signals[0].samples[0];
-            std::vector<double> real = getVisibleSamples(*plot.real);
-            std::vector<double> imag(real.size(), 0);
-            std::vector<std::complex<double>> samples = realImagToComplex(real, imag);
-            // Store used x-range so that spectrum is not recalculated over and over if samples are not changing
-            plot.prev_x_range = m_x_axis;
-            plot.spectrum_calculation = std::async(std::launch::async,
-                                                   calculateSpectrum,
-                                                   samples,
-                                                   sampling_time,
-                                                   plot.window,
-                                                   one_sided,
-                                                   0);
+        bool axis_changed = m_x_axis != plot.prev_x_range;
+        for (auto& spec : plot.spectrum) {
+            bool one_sided = (spec.imag == nullptr);
+            bool recalculate = !spec.calculation.valid() || axis_changed;
+            if (spec.calculation.valid()
+                && spec.calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                spec.data = spec.calculation.get();
+            } else if (recalculate && spec.real && spec.imag) {
+                double sampling_time = spec.real->file->signals[0].samples[1] - spec.real->file->signals[0].samples[0];
+                std::vector<double> real = getVisibleSamples(*spec.real);
+                std::vector<double> imag = getVisibleSamples(*spec.imag);
+                std::vector<std::complex<double>> samples = realImagToComplex(real, imag);
+                // Store used x-range so that spectrum is not recalculated over and over if samples are not changing
+                plot.prev_x_range = m_x_axis;
+                spec.calculation = std::async(std::launch::async,
+                                              calculateSpectrum,
+                                              samples,
+                                              sampling_time,
+                                              plot.window,
+                                              one_sided,
+                                              0);
+            } else if (recalculate && spec.real) {
+                double sampling_time = spec.real->file->signals[0].samples[1] - spec.real->file->signals[0].samples[0];
+                std::vector<double> real = getVisibleSamples(*spec.real);
+                std::vector<double> imag(real.size(), 0);
+                std::vector<std::complex<double>> samples = realImagToComplex(real, imag);
+                // Store used x-range so that spectrum is not recalculated over and over if samples are not changing
+                plot.prev_x_range = m_x_axis;
+                spec.calculation = std::async(std::launch::async,
+                                              calculateSpectrum,
+                                              samples,
+                                              sampling_time,
+                                              plot.window,
+                                              one_sided,
+                                              0);
+            }
         }
         ImGui::End();
     }

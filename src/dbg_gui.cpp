@@ -474,20 +474,24 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         m_spectrum_plots.clear();
-        for (auto spec_plot_data : m_settings["spec_plots"]) {
+        for (auto spec_plot_data : m_settings.at("spec_plots")) {
             SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data);
-            if (spec_plot_data.contains("signal_id")) {
-                uint64_t id = spec_plot_data["signal_id"];
-                Scalar* scalar = getScalar(id);
-                Vector2D* vector = getVector(id);
-                if (scalar) {
-                    m_sampler.startSampling(scalar);
-                    plot.addScalarToPlot(scalar);
-                } else if (vector) {
-                    m_sampler.startSampling(vector);
-                    plot.addVectorToPlot(vector);
+            if (spec_plot_data.contains("signals")) {
+                for (auto xy : spec_plot_data.at("signals")) {
+                    if (xy.is_array() && xy.size() == 2) {
+                        Scalar* real = getScalar(xy[0]);
+                        Scalar* imag = getScalar(xy[1]);
+                        if (real && imag) {
+                            m_sampler.startSampling(real);
+                            m_sampler.startSampling(imag);
+                            plot.addToPlot(real, imag);
+                        } else if (real) {
+                            m_sampler.startSampling(real);
+                            plot.addToPlot(real, nullptr);
+                        }
+                    }
                 }
-            };
+            }
         }
 
         for (auto& scalar_data : m_settings["scalars"]) {
@@ -680,19 +684,40 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["spec_plots"][std::to_string(spec_plot.id)];
         spec_plot.updateJson(j);
-        if (spec_plot.scalar) {
-            if (spec_plot.scalar->deleted) {
-                spec_plot.scalar = spec_plot.scalar->replacement;
+        for (int i = int(spec_plot.spectrums.size() - 1); i >= 0; --i) {
+            Spectrum<Scalar>& spec = spec_plot.spectrums[i];
+            if (spec.imag == nullptr) {
+                if (spec.real->deleted) {
+                    spec_plot.removeFromPlot(spec.real);
+                    j["signals"].erase(spec.real->name_and_group);
+                    if (spec.real->replacement != nullptr) {
+                        spec_plot.addToPlot(spec.real->replacement, nullptr);
+                    }
+                } else {
+                    j["signals"][spec.real->name_and_group] = {spec.real->id, 0};
+                }
             } else {
-                j["signal_id"] = spec_plot.scalar->id;
-            }
-        } else if (spec_plot.vector) {
-            if (spec_plot.vector->deleted) {
-                spec_plot.vector = spec_plot.vector->replacement;
-            } else {
-                j["signal_id"] = spec_plot.vector->id;
+                if (spec.real->deleted || spec.imag->deleted) {
+                    spec_plot.removeFromPlot(spec.real);
+                    spec_plot.removeFromPlot(spec.imag);
+                    j["signals"].erase(spec.real->name_and_group);
+                    if (spec.real->replacement != nullptr && spec.imag->replacement != nullptr) {
+                        spec_plot.addToPlot(spec.real->replacement, spec.imag->replacement);
+                    }
+                } else {
+                    j["signals"][spec.real->name_and_group] = {spec.real->id, spec.imag->id};
+                }
             }
         }
+        // If scalars are deleted but not yet removed from spectrums, remove them from json
+        // so that they don't get saved to settings and added back to plot after restart
+        for (Scalar* removed_scalar : spec_plot.removed_scalars) {
+            if (removed_scalar == nullptr) {
+                continue;
+            }
+            j["signals"].erase(removed_scalar->name_and_group);
+        }
+        spec_plot.removed_scalars.clear();
     }
 
     for (CustomWindow& custom_window : m_custom_windows) {

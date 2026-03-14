@@ -757,6 +757,8 @@ void DbgGui::showVectorWindow() {
                             }
                             vector->deleted = true;
                             vector->replacement = new_vector;
+                            vector->x->replacement = new_vector->x;
+                            vector->y->replacement = new_vector->y;
                         }
                     }
                 }

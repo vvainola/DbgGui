@@ -74,7 +74,7 @@ int closestSpectralBin(std::vector<double> const& vec_x, std::vector<double> con
     double y_err_min = INFINITY;
     for (auto it = it_lower; it <= it_upper; ++it) {
         int idx = int(std::distance(vec_x.begin(), it));
-        double y_err = std::abs(vec_y[idx] - y);
+        double y_err = std::abs(log(vec_y[idx]) - log(y));
         if (y_err < y_err_min) {
             closest_idx = idx;
             y_err_min = y_err;
@@ -115,11 +115,11 @@ size_t reduceSampleCountForFFT(size_t n) {
     return 1;
 }
 
-Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
-                           double sampling_time,
-                           SpectrumWindow window,
-                           bool one_sided,
-                           double bin_threshold) {
+SpectrumData calculateSpectrum(std::vector<std::complex<double>> samples,
+                                             double sampling_time,
+                                             SpectrumWindow window,
+                                             bool one_sided,
+                                             double bin_threshold) {
     // Push one zero if odd number of samples so that 1 second sampling time does not get
     // truncated down due to floating point inaccuracies when collecting samples (1 sample is missing)
     if (samples.size() % 2 == 1) {
@@ -161,7 +161,7 @@ Spectrum calculateSpectrum(std::vector<std::complex<double>> samples,
     fft.transform(samples.data(), cplx_spec.data());
 
     // Calculate magnitude spectrum with Hz on x-axis
-    Spectrum spec;
+    SpectrumData spec;
     double abs_max = 0;
     double amplitude_inv = 1.0 / sample_cnt;
     // Very small bins are left out from FFT result because it breaks the autozoom with

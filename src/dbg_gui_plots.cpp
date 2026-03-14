@@ -139,10 +139,10 @@ void DbgGui::showScalarPlots() {
                                                                                      scalar->getOffset());
                 std::string label_id = std::format("{}###{}", scalar->alias_and_group, scalar->name_and_group);
                 bool visible = ImPlot::PlotLine(label_id.c_str(),
-                                 values.time.data(),
-                                 values.y_min.data(),
-                                 int(values.time.size()),
-                                 ImPlotLineFlags_None);
+                                                values.time.data(),
+                                                values.y_min.data(),
+                                                int(values.time.size()),
+                                                ImPlotLineFlags_None);
                 scalar_visible[scalar] = visible;
                 ImPlot::PlotLine(label_id.c_str(),
                                  values.time.data(),
@@ -524,56 +524,60 @@ void DbgGui::showSpectrumPlots() {
                 }
             }
 
-            std::string text = "Drag signal to calculate spectrum";
-            if (plot.vector) {
-                text = plot.vector->name_and_group;
-            } else if (plot.scalar) {
-                text = plot.scalar->name_and_group;
-            } else {
-                plot.spectrum.freq.clear();
-                plot.spectrum.mag.clear();
+            for (auto& spec : plot.spectrums) {
+                ImPlot::PlotStems(spec.real->alias_and_group.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
+                // Legend right-click
+                if (ImPlot::BeginLegendPopup(spec.real->alias_and_group.c_str())) {
+                    if (ImGui::Button("Remove")) {
+                        plot.removeFromPlot(spec.real);
+                    };
+                    ImPlot::EndLegendPopup();
+                }
             }
-            ImPlot::PlotStems(text.c_str(), plot.spectrum.freq.data(), plot.spectrum.mag.data(), int(plot.spectrum.mag.size()));
 
             if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
-                    plot.addScalarToPlot(scalar);
+                    plot.addToPlot(scalar, nullptr);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                     m_sampler.startSampling(scalar);
-                    plot.addScalarToPlot(scalar);
+                    plot.addToPlot(scalar, nullptr);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = getVector(id);
                     m_sampler.startSampling(vector);
-                    plot.addVectorToPlot(vector);
+                    plot.addToPlot(vector->x, vector->y);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
                     VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
                     Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
                     m_sampler.startSampling(vector);
-                    plot.addVectorToPlot(vector);
+                    plot.addToPlot(vector->x, vector->y);
                 }
                 ImPlot::EndDragDropTarget();
             }
 
             if (ImPlot::IsPlotHovered()) {
                 ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                int idx = closestSpectralBin(plot.spectrum.freq, plot.spectrum.mag, mouse.x, mouse.y);
-                if (idx != -1) {
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                    ImPlot::PlotStems("", &plot.spectrum.freq[idx], &plot.spectrum.mag[idx], 1);
-                    ImGui::BeginTooltip();
-                    ImGui::Text(std::format("x : {:10f}", plot.spectrum.freq[idx]).c_str());
-                    ImGui::Text(std::format("y : {:10f}", plot.spectrum.mag[idx]).c_str());
-                    ImGui::EndTooltip();
+                for (int i = 0; i < plot.spectrums.size(); ++i) {
+                    auto& spec = plot.spectrums[i];
+                    int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
+                    if (idx != -1) {
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+                        ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
+                        ImGui::BeginTooltip();
+                        ImVec4 color = ImPlot::GetColormapColor(i);
+                        ImGui::TextColored(color, std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
+                        ImGui::TextColored(color, std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
+                        ImGui::EndTooltip();
+                    }
                 }
             }
 
@@ -581,50 +585,52 @@ void DbgGui::showSpectrumPlots() {
         }
         ImPlot::PopStyleVar();
 
-        bool one_sided = plot.scalar != nullptr;
-        auto time_idx = m_sampler.getTimeIndices(m_plot_timestamp - plot.time_range, m_plot_timestamp);
-        if (plot.spectrum_calculation.valid() && plot.spectrum_calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            plot.spectrum = plot.spectrum_calculation.get();
-        } else if (plot.vector && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues samples_x = m_sampler.getValuesInRange(plot.vector->x,
-                                                                                    time_idx,
-                                                                                    ALL_SAMPLES,
-                                                                                    plot.vector->x->getScale(),
-                                                                                    plot.vector->x->getOffset());
-            ScrollingBuffer::DecimatedValues samples_y = m_sampler.getValuesInRange(plot.vector->y,
-                                                                                    time_idx,
-                                                                                    ALL_SAMPLES,
-                                                                                    plot.vector->y->getScale(),
-                                                                                    plot.vector->y->getOffset());
-            std::vector<std::complex<double>> samples = collectFftSamples(samples_x.time,
-                                                                          samples_x.y_min,
-                                                                          samples_y.y_min,
-                                                                          m_sampling_time);
-            plot.spectrum_calculation = std::async(std::launch::async,
-                                                   calculateSpectrum,
-                                                   samples,
-                                                   m_sampling_time,
-                                                   plot.window,
-                                                   one_sided,
-                                                   m_options.spectrum_plot_threshold / 100.0);
-        } else if (plot.scalar && !plot.spectrum_calculation.valid()) {
-            ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(plot.scalar,
-                                                                                 time_idx,
-                                                                                 ALL_SAMPLES,
-                                                                                 plot.scalar->getScale(),
-                                                                                 plot.scalar->getOffset());
-            std::vector<double> zeros(values.time.size(), 0);
-            std::vector<std::complex<double>> samples = collectFftSamples(values.time,
-                                                                          values.y_min,
-                                                                          zeros,
-                                                                          m_sampling_time);
-            plot.spectrum_calculation = std::async(std::launch::async,
-                                                   calculateSpectrum,
-                                                   samples,
-                                                   m_sampling_time,
-                                                   plot.window,
-                                                   one_sided,
-                                                   m_options.spectrum_plot_threshold / 100.0);
+        for (auto& spec : plot.spectrums) {
+            bool one_sided = spec.imag == nullptr;
+            auto time_idx = m_sampler.getTimeIndices(m_plot_timestamp - plot.time_range, m_plot_timestamp);
+            if (spec.calculation.valid() && spec.calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                spec.data = spec.calculation.get();
+            } else if (!one_sided && !spec.calculation.valid()) {
+                ScrollingBuffer::DecimatedValues samples_x = m_sampler.getValuesInRange(spec.real,
+                                                                                        time_idx,
+                                                                                        ALL_SAMPLES,
+                                                                                        spec.real->getScale(),
+                                                                                        spec.real->getOffset());
+                ScrollingBuffer::DecimatedValues samples_y = m_sampler.getValuesInRange(spec.imag,
+                                                                                        time_idx,
+                                                                                        ALL_SAMPLES,
+                                                                                        spec.imag->getScale(),
+                                                                                        spec.imag->getOffset());
+                std::vector<std::complex<double>> samples = collectFftSamples(samples_x.time,
+                                                                              samples_x.y_min,
+                                                                              samples_y.y_min,
+                                                                              m_sampling_time);
+                spec.calculation = std::async(std::launch::async,
+                                              calculateSpectrum,
+                                              samples,
+                                              m_sampling_time,
+                                              plot.window,
+                                              one_sided,
+                                              m_options.spectrum_plot_threshold / 100.0);
+            } else if (one_sided && !spec.calculation.valid()) {
+                ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(spec.real,
+                                                                                     time_idx,
+                                                                                     ALL_SAMPLES,
+                                                                                     spec.real->getScale(),
+                                                                                     spec.real->getOffset());
+                std::vector<double> zeros(values.time.size(), 0);
+                std::vector<std::complex<double>> samples = collectFftSamples(values.time,
+                                                                              values.y_min,
+                                                                              zeros,
+                                                                              m_sampling_time);
+                spec.calculation = std::async(std::launch::async,
+                                              calculateSpectrum,
+                                              samples,
+                                              m_sampling_time,
+                                              plot.window,
+                                              one_sided,
+                                              m_options.spectrum_plot_threshold / 100.0);
+            }
         }
 
         ImGui::End();

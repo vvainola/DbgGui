@@ -415,28 +415,34 @@ struct SpectrumPlot : Window {
         return j;
     }
 
-    // Source is either scalar or vector
-    Scalar* scalar = nullptr;
-    Vector2D* vector = nullptr;
-
     double time_range = 1;
     bool logarithmic_y_axis = false;
     MinMax y_axis = {-0.1, 1.1};
     MinMax x_axis = {-1000, 1000};
 
-    Spectrum spectrum;
+    std::vector<Spectrum<Scalar>> spectrums;
     SpectrumWindow window = SpectrumWindow::None;
-    std::future<Spectrum> spectrum_calculation;
 
-    void addVectorToPlot(Vector2D* new_vector) {
-        vector = new_vector;
-        scalar = nullptr;
+    void addToPlot(Scalar* real, Scalar* imag) {
+        for (auto& spec : spectrums) {
+            if (spec.real == real && spec.imag == imag) {
+                return;
+            }
+        }
+        spectrums.push_back(Spectrum<Scalar>(real, imag));
     }
 
-    void addScalarToPlot(Scalar* new_scalar) {
-        scalar = new_scalar;
-        vector = nullptr;
+    void removeFromPlot(Scalar* s) {
+        for (int i = int(spectrums.size() - 1); i >= 0; --i) {
+            if (spectrums[i].real == s || spectrums[i].imag == s) {
+                removed_scalars.push_back(spectrums[i].real);
+                removed_scalars.push_back(spectrums[i].imag);
+                spectrums.erase(spectrums.begin() + i);
+            }
+        }
     }
+
+    std::vector<Scalar*> removed_scalars;
 };
 
 struct CustomWindow : Window {
@@ -529,7 +535,6 @@ struct GridWindow : Window {
 
   private:
     std::optional<Cell> m_focus_cell = std::nullopt;
-
 };
 
 struct DockSpace : Window {
