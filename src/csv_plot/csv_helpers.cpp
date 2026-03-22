@@ -26,7 +26,7 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-#include <windows.h>
+#include <cmath>
 
 template <typename T>
 T inline min(T a, T b) {
@@ -152,7 +152,7 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     double current_min = INFINITY;
     double current_max = -INFINITY;
     int64_t counter = 0;
-    for (int32_t i = 0; i <= x.size(); i++) {
+    for (int32_t i = 0; i < x.size(); i++) {
         if (counter < 0) {
             decimated_values.x.push_back(x[i - 1]);
             decimated_values.y_min.push_back(current_min);
