@@ -89,8 +89,10 @@ class DbgSymbols {
     void sortSymbols();
     void initSymbolsFromPdb();
 
+#if LINUX
     void collectSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die parent);
     void collectAllSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die);
+#endif
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
