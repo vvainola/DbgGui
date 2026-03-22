@@ -22,7 +22,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
-#include "symbols/fts_fuzzy_match.h"
+#include "str_helpers.h"
 #include "imgui_internal.h"
 #include "themes.h"
 
@@ -632,11 +632,11 @@ void DbgGui::showScalarWindow() {
                 }
 
                 // All signals in a group are shown if the group name matches filter
-                bool group_matches_filter = fts::fuzzy_match_simple(scalar_name_filter.c_str(), group.full_name.c_str());
+                bool group_matches_filter = str::fuzzy_match(scalar_name_filter.c_str(), group.full_name.c_str());
                 // Show each scalar
                 for (Scalar* scalar : scalars) {
                     bool hide_by_filter = !scalar_name_filter.empty()
-                                       && !fts::fuzzy_match_simple(scalar_name_filter.c_str(), scalar->alias.c_str())
+                                       && !str::fuzzy_match(scalar_name_filter.c_str(), scalar->alias.c_str())
                                        && !group_matches_filter;
                     if (scalar->hide_from_scalars_window || hide_by_filter) {
                         continue;
@@ -772,10 +772,10 @@ void DbgGui::showVectorWindow() {
                 }
 
                 // All vectors in a group are shown if the group name matches filter
-                bool group_matches_filter = fts::fuzzy_match_simple(vector_name_filter.c_str(), group.full_name.c_str());
+                bool group_matches_filter = str::fuzzy_match(vector_name_filter.c_str(), group.full_name.c_str());
                 for (Vector2D* vector : vectors) {
                     if (!vector_name_filter.empty()
-                        && !fts::fuzzy_match_simple(vector_name_filter.c_str(), vector->name.c_str())
+                        && !str::fuzzy_match(vector_name_filter.c_str(), vector->name.c_str())
                         && !group_matches_filter) {
                         continue;
                     }

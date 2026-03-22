@@ -23,11 +23,6 @@
 #include "dbghelp_symbols_lookup.h"
 #include "str_helpers.h"
 
-#pragma warning(push, 0)
-#define FTS_FUZZY_MATCH_IMPLEMENTATION
-#include "fts_fuzzy_match.h"
-#pragma warning(pop)
-
 #include "variant_symbol.h"
 #include "symbol_helpers.h"
 #include <DbgHelp.h>
@@ -182,7 +177,7 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
             if (name == sym->getFullName()) {
                 matching_symbols.insert(matching_symbols.begin(), sym);
             } else if (matching_symbols.size() < max_count
-                       && fts::fuzzy_match_simple(name.c_str(), sym->getFullName().c_str())) {
+                       && str::fuzzy_match(name.c_str(), sym->getFullName().c_str())) {
                 matching_symbols.push_back(sym);
             }
             // Find children
@@ -215,7 +210,7 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
         if (name_to_search == sym->getName()) {
             matching_symbols.insert(matching_symbols.begin(), sym.get());
         } else if (matching_symbols.size() < max_count
-                   && fts::fuzzy_match_simple(name_to_search.c_str(), sym->getName().c_str())) {
+                   && str::fuzzy_match(name_to_search.c_str(), sym->getName().c_str())) {
             matching_symbols.push_back(sym.get());
         }
     }

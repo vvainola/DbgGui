@@ -22,11 +22,6 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#pragma warning(push, 0)
-#define FTS_FUZZY_MATCH_IMPLEMENTATION
-#include "symbols/fts_fuzzy_match.h"
-#pragma warning(pop)
-
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include "resource.h"
@@ -842,7 +837,7 @@ void CsvPlotter::showSignalWindow() {
             for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
                 if (!std::string(signal_name_filter).empty()
-                    && !fts::fuzzy_match_simple(signal_name_filter, signal.name.c_str())) {
+                    && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
                     continue;
                 }
 

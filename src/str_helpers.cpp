@@ -21,15 +21,22 @@
 // SOFTWARE.
 
 #include "str_helpers.h"
-#include <windows.h>
 #include <format>
 #include <sstream>
 #include <iomanip>
 #include <stack>
+#include <fstream>
+#include <algorithm>
+#include <cmath>
+
+#if WINDOWS
+#include <windows.h>
+#endif
 
 namespace str {
 
-std::expected<std::string, std::string> str::readFile(const std::string& filename) {
+#if WINDOWS
+std::expected<std::string, std::string> readFile(const std::string& filename) {
     HANDLE file_handle = CreateFileA(
       filename.c_str(),
       GENERIC_READ,
@@ -73,12 +80,30 @@ std::expected<std::string, std::string> str::readFile(const std::string& filenam
 
     return result;
 }
+#else
+std::expected<std::string, std::string> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return std::unexpected(std::format("Error opening file: {}", filename));
+    }
 
-std::vector<std::string_view> str::splitSv(const std::string& s, char delim, int expected_column_count) {
+    auto file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::string result(static_cast<size_t>(file_size), '\0');
+    if (!file.read(result.data(), file_size)) {
+        return std::unexpected(std::format("Error reading file: {}", filename));
+    }
+
+    return result;
+}
+#endif
+
+std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count) {
     std::vector<std::string_view> elems;
     elems.reserve(expected_column_count);
-    int32_t pos_start = 0;
-    for (int i = 0; i < s.size(); ++i) {
+    size_t pos_start = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] == delim) {
             elems.push_back(std::string_view(&s[pos_start], &s[i]));
             pos_start = i + 1;
@@ -91,7 +116,7 @@ std::vector<std::string_view> str::splitSv(const std::string& s, char delim, int
     return elems;
 }
 
-std::vector<std::string> str::split(const std::string& s, char delim) {
+std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> elems;
     std::istringstream iss(s);
     std::string item;
@@ -101,7 +126,7 @@ std::vector<std::string> str::split(const std::string& s, char delim) {
     return elems;
 }
 
-std::string str::replaceAll(
+std::string replaceAll(
   const std::string& str,    // where to work
   const std::string& find,   // substitute 'find'
   const std::string& replace // by 'replace'
@@ -130,19 +155,19 @@ std::string removeWhitespace(std::string_view str) {
     return result;
 }
 
-std::string& str::ltrim(std::string& str) {
+std::string& ltrim(std::string& str) {
     auto it2 = std::find_if(str.begin(), str.end(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
     str.erase(str.begin(), it2);
     return str;
 }
 
-std::string& str::rtrim(std::string& str) {
+std::string& rtrim(std::string& str) {
     auto it1 = std::find_if(str.rbegin(), str.rend(), [](char ch) { return !std::isspace<char>(ch, std::locale::classic()); });
     str.erase(it1.base(), str.end());
     return str;
 }
 
-std::string& str::trim(std::string& str) {
+std::string& trim(std::string& str) {
     return ltrim(rtrim(str));
 }
 
@@ -268,7 +293,39 @@ static double evaluateExpression(std::istringstream& iss) {
     }
 }
 
-std::expected<double, std::string> str::evaluateExpression(std::string expression) {
+bool fuzzy_match(char const* pattern, char const* str) {
+    while (*pattern != '\0' && *str != '\0') {
+        if (tolower(*pattern) == tolower(*str))
+            ++pattern;
+        ++str;
+    }
+
+    return *pattern == '\0' ? true : false;
+}
+
+bool fuzzy_match(std::string_view pattern, std::string_view str) {
+    int i = 0;
+    while (!pattern.empty() && i < str.size()) {
+        if (tolower(pattern[0]) == tolower(str[i]))
+            pattern.remove_prefix(1);
+        ++i;
+    }
+
+    return pattern.empty();
+}
+
+bool fuzzy_match(char const* pattern, std::string_view str) {
+    int i = 0;
+    while (*pattern != '\0' && i < str.size()) {
+        if (tolower(*pattern) == tolower(str[i]))
+            ++pattern;
+        ++i;
+    }
+
+    return *pattern == '\0';
+}
+
+std::expected<double, std::string> evaluateExpression(std::string expression) {
     // Remove whitespace
     expression.erase(std::remove_if(expression.begin(), expression.end(), isspace), expression.end());
     // Replace PI with its numerical value
@@ -278,7 +335,7 @@ std::expected<double, std::string> str::evaluateExpression(std::string expressio
     std::istringstream iss(expression);
     try {
         return evaluateExpression(iss);
-    } catch (std::runtime_error e) {
+    } catch (std::runtime_error& e) {
         return std::unexpected(e.what());
     }
 }

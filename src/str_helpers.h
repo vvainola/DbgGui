@@ -41,6 +41,10 @@ std::string& ltrim(std::string& str);
 std::string& rtrim(std::string& str);
 std::string& trim(std::string& str);
 
+bool fuzzy_match(char const* pattern, char const* str);
+bool fuzzy_match(std::string_view pattern, std::string_view str);
+bool fuzzy_match(char const* pattern, std::string_view str);
+
 std::expected<double, std::string> evaluateExpression(std::string expression);
 
 } // namespace str
