@@ -43,7 +43,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
                 m_scalar_plots.push_back(plot);
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -56,7 +56,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_vector_plots.push_back(VectorPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -69,7 +69,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_custom_windows.push_back(CustomWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -82,7 +82,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_script_windows.push_back(ScriptWindow{this, window_or_plot_name, hashWithTime(window_or_plot_name)});
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -95,7 +95,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_grid_windows.emplace_back(GridWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -108,7 +108,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                                  IM_ARRAYSIZE(window_or_plot_name),
                                  ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_spectrum_plots.push_back(SpectrumPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -124,7 +124,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                 // Add clock to hash calculation because dockspace name can change later and the user might
                 // create a new dockspace which could have same name as the original and they would result in same id
                 m_dockspaces.push_back(DockSpace(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                strcpy_s(window_or_plot_name, "");
+                window_or_plot_name[0] = '\0';
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();

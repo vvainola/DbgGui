@@ -72,7 +72,8 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
         key_name = key_name[6];
     }
     // Clear text edit and set cursor after first character
-    strcpy_s(data->Buf, 20, key_name.c_str());
+    strncpy(data->Buf, key_name.c_str(), 20);
+    data->Buf[19] = '\0';
     data->BufTextLen = 1;
     data->BufDirty = 1;
     data->CursorPos = 1;
@@ -123,7 +124,8 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
                                    | ImGuiInputTextFlags_CallbackAlways;
     double scaled_value = getSourceValue(value_src) * scale + offset;
     char value[20];
-    strcpy_s(value, numberAsStr(scaled_value).c_str());
+    strncpy(value, numberAsStr(scaled_value).c_str(), 20);
+    value[19] = '\0';
     ImGui::SetNextItemWidth(-FLT_MIN);
     static ImGuiKey pressed_number = ImGuiKey_None;
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
@@ -1017,7 +1019,8 @@ void DbgGui::showSymbolsWindow() {
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str());
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strcpy_s(symbol_name_buffer, sym->getFullName().data());
+                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
+                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
                         ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
                         ImGui::Text("Drag to custom window to add all children");
                         ImGui::EndDragDropSource();

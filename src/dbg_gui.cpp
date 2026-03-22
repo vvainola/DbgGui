@@ -65,8 +65,7 @@ static void glfw_error_callback(int error, const char* description) {
 
 DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time),
-      m_symbols(DbgSymbols::getSymbols())
-{
+      m_symbols(DbgSymbols::getSymbols()) {
     assert(sampling_time >= 0);
 }
 
@@ -315,7 +314,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
             scalar->setScaleStr(scale);
             std::string offset = scalar_data["offset"];
             scalar->setOffsetStr(offset);
-            scalar->alias = scalar_data["alias"];
+            scalar->alias = std::string(scalar_data["alias"]);
             scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
             break;
         }
@@ -533,7 +532,8 @@ void DbgGui::loadPreviousSessionSettings() {
         };)
 
         TRY(std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
-            strcpy_s(m_group_to_add_symbols, group_to_add_symbols.data());)
+            strncpy(m_group_to_add_symbols, group_to_add_symbols.data(), MAX_NAME_LENGTH);
+            m_group_to_add_symbols[MAX_NAME_LENGTH - 1] = '\0';)
     }
     f.close();
 }
