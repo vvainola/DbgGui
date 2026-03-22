@@ -2,19 +2,31 @@ project('DbgGui', ['cpp', 'c'],
     meson_version: '>=1.1.0',
     default_options : [
         'b_vscrt=md',
-        'cpp_std=c++latest',
         'c_std=c17',
         'warning_level=3'
     ]
 )
 
+WINDOWS = (host_machine.system() == 'windows')
+LINUX = (host_machine.system() == 'linux')
+
 project_root = meson.current_source_dir()
-add_project_arguments([
-        '-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR',
-        '-DNOMINMAX',
-        '-DJSON_DIAGNOSTICS=1',
-        '-Zc:preprocessor',
-    ], language : ['c', 'cpp'])
+if WINDOWS
+    add_project_arguments([
+            '-DWINDOWS',
+            '-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR',
+            '-DNOMINMAX',
+            '-DJSON_DIAGNOSTICS=1',
+            '-Zc:preprocessor',
+        ], language : ['c', 'cpp']
+    )
+else
+    add_project_arguments([
+            '-DLINUX',
+            '-DJSON_DIAGNOSTICS=1',
+        ], language : ['c', 'cpp']
+    )
+endif
 
 cpp = meson.get_compiler('cpp')
 windows = import('windows')
@@ -38,8 +50,13 @@ deps = [
     dependency('glfw3'),
     dependency('kissfft-float'),
     dependency('cxxopts'),
-    cpp.find_library('dbghelp'),
 ]
+
+if WINDOWS
+    deps += [cpp.find_library('dbghelp')]
+else
+    deps += [dependency('libdwarf'), dependency('gtk+-3.0')]
+endif
 
 imgui_src = files([
     'src/imgui/calibri.cpp',
@@ -62,8 +79,13 @@ imgui_src = files([
     'src/imgui/implot/implot_items.cpp',
     'src/imgui/implot/implot_items.cpp',
     'src/nativefiledialog/nfd_common.c',
-    'src/nativefiledialog/nfd_win.cpp',
 ])
+
+if WINDOWS
+    imgui_src += files(['src/nativefiledialog/nfd_win.cpp'])
+else
+    imgui_src += files(['src/nativefiledialog/nfd_gtk.c'])
+endif
 inc = []
 inc += include_directories(
     'src/imgui',
@@ -136,14 +158,17 @@ version_header = vcs_tag(
     output: 'version.h'
 )
 
-
-csv_plotter_icon = windows.compile_resources('src/csv_plot/icon.rc',
-    depend_files : [
-        'src/csv_plot/csv_plotter.png',
-        'src/csv_plot/csv_plotter.ico',
-        'src/csv_plot/resource.h'
-    ],
-)
+if WINDOWS
+    csv_plotter_icon = [windows.compile_resources('src/csv_plot/icon.rc',
+        depend_files : [
+            'src/csv_plot/csv_plotter.png',
+            'src/csv_plot/csv_plotter.ico',
+            'src/csv_plot/resource.h'
+        ],
+    )]
+else
+    csv_plotter_icon = []
+endif
 
 csv_plotter = executable('csv_plotter',
     sources : [
@@ -159,8 +184,7 @@ csv_plotter = executable('csv_plotter',
         'src/str_helpers.cpp',
         'src/themes.cpp',
         version_header,
-        csv_plotter_icon
-    ],
+    ] + csv_plotter_icon,
     include_directories : inc + ['src'],
     link_with : imgui_lib,
     dependencies : deps,
