@@ -25,7 +25,7 @@
 #include <cassert>
 #include <numeric>
 #include <format>
-#include <processthreadsapi.h>
+#include <cstring>
 
 #if !defined(DBGHELP_MAX_ARRAY_ELEMENT_COUNT)
 #define DBGHELP_MAX_ARRAY_ELEMENT_COUNT 10000
@@ -130,19 +130,12 @@ VariantSymbol* VariantSymbol::getPointedSymbol() const {
 }
 
 void VariantSymbol::setPointedAddress(MemoryAddress address) {
-#if _WIN64
-    *(ULONG64*)m_address = address;
-#else
-    *(DWORD*)m_address = (DWORD)address;
-#endif
+    std::memcpy(reinterpret_cast<void*>(m_address), &address, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::setPointedSymbol(VariantSymbol* symbol) {
-#if _WIN64
-    *(ULONG64*)m_address = symbol->getAddress();
-#else
-    *(DWORD*)m_address = (DWORD)symbol->getAddress();
-#endif
+    MemoryAddress addr = symbol->getAddress();
+    std::memcpy(reinterpret_cast<void*>(m_address), &addr, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::write(double value) {
@@ -256,9 +249,7 @@ std::string VariantSymbol::valueAsStr() const {
 
 MemoryAddress VariantSymbol::getPointedAddress() const {
     assert(m_type == Type::Pointer);
-#if _WIN64
-    return *(ULONG64*)m_address;
-#else
-    return *(DWORD*)m_address;
-#endif
+    MemoryAddress addr = 0;
+    std::memcpy(&addr, reinterpret_cast<const void*>(m_address), sizeof(MemoryAddress));
+    return addr;
 }
