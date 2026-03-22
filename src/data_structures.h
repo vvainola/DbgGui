@@ -492,8 +492,8 @@ struct GridWindow : Window {
         return j;
     }
 
-    static const int MAX_ROWS = 20;
-    static const int MAX_COLUMNS = 10;
+    inline static const int MAX_ROWS = 20;
+    inline static const int MAX_COLUMNS = 10;
     std::array<std::array<uint64_t, MAX_COLUMNS>, MAX_ROWS> scalars = {};
     int rows = 1;
     int columns = 1;
