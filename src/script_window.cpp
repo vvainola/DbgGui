@@ -42,7 +42,9 @@ const std::set<std::string> SPECIAL_OPERATIONS = {
   "save_csv",
 };
 
-std::expected<std::vector<VariantSymbol*>, std::string> getValueSymbols(std::string line, int line_number, DbgHelpSymbols const& symbols) {
+std::expected<std::vector<VariantSymbol*>, std::string> getValueSymbols(std::string line,
+                                                                        int line_number,
+                                                                        DbgSymbols const& symbols) {
     std::vector<VariantSymbol*> value_symbols;
     // Parse value for symbols that match {name} regex
     std::regex scalar_regex(R"(\{([^{}]+)\})");
@@ -126,7 +128,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         // Parse if the value refers to other symbols
         //--------------
         std::string value_orig = str::trim(line_split[2]);
-        std::expected<std::vector<VariantSymbol*>, std::string> value_symbols = getValueSymbols(value_orig, i, m_gui->m_dbghelp_symbols);
+        std::expected<std::vector<VariantSymbol*>, std::string> value_symbols = getValueSymbols(value_orig, i, m_gui->m_symbols);
         if (!value_symbols.has_value()) {
             return value_symbols.error();
         }
@@ -221,7 +223,7 @@ std::expected<ScriptWindow::Operation, std::string> ScriptWindow::parseSpecialOp
     op.line = line_number;
 
     if (operation_name == "save_csv") {
-        std::expected<std::vector<VariantSymbol*>, std::string> value_symbols = getValueSymbols(line_split[2], line_number, m_gui->m_dbghelp_symbols);
+        std::expected<std::vector<VariantSymbol*>, std::string> value_symbols = getValueSymbols(line_split[2], line_number, m_gui->m_symbols);
         if (!value_symbols.has_value()) {
             return std::unexpected(value_symbols.error());
         }

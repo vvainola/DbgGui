@@ -165,7 +165,7 @@ void DbgGui::saveSnapshot() {
     // Wait until main thread goes to pause state
     while (m_next_sync_timestamp > 0) {
     }
-    m_saved_snapshot = m_dbghelp_symbols.saveSnapshotToMemory();
+    m_saved_snapshot = m_symbols.saveSnapshotToMemory();
     m_paused = paused;
 }
 
@@ -176,7 +176,7 @@ void DbgGui::loadSnapshot() {
     // Wait until main thread goes to pause state
     while (m_next_sync_timestamp > 0) {
     }
-    m_dbghelp_symbols.loadSnapshotFromMemory(m_saved_snapshot);
+    m_symbols.loadSnapshotFromMemory(m_saved_snapshot);
     m_paused = paused;
 }
 

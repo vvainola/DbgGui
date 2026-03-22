@@ -142,7 +142,7 @@ class DbgGui {
         return nullptr;
     }
 
-    DbgHelpSymbols const& m_dbghelp_symbols;
+    DbgSymbols const& m_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
     std::set<std::string> m_hidden_symbols;

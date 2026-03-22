@@ -41,48 +41,48 @@ static double getSourceValue(ValueSource src) {
 }
 
 void* SNP_getSymbolsFromPdb() {
-    return (void*)&DbgHelpSymbols::getSymbolsFromPdb();
+    return (void*)&DbgSymbols::getSymbols();
 }
 void* SNP_getSymbolsFromJson(const char* symbols_json) {
-    DbgHelpSymbols* symbols = new DbgHelpSymbols(symbols_json);
+    DbgSymbols* symbols = new DbgSymbols(symbols_json);
     if (!symbols->symbolsLoadedFromJson()) {
-        delete (DbgHelpSymbols*)symbols;
+        delete (DbgSymbols*)symbols;
         symbols = nullptr;
     }
     return symbols;
 }
 
 void SNP_deleteSymbolLookup(void* symbols) {
-    if (((DbgHelpSymbols*)symbols)->symbolsLoadedFromJson()) {
-        delete (DbgHelpSymbols*)symbols;
+    if (((DbgSymbols*)symbols)->symbolsLoadedFromJson()) {
+        delete (DbgSymbols*)symbols;
     }
 }
 
 void SNP_saveSymbolInfoToJson(void* symbols, const char* symbols_file, int omit_names) {
-    ((DbgHelpSymbols*)symbols)->saveSymbolInfoToJson(symbols_file, omit_names);
+    ((DbgSymbols*)symbols)->saveSymbolInfoToJson(symbols_file, omit_names);
 }
 
 void SNP_saveSnapshotToFile(void* symbols, const char* snapshot_file) {
-    ((DbgHelpSymbols*)symbols)->saveSnapshotToFile(snapshot_file);
+    ((DbgSymbols*)symbols)->saveSnapshotToFile(snapshot_file);
 }
 
 void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file) {
-    ((DbgHelpSymbols*)symbols)->loadSnapshotFromFile(snapshot_file);
+    ((DbgSymbols*)symbols)->loadSnapshotFromFile(snapshot_file);
 }
 
 std::vector<SymbolValue> SNP_saveSnapshotToMemory(void* symbols) {
-    return ((DbgHelpSymbols*)symbols)->saveSnapshotToMemory();
+    return ((DbgSymbols*)symbols)->saveSnapshotToMemory();
 }
 
 void SNP_loadSnapshotFromMemory(void* symbols, std::vector<SymbolValue> const& snapshot) {
-    ((DbgHelpSymbols*)symbols)->loadSnapshotFromMemory(snapshot);
+    ((DbgSymbols*)symbols)->loadSnapshotFromMemory(snapshot);
 }
 
 std::function<double(void)> SNP_getSymbolReadFn(std::string const& symbol_name, void* symbols) {
     if (symbols == nullptr) {
         symbols = SNP_getSymbolsFromPdb();
     }
-    VariantSymbol* sym = ((DbgHelpSymbols*)symbols)->getSymbol(symbol_name);
+    VariantSymbol* sym = ((DbgSymbols*)symbols)->getSymbol(symbol_name);
     if (sym) {
         return [=]() {
             return getSourceValue(sym->getValueSource());

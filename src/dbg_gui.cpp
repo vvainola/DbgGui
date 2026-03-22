@@ -65,7 +65,8 @@ static void glfw_error_callback(int error, const char* description) {
 
 DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time),
-      m_dbghelp_symbols(DbgHelpSymbols::getSymbolsFromPdb()) {
+      m_symbols(DbgSymbols::getSymbols())
+{
     assert(sampling_time >= 0);
 }
 
@@ -86,7 +87,7 @@ void DbgGui::synchronizeSpeed() {
     static double last_timestamp = m_sample_timestamp;
     static std::future<void> tick;
 
-    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick._Is_ready())) {
+    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
@@ -99,7 +100,7 @@ void DbgGui::synchronizeSpeed() {
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
-        real_time_us = std::max(real_time_us, 1ll);
+        real_time_us = std::max<long>(real_time_us, 1);
         double real_time_s = real_time_us * 1e-6;
         last_real_timestamp = now;
 
@@ -394,7 +395,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto symbol : m_settings["scalar_symbols"]) {
             TRY(
-              VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
+              VariantSymbol* sym = m_symbols.getSymbol(symbol["name"]);
               if (sym
                   && (sym->getType() == VariantSymbol::Type::Arithmetic
                       || sym->getType() == VariantSymbol::Type::Enum
@@ -405,8 +406,8 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto symbol : m_settings["vector_symbols"]) {
             TRY(
-              VariantSymbol* sym_x = m_dbghelp_symbols.getSymbol(symbol["x"]);
-              VariantSymbol* sym_y = m_dbghelp_symbols.getSymbol(symbol["y"]);
+              VariantSymbol* sym_x = m_symbols.getSymbol(symbol["x"]);
+              VariantSymbol* sym_y = m_symbols.getSymbol(symbol["y"]);
               if (sym_x && sym_y) {
                   addVectorSymbol(sym_x, sym_y, symbol["group"]);
               };)
@@ -419,7 +420,7 @@ void DbgGui::loadPreviousSessionSettings() {
             std::vector<VariantSymbol*> selected_symbols;
             bool all_symbols_exist = true;
             for (auto& symbol_name : custom_signal["symbols"]) {
-                VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
+                VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
                 if (sym) {
                     selected_symbols.push_back(sym);
                 } else {
@@ -555,15 +556,15 @@ void DbgGui::updateSavedSettings() {
         m_settings_saved.clear();
         // Restore symbols
         for (auto const& scalar : m_scalars) {
-            VariantSymbol* scalar_sym = m_dbghelp_symbols.getSymbol(scalar->name);
+            VariantSymbol* scalar_sym = m_symbols.getSymbol(scalar->name);
             if (scalar_sym) {
                 m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
                 m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
             }
         }
         for (auto const& vector : m_vectors) {
-            VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
-            VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+            VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
+            VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
             if (x && y) {
                 m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
                 m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
@@ -993,7 +994,7 @@ void DbgGui::pause() {
 }
 
 Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale, double offset) {
-    VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
+    VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
     if (sym) {
         Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
         ptr->alias = alias;

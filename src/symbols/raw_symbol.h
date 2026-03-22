@@ -23,8 +23,12 @@
 #pragma once
 
 #include "cvconst.h"
+#if WINDOWS
 #include <Windows.h>
 #include <DbgHelp.h>
+#endif
+
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -73,7 +77,7 @@ struct RawSymbol {
 
     SymbolInfo info;
     SymTagEnum tag = SymTagNull;
-    DWORD offset_to_parent = 0;
+    uint32_t offset_to_parent = 0;
     uint32_t array_element_count = 0;
     BasicType basic_type = BasicType::btNoType;
     int bitfield_position = -1;

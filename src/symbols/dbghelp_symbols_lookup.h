@@ -33,15 +33,13 @@
 struct RawSymbol;
 class VariantSymbol;
 
-class DbgHelpSymbols {
+class DbgSymbols {
   public:
-    /// @brief Load global symbols from PDB file
-    /// @return Singleton object
-    static DbgHelpSymbols const& getSymbolsFromPdb();
+    static DbgSymbols const& getSymbols();
 
     /// @brief Load global symbols from JSON file
     /// @param symbol_json JSON file from which the global symbols are loaded if it matches the current binary.
-    DbgHelpSymbols(std::string const& symbol_json);
+    DbgSymbols(std::string const& symbol_json);
 
     /// @return Symbols succesfully loaded from json file
     bool symbolsLoadedFromJson() const { return m_symbols_loaded_from_json; }
@@ -81,9 +79,11 @@ class DbgHelpSymbols {
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
   private:
-    DbgHelpSymbols();
+    DbgSymbols();
     bool loadSymbolsFromJson(std::string const& json);
-    void loadSymbolsFromPdb();
+    void sortSymbols();
+    void initSymbolsFromPdb();
+
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;

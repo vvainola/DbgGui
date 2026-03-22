@@ -602,7 +602,7 @@ void DbgGui::showScalarWindow() {
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
                     if (scalar->group != group.full_name) {
-                        VariantSymbol* scalar_symbol = m_dbghelp_symbols.getSymbol(scalar->name);
+                        VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
                         if (scalar_symbol) {
                             Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
                             new_scalar->alias = scalar->alias;
@@ -743,8 +743,8 @@ void DbgGui::showVectorWindow() {
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
                     if (vector->group != group.full_name) {
-                        VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
-                        VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+                        VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
+                        VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
                         if (x && y) {
                             Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
                             new_vector->x->setScaleStr(vector->x->getScaleStr());
@@ -854,7 +854,7 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
             char* symbol_name = (char*)payload->Data;
-            VariantSymbol* dragged_symbol = m_dbghelp_symbols.getSymbol(symbol_name);
+            VariantSymbol* dragged_symbol = m_symbols.getSymbol(symbol_name);
             if (dragged_symbol) {
                 // Add children recursively
                 std::function<void(VariantSymbol*)> add_children = [&](VariantSymbol* sym) {
@@ -960,7 +960,7 @@ void DbgGui::showSymbolsWindow() {
     static char symbols_to_search[MAX_NAME_LENGTH];
     if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
         if (std::string(symbols_to_search).size() > 2) {
-            m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
+            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
             auto begin_it = m_symbol_search_results.begin();
             // Don't sort first element if it is an exact match
             if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {

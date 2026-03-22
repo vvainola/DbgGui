@@ -65,29 +65,30 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     return TRUE;
 }
 
-void DbgHelpSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
+void DbgSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
     saveSymbolsToJson(filename, m_raw_symbols, omit_names);
 }
 
-DbgHelpSymbols::DbgHelpSymbols() {
-    loadSymbolsFromPdb();
-    // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
-    std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
-        return l->getAddress() < r->getAddress();
-    });
+DbgSymbols::DbgSymbols() {
+    initSymbolsFromPdb();
+    sortSymbols();
 }
 
-DbgHelpSymbols::DbgHelpSymbols(std::string const& symbol_json) {
+DbgSymbols::DbgSymbols(std::string const& symbol_json) {
     m_symbols_loaded_from_json = loadSymbolsFromJson(symbol_json);
+    sortSymbols();
+}
+
+void DbgSymbols::sortSymbols() {
     // Sort addresses so that lookup for pointed symbol can use binary search on addresses to find the symbol
     std::sort(m_root_symbols.begin(), m_root_symbols.end(), [](std::unique_ptr<VariantSymbol> const& l, std::unique_ptr<VariantSymbol> const& r) {
         return l->getAddress() < r->getAddress();
     });
 }
 
-DbgHelpSymbols const& DbgHelpSymbols::getSymbolsFromPdb() {
-    static DbgHelpSymbols dbghelp_symbols;
-    return dbghelp_symbols;
+DbgSymbols const& DbgSymbols::getSymbols() {
+    static DbgSymbols dbg_symbols;
+    return dbg_symbols;
 }
 
 // For name[2][3][4] return {2, 3, 4}
@@ -113,7 +114,7 @@ std::vector<size_t> getArrayIndices(std::string const& s) {
     return indices;
 }
 
-VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
+VariantSymbol* DbgSymbols::getSymbol(std::string const& name) const {
     std::vector<std::string> split_name = str::split(name, '.');
     std::vector<std::unique_ptr<VariantSymbol>> const* container = &m_root_symbols;
     for (size_t i = 0; i < split_name.size(); ++i) {
@@ -166,21 +167,18 @@ VariantSymbol* DbgHelpSymbols::getSymbol(std::string const& name) const {
     return nullptr;
 }
 
-std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string const& name,
-                                                                bool recursive,
-                                                                int max_count) const {
+std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& name,
+                                                            bool recursive,
+                                                            int max_count) const {
     std::vector<VariantSymbol*> matching_symbols;
-    // Find from all symbols, can be pretty slow
     if (recursive) {
         std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
-            // Exact match is shown first
             if (name == sym->getFullName()) {
                 matching_symbols.insert(matching_symbols.begin(), sym);
             } else if (matching_symbols.size() < max_count
                        && str::fuzzy_match(name.c_str(), sym->getFullName().c_str())) {
                 matching_symbols.push_back(sym);
             }
-            // Find children
             for (std::unique_ptr<VariantSymbol> const& child : sym->getChildren()) {
                 find_matching_recursively(child.get());
             }
@@ -194,7 +192,6 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
     std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
     std::string name_to_search = name;
 
-    // Search only members of a symbol if the name contains "."
     size_t idx = name.rfind('.');
     if (idx != std::string::npos) {
         std::string parent_name = name.substr(0, idx);
@@ -217,7 +214,7 @@ std::vector<VariantSymbol*> DbgHelpSymbols::findMatchingSymbols(std::string cons
     return matching_symbols;
 }
 
-bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
+bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
     if (!std::filesystem::exists(json)) {
         return false;
     }
@@ -233,7 +230,7 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
             RawSymbol raw_symbol(symbol_data);
             m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
         }
-    } catch (nlohmann::json::exception err) {
+    } catch (nlohmann::json::exception& err) {
         std::cerr << err.what();
         m_root_symbols.clear();
         return false;
@@ -242,7 +239,7 @@ bool DbgHelpSymbols::loadSymbolsFromJson(std::string const& json) {
     return true;
 }
 
-void DbgHelpSymbols::loadSymbolsFromPdb() {
+void DbgSymbols::initSymbolsFromPdb() {
     ScopedSymbolHandler symbol_handler;
     if (!symbol_handler.initialized()) {
         return;
@@ -292,7 +289,7 @@ void DbgHelpSymbols::loadSymbolsFromPdb() {
     }
 }
 
-void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
+void DbgSymbols::saveSnapshotToFile(std::string const& json) const {
     nlohmann::json snapshot;
     auto module_info = getCurrentModuleInfo();
     snapshot["write_time"] = module_info.write_time;
@@ -303,14 +300,13 @@ void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
         std::string key = std::format("{} {}", sym->getFullName(), address_offset);
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
             double value = sym->read();
-            bool value_ok = !isnan(value) && !isinf(value);
+            bool value_ok = !std::isnan(value) && !std::isinf(value);
             if (value_ok) {
                 snapshot["state"][key] = sym->read();
             }
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
             MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
-            // Set pointer only if it points to something else within this module
             bool pointed_address_ok = pointed_address_offset < module_info.size;
             if (pointed_address == NULL) {
                 snapshot["state"][key] = 0;
@@ -332,7 +328,7 @@ void DbgHelpSymbols::saveSnapshotToFile(std::string const& json) const {
     std::ofstream(json) << std::setw(4) << snapshot;
 }
 
-std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
+std::vector<SymbolValue> DbgSymbols::saveSnapshotToMemory() const {
     ScopedSymbolHandler scoped_symbol_handler;
 
     std::vector<SymbolValue> snapshot;
@@ -369,7 +365,7 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
     return snapshot;
 }
 
-void DbgHelpSymbols::loadSnapshotFromFile(std::string const& json) const {
+void DbgSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto module_info = getCurrentModuleInfo();
     nlohmann::json snapshot = nlohmann::json::parse(std::ifstream(json));
     if (module_info.write_time != std::string(snapshot["write_time"])) {
@@ -413,7 +409,7 @@ void DbgHelpSymbols::loadSnapshotFromFile(std::string const& json) const {
     }
 }
 
-void DbgHelpSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const {
+void DbgSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const {
     for (SymbolValue symbol_snapshot : snapshot) {
         VariantSymbol* sym = symbol_snapshot.symbol;
         std::visit(

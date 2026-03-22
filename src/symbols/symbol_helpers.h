@@ -26,9 +26,10 @@
 #include <memory>
 #include <map>
 #include <iostream>
+#include <string>
 
-using ModuleBase = ULONG64;
-using TypeIndex = ULONG;
+using ModuleBase = uint64_t;
+using TypeIndex = uint32_t;
 
 void printLastError();
 
@@ -49,12 +50,12 @@ inline bool endsWith(std::string_view str, std::string_view suffix) {
 
 struct ModuleInfo {
     MemoryAddress base_address;
-    MemoryAddress size;
+    size_t size;
     std::string write_time;
     std::string path;
 };
 ModuleInfo getCurrentModuleInfo();
-std::string getModuleName(ULONG64 module_base);
+std::string getModuleName(ModuleBase module_base);
 
 std::string readFile(std::string const& filename);
 
