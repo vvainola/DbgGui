@@ -24,6 +24,7 @@
 #include "moving_average.h"
 #include <thread>
 #include "DbgGui/global_snapshot.h"
+#include <cmath>
 
 struct Vector_ABC {
     double a;

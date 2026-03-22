@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include <iostream>
+#include <format>
 #include "csvplot.h"
 #include "version.h"
 #include <cxxopts.hpp>

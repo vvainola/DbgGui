@@ -22,6 +22,7 @@
 // SOFTWARE.
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #include "str_helpers.h"
 

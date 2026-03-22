@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <cmath>
+
 template <size_t N>
 class MovingAverage {
   public:
