@@ -103,6 +103,13 @@ imgui_lib = static_library('imgui',
     override_options : override_options,
 )
 
+platform_src = []
+if WINDOWS
+    platform_src += ['src/symbols/dbghelp_helpers.cpp']
+else
+    platform_src += ['src/symbols/elf_helpers.cpp']
+endif
+
 lib_symbols = static_library('symbols',
     sources : [
         'src/str_helpers.cpp',
@@ -110,9 +117,8 @@ lib_symbols = static_library('symbols',
         'src/symbols/dbghelp_symbols_lookup.cpp',
         'src/symbols/global_snapshot.cpp',
         'src/symbols/raw_symbol.cpp',
-        'src/symbols/symbol_helpers.cpp',
         'src/symbols/variant_symbol.cpp',
-    ],
+    ] + platform_src,
     dependencies : deps,
     include_directories : ['include', 'src'],
     override_options : override_options,

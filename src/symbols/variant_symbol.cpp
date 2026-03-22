@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "variant_symbol.h"
-#include "symbol_helpers.h"
+#include "dbghelp_helpers.h"
 #include <cassert>
 #include <numeric>
 #include <format>

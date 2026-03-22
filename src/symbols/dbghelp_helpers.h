@@ -62,6 +62,7 @@ std::string readFile(std::string const& filename);
 // Currently unused helpers
 DataKind getDataKind(RawSymbol const& sym);
 
+#if WINDOWS
 class ScopedSymbolHandler {
   public:
     ScopedSymbolHandler() {
@@ -94,3 +95,13 @@ class ScopedSymbolHandler {
     bool m_symbol_handler_initialized = false;
     HANDLE m_current_process = GetCurrentProcess();
 };
+#else
+class ScopedSymbolHandler {
+  public:
+    ScopedSymbolHandler() : m_initialized(false) {}
+    bool initialized() const { return m_initialized; }
+    ~ScopedSymbolHandler() {}
+  private:
+    bool m_initialized;
+};
+#endif

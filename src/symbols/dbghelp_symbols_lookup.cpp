@@ -24,8 +24,8 @@
 #include "str_helpers.h"
 
 #include "variant_symbol.h"
-#include "symbol_helpers.h"
-#include <DbgHelp.h>
+#include "dbghelp_helpers.h"
+
 #include <cassert>
 #include <sstream>
 #include <fstream>
