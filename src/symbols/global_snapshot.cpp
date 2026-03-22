@@ -43,6 +43,7 @@ static double getSourceValue(ValueSource src) {
 void* SNP_getSymbolsFromPdb() {
     return (void*)&DbgSymbols::getSymbols();
 }
+
 void* SNP_getSymbolsFromJson(const char* symbols_json) {
     DbgSymbols* symbols = new DbgSymbols(symbols_json);
     if (!symbols->symbolsLoadedFromJson()) {
@@ -76,6 +77,10 @@ std::vector<SymbolValue> SNP_saveSnapshotToMemory(void* symbols) {
 
 void SNP_loadSnapshotFromMemory(void* symbols, std::vector<SymbolValue> const& snapshot) {
     ((DbgSymbols*)symbols)->loadSnapshotFromMemory(snapshot);
+}
+
+VariantSymbol* SNP_getSymbol(void* symbols, const char* name) {
+    return ((DbgSymbols*)symbols)->getSymbol(name);
 }
 
 std::function<double(void)> SNP_getSymbolReadFn(std::string const& symbol_name, void* symbols) {
