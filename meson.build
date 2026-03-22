@@ -106,15 +106,16 @@ imgui_lib = static_library('imgui',
 platform_src = []
 if WINDOWS
     platform_src += ['src/symbols/dbghelp_helpers.cpp']
+    platform_src += ['src/symbols/dbg_symbols_win.cpp']
 else
     platform_src += ['src/symbols/elf_helpers.cpp']
+    platform_src += ['src/symbols/dbg_symbols_linux.cpp']
 endif
 
 lib_symbols = static_library('symbols',
     sources : [
         'src/str_helpers.cpp',
         'src/symbols/arithmetic_symbol.cpp',
-        'src/symbols/dbghelp_symbols_lookup.cpp',
         'src/symbols/global_snapshot.cpp',
         'src/symbols/raw_symbol.cpp',
         'src/symbols/variant_symbol.cpp',

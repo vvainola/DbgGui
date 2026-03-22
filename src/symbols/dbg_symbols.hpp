@@ -22,13 +22,18 @@
 
 #pragma once
 
+#include "DbgGui/global_snapshot.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <variant>
-#include "DbgGui/global_snapshot.h"
+
+#if LINUX
+#include <dwarf.h>
+#include <libdwarf.h>
+#endif
 
 struct RawSymbol;
 class VariantSymbol;
@@ -84,6 +89,8 @@ class DbgSymbols {
     void sortSymbols();
     void initSymbolsFromPdb();
 
+    void collectSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die parent);
+    void collectAllSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die);
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;

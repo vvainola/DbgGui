@@ -20,9 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbghelp_symbols_lookup.h"
+#include "dbg_symbols.hpp"
 #include "str_helpers.h"
-
 #include "variant_symbol.h"
 #include "dbghelp_helpers.h"
 
@@ -34,6 +33,8 @@
 #include <iostream>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+
+#include <DbgHelp.h>
 #include <psapi.h>
 
 BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID UserContext) {

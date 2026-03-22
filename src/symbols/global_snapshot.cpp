@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "DbgGui/global_snapshot.h"
-#include "dbghelp_symbols_lookup.h"
+#include "dbg_symbols.hpp"
 #include "variant_symbol.h"
 #include <iostream>
 
