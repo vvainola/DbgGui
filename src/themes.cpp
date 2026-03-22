@@ -22,8 +22,10 @@
 
 #include "themes.h"
 
+#if WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#endif
 #include "imgui.h"
 #include "implot.h"
 #include "magic_enum.hpp"
@@ -85,6 +87,7 @@ void setTheme(Theme theme, GLFWwindow* window) {
     implot_style.Colors[ImPlotCol_LegendBg] = ImVec4(0, 0, 0, 0);
 }
 
+#if WINDOWS
 void setDarkTitleBar(GLFWwindow* window) {
     // https://github.com/ysc3839/win32-darkmode/blob/cc26549b65b25d6f3168a80238792545bd401271/win32-darkmode/DarkMode.h#L107-L123
     // https://gaellalire.fr/gitlab/vestige/vestige/-/commit/a069f425efc11fd078bb05087fb8ce4e37665a55
@@ -144,6 +147,9 @@ void setDarkTitleBar(GLFWwindow* window) {
     WINDOWCOMPOSITIONATTRIBDATA data = {WCA_USEDARKMODECOLORS, &dark, sizeof(dark)};
     (*fnSetWindowCompositionAttribute)(hWnd, &data);
 }
+#else
+inline void setDarkTitleBar(GLFWwindow*) {}
+#endif
 
 void setTheme(Theme theme) {
     switch (theme) {
