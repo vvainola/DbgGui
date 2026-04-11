@@ -377,7 +377,7 @@ std::vector<SymbolValue> DbgHelpSymbols::saveSnapshotToMemory() const {
 void DbgHelpSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto module_info = getCurrentModuleInfo();
     nlohmann::json snapshot = nlohmann::json::parse(std::ifstream(json));
-    if (module_info.write_time != snapshot["write_time"]) {
+    if (module_info.write_time != std::string(snapshot["write_time"])) {
         std::cerr << "Snapshot has been made with different binary" << std::endl;
         return;
     }
