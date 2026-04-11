@@ -93,7 +93,7 @@ size_t reduceSampleCountForFFT(size_t n) {
         n = 1;
     }
 
-    size_t original_n = n;
+    /*size_t original_n = n;*/
     size_t reduced_n = n;
     while (n > 0) {
         while (n % 2 == 0) {
