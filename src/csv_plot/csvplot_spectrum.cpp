@@ -135,7 +135,8 @@ void CsvPlotter::showSpectrumPlots() {
                 && spec.calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 spec.data = spec.calculation.get();
             } else if (recalculate && spec.real && spec.imag) {
-                double sampling_time = spec.real->file->signals[0].samples[1] - spec.real->file->signals[0].samples[0];
+                std::span<double const> x_samples = getXSignalSamples(*spec.real->file);
+                double sampling_time = x_samples[1] - x_samples[0];
                 std::vector<double> real = getVisibleSamples(*spec.real);
                 std::vector<double> imag = getVisibleSamples(*spec.imag);
                 std::vector<std::complex<double>> samples = realImagToComplex(real, imag);
@@ -149,7 +150,8 @@ void CsvPlotter::showSpectrumPlots() {
                                               one_sided,
                                               0);
             } else if (recalculate && spec.real) {
-                double sampling_time = spec.real->file->signals[0].samples[1] - spec.real->file->signals[0].samples[0];
+                std::span<double const> x_samples = getXSignalSamples(*spec.real->file);
+                double sampling_time = x_samples[1] - x_samples[0];
                 std::vector<double> real = getVisibleSamples(*spec.real);
                 std::vector<double> imag(real.size(), 0);
                 std::vector<std::complex<double>> samples = realImagToComplex(real, imag);

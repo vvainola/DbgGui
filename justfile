@@ -19,3 +19,10 @@ setup build *opts:
     .\\{{build}}\\conan\\conanbuild.ps1
     uv run meson setup {{build}} {{opts}} -Dtests=true
     uv run ..\meson-ninja-vs\ninja_vs.py -b {{build}}
+
+[no-cd]
+[windows]
+build build_folder="build" *opts="":
+    #! powershell
+    .venv/scripts/activate
+    meson compile -C {{build_folder}}

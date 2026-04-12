@@ -112,19 +112,18 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double 
 }
 
 std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
-    std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal.file->signals[0].samples : ASCENDING_NUMBERS;
+    std::span<double const> x_samples = getXSignalSamples(*signal.file);
     std::vector<double> const& all_samples = signal.samples;
-    double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
+    double x_offset = m_options.shift_samples_to_start_from_zero ? x_samples[0] : 0;
     x_offset -= signal.file->x_axis_shift;
 
     std::pair<int32_t, int32_t> indices;
-    if (!m_options.first_signal_as_x) {
+    if (m_options.x_signal_name == "ASCENDING_NUMBERS") {
         indices = {std::max(0, (int)std::floor(m_x_axis.min)),
                    std::min((int)all_samples.size(), (int)std::ceil(m_x_axis.max))};
     } else {
-        indices = getTimeIndices(signal.file->signals[0].samples, m_x_axis.min + x_offset, m_x_axis.max + x_offset);
+        indices = getTimeIndices(x_samples, m_x_axis.min + x_offset, m_x_axis.max + x_offset);
     }
-
     std::vector<double> plotted_samples(all_samples.begin() + indices.first, all_samples.begin() + indices.second);
     // Scale samples. Use default scale if signal has no scale
     double signal_scale = 1;
@@ -137,6 +136,23 @@ std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
     }
 
     return plotted_samples;
+}
+
+std::span<double const> CsvPlotter::getXSignalSamples(CsvFileData const& file) {
+    if (m_options.x_signal_name == "ASCENDING_NUMBERS") {
+        return ASCENDING_NUMBERS;
+    }
+    // Find signal with matching name. Use first signal as x-axis if signal is not found
+    for (auto const& sig : file.signals) {
+        if (sig.name == m_options.x_signal_name) {
+            return std::span<double const>(sig.samples);
+        }
+    }
+    if (!file.signals.empty()) {
+        return std::span<double const>(file.signals[0].samples);
+    }
+    // Fallback to ascending numbers if no signals in file
+    return ASCENDING_NUMBERS;
 }
 
 static void glfw_error_callback(int error, const char* description) {
@@ -318,7 +334,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_cols = int(settings["window"]["cols"]);)
             TRY(m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);)
             TRY(m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);)
-            TRY(m_options.first_signal_as_x = settings["window"]["first_signal_as_x"];)
+            TRY(m_options.x_signal_name = settings["window"]["x_signal_name"];)
             TRY(m_options.link_axis = settings["window"]["link_axis"];)
             TRY(m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];)
             TRY(m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];)
@@ -368,7 +384,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["cols"] = m_cols;
     settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
     settings["window"]["spectrum_plot_cnt"] = m_spectrum_plot_cnt;
-    settings["window"]["first_signal_as_x"] = m_options.first_signal_as_x;
+    settings["window"]["x_signal_name"] = m_options.x_signal_name;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
     settings["window"]["show_vertical_line_in_all_plots"] = m_options.show_vertical_line_in_all_plots;
@@ -558,6 +574,46 @@ void CsvPlotter::showErrorModal() {
     }
 }
 
+void CsvPlotter::showXSignalCombo() {
+    // Collect combo items
+    std::vector<std::string> x_signal_combo_items;
+    x_signal_combo_items.push_back("Index");
+    if (!m_csv_data.empty() && !m_csv_data[0]->signals.empty()) {
+        for (auto const& signal : m_csv_data[0]->signals) {
+            x_signal_combo_items.push_back(signal.name);
+        }
+    }
+    // Get index of selected x-signal, default to first signal
+    int x_signal_idx = m_options.x_signal_name == "ASCENDING_NUMBERS" ? 0 : 1;
+    if (!m_options.x_signal_name.empty()) {
+        for (int n = 1; n < (int)x_signal_combo_items.size(); n++) {
+            if (x_signal_combo_items[n] == m_options.x_signal_name) {
+                x_signal_idx = n;
+                break;
+            }
+        }
+    }
+    // Show combo
+    std::string x_signal_combo_preview = x_signal_combo_items.size() < 2 ? "" : x_signal_combo_items[x_signal_idx];
+    ImGui::SetNextItemWidth(185);
+    if (ImGui::BeginCombo("X-axis signal", x_signal_combo_preview.c_str())) {
+        for (int n = 0; n < (int)x_signal_combo_items.size(); n++) {
+            bool is_selected = (x_signal_idx == n);
+            if (ImGui::Selectable(x_signal_combo_items[n].c_str(), is_selected)) {
+                if (n == 0) {
+                    m_options.x_signal_name = "ASCENDING_NUMBERS";
+                } else {
+                    m_options.x_signal_name = x_signal_combo_items[n];
+                }
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+}
+
 void CsvPlotter::showSignalWindow() {
     ImGui::Begin("Signals");
 
@@ -633,11 +689,8 @@ void CsvPlotter::showSignalWindow() {
         m_spectrum_plot_cnt = std::clamp(m_spectrum_plot_cnt, 0, MAX_PLOTS);
         m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
         m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
-
+        showXSignalCombo();
         themeCombo(m_options.theme, m_window);
-        if (ImGui::Checkbox("Use first signal as x-axis", &m_options.first_signal_as_x)) {
-            ImPlot::SetNextAxesToFit();
-        }
         ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
         ImGui::Checkbox("Link x-axis", &m_options.link_axis);
         ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
@@ -942,7 +995,7 @@ void CsvPlotter::showScalarPlots() {
 
                 for (int i = 0; i < plot.signals.size(); ++i) {
                     CsvSignal* signal = plot.signals[i];
-                    std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                    std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                     std::vector<double> const& all_y_values = signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
@@ -1012,7 +1065,7 @@ void CsvPlotter::showScalarPlots() {
                     limits.X.Min = -INFINITY;
                     limits.X.Max = INFINITY;
                 }
-                std::vector<double> const& all_x_values = m_options.first_signal_as_x ? signal->file->signals[0].samples : ASCENDING_NUMBERS;
+                std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                 std::vector<double> const& all_y_values = signal->samples;
                 double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
                 x_offset -= signal->file->x_axis_shift;
@@ -1021,7 +1074,7 @@ void CsvPlotter::showScalarPlots() {
                 std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
                 std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
                 if (fit_data) {
-                    x_samples_in_range = all_x_values;
+                    x_samples_in_range.assign(all_x_values.begin(), all_x_values.end());
                     y_samples_in_range = all_y_values;
                     if (y_samples_in_range.size() < x_samples_in_range.size()) {
                         x_samples_in_range.resize(y_samples_in_range.size());

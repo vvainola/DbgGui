@@ -29,6 +29,7 @@
 #include <map>
 #include <array>
 #include <future>
+#include <span>
 #include "csv_helpers.h"
 
 struct MinMax {
@@ -157,8 +158,10 @@ class CsvPlotter {
     void showScalarPlots();
     void showVectorPlots();
     void showSpectrumPlots();
+    void showXSignalCombo();
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
+    std::span<double const> getXSignalSamples(CsvFileData const& file);
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
@@ -172,7 +175,7 @@ class CsvPlotter {
     int m_spectrum_plot_cnt = 0;
     float m_signals_window_width = 0.15f;
     struct {
-        bool first_signal_as_x = true;
+        std::string x_signal_name;
         bool shift_samples_to_start_from_zero = true;
         bool link_axis = true;
         bool autofit_y_axis = true;
