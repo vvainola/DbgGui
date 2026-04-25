@@ -185,7 +185,7 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    loadPreviousSessionSettings();
+    TRY(loadPreviousSessionSettings();)
 
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
