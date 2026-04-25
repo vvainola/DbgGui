@@ -32,6 +32,8 @@ build build_folder="build" *opts="":
 [windows]
 test build_folder="build" *opts="":
     #! powershell
+    .venv/scripts/activate
+    meson compile -C {{build_folder}}
     cd {{build_folder}}
     ./tests.exe
 
@@ -59,5 +61,7 @@ build build_folder="build" *opts="":
 [linux]
 test build_folder="build" *opts="":
     #!/usr/bin/env bash
+    source .venv_linux/bin/activate
+    ninja -C {{build_folder}}
     cd ./{{build_folder}}
     ./tests
