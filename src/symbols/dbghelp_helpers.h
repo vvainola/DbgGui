@@ -51,6 +51,26 @@ inline bool endsWith(std::string_view str, std::string_view suffix) {
     return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
+inline bool shouldSkipSymbolName(std::string const& name) {
+    return startsWith(name, "_")
+        || startsWith(name, "std::")
+        || endsWith(name, "$initializer$")
+        || startsWith(name, "IID_")
+        || startsWith(name, "GUID_")
+        || startsWith(name, "CLSID_")
+        || startsWith(name, "LIBID_")
+        || startsWith(name, "FONT_ATLAS_")
+        || startsWith(name, "nlohmann::")
+        || startsWith(name, "Concurrency::")
+        || startsWith(name, "ImPlot::")
+        || startsWith(name, "Catch::")
+        || name == "GImGui"
+        || name == "GImPlot"
+        || name == "g_ContextMap"
+        || name == "imgl3wProcs"
+        || name == "g_dbg_gui";
+}
+
 struct ModuleInfo {
     MemoryAddress base_address;
     size_t size;

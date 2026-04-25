@@ -33,23 +33,7 @@ BOOL CALLBACK storeSymbols(PSYMBOL_INFO pSymInfo, ULONG /*SymbolSize*/, PVOID Us
     std::string symbol_name = pSymInfo->Name;
     if (pSymInfo->TypeIndex == 0
         || (pSymInfo->Tag != SymTagData)
-        || startsWith(symbol_name, "_")
-        || startsWith(symbol_name, "std::")
-        || endsWith(symbol_name, "$initializer$")
-        || startsWith(symbol_name, "IID_")
-        || startsWith(symbol_name, "GUID_")
-        || startsWith(symbol_name, "CLSID_")
-        || startsWith(symbol_name, "LIBID_")
-        || startsWith(symbol_name, "FONT_ATLAS_")
-        || startsWith(symbol_name, "nlohmann::")
-        || startsWith(symbol_name, "Concurrency::")
-        || startsWith(symbol_name, "ImPlot::")
-        || startsWith(symbol_name, "Catch::")
-        || symbol_name == "GImGui"
-        || symbol_name == "GImPlot"
-        || symbol_name == "g_ContextMap"
-        || symbol_name == "imgl3wProcs"
-        || symbol_name == "g_dbg_gui") {
+        || shouldSkipSymbolName(symbol_name)) {
         return TRUE;
     }
 

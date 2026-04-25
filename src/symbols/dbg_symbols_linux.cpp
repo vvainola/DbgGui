@@ -545,59 +545,57 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
             }
         }
 
-        if (!effective_name.empty()) {
-            if (!startsWith(effective_name, "_") && !startsWith(effective_name, "std::")) {
-                MemoryAddress addr = 0;
+        if (!effective_name.empty() && !shouldSkipSymbolName(effective_name)) {
+            MemoryAddress addr = 0;
 
-                Dwarf_Attribute loc_attr = nullptr;
-                if (dwarf_attr(die, DW_AT_location, &loc_attr, &err) == DW_DLV_OK) {
-                    Dwarf_Block* block = nullptr;
-                    if (dwarf_formblock(loc_attr, &block, &err) == DW_DLV_OK) {
-                        if (block->bl_len >= 1) {
-                            uint8_t* buf = (uint8_t*)block->bl_data;
-                            if (buf[0] == DW_OP_addr) {
-                                Dwarf_Addr addr_val = 0;
-                                memcpy(&addr_val, buf + 1, sizeof(addr_val));
-                                addr = addr_val + load_base;
-                            }
+            Dwarf_Attribute loc_attr = nullptr;
+            if (dwarf_attr(die, DW_AT_location, &loc_attr, &err) == DW_DLV_OK) {
+                Dwarf_Block* block = nullptr;
+                if (dwarf_formblock(loc_attr, &block, &err) == DW_DLV_OK) {
+                    if (block->bl_len >= 1) {
+                        uint8_t* buf = (uint8_t*)block->bl_data;
+                        if (buf[0] == DW_OP_addr) {
+                            Dwarf_Addr addr_val = 0;
+                            memcpy(&addr_val, buf + 1, sizeof(addr_val));
+                            addr = addr_val + load_base;
                         }
-                        dwarf_dealloc(dbg, block, DW_DLA_BLOCK);
                     }
-                    dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+                    dwarf_dealloc(dbg, block, DW_DLA_BLOCK);
+                }
+                dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+            }
+
+            if (addr != 0) {
+                // Get type - from current die or from specification die
+                Dwarf_Attribute type_attr = nullptr;
+                Dwarf_Off type_offset = 0;
+                bool has_type = false;
+
+                if (dwarf_attr(die, DW_AT_type, &type_attr, &err) == DW_DLV_OK) {
+                    dwarf_global_formref(type_attr, &type_offset, &err);
+                    dwarf_dealloc(dbg, type_attr, DW_DLA_ATTR);
+                    has_type = true;
+                } else if (spec_die_offset != 0) {
+                    // Try to get type from specification die
+                    Dwarf_Die type_spec_die = nullptr;
+                    if (dwarf_offdie_b(dbg, spec_die_offset, 1, &type_spec_die, &err) == DW_DLV_OK) {
+                        if (dwarf_attr(type_spec_die, DW_AT_type, &type_attr, &err) == DW_DLV_OK) {
+                            dwarf_global_formref(type_attr, &type_offset, &err);
+                            dwarf_dealloc(dbg, type_attr, DW_DLA_ATTR);
+                            has_type = true;
+                        }
+                        dwarf_dealloc(dbg, type_spec_die, DW_DLA_DIE);
+                    }
                 }
 
-                if (addr != 0) {
-                    // Get type - from current die or from specification die
-                    Dwarf_Attribute type_attr = nullptr;
-                    Dwarf_Off type_offset = 0;
-                    bool has_type = false;
+                if (has_type) {
+                    std::string sym_name = module_prefix + namespace_prefix + effective_name;
+                    auto raw_sym = std::make_unique<RawSymbol>(sym_name, addr, 4, SymTagNull);
+                    resolveType(dbg, type_offset, *raw_sym);
 
-                    if (dwarf_attr(die, DW_AT_type, &type_attr, &err) == DW_DLV_OK) {
-                        dwarf_global_formref(type_attr, &type_offset, &err);
-                        dwarf_dealloc(dbg, type_attr, DW_DLA_ATTR);
-                        has_type = true;
-                    } else if (spec_die_offset != 0) {
-                        // Try to get type from specification die
-                        Dwarf_Die type_spec_die = nullptr;
-                        if (dwarf_offdie_b(dbg, spec_die_offset, 1, &type_spec_die, &err) == DW_DLV_OK) {
-                            if (dwarf_attr(type_spec_die, DW_AT_type, &type_attr, &err) == DW_DLV_OK) {
-                                dwarf_global_formref(type_attr, &type_offset, &err);
-                                dwarf_dealloc(dbg, type_attr, DW_DLA_ATTR);
-                                has_type = true;
-                            }
-                            dwarf_dealloc(dbg, type_spec_die, DW_DLA_DIE);
-                        }
-                    }
-
-                    if (has_type) {
-                        std::string sym_name = module_prefix + namespace_prefix + effective_name;
-                        auto raw_sym = std::make_unique<RawSymbol>(sym_name, addr, 4, SymTagNull);
-                        resolveType(dbg, type_offset, *raw_sym);
-
-                        m_raw_symbols.push_back(std::move(raw_sym));
-                        m_root_symbols.push_back(std::make_unique<VariantSymbol>(
-                          m_root_symbols, m_raw_symbols.back().get()));
-                    }
+                    m_raw_symbols.push_back(std::move(raw_sym));
+                    m_root_symbols.push_back(std::make_unique<VariantSymbol>(
+                      m_root_symbols, m_raw_symbols.back().get()));
                 }
             }
         }
@@ -640,7 +638,7 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
             func_name = die_name;
         }
 
-        if (!func_name.empty() && !startsWith(func_name, "_")) {
+        if (!func_name.empty() && !shouldSkipSymbolName(func_name)) {
             // Strip trailing args from demangled function names
             size_t paren = func_name.find('(');
             if (paren != std::string::npos) {
