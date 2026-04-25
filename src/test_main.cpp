@@ -25,6 +25,7 @@
 #include <thread>
 #include "DbgGui/global_snapshot.h"
 #include <cmath>
+#include "test_library_loader.h"
 
 struct Vector_ABC {
     double a;
@@ -185,6 +186,7 @@ double theta;
 
 void t_500us();
 int main(int, char**) {
+    TestLibraryLoader test_library_loader;
     static float sfl;
     DbgGui_create(10e-6);
     DbgGui_addScalar(&g::f64, "group 2", "g_f64");

@@ -33,10 +33,13 @@ using TypeIndex = uint32_t;
 
 void printLastError();
 
-int getBitPosition(RawSymbol const& sym);
-SymTagEnum getSymbolTag(SymbolInfo const& sym);
-BasicType getBasicType(RawSymbol const& sym);
+#if WINDOWS
+int getBitPosition(SymbolInfo const& info);
+BasicType getBasicType(SymbolInfo const& info);
 void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
+// Currently unused helpers
+DataKind getDataKind(SymbolInfo const& info);
+#endif
 std::string getUndecoratedSymbolName(std::string const& name);
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
 
@@ -58,9 +61,6 @@ ModuleInfo getCurrentModuleInfo();
 std::string getModuleName(ModuleBase module_base);
 
 std::string readFile(std::string const& filename);
-
-// Currently unused helpers
-DataKind getDataKind(RawSymbol const& sym);
 
 #if WINDOWS
 class ScopedSymbolHandler {
@@ -101,6 +101,7 @@ class ScopedSymbolHandler {
     ScopedSymbolHandler() : m_initialized(false) {}
     bool initialized() const { return m_initialized; }
     ~ScopedSymbolHandler() {}
+
   private:
     bool m_initialized;
 };

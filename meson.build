@@ -116,6 +116,7 @@ lib_symbols = static_library('symbols',
     sources : [
         'src/str_helpers.cpp',
         'src/symbols/arithmetic_symbol.cpp',
+        'src/symbols/dbg_symbols.cpp',
         'src/symbols/global_snapshot.cpp',
         'src/symbols/raw_symbol.cpp',
         'src/symbols/variant_symbol.cpp',
@@ -147,8 +148,13 @@ lib_gui = static_library('dbg_gui',
     override_options : override_options,
 )
 
+test_library = shared_library('test_library',
+    sources : ['src/test_library.cpp'],
+    override_options : override_options,
+)
+
 cpp_gui = executable('test_gui_cpp',
-    sources : 'src/test_main.cpp',
+    sources : ['src/test_main.cpp', 'src/test_library_loader.cpp'],
     include_directories : 'include',
     link_with : lib_gui,
 )
@@ -208,7 +214,7 @@ inf2csv = executable('inf2csv',
     override_options : override_options,
 )
 
-lib_dbghelp_symbols_dep = declare_dependency(
+lib_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
 )
@@ -220,8 +226,13 @@ lib_gui_dep = declare_dependency(
 
 
 if get_option('tests')
-executable('tests',
-    sources : ['tests/symbols_test.cpp'],
-    dependencies : [lib_dbghelp_symbols_dep, dependency('catch2-with-main')]
-)
+    executable('tests',
+        sources : ['tests/symbols_test.cpp', 'src/test_library_loader.cpp'],
+        dependencies : [
+            lib_symbols_dep,
+            dependency('catch2-with-main'),
+            deps
+        ],
+        include_directories: ['src', 'tests'],
+    )
 endif

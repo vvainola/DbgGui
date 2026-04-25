@@ -24,13 +24,75 @@
 
 #include <fstream>
 #include <sstream>
+#include <climits>
+#include <cstring>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <elf.h>
+#include <fcntl.h>
+#include <dlfcn.h>
+#include <cxxabi.h>
 
 ModuleInfo getCurrentModuleInfo() {
-    return ModuleInfo{
-        .base_address = 0,
-        .size = 0,
-        .write_time = "",
-        .path = ""};
+    static ModuleInfo cached;
+    static bool initialized = false;
+    if (initialized)
+        return cached;
+
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len == -1) {
+        initialized = true;
+        return cached;
+    }
+    exe_path[len] = '\0';
+    cached.path = exe_path;
+
+    // Get write time from file modification time
+    struct stat st;
+    if (stat(exe_path, &st) == 0) {
+        cached.write_time = std::to_string(st.st_mtime);
+    }
+
+    // Find base address (lowest start) and size from /proc/self/maps.
+    // The base address is used to convert between runtime addresses and
+    // file-relative offsets in JSON serialization.
+    // The .bss section (uninitialized globals) is mapped as anonymous pages
+    // contiguous with the file-backed data segment, so we must also include
+    // anonymous rw-p mappings that immediately follow the executable's mappings.
+    MemoryAddress lowest_start = ULONG_MAX;
+    MemoryAddress highest_end = 0;
+    FILE* maps = fopen("/proc/self/maps", "r");
+    if (maps) {
+        char line[512];
+        while (fgets(line, sizeof(line), maps)) {
+            unsigned long start, end;
+            if (sscanf(line, "%lx-%lx", &start, &end) == 2) {
+                if (strstr(line, exe_path)) {
+                    if (start < lowest_start) {
+                        lowest_start = start;
+                    }
+                    if (end > highest_end) {
+                        highest_end = end;
+                    }
+                } else if (start == highest_end && strstr(line, " rw-p ")) {
+                    // Anonymous rw-p mapping contiguous with exe (.bss segment)
+                    highest_end = end;
+                }
+            }
+        }
+        fclose(maps);
+    }
+    if (lowest_start != ULONG_MAX) {
+        cached.base_address = lowest_start;
+        cached.size = highest_end - lowest_start;
+    } else {
+        cached.base_address = 0;
+        cached.size = 0;
+    }
+
+    initialized = true;
+    return cached;
 }
 
 std::string getModuleName(ModuleBase module_base) {
@@ -42,23 +104,24 @@ std::string getUndecoratedSymbolName(std::string const& name) {
 }
 
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
-    return nullptr;
-}
+    Dl_info info;
+    int result = dladdr(reinterpret_cast<void*>(address), &info);
+    if (result == 0 || info.dli_sname == nullptr) {
+        return nullptr;
+    }
 
-int getBitPosition(RawSymbol const& sym) {
-    return NO_VALUE;
-}
+    std::string name;
+    int demangle_status;
+    char* demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &demangle_status);
+    fprintf(stderr, "  demangle status=%d, demangled=%s\n", demangle_status, demangled ? demangled : "(null)");
+    if (demangle_status == 0 && demangled != nullptr) {
+        name = demangled;
+        free(demangled);
+    } else {
+        name = info.dli_sname;
+    }
 
-DataKind getDataKind(RawSymbol const& sym) {
-    return DataKind::DataIsUnknown;
-}
-
-BasicType getBasicType(RawSymbol const& sym) {
-    return BasicType::btNoType;
-}
-
-SymTagEnum getSymbolTag(SymbolInfo const& sym) {
-    return SymTagEnum::SymTagNull;
+    return std::make_unique<RawSymbol>(name, reinterpret_cast<MemoryAddress>(info.dli_saddr), 0, SymTagPublicSymbol);
 }
 
 std::string readFile(std::string const& filename) {
@@ -66,17 +129,4 @@ std::string readFile(std::string const& filename) {
 }
 
 void printLastError() {
-}
-
-void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
-    parent.children.reserve(from.children.size());
-    parent.array_element_count = from.array_element_count;
-    for (size_t i = 0; i < from.children.size(); ++i) {
-        std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
-            std::make_unique<RawSymbol>(*from.children[i]));
-        copyChildrenFromSymbol(*from.children[i], *new_child);
-    }
-}
-
-void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
 }

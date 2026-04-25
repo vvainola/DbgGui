@@ -90,8 +90,11 @@ class DbgSymbols {
     void initSymbolsFromPdb();
 
 #if LINUX
-    void collectSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Die parent);
-    void collectAllSymbolsFromDie(Dwarf_Debug dbg, Dwarf_Die die);
+    void walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base,
+                     std::string const& namespace_prefix = "",
+                     std::string const& module_prefix = "");
+    void processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base,
+                       std::string const& module_prefix = "");
 #endif
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;

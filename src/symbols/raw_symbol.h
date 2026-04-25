@@ -38,50 +38,67 @@
 using MemoryAddress = uint64_t;
 inline constexpr int NO_VALUE = -1;
 
+#if WINDOWS
 struct SymbolInfo {
-    SymbolInfo(){};
+    SymbolInfo() {};
     SymbolInfo(SYMBOL_INFO* symbol)
         : TypeIndex(symbol->TypeIndex),
           Index(symbol->Index),
           Size(symbol->Size),
           ModBase(symbol->ModBase),
-          Value(symbol->Value),
           Address(symbol->Address),
           PdbTag((SymTagEnum)symbol->Tag),
           Name(symbol->Name) {
     }
-    ULONG TypeIndex = 0; // Type Index of symbol
-    ULONG Index = 0;
-    ULONG Size = 0;
-    ULONG64 ModBase = 0;            // Base Address of module containing this symbol
-    ULONG64 Value = 0;              // Value of symbol, ValuePresent should be 1
-    ULONG64 Address = 0;            // Address of symbol including base address of module
+    uint32_t TypeIndex = 0;         // Type Index of symbol
+    uint32_t Index = 0;
+    MemoryAddress ModBase = 0;      // Base Address of module containing this symbol
     SymTagEnum PdbTag = SymTagNull; // pdb classification
+    uint32_t Size = 0;
+    MemoryAddress Address = 0;      // Address of symbol including base address of module
     std::string Name = "";
 };
 
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
+#endif
+
 struct RawSymbol {
+#if WINDOWS
     RawSymbol(SymbolInfo const& symbol);
+#endif
+    RawSymbol(std::string const& name,
+              MemoryAddress address,
+              uint32_t size,
+              SymTagEnum tag);
     RawSymbol(nlohmann::json const& j);
 
-    // Copy from another symbol
     RawSymbol(RawSymbol const& other)
-        : info(other.info),
+        : name(other.name),
+          address(other.address),
+          size(other.size),
           tag(other.tag),
           offset_to_parent(other.offset_to_parent),
           array_element_count(other.array_element_count),
           basic_type(other.basic_type),
-          bitfield_position(other.bitfield_position) {
+          bitfield_position(other.bitfield_position),
+          enum_value(other.enum_value) {
+        for (auto const& child : other.children) {
+            children.push_back(std::make_unique<RawSymbol>(*child));
+        }
     }
 
+#if defined(WINDOWS)
     SymbolInfo info;
+#endif
+    std::string name;
+    MemoryAddress address = 0;
+    uint32_t size = 0;
     SymTagEnum tag = SymTagNull;
     uint32_t offset_to_parent = 0;
     uint32_t array_element_count = 0;
     BasicType basic_type = BasicType::btNoType;
     int bitfield_position = -1;
-    // Children/members of the symbol
+    int64_t enum_value = 0;
     std::vector<std::unique_ptr<RawSymbol>> children;
 };
 

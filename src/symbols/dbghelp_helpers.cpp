@@ -84,25 +84,24 @@ double getVariantEnumValue(VARIANT const& variant) {
     }
 }
 
-int getBitPosition(RawSymbol const& sym) {
+int getBitPosition(SymbolInfo const& info) {
     int position = NO_VALUE;
-    if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.Index, TI_GET_BITPOSITION, &position)) {
+    if (!SymGetTypeInfo(current_process, info.ModBase, info.Index, TI_GET_BITPOSITION, &position)) {
         return NO_VALUE;
     }
     return position;
 }
 
-DataKind getDataKind(RawSymbol const& sym) {
+DataKind getDataKind(SymbolInfo const& info) {
     DataKind data_kind = DataKind::DataIsUnknown;
-    if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.Index, TI_GET_DATAKIND, &data_kind)) {
+    if (!SymGetTypeInfo(current_process, info.ModBase, info.Index, TI_GET_DATAKIND, &data_kind)) {
     }
     return data_kind;
 }
 
-BasicType getBasicType(RawSymbol const& sym) {
-    assert(sym.tag == SymTagBaseType || sym.tag == SymTagEnumerator);
+BasicType getBasicType(SymbolInfo const& info) {
     BasicType base_type = BasicType::btNoType;
-    if (!SymGetTypeInfo(current_process, sym.info.ModBase, sym.info.TypeIndex, TI_GET_BASETYPE, &base_type)) {
+    if (!SymGetTypeInfo(current_process, info.ModBase, info.TypeIndex, TI_GET_BASETYPE, &base_type)) {
         printLastError();
         assert(("Unable to get base type of symbol.", 0));
     }
@@ -213,7 +212,7 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
                 VARIANT variant;
                 VariantInit(&variant);
                 assert(SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_VALUE, &variant));
-                child->info.Value = static_cast<ULONG64>(getVariantEnumValue(variant));
+                child->enum_value = static_cast<int64_t>(getVariantEnumValue(variant));
                 parent.children.push_back(std::move(child));
                 VariantClear(&variant);
             } else if (SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_OFFSET, &offset_to_parent)) {
