@@ -37,13 +37,13 @@
 #include <format>
 #include <map>
 
-#define TRY(expression)                       \
-    try {                                     \
-        expression                            \
-    } catch (nlohmann::json::exception err) { \
-        std::cerr << err.what() << std::endl; \
-    } catch (std::exception err) {            \
-        std::cerr << err.what() << std::endl; \
+#define TRY(expression)                         \
+    try {                                       \
+        expression                              \
+    } catch (nlohmann::json::exception & err) { \
+        std::cerr << err.what() << std::endl;   \
+    } catch (std::exception & err) {            \
+        std::cerr << err.what() << std::endl;   \
     }
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
