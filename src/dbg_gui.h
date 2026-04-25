@@ -198,7 +198,7 @@ class DbgGui {
 
     struct OptionalSettings {
         bool pause_on_close = false;
-        bool link_scalar_x_axis = false;
+        bool link_scalar_x_axis = true;
         bool scalar_plot_tooltip = true;
         bool show_latest_message_on_main_menu_bar = true;
         bool show_vertical_line_in_all_plots = true;
