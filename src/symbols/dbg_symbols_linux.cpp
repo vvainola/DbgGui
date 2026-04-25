@@ -487,6 +487,33 @@ static void resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
 // Symbol collection from DWARF
 // ============================================================================
 
+// Demangle a DW_AT_linkage_name from a DIE. Returns the demangled string
+// or std::nullopt if no linkage name is present or demangling fails.
+static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die die) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Attribute link_attr = nullptr;
+    if (dwarf_attr(die, DW_AT_linkage_name, &link_attr, &err) != DW_DLV_OK) {
+        return std::nullopt;
+    }
+    char* link_name = nullptr;
+    dwarf_formstring(link_attr, &link_name, &err);
+    dwarf_dealloc(dbg, link_attr, DW_DLA_ATTR);
+
+    if (link_name == nullptr) {
+        return std::nullopt;
+    }
+
+    std::optional<std::string> result;
+    int demangle_status;
+    char* demangled = abi::__cxa_demangle(link_name, nullptr, nullptr, &demangle_status);
+    if (demangle_status == 0 && demangled != nullptr) {
+        result = demangled;
+        free(demangled);
+    }
+    dwarf_dealloc(dbg, link_name, DW_DLA_STRING);
+    return result;
+}
+
 // Walk the DWARF DIE tree and collect global variable symbols
 void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix) {
     Dwarf_Error err = nullptr;
@@ -498,9 +525,7 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
     // Process variable declarations
     if (tag == DW_TAG_variable) {
-        // Get the effective name - may come from DW_AT_specification
-        char* effective_name = die_name;
-        bool name_from_spec = false;
+        std::string effective_name = die_name ? die_name : "";
         Dwarf_Off spec_die_offset = 0;
 
         if (die_name == nullptr) {
@@ -511,21 +536,8 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 if (spec_die_offset != 0) {
                     Dwarf_Die spec_die = nullptr;
                     if (dwarf_offdie_b(dbg, spec_die_offset, 1, &spec_die, &err) == DW_DLV_OK) {
-                        // Get linkage name for demangling to get fully qualified name
-                        Dwarf_Attribute link_attr = nullptr;
-                        if (dwarf_attr(spec_die, DW_AT_linkage_name, &link_attr, &err) == DW_DLV_OK) {
-                            char* link_name = nullptr;
-                            dwarf_formstring(link_attr, &link_name, &err);
-                            if (link_name != nullptr) {
-                                int demangle_status;
-                                char* demangled = abi::__cxa_demangle(link_name, nullptr, nullptr, &demangle_status);
-                                if (demangle_status == 0 && demangled != nullptr) {
-                                    effective_name = demangled;
-                                    name_from_spec = true;
-                                }
-                                dwarf_dealloc(dbg, link_name, DW_DLA_STRING);
-                            }
-                            dwarf_dealloc(dbg, link_attr, DW_DLA_ATTR);
+                        if (auto demangled = demangleLinkageName(dbg, spec_die)) {
+                            effective_name = std::move(*demangled);
                         }
                         dwarf_dealloc(dbg, spec_die, DW_DLA_DIE);
                     }
@@ -533,7 +545,7 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
             }
         }
 
-        if (effective_name != nullptr) {
+        if (!effective_name.empty()) {
             if (!startsWith(effective_name, "_") && !startsWith(effective_name, "std::")) {
                 MemoryAddress addr = 0;
 
@@ -588,10 +600,6 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                     }
                 }
             }
-
-            if (name_from_spec) {
-                free(effective_name);
-            }
         }
     }
 
@@ -610,21 +618,9 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 if (spec_die_offset != 0) {
                     Dwarf_Die spec_die = nullptr;
                     if (dwarf_offdie_b(dbg, spec_die_offset, 1, &spec_die, &err) == DW_DLV_OK) {
-                        Dwarf_Attribute link_attr = nullptr;
-                        if (dwarf_attr(spec_die, DW_AT_linkage_name, &link_attr, &err) == DW_DLV_OK) {
-                            char* link_name = nullptr;
-                            dwarf_formstring(link_attr, &link_name, &err);
-                            if (link_name != nullptr) {
-                                int demangle_status;
-                                char* demangled = abi::__cxa_demangle(link_name, nullptr, nullptr, &demangle_status);
-                                if (demangle_status == 0 && demangled != nullptr) {
-                                    func_name = demangled;
-                                    free(demangled);
-                                    name_from_spec = true;
-                                }
-                                dwarf_dealloc(dbg, link_name, DW_DLA_STRING);
-                            }
-                            dwarf_dealloc(dbg, link_attr, DW_DLA_ATTR);
+                        if (auto demangled = demangleLinkageName(dbg, spec_die)) {
+                            func_name = std::move(*demangled);
+                            name_from_spec = true;
                         }
                         // Fall back to namespace_prefix + spec_die name
                         if (func_name.empty()) {
