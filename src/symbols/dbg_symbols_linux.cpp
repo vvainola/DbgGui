@@ -595,6 +595,82 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
         }
     }
 
+    // Process function declarations (for function pointer resolution)
+    if (tag == DW_TAG_subprogram) {
+        std::string func_name;
+        bool name_from_spec = false;
+
+        // If this is a concrete definition with DW_AT_specification, follow it to get the name
+        if (die_name == nullptr) {
+            Dwarf_Off spec_die_offset = 0;
+            Dwarf_Attribute spec_attr = nullptr;
+            if (dwarf_attr(die, DW_AT_specification, &spec_attr, &err) == DW_DLV_OK) {
+                dwarf_global_formref(spec_attr, &spec_die_offset, &err);
+                dwarf_dealloc(dbg, spec_attr, DW_DLA_ATTR);
+                if (spec_die_offset != 0) {
+                    Dwarf_Die spec_die = nullptr;
+                    if (dwarf_offdie_b(dbg, spec_die_offset, 1, &spec_die, &err) == DW_DLV_OK) {
+                        Dwarf_Attribute link_attr = nullptr;
+                        if (dwarf_attr(spec_die, DW_AT_linkage_name, &link_attr, &err) == DW_DLV_OK) {
+                            char* link_name = nullptr;
+                            dwarf_formstring(link_attr, &link_name, &err);
+                            if (link_name != nullptr) {
+                                int demangle_status;
+                                char* demangled = abi::__cxa_demangle(link_name, nullptr, nullptr, &demangle_status);
+                                if (demangle_status == 0 && demangled != nullptr) {
+                                    func_name = demangled;
+                                    free(demangled);
+                                    name_from_spec = true;
+                                }
+                                dwarf_dealloc(dbg, link_name, DW_DLA_STRING);
+                            }
+                            dwarf_dealloc(dbg, link_attr, DW_DLA_ATTR);
+                        }
+                        // Fall back to namespace_prefix + spec_die name
+                        if (func_name.empty()) {
+                            char* spec_name = nullptr;
+                            dwarf_diename(spec_die, &spec_name, &err);
+                            if (spec_name != nullptr) {
+                                func_name = namespace_prefix + spec_name;
+                                dwarf_dealloc(dbg, spec_name, DW_DLA_STRING);
+                            }
+                        }
+                        dwarf_dealloc(dbg, spec_die, DW_DLA_DIE);
+                    }
+                }
+            }
+        } else {
+            // Function has a direct name
+            func_name = die_name;
+        }
+
+        if (!func_name.empty() && !startsWith(func_name, "_")) {
+            // Strip trailing args from demangled function names
+            size_t paren = func_name.find('(');
+            if (paren != std::string::npos) {
+                func_name.resize(paren);
+            }
+            Dwarf_Attribute low_pc_attr = nullptr;
+            if (dwarf_attr(die, DW_AT_low_pc, &low_pc_attr, &err) == DW_DLV_OK) {
+                Dwarf_Addr low_pc = 0;
+                dwarf_formaddr(low_pc_attr, &low_pc, &err);
+                dwarf_dealloc(dbg, low_pc_attr, DW_DLA_ATTR);
+
+                if (low_pc != 0) {
+                    std::string full_name;
+                    if (name_from_spec) {
+                        // func_name already has the full demangled name
+                        full_name = func_name;
+                    } else {
+                        full_name = namespace_prefix + func_name;
+                    }
+
+                    m_function_addresses[load_base + low_pc] = full_name;
+                }
+            }
+        }
+    }
+
     if (die_name != nullptr) {
         dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
     }

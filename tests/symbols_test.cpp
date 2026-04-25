@@ -48,6 +48,7 @@ int g_int;
 namespace g {
 float g_float;
 void test_fn2() {}
+void test_fn3(int) {}
 } // namespace g
 double g_double1;
 double g_double2;
@@ -55,6 +56,7 @@ double g_multidim_double[5][5];
 double* g_double_ptr;
 void (*g_fn_ptr)();
 void (*g_fn_ptr2)();
+void (*g_fn_ptr3)(int);
 BitField g_bitfield;
 Enumeration g_enum;
 
@@ -83,9 +85,15 @@ TEST_CASE("Basic symbol access") {
     g_enum = EnumValue_1n;
     CHECK(g_enum_sym->valueAsStr() == "EnumValue_1n");
 
-    g_fn_ptr = &g::test_fn2;
     VariantSymbol* g_fn_ptr_sym = symbols.getSymbol("g_fn_ptr");
+    g_fn_ptr = &test_fn1;
+    CHECK(g_fn_ptr_sym->valueAsStr() == "test_fn1");
+    g_fn_ptr = &g::test_fn2;
     CHECK(g_fn_ptr_sym->valueAsStr() == "g::test_fn2");
+
+    VariantSymbol* g_fn_ptr3_sym = symbols.getSymbol("g_fn_ptr3");
+    g_fn_ptr3 = &g::test_fn3;
+    CHECK(g_fn_ptr3_sym->valueAsStr() == "g::test_fn3");
 }
 
 TEST_CASE("Snapshot from file") {

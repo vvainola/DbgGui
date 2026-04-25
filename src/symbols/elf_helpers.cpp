@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "dbghelp_helpers.h"
+#include "dbg_symbols.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -104,16 +105,19 @@ std::string getUndecoratedSymbolName(std::string const& name) {
 }
 
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
+    std::string const& resolved = DbgSymbols::getSymbols().resolveFunctionAddress(address);
+    if (!resolved.empty()) {
+        return std::make_unique<RawSymbol>(resolved, address, 0, SymTagPublicSymbol);
+    }
+
     Dl_info info;
-    int result = dladdr(reinterpret_cast<void*>(address), &info);
-    if (result == 0 || info.dli_sname == nullptr) {
+    if (dladdr(reinterpret_cast<void*>(address), &info) == 0 || info.dli_sname == nullptr) {
         return nullptr;
     }
 
     std::string name;
     int demangle_status;
     char* demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &demangle_status);
-    fprintf(stderr, "  demangle status=%d, demangled=%s\n", demangle_status, demangled ? demangled : "(null)");
     if (demangle_status == 0 && demangled != nullptr) {
         name = demangled;
         free(demangled);

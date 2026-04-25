@@ -314,3 +314,11 @@ void DbgSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot)
           symbol_snapshot.value);
     }
 }
+
+std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
+    auto it = m_function_addresses.find(address);
+    if (it != m_function_addresses.end()) {
+        return it->second;
+    }
+    return "";
+}

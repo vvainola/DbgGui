@@ -83,6 +83,10 @@ class DbgSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
+    /// @brief Resolve a function address to its demangled name.
+    /// @return Function name or empty string if not found.
+    std::string resolveFunctionAddress(MemoryAddress address) const;
+
   private:
     DbgSymbols();
     bool loadSymbolsFromJson(std::string const& json);
@@ -90,14 +94,18 @@ class DbgSymbols {
     void initSymbolsFromPdb();
 
 #if LINUX
-    void walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base,
+    void walkDieTree(Dwarf_Debug dbg,
+                     Dwarf_Die die,
+                     MemoryAddress load_base,
                      std::string const& namespace_prefix = "",
                      std::string const& module_prefix = "");
-    void processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base,
+    void processAllCUs(Dwarf_Debug dbg,
+                       MemoryAddress load_base,
                        std::string const& module_prefix = "");
 #endif
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
+    std::unordered_map<MemoryAddress, std::string> m_function_addresses;
     bool m_symbols_loaded_from_json = false;
 };
