@@ -459,7 +459,7 @@ void DbgGui::showMainMenuBar() {
 
             ImGui::Separator();
 
-            std::string settings_dir = std::format("{}/.dbg_gui/", std::getenv("USERPROFILE"));
+            std::string settings_dir = std::format("{}/.dbg_gui/", std::getenv(USER_SETTINGS_LOCATION));
             if (ImGui::Button("Save settings")) {
                 std::string out_path = getFilenameToSave("json", settings_dir);
                 if (!out_path.empty()) {

@@ -39,11 +39,6 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
-#ifdef _WIN32
-constexpr std::string USER_SETTINGS_LOCATION = "USERPROFILE";
-#else
-constexpr std::string USER_SETTINGS_LOCATION = "HOME";
-#endif
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
 uint64_t hash(const std::string& str) {
@@ -358,7 +353,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 
 void DbgGui::loadPreviousSessionSettings() {
     m_initial_focus_set = false;
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
+    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION) + std::string("/.dbg_gui/");
     std::string settings_path = settings_dir + "settings.json";
     std::ifstream f(settings_path);
     if (f.is_open()) {
@@ -575,7 +570,7 @@ void DbgGui::updateSavedSettings() {
     }
 
     // Read current settings from json if there is a parallel process in which they have changed
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
+    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION) + std::string("/.dbg_gui/");
     std::string settings_path = settings_dir + "settings.json";
     if (std::filesystem::exists(settings_path)) {
         auto current_write_time = std::filesystem::last_write_time(settings_path);
