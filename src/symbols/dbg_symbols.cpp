@@ -140,8 +140,10 @@ std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& n
                                                             bool recursive,
                                                             int max_count) const {
     std::vector<VariantSymbol*> matching_symbols;
+    // Find from all symbols, can be pretty slow
     if (recursive) {
         std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
+            // Exact match is shown first
             if (name == sym->getFullName()) {
                 matching_symbols.insert(matching_symbols.begin(), sym);
             } else if (matching_symbols.size() < max_count
@@ -161,6 +163,7 @@ std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& n
     std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
     std::string name_to_search = name;
 
+    // Search only members of a symbol if the name contains "."
     size_t idx = name.rfind('.');
     if (idx != std::string::npos) {
         std::string parent_name = name.substr(0, idx);
@@ -226,6 +229,7 @@ void DbgSymbols::saveSnapshotToFile(std::string const& json) const {
         } else if (type == VariantSymbol::Type::Pointer) {
             MemoryAddress pointed_address = sym->getPointedAddress();
             MemoryAddress pointed_address_offset = sym->getPointedAddress() - module_info.base_address;
+            // Set pointer only if it points to something else within this module
             bool pointed_address_ok = pointed_address_offset < module_info.size;
             if (pointed_address == NULL) {
                 snapshot["state"][key] = 0;
