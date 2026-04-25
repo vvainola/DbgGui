@@ -217,12 +217,14 @@ std::string VariantSymbol::valueAsStr() const {
             std::string name = "??";
             if (sym) {
                 name = sym->name;
+#if WINDOWS
                 size_t decoration_offset = name.find("?");
                 if (decoration_offset != name.npos) {
                     std::string decorated_name = name.substr(decoration_offset);
                     decorated_name.pop_back(); // Remove trailing ")"
                     name = getUndecoratedSymbolName(decorated_name);
                 }
+#endif
                 symbol_addresses[pointed_address] = name;
             }
             return name;

@@ -96,14 +96,6 @@ ModuleInfo getCurrentModuleInfo() {
     return cached;
 }
 
-std::string getModuleName(ModuleBase module_base) {
-    return "";
-}
-
-std::string getUndecoratedSymbolName(std::string const& name) {
-    return name;
-}
-
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
     std::string const& resolved = DbgSymbols::getSymbols().resolveFunctionAddress(address);
     if (!resolved.empty()) {
@@ -130,7 +122,4 @@ std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
 
 std::string readFile(std::string const& filename) {
     return (std::stringstream() << std::ifstream(filename).rdbuf()).str();
-}
-
-void printLastError() {
 }

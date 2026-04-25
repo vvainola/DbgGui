@@ -31,16 +31,16 @@
 using ModuleBase = uint64_t;
 using TypeIndex = uint32_t;
 
-void printLastError();
-
 #if WINDOWS
+void printLastError();
 int getBitPosition(SymbolInfo const& info);
 BasicType getBasicType(SymbolInfo const& info);
 void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
 // Currently unused helpers
 DataKind getDataKind(SymbolInfo const& info);
-#endif
 std::string getUndecoratedSymbolName(std::string const& name);
+std::string getModuleName(ModuleBase module_base);
+#endif
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
 
 inline bool startsWith(std::string const& s, std::string const& w) {
@@ -78,7 +78,6 @@ struct ModuleInfo {
     std::string path;
 };
 ModuleInfo getCurrentModuleInfo();
-std::string getModuleName(ModuleBase module_base);
 
 std::string readFile(std::string const& filename);
 
