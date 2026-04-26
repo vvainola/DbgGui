@@ -34,6 +34,15 @@ union BitField {
     };
 };
 
+struct A {
+    int m_a = 2;
+};
+
+struct B {
+    double m_b = 1;
+    A a;
+};
+
 enum Enumeration {
     EnumValue_1n = -1,
     EnumValue0 = 0,
@@ -46,6 +55,9 @@ void test_fn1() {}
 // Define global variables of different types
 int g_int;
 namespace g {
+A g_a;
+B g_b1;
+B g_b2;
 float g_float;
 void test_fn2() {}
 void test_fn3(int) {}
@@ -94,6 +106,19 @@ TEST_CASE("Basic symbol access") {
     VariantSymbol* g_fn_ptr3_sym = symbols.getSymbol("g_fn_ptr3");
     g_fn_ptr3 = &g::test_fn3;
     CHECK(g_fn_ptr3_sym->valueAsStr() == "g::test_fn3");
+
+    VariantSymbol* g_a_sym = symbols.getSymbol("g::g_a");
+    CHECK(g_a_sym->getChildren().size() == 1);
+
+    VariantSymbol* g_b1_sym = symbols.getSymbol("g::g_b1");
+    CHECK(g_b1_sym->getChildren().size() == 2);
+    VariantSymbol* g_b2_sym = symbols.getSymbol("g::g_b2");
+    CHECK(g_b2_sym->getChildren().size() == 2);
+
+    VariantSymbol* g_b1_a_sym = symbols.getSymbol("g::g_b1.a");
+    CHECK(g_b1_a_sym->getChildren().size() == 1);
+    VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
+    CHECK(g_b2_a_sym->getChildren().size() == 1);
 }
 
 TEST_CASE("Snapshot from file") {
