@@ -70,6 +70,10 @@ std::unique_ptr<RawSymbol> RawSymbol::clone() const {
     sym->index = index;
     sym->pdb_tag = pdb_tag;
 #endif
+    sym->children.reserve(children.size());
+    for (auto const& child : children) {
+        sym->children.push_back(child->clone());
+    }
     return sym;
 }
 

@@ -149,18 +149,6 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     }
 }
 
-void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
-    parent.children.reserve(from.children.size());
-    parent.array_element_count = from.array_element_count;
-    for (size_t i = 0; i < from.children.size(); ++i) {
-        std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
-          from.children[i]->clone());
-
-        // Recursively copy children of children
-        copyChildrenFromSymbol(*from.children[i], *new_child);
-    }
-}
-
 void addFirstChildToArray(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
     assert((parent.tag == SymTagArrayType, "Symbol is not an array."));
     ULONG64 array_size_in_bytes = 0;
@@ -190,7 +178,9 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
     // Copy structure from reference symbol if children have already been looked up for same type before
     std::pair<ModuleBase, TypeIndex> modbase_and_type_idx{parent.mod_base, parent.type_index};
     if (reference_symbols.find(modbase_and_type_idx) != reference_symbols.end()) {
-        copyChildrenFromSymbol(*reference_symbols[modbase_and_type_idx], parent);
+        auto cloned = reference_symbols[modbase_and_type_idx]->clone();
+        parent.children = std::move(cloned->children);
+        parent.array_element_count = cloned->array_element_count;
         return;
     } else {
         reference_symbols[modbase_and_type_idx] = &parent;
