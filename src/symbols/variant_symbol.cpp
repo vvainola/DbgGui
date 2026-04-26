@@ -92,7 +92,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             }
             break;
         default:
-            assert((0, "Unknown type for variant symbol"));
+            assert(!"Unknown type for variant symbol");
     }
 }
 
@@ -244,7 +244,7 @@ std::string VariantSymbol::valueAsStr() const {
         case Type::Object:
             return "Object";
         default:
-            assert((0, "Invalid type"));
+            assert(!"Invalid type");
             return "Unknown";
     }
 }
