@@ -111,7 +111,9 @@ std::string getFilenameToOpen(std::string const& filter, std::string default_pat
 #endif
     nfdresult_t result = NFD_OpenDialog(filter.c_str(), default_path.c_str(), &out_path);
     if (result == NFD_OKAY) {
-        return out_path;
+        std::string out(out_path);
+        free(out_path);
+        return out;
     }
     return "";
 }
