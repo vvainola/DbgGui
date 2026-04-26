@@ -353,7 +353,12 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 
 void DbgGui::loadPreviousSessionSettings() {
     m_initial_focus_set = false;
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION) + std::string("/.dbg_gui/");
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    if (env == nullptr) {
+        m_error_message = std::format("The {} environment variable is not set. Settings cannot be saved or loaded.", USER_SETTINGS_LOCATION);
+        return;
+    }
+    std::string settings_dir = std::string(env) + "/.dbg_gui/";
     std::string settings_path = settings_dir + "settings.json";
     std::ifstream f(settings_path);
     if (f.is_open()) {
@@ -570,12 +575,17 @@ void DbgGui::updateSavedSettings() {
     }
 
     // Read current settings from json if there is a parallel process in which they have changed
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION) + std::string("/.dbg_gui/");
-    std::string settings_path = settings_dir + "settings.json";
-    if (std::filesystem::exists(settings_path)) {
-        auto current_write_time = std::filesystem::last_write_time(settings_path);
-        if (current_write_time != m_last_settings_write_time) {
-            loadPreviousSessionSettings();
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    std::string settings_dir;
+    std::string settings_path;
+    if (env != nullptr) {
+        settings_dir = std::string(env) + "/.dbg_gui/";
+        settings_path = settings_dir + "settings.json";
+        if (std::filesystem::exists(settings_path)) {
+            auto current_write_time = std::filesystem::last_write_time(settings_path);
+            if (current_write_time != m_last_settings_write_time) {
+                loadPreviousSessionSettings();
+            }
         }
     }
 
@@ -843,7 +853,8 @@ void DbgGui::updateSavedSettings() {
     if (!closing
         && focused
         && m_initial_focus_set
-        && settings_changed) {
+        && settings_changed
+        && !settings_dir.empty()) {
         m_settings_saved = m_settings;
 
         if (!std::filesystem::exists(settings_dir)) {
