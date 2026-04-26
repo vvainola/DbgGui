@@ -39,7 +39,6 @@ RawSymbol RawSymbol::fromJson(nlohmann::json const& field) {
     sym.array_element_count = field["array_element_count"].get<uint32_t>();
     sym.basic_type = field["basic_type"].get<BasicType>();
     sym.bitfield_position = field["bitfield_position"].get<int>();
-    sym.basic_type = field["basic_type"].get<BasicType>();
     if (field.contains("enum_value")) {
         sym.enum_value = field["enum_value"].get<int32_t>();
     }
