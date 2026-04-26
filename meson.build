@@ -218,6 +218,7 @@ lib_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
 )
+lib_dbghelp_symbols_dep = lib_symbols_dep
 
 lib_gui_dep = declare_dependency(
     link_with : [lib_gui, lib_symbols],
