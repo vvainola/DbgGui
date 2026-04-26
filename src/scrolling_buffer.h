@@ -145,7 +145,7 @@ class ScrollingBuffer {
         decimated_values.y_min.reserve(std::min(end_idx - start_idx, n_points + 5));
         decimated_values.y_max.reserve(std::min(end_idx - start_idx, n_points + 5));
 
-        auto const& data = m_scalar_buffers[scalar];
+        auto const& data = m_scalar_buffers.at(scalar);
 
         double current_min = INFINITY;
         double current_max = -INFINITY;
