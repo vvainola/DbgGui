@@ -83,10 +83,9 @@ void DbgSymbols::initSymbolsFromPdb() {
             module_names[symbol.ModBase] = getModuleName(symbol.ModBase);
         }
 
-        std::unique_ptr<RawSymbol>& raw_symbol = m_raw_symbols.emplace_back(std::make_unique<RawSymbol>(symbol));
+        std::unique_ptr<RawSymbol>& raw_symbol = m_raw_symbols.emplace_back(std::make_unique<RawSymbol>(rawSymbolFromSymInfo(symbol)));
         if (!symbol_in_current_module) {
-            raw_symbol->info.Name = std::format("{}|{}", module_names[symbol.ModBase], raw_symbol->info.Name);
-            raw_symbol->name = raw_symbol->info.Name;
+            raw_symbol->name = std::format("{}|{}", module_names[symbol.ModBase], raw_symbol->name);
         }
         addChildrenToSymbol(*raw_symbol, reference_symbols);
         m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, raw_symbol.get()));

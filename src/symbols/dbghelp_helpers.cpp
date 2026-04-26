@@ -129,7 +129,7 @@ std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
 
     DWORD64 dwDisplacement = 0;
     if (SymFromAddr(current_process, address, &dwDisplacement, pSymbol)) {
-        return std::make_unique<RawSymbol>(pSymbol);
+        return std::make_unique<RawSymbol>(rawSymbolFromSymInfo(SymbolInfo(pSymbol)));
     } else {
         return nullptr;
     }
@@ -142,8 +142,8 @@ std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& pare
     pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
     pSymbol->MaxNameLen = MAX_SYM_NAME;
 
-    if (SymFromIndex(current_process, parent.info.ModBase, index, pSymbol) && pSymbol->TypeIndex != 0) {
-        return std::make_unique<RawSymbol>(pSymbol);
+    if (SymFromIndex(current_process, parent.mod_base, index, pSymbol) && pSymbol->TypeIndex != 0) {
+        return std::make_unique<RawSymbol>(rawSymbolFromSymInfo(SymbolInfo(pSymbol)));
     } else {
         return nullptr;
     }
@@ -154,7 +154,7 @@ void copyChildrenFromSymbol(RawSymbol const& from, RawSymbol& parent) {
     parent.array_element_count = from.array_element_count;
     for (size_t i = 0; i < from.children.size(); ++i) {
         std::unique_ptr<RawSymbol>& new_child = parent.children.emplace_back(
-          std::make_unique<RawSymbol>(*from.children[i]));
+          from.children[i]->clone());
 
         // Recursively copy children of children
         copyChildrenFromSymbol(*from.children[i], *new_child);
@@ -166,28 +166,29 @@ void addFirstChildToArray(RawSymbol& parent, std::map<std::pair<ModuleBase, Type
     ULONG64 array_size_in_bytes = 0;
     DWORD element_count = 0;
     DWORD array_typeid = 0;
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.info.ModBase, parent.info.TypeIndex, TI_GET_LENGTH, &array_size_in_bytes));
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.info.ModBase, parent.info.TypeIndex, TI_GET_COUNT, &element_count));
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.info.ModBase, parent.info.TypeIndex, TI_GET_TYPEID, &array_typeid));
+    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_LENGTH, &array_size_in_bytes));
+    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_COUNT, &element_count));
+    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_TYPEID, &array_typeid));
     if (array_size_in_bytes == 0 || element_count == 0) {
         return;
     }
     parent.array_element_count = element_count;
     ULONG element_size = ULONG(array_size_in_bytes / element_count);
+    SymbolInfo elem_si;
     // Use the parent symbol as a base info and change only relevant fields to fit the array member
-    SymbolInfo base = parent.info;
-    base.TypeIndex = array_typeid;
-    base.Size = element_size;
-
-    // Add only first child because the rest can be added later by just adjusting memory address
-    std::unique_ptr<RawSymbol>& first_child = parent.children.emplace_back(std::make_unique<RawSymbol>(base));
-    addChildrenToSymbol(*first_child, reference_symbols);
+    elem_si.ModBase = parent.mod_base;
+    elem_si.TypeIndex = array_typeid;
+    elem_si.Size = (uint32_t)element_size;
+    elem_si.Name = parent.name;
+    auto first_child = std::make_unique<RawSymbol>(rawSymbolFromSymInfo(elem_si));
+    parent.children.push_back(std::move(first_child));
+    addChildrenToSymbol(*parent.children.back(), reference_symbols);
 }
 
 // https://yanshurong.wordpress.com/2009/01/02/how-to-use-dbghelp-to-access-type-information-from-www-debuginfo-com/
 void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
     // Copy structure from reference symbol if children have already been looked up for same type before
-    std::pair<ModuleBase, TypeIndex> modbase_and_type_idx{parent.info.ModBase, parent.info.TypeIndex};
+    std::pair<ModuleBase, TypeIndex> modbase_and_type_idx{parent.mod_base, parent.type_index};
     if (reference_symbols.find(modbase_and_type_idx) != reference_symbols.end()) {
         copyChildrenFromSymbol(*reference_symbols[modbase_and_type_idx], parent);
         return;
@@ -196,7 +197,7 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
     }
 
     DWORD num_children = 0;
-    assert(SymGetTypeInfo(current_process, parent.info.ModBase, parent.info.TypeIndex, TI_GET_CHILDRENCOUNT, &num_children));
+    assert(SymGetTypeInfo(current_process, parent.mod_base, parent.type_index, TI_GET_CHILDRENCOUNT, &num_children));
     if (num_children == 0) {
         if (parent.tag == SymTagArrayType) {
             addFirstChildToArray(parent, reference_symbols);
@@ -209,27 +210,27 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
     TI_FINDCHILDREN_PARAMS* found_children = (TI_FINDCHILDREN_PARAMS*)_alloca(find_children_size);
     memset(found_children, 0, find_children_size);
     found_children->Count = num_children;
-    assert(SymGetTypeInfo(current_process, parent.info.ModBase, parent.info.TypeIndex, TI_FINDCHILDREN, found_children));
+    assert(SymGetTypeInfo(current_process, parent.mod_base, parent.type_index, TI_FINDCHILDREN, found_children));
 
     for (DWORD i = 0; i < num_children; i++) {
         std::unique_ptr<RawSymbol> child = getSymbolFromIndex(found_children->ChildId[i], parent);
-        if (child && (child->info.PdbTag == SymTagData || child->info.PdbTag == SymTagBaseClass)) {
+        if (child && (child->pdb_tag == SymTagData || child->pdb_tag == SymTagBaseClass)) {
             // Memory address offset relative to parent
             DWORD offset_to_parent = 0;
             // If parent is an enum, the names and values can be used for mapping "enum value <-> enum string"
             if (parent.tag == SymTagEnumerator) {
                 VARIANT variant;       // Enumerators have their values stored as variant
                 VariantInit(&variant); // Variant has to be initialized to be empty
-                assert(SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_VALUE, &variant));
+                assert(SymGetTypeInfo(current_process, child->mod_base, child->index, TI_GET_VALUE, &variant));
                 child->enum_value = static_cast<int64_t>(getVariantEnumValue(variant));
                 parent.children.push_back(std::move(child));
                 VariantClear(&variant);
-            } else if (SymGetTypeInfo(current_process, child->info.ModBase, child->info.Index, TI_GET_OFFSET, &offset_to_parent)) {
+            } else if (SymGetTypeInfo(current_process, child->mod_base, child->index, TI_GET_OFFSET, &offset_to_parent)) {
                 // Members by default have no address, the address is offset relative to parent
                 child->offset_to_parent = offset_to_parent;
 
                 // Skip stdlib objects e.g. std::default_delete and symbols with reserved identifier "underscore + uppercase letter"
-                std::string child_name = child->info.Name;
+                std::string child_name = child->name;
                 if (!startsWith(child_name, "std::")
                     && !(child_name.size() > 2 && child_name[0] == '_' && isupper(child_name[1]))) {
                     addChildrenToSymbol(*child, reference_symbols);
@@ -240,6 +241,32 @@ void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeI
             // Member functions could be added here but left out for now since pointers to those are probably rarely used
         }
     }
+}
+
+RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si) {
+    RawSymbol sym{
+        .name = si.Name,
+        .address = si.Address,
+        .size = si.Size,
+        .tag = getSymbolTag(si),
+        .mod_base = si.ModBase,
+        .type_index = si.TypeIndex,
+        .index = si.Index,
+        .pdb_tag = si.PdbTag,
+    };
+    if (sym.tag == SymTagBaseType) {
+        sym.basic_type = getBasicType(si);
+        if (sym.basic_type == BasicType::btUInt
+            || sym.basic_type == BasicType::btInt
+            || sym.basic_type == BasicType::btLong
+            || sym.basic_type == BasicType::btULong
+            || sym.basic_type == BasicType::btBool) {
+            sym.bitfield_position = getBitPosition(si);
+        }
+    } else if (sym.tag == SymTagEnumerator) {
+        sym.basic_type = getBasicType(si);
+    }
+    return sym;
 }
 
 std::string getUndecoratedSymbolName(std::string const& name) {

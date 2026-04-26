@@ -23,10 +23,6 @@
 #pragma once
 
 #include "cvconst.h"
-#if WINDOWS
-#include <Windows.h>
-#include <DbgHelp.h>
-#endif
 
 #include <cstdint>
 #include <memory>
@@ -38,58 +34,7 @@
 using MemoryAddress = uint64_t;
 inline constexpr int NO_VALUE = -1;
 
-#if WINDOWS
-struct SymbolInfo {
-    SymbolInfo() {};
-    SymbolInfo(SYMBOL_INFO* symbol)
-        : TypeIndex(symbol->TypeIndex),
-          Index(symbol->Index),
-          Size(symbol->Size),
-          ModBase(symbol->ModBase),
-          Address(symbol->Address),
-          PdbTag((SymTagEnum)symbol->Tag),
-          Name(symbol->Name) {
-    }
-    uint32_t TypeIndex = 0;         // Type Index of symbol
-    uint32_t Index = 0;
-    MemoryAddress ModBase = 0;      // Base Address of module containing this symbol
-    SymTagEnum PdbTag = SymTagNull; // pdb classification
-    uint32_t Size = 0;
-    MemoryAddress Address = 0;      // Address of symbol including base address of module
-    std::string Name = "";
-};
-
-SymTagEnum getSymbolTag(SymbolInfo const& sym);
-#endif
-
 struct RawSymbol {
-#if WINDOWS
-    RawSymbol(SymbolInfo const& symbol);
-#endif
-    RawSymbol(std::string const& name,
-              MemoryAddress address,
-              uint32_t size,
-              SymTagEnum tag);
-    RawSymbol(nlohmann::json const& j);
-
-    RawSymbol(RawSymbol const& other)
-        : name(other.name),
-          address(other.address),
-          size(other.size),
-          tag(other.tag),
-          offset_to_parent(other.offset_to_parent),
-          array_element_count(other.array_element_count),
-          basic_type(other.basic_type),
-          bitfield_position(other.bitfield_position),
-          enum_value(other.enum_value) {
-        for (auto const& child : other.children) {
-            children.push_back(std::make_unique<RawSymbol>(*child));
-        }
-    }
-
-#if defined(WINDOWS)
-    SymbolInfo info;
-#endif
     std::string name;
     MemoryAddress address = 0;
     uint32_t size = 0;
@@ -100,6 +45,16 @@ struct RawSymbol {
     int bitfield_position = -1;
     int64_t enum_value = 0;
     std::vector<std::unique_ptr<RawSymbol>> children;
+
+#if WINDOWS
+    MemoryAddress mod_base = 0;
+    uint32_t type_index = 0;
+    uint32_t index = 0;
+    SymTagEnum pdb_tag = SymTagNull;
+#endif
+
+    static RawSymbol fromJson(nlohmann::json const& j);
+    std::unique_ptr<RawSymbol> clone() const;
 };
 
 void to_json(nlohmann::json& j, RawSymbol const& sym);

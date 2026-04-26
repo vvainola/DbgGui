@@ -32,14 +32,39 @@ using ModuleBase = uint64_t;
 using TypeIndex = uint32_t;
 
 #if WINDOWS
+#include <Windows.h>
+#include <DbgHelp.h>
+
+struct SymbolInfo {
+    SymbolInfo() {};
+    SymbolInfo(SYMBOL_INFO* symbol)
+        : TypeIndex(symbol->TypeIndex),
+          Index(symbol->Index),
+          Size(symbol->Size),
+          ModBase(symbol->ModBase),
+          Address(symbol->Address),
+          PdbTag((SymTagEnum)symbol->Tag),
+          Name(symbol->Name) {
+    }
+    uint32_t TypeIndex = 0;
+    uint32_t Index = 0;
+    MemoryAddress ModBase = 0;
+    SymTagEnum PdbTag = SymTagNull;
+    uint32_t Size = 0;
+    MemoryAddress Address = 0;
+    std::string Name = "";
+};
+
 void printLastError();
 int getBitPosition(SymbolInfo const& info);
 BasicType getBasicType(SymbolInfo const& info);
+SymTagEnum getSymbolTag(SymbolInfo const& sym);
 void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
 // Currently unused helpers
 DataKind getDataKind(SymbolInfo const& info);
 std::string getUndecoratedSymbolName(std::string const& name);
 std::string getModuleName(ModuleBase module_base);
+RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si);
 #endif
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
 

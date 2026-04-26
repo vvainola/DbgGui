@@ -26,60 +26,54 @@
 #include <format>
 #include <functional>
 
-RawSymbol::RawSymbol(std::string const& in_name,
-                     MemoryAddress in_address,
-                     uint32_t in_size,
-                     SymTagEnum in_tag)
-    : name(in_name),
-      address(in_address),
-      size(in_size),
-      tag(in_tag) {
-}
-
-#if WINDOWS
-RawSymbol::RawSymbol(SymbolInfo const& symbol_info)
-    : info(symbol_info),
-      name(symbol_info.Name),
-      address(symbol_info.Address),
-      size(symbol_info.Size),
-      tag(getSymbolTag(symbol_info)) {
-    if (tag == SymTagBaseType) {
-        basic_type = getBasicType(symbol_info);
-        if (basic_type == BasicType::btUInt
-            || basic_type == BasicType::btInt
-            || basic_type == BasicType::btLong
-            || basic_type == BasicType::btULong
-            || basic_type == BasicType::btBool) {
-            bitfield_position = getBitPosition(symbol_info);
-        }
-    } else if (tag == SymTagEnumerator) {
-        basic_type = getBasicType(symbol_info);
-    }
-}
-#endif
-
-RawSymbol::RawSymbol(nlohmann::json const& field) {
+RawSymbol RawSymbol::fromJson(nlohmann::json const& field) {
+    RawSymbol sym;
     static ModuleInfo module_info = getCurrentModuleInfo();
 
-    name = field["name"].get<std::string>();
-    address = module_info.base_address + static_cast<size_t>(field["address"].get<uint64_t>());
-    size = field["size"].get<uint32_t>();
+    sym.name = field["name"].get<std::string>();
+    sym.address = module_info.base_address + static_cast<size_t>(field["address"].get<uint64_t>());
+    sym.size = field["size"].get<uint32_t>();
 
-    tag = field["tag"].get<SymTagEnum>();
-    offset_to_parent = field["offset_to_parent"].get<uint32_t>();
-    array_element_count = field["array_element_count"].get<uint32_t>();
-    basic_type = field["basic_type"].get<BasicType>();
-    bitfield_position = field["bitfield_position"].get<int>();
-    basic_type = field["basic_type"].get<BasicType>();
+    sym.tag = field["tag"].get<SymTagEnum>();
+    sym.offset_to_parent = field["offset_to_parent"].get<uint32_t>();
+    sym.array_element_count = field["array_element_count"].get<uint32_t>();
+    sym.basic_type = field["basic_type"].get<BasicType>();
+    sym.bitfield_position = field["bitfield_position"].get<int>();
+    sym.basic_type = field["basic_type"].get<BasicType>();
     if (field.contains("enum_value")) {
-        enum_value = field["enum_value"].get<int32_t>();
+        sym.enum_value = field["enum_value"].get<int32_t>();
     }
 
     if (field.contains("children")) {
         for (auto const& child_data : field["children"]) {
-            children.push_back(std::make_unique<RawSymbol>(child_data));
+            sym.children.push_back(std::make_unique<RawSymbol>(fromJson(child_data)));
         }
     }
+
+    return sym;
+}
+
+std::unique_ptr<RawSymbol> RawSymbol::clone() const {
+    auto sym = std::make_unique<RawSymbol>();
+    sym->name = name;
+    sym->address = address;
+    sym->size = size;
+    sym->tag = tag;
+    sym->offset_to_parent = offset_to_parent;
+    sym->array_element_count = array_element_count;
+    sym->basic_type = basic_type;
+    sym->bitfield_position = bitfield_position;
+    sym->enum_value = enum_value;
+#if WINDOWS
+    sym->mod_base = mod_base;
+    sym->type_index = type_index;
+    sym->index = index;
+    sym->pdb_tag = pdb_tag;
+#endif
+    for (auto const& child : children) {
+        sym->children.push_back(child->clone());
+    }
+    return sym;
 }
 
 void to_json(nlohmann::json& field, RawSymbol const& sym) {

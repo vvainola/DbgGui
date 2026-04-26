@@ -199,7 +199,7 @@ bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
 
         m_root_symbols.reserve(symbols_json.size());
         for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
-            RawSymbol raw_symbol(symbol_data);
+            auto raw_symbol = RawSymbol::fromJson(symbol_data);
             m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
         }
     } catch (nlohmann::json::exception& err) {

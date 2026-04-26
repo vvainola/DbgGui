@@ -99,7 +99,11 @@ ModuleInfo getCurrentModuleInfo() {
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
     std::string const& resolved = DbgSymbols::getSymbols().resolveFunctionAddress(address);
     if (!resolved.empty()) {
-        return std::make_unique<RawSymbol>(resolved, address, 0, SymTagPublicSymbol);
+        return std::make_unique<RawSymbol>(RawSymbol{
+            .name = resolved,
+            .address = address,
+            .tag = SymTagPublicSymbol
+        });
     }
 
     Dl_info info;
@@ -117,7 +121,11 @@ std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
         name = info.dli_sname;
     }
 
-    return std::make_unique<RawSymbol>(name, reinterpret_cast<MemoryAddress>(info.dli_saddr), 0, SymTagPublicSymbol);
+    return std::make_unique<RawSymbol>(RawSymbol{
+        .name = name,
+        .address = reinterpret_cast<MemoryAddress>(info.dli_saddr),
+        .tag = SymTagPublicSymbol
+    });
 }
 
 std::string readFile(std::string const& filename) {

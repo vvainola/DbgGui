@@ -298,14 +298,16 @@ static void resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
 
             if (has_elem_type && !dimensions.empty()) {
                 // Resolve the innermost element type
-                auto innermost = std::make_unique<RawSymbol>("", 0, 0, SymTagNull);
+                auto innermost = std::make_unique<RawSymbol>();
                 resolveType(dbg, elem_type_offset, *innermost);
 
                 // Build nested array structure from innermost dimension outward
                 // For dimensions [3, 3] with element type int32_t:
                 // Build: array(3, array(3, int32_t))
                 for (int i = (int)dimensions.size() - 1; i >= 1; --i) {
-                    auto array_elem = std::make_unique<RawSymbol>("", 0, 0, SymTagArrayType);
+                    auto array_elem = std::make_unique<RawSymbol>(RawSymbol{
+                        .tag = SymTagArrayType
+                    });
                     array_elem->array_element_count = dimensions[i];
                     array_elem->size = innermost->size * dimensions[i];
                     array_elem->children.push_back(std::move(innermost));
@@ -354,8 +356,9 @@ static void resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
                             dwarf_global_formref(mem_type_attr, &member_type_offset, &err);
                             dwarf_dealloc(dbg, mem_type_attr, DW_DLA_ATTR);
 
-                            auto child_sym = std::make_unique<RawSymbol>(
-                              member_name ? member_name : "", 0, 0, SymTagNull);
+                            auto child_sym = std::make_unique<RawSymbol>(RawSymbol{
+                                .name = member_name ? member_name : ""
+                            });
                             child_sym->offset_to_parent = offset;
 
                             // Check for bitfield
@@ -425,7 +428,7 @@ static void resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
                 dwarf_global_formref(underlying_type_attr, &underlying_offset, &err);
                 dwarf_dealloc(dbg, underlying_type_attr, DW_DLA_ATTR);
 
-                RawSymbol temp("", 0, 0, SymTagNull);
+                RawSymbol temp{};
                 resolveType(dbg, underlying_offset, temp);
                 raw_sym.basic_type = temp.basic_type;
                 if (raw_sym.size == 0) {
@@ -450,8 +453,9 @@ static void resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
                             }
                             dwarf_dealloc(dbg, const_val_attr, DW_DLA_ATTR);
                         }
-                        auto enum_child = std::make_unique<RawSymbol>(
-                          enum_name ? enum_name : "", 0, 0, SymTagNull);
+                        auto enum_child = std::make_unique<RawSymbol>(RawSymbol{
+                            .name = enum_name ? enum_name : ""
+                        });
                         enum_child->enum_value = enum_const_value;
                         raw_sym.children.push_back(std::move(enum_child));
                         if (enum_name) {
@@ -590,7 +594,11 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
                 if (has_type) {
                     std::string sym_name = module_prefix + namespace_prefix + effective_name;
-                    auto raw_sym = std::make_unique<RawSymbol>(sym_name, addr, 4, SymTagNull);
+                    auto raw_sym = std::make_unique<RawSymbol>(RawSymbol{
+                        .name = sym_name,
+                        .address = addr,
+                        .size = 4
+                    });
                     resolveType(dbg, type_offset, *raw_sym);
 
                     m_raw_symbols.push_back(std::move(raw_sym));
