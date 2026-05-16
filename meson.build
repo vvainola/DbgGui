@@ -228,12 +228,16 @@ lib_gui_dep = declare_dependency(
 
 if get_option('tests')
     executable('tests',
-        sources : ['tests/symbols_test.cpp', 'src/test_library_loader.cpp'],
+        sources : [
+            'tests/symbols_test.cpp',
+            'src/test_library_loader.cpp',
+        ],
         dependencies : [
             lib_symbols_dep,
             dependency('catch2-with-main'),
             deps
         ],
+        link_with : test_library,
         include_directories: ['src', 'tests'],
     )
 endif
