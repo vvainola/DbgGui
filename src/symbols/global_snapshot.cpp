@@ -54,6 +54,9 @@ void* SNP_getSymbolsFromJson(const char* symbols_json) {
 }
 
 void SNP_deleteSymbolLookup(void* symbols) {
+    if (!symbols) {
+        return;
+    }
     if (((DbgSymbols*)symbols)->symbolsLoadedFromJson()) {
         delete (DbgSymbols*)symbols;
     }
