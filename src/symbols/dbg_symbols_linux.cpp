@@ -679,15 +679,15 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
         }
     }
 
-    if (die_name != nullptr) {
-        dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
-    }
-
     // Recursively process children
     std::string child_prefix = namespace_prefix;
     if (tag == DW_TAG_namespace && die_name != nullptr) {
         child_prefix = namespace_prefix.empty() ? std::string(die_name) + "::" : namespace_prefix + die_name + "::";
     }
+    if (die_name != nullptr) {
+        dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+    }
+
     Dwarf_Die child = nullptr;
     if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
         walkDieTree(dbg, child, load_base, child_prefix, module_prefix);
