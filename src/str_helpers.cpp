@@ -102,6 +102,9 @@ std::expected<std::string, std::string> readFile(const std::string& filename) {
 std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count) {
     std::vector<std::string_view> elems;
     elems.reserve(expected_column_count);
+    if (s.empty()) {
+        return elems;
+    }
     size_t pos_start = 0;
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] == delim) {
