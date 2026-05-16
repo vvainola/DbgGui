@@ -494,9 +494,17 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename) {
         }
         ++header_line_idx;
     }
+    if (header_line_idx >= csv_lines.size()) {
+        std::cerr << std::format("Unable to find CSV header in file \"{}\"\n", csv_filename);
+        return nullptr;
+    }
     std::string header_line(csv_lines[header_line_idx]);
     str::trim(header_line);
     std::vector<std::string> signal_names = str::split(header_line, delimiter);
+    if (signal_names.empty()) {
+        std::cerr << std::format("No signals found in CSV file \"{}\"\n", csv_filename);
+        return nullptr;
+    }
 
     // Count number of instances with same name
     std::map<std::string, int> signal_name_count;
