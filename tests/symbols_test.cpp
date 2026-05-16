@@ -481,6 +481,28 @@ TEST_CASE("Read symbols from shared library") {
         CHECK(sym_null->getPointedAddress() == 0);
     }
 
+    SECTION("Memory snapshot restores pointer within shared library") {
+        VariantSymbol* sym_ptr = symbols.getSymbol(prefix + "lib_double_ptr");
+        REQUIRE(sym_ptr != nullptr);
+        REQUIRE(sym_ptr->getType() == VariantSymbol::Type::Pointer);
+
+        VariantSymbol* sym_double = symbols.getSymbol(prefix + "lib_double");
+        REQUIRE(sym_double != nullptr);
+
+        VariantSymbol* sym_array_1 = symbols.getSymbol(prefix + "lib_array[1]");
+        REQUIRE(sym_array_1 != nullptr);
+
+        sym_ptr->setPointedAddress(sym_double->getAddress());
+        auto snapshot = symbols.saveSnapshotToMemory();
+
+        sym_ptr->setPointedAddress(sym_array_1->getAddress());
+        REQUIRE(sym_ptr->getPointedAddress() == sym_array_1->getAddress());
+
+        symbols.loadSnapshotFromMemory(snapshot);
+        CHECK(sym_ptr->getPointedAddress() == sym_double->getAddress());
+        CHECK(sym_ptr->read() == Approx(sym_double->read()));
+    }
+
     // ---- Write and read back ----
     SECTION("Write to shared library symbol and read back") {
         VariantSymbol* sym_int32 = symbols.getSymbol(prefix + "lib_int32");
