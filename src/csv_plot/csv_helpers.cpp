@@ -143,16 +143,21 @@ bool pscadInfToCsv(std::string const& inf_filename) {
 
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
     DecimatedValues decimated_values;
+    if (x.empty() || y.empty() || count <= 0) {
+        return decimated_values;
+    }
+
+    size_t sample_count = std::min(x.size(), y.size());
     decimated_values.x.reserve(count + 2);
     decimated_values.y_min.reserve(count + 2);
     decimated_values.y_max.reserve(count + 2);
 
-    int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(x.size()) / count) - 1, 0.0));
+    int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(sample_count) / count) - 1, 0.0));
 
     double current_min = INFINITY;
     double current_max = -INFINITY;
     int64_t counter = 0;
-    for (int32_t i = 0; i < x.size(); i++) {
+    for (int32_t i = 0; i < sample_count; i++) {
         if (counter < 0) {
             decimated_values.x.push_back(x[i - 1]);
             decimated_values.y_min.push_back(current_min);
@@ -167,9 +172,9 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
         counter--;
     }
     // Add last value
-    decimated_values.x.push_back(x.back());
-    decimated_values.y_min.push_back(y.back());
-    decimated_values.y_max.push_back(y.back());
+    decimated_values.x.push_back(x[sample_count - 1]);
+    decimated_values.y_min.push_back(y[sample_count - 1]);
+    decimated_values.y_max.push_back(y[sample_count - 1]);
     return decimated_values;
 }
 
