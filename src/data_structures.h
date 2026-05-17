@@ -36,6 +36,7 @@
 #include <string>
 #include <format>
 #include <map>
+#include <algorithm>
 
 #define TRY(expression)                         \
     try {                                       \
@@ -316,8 +317,18 @@ struct Window {
 };
 
 struct ScalarPlot : Window {
+    struct Subplot {
+        std::vector<Scalar*> scalars;
+        MinMax y_axis = {-1, 1};
+        bool autofit_y = true;
+    };
+
+    inline static constexpr int MAX_SUBPLOT_ROWS = 10;
+    inline static constexpr int MAX_SUBPLOT_COLS = 10;
+
     ScalarPlot(std::string const& name, uint64_t id)
         : Window(name, id) {
+        ensureSubplots();
     }
     ScalarPlot(nlohmann::json const& j)
         : Window(j) {
@@ -328,6 +339,28 @@ struct ScalarPlot : Window {
         if (!autofit_y) {
             y_axis.min = j.value("y_min", y_axis.min);
             y_axis.max = j.value("y_max", y_axis.max);
+        }
+        rows = std::clamp(j.value("rows", rows), 1, MAX_SUBPLOT_ROWS);
+        cols = std::clamp(j.value("cols", cols), 1, MAX_SUBPLOT_COLS);
+        ensureSubplots();
+        // Old settings stored one Y-axis/autofit state for the whole plot.
+        // Use that as the first subplot default before applying per-subplot data.
+        subplots[0].y_axis = y_axis;
+        subplots[0].autofit_y = autofit_y;
+        if (j.contains("subplots")) {
+            int subplot_idx = 0;
+            for (auto const& subplot_data : j["subplots"]) {
+                if (subplot_idx >= subplotCount()) {
+                    break;
+                }
+                Subplot& subplot = subplots[subplot_idx];
+                subplot.autofit_y = subplot_data.value("autofit_y", subplot.autofit_y);
+                if (!subplot.autofit_y) {
+                    subplot.y_axis.min = subplot_data.value("y_min", subplot.y_axis.min);
+                    subplot.y_axis.max = subplot_data.value("y_max", subplot.y_axis.max);
+                }
+                ++subplot_idx;
+            }
         }
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
@@ -340,24 +373,137 @@ struct ScalarPlot : Window {
         }
         j["x_range"] = x_range;
         j["autofit_y"] = autofit_y;
+        j["rows"] = rows;
+        j["cols"] = cols;
+        // Signal placement is saved by updateSavedSettings() after deleted
+        // scalars have been resolved. This keeps updateJson() focused on plot state.
+        j["subplots"] = nlohmann::json::array();
+        for (Subplot const& subplot : subplots) {
+            nlohmann::json subplot_data;
+            subplot_data["autofit_y"] = subplot.autofit_y;
+            if (!subplot.autofit_y) {
+                subplot_data["y_min"] = subplot.y_axis.min;
+                subplot_data["y_max"] = subplot.y_axis.max;
+            }
+            j["subplots"].push_back(subplot_data);
+        }
         return j;
     }
 
+    int rows = 1;
+    int cols = 1;
+    int selected_subplot = 0;
     std::vector<Scalar*> scalars;
+    std::vector<Subplot> subplots;
     MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp = 0;
     bool autofit_y = true;
 
-    void addScalarToPlot(Scalar* new_scalar) {
+    int subplotCount() const {
+        return rows * cols;
+    }
+
+    void setSubplotGrid(int new_rows, int new_cols) {
+        new_rows = std::clamp(new_rows, 1, MAX_SUBPLOT_ROWS);
+        new_cols = std::clamp(new_cols, 1, MAX_SUBPLOT_COLS);
+        int new_count = new_rows * new_cols;
+        std::vector<Subplot> old_subplots = std::move(subplots);
+        rows = new_rows;
+        cols = new_cols;
+        subplots.resize(new_count);
+        int copied_count = std::min<int>(static_cast<int>(old_subplots.size()), static_cast<int>(subplots.size()));
+        for (int i = 0; i < copied_count; ++i) {
+            subplots[i] = std::move(old_subplots[i]);
+        }
+        // When the grid shrinks, keep signals from removed cells instead of
+        // silently dropping them.
+        for (int i = new_count; i < static_cast<int>(old_subplots.size()); ++i) {
+            for (Scalar* scalar : old_subplots[i].scalars) {
+                addScalarToPlot(scalar, 0);
+            }
+        }
+    }
+
+    void addScalarToPlot(Scalar* new_scalar, int subplot_idx = 0) {
+        ensureSubplots();
+        subplot_idx = std::clamp(subplot_idx, 0, subplotCount() - 1);
+        // A scalar appears at most once inside a scalar plot window. Dropping it
+        // on another subplot moves it there.
+        removeScalar(new_scalar);
         // Add scalar if it is not already in the plot
-        auto it = std::find_if(scalars.begin(), scalars.end(), [=](Scalar* sig) {
+        std::vector<Scalar*>& subplot_scalars = subplots[subplot_idx].scalars;
+        auto it = std::find_if(subplot_scalars.begin(), subplot_scalars.end(), [=](Scalar* sig) {
             return sig->id == new_scalar->id;
         });
-        if (it == scalars.end()) {
-            scalars.push_back(new_scalar);
+        if (it == subplot_scalars.end()) {
+            subplot_scalars.push_back(new_scalar);
         }
+    }
+
+    void removeScalar(Scalar* scalar) {
+        ensureSubplots();
+        for (Subplot& subplot : subplots) {
+            remove(subplot.scalars, scalar);
+        }
+    }
+
+    void removeScalar(Scalar* scalar, int subplot_idx) {
+        ensureSubplots();
+        if (subplot_idx >= 0 && subplot_idx < subplotCount()) {
+            remove(subplots[subplot_idx].scalars, scalar);
+        }
+    }
+
+    std::vector<Scalar*> allScalars() const {
+        std::vector<Scalar*> all_scalars;
+        for (Subplot const& subplot : subplots) {
+            for (Scalar* scalar : subplot.scalars) {
+                if (!contains(all_scalars, scalar)) {
+                    all_scalars.push_back(scalar);
+                }
+            }
+        }
+        return all_scalars;
+    }
+
+    void clearScalars() {
+        ensureSubplots();
+        for (Subplot& subplot : subplots) {
+            subplot.scalars.clear();
+        }
+        scalars.clear();
+    }
+
+    void contextMenu() {
+        if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
+            name.reserve(MAX_NAME_LENGTH);
+            if (ImGui::InputText("Name##window_context_menu",
+                                 name.data(),
+                                 MAX_NAME_LENGTH)) {
+                name = std::string(name.data());
+            }
+            int new_rows = rows;
+            int new_cols = cols;
+            if (ImGui::InputInt("Rows", &new_rows)) {
+                setSubplotGrid(new_rows, cols);
+            }
+            if (ImGui::InputInt("Columns", &new_cols)) {
+                setSubplotGrid(rows, new_cols);
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+  private:
+    void ensureSubplots() {
+        // Constructors and public mutators keep this invariant so callers do
+        // not need to guard every access to subplots.
+        rows = std::clamp(rows, 1, MAX_SUBPLOT_ROWS);
+        cols = std::clamp(cols, 1, MAX_SUBPLOT_COLS);
+        subplots.resize(subplotCount());
+        selected_subplot = std::clamp(selected_subplot, 0, subplotCount() - 1);
     }
 };
 

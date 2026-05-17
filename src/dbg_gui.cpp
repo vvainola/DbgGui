@@ -39,6 +39,22 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
+namespace {
+template <typename Fn>
+void forEachSignalId(nlohmann::json const& signals, Fn fn) {
+    // Saved signal maps use names as keys, while older/imported shapes may be
+    // arrays. Iterating values supports both without duplicating restore loops.
+    if (!signals.is_array() && !signals.is_object()) {
+        return;
+    }
+    for (auto const& signal : signals) {
+        if (signal.is_number_unsigned() || signal.is_number_integer()) {
+            fn(signal.get<uint64_t>());
+        }
+    }
+}
+} // namespace
+
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
 uint64_t hash(const std::string& str) {
@@ -324,11 +340,31 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
                 break;
             }
         }
-        for (uint64_t id : scalar_plot_data["signals"]) {
-            if (plot != nullptr && id == scalar->id) {
-                m_sampler.startSampling(scalar);
-                plot->addScalarToPlot(scalar);
+        if (plot == nullptr) {
+            continue;
+        }
+        // New settings store signal placement per subplot. Old settings only
+        // have a top-level signals object, which restores into subplot 0.
+        if (scalar_plot_data.contains("subplots")) {
+            int subplot_idx = 0;
+            for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                if (subplot_data.contains("signals")) {
+                    forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
+                        if (id == scalar->id) {
+                            m_sampler.startSampling(scalar);
+                            plot->addScalarToPlot(scalar, subplot_idx);
+                        }
+                    });
+                }
+                ++subplot_idx;
             }
+        } else if (scalar_plot_data.contains("signals")) {
+            forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+                if (id == scalar->id) {
+                    m_sampler.startSampling(scalar);
+                    plot->addScalarToPlot(scalar);
+                }
+            });
         }
     })
 
@@ -452,13 +488,31 @@ void DbgGui::loadPreviousSessionSettings() {
         m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
             ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data);
-            for (uint64_t id : scalar_plot_data["signals"]) {
-                Scalar* scalar = getScalar(id);
-                if (scalar) {
-                    m_sampler.startSampling(scalar);
-                    plot.addScalarToPlot(scalar);
+            // Prefer the subplot-aware format, but keep old top-level signals
+            // readable for existing settings files.
+            if (scalar_plot_data.contains("subplots")) {
+                int subplot_idx = 0;
+                for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                    if (subplot_data.contains("signals")) {
+                        forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
+                            Scalar* scalar = getScalar(id);
+                            if (scalar) {
+                                m_sampler.startSampling(scalar);
+                                plot.addScalarToPlot(scalar, subplot_idx);
+                            }
+                        });
+                    }
+                    ++subplot_idx;
                 }
-            };
+            } else if (scalar_plot_data.contains("signals")) {
+                forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+                    Scalar* scalar = getScalar(id);
+                    if (scalar) {
+                        m_sampler.startSampling(scalar);
+                        plot.addScalarToPlot(scalar);
+                    }
+                });
+            }
         }
 
         m_vector_plots.clear();
@@ -642,16 +696,23 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["scalar_plots"][std::to_string(scalar_plot.id)];
         scalar_plot.updateJson(j);
-        for (int i = int(scalar_plot.scalars.size() - 1); i >= 0; --i) {
-            Scalar* scalar = scalar_plot.scalars[i];
-            if (scalar->deleted) {
-                j["signals"].erase(scalar->name_and_group);
-                if (scalar->replacement != nullptr) {
-                    scalar_plot.addScalarToPlot(scalar->replacement);
+        // Top-level scalar plot signals are a legacy read-only migration path.
+        // New settings write signal placement only under subplots.
+        j.erase("signals");
+        for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
+            auto& scalars = scalar_plot.subplots[subplot_idx].scalars;
+            j["subplots"][subplot_idx]["signals"] = nlohmann::json::object();
+            for (int i = int(scalars.size() - 1); i >= 0; --i) {
+                Scalar* scalar = scalars[i];
+                if (scalar->deleted) {
+                    if (scalar->replacement != nullptr) {
+                        scalars[i] = scalar->replacement;
+                    } else {
+                        remove(scalars, scalar);
+                    }
+                } else {
+                    j["subplots"][subplot_idx]["signals"][scalar->name_and_group] = scalar->id;
                 }
-                remove(scalar_plot.scalars, scalar);
-            } else {
-                j["signals"][scalar->name_and_group] = scalar->id;
             }
         }
     }
