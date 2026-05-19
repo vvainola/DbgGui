@@ -212,7 +212,9 @@ std::string VariantSymbol::valueAsStr() const {
                 return it->second;
             }
 
+#if WINDOWS
             ScopedSymbolHandler scoped_symbol_handler;
+#endif
             auto sym = getSymbolFromAddress(pointed_address);
             std::string name = "??";
             if (sym) {
