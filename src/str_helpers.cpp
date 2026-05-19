@@ -296,36 +296,25 @@ static double evaluateExpression(std::istringstream& iss) {
     }
 }
 
-bool fuzzy_match(char const* pattern, char const* str) {
-    while (*pattern != '\0' && *str != '\0') {
-        if (tolower(*pattern) == tolower(*str))
-            ++pattern;
-        ++str;
-    }
-
-    return *pattern == '\0' ? true : false;
-}
-
 bool fuzzy_match(std::string_view pattern, std::string_view str) {
-    int i = 0;
-    while (!pattern.empty() && i < str.size()) {
-        if (tolower(pattern[0]) == tolower(str[i]))
+    for (char c : str) {
+        if (pattern.empty()) {
+            return true;
+        }
+        if (tolower(static_cast<unsigned char>(pattern[0])) == tolower(static_cast<unsigned char>(c))) {
             pattern.remove_prefix(1);
-        ++i;
+        }
     }
 
     return pattern.empty();
 }
 
-bool fuzzy_match(char const* pattern, std::string_view str) {
-    int i = 0;
-    while (*pattern != '\0' && i < str.size()) {
-        if (tolower(*pattern) == tolower(str[i]))
-            ++pattern;
-        ++i;
-    }
+bool fuzzy_match(char const* pattern, char const* str) {
+    return fuzzy_match(std::string_view(pattern), std::string_view(str));
+}
 
-    return *pattern == '\0';
+bool fuzzy_match(char const* pattern, std::string_view str) {
+    return fuzzy_match(std::string_view(pattern), str);
 }
 
 std::expected<double, std::string> evaluateExpression(std::string expression) {
