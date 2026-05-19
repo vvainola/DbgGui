@@ -6,6 +6,7 @@
 #include "symbols/dbg_symbols.hpp"
 
 #include "test_library_loader.h"
+#include "fwd_decl_types.h"
 
 #include <filesystem>
 #include <random>
@@ -72,6 +73,35 @@ void (*g_fn_ptr3)(int);
 BitField g_bitfield;
 Enumeration g_enum;
 
+// A type with a non-trivial constructor forces GCC to emit the variable's
+// definition as a top-level DW_TAG_variable carrying DW_AT_specification +
+// DW_AT_location, with the declaration nested inside the namespace DIE. When
+// such a variable is also `static`, the definition DIE has no DW_AT_name and
+// no DW_AT_linkage_name (internal linkage → no mangled symbol), so the symbol
+// walker must recover the qualified name by following the specification back
+// to the namespace-nested declaration.
+struct StaticCtorType {
+    StaticCtorType() : value(123) {}
+    int value;
+};
+
+namespace static_ns {
+static int s_int = 7;
+static double s_double = 1.5;
+static A s_a;
+static B s_b;
+static StaticCtorType s_ctor;
+static int s_array[3] = {10, 20, 30};
+} // namespace static_ns
+
+// FwdDeclOuter contains a FwdDeclInner member. This TU (symbols_test.cpp) does
+// not define any FwdDeclInner methods, so GCC's limited-debug-info default
+// emits FwdDeclInner as DW_AT_declaration=1 in this TU's DWARF. The full
+// definition is carried by fwd_decl_types.cpp. The symbol walker must follow
+// the forward declaration to the full definition in order to size up the
+// member.
+FwdDeclOuter g_fwd_outer;
+
 TEST_CASE("Basic symbol access") {
     DbgSymbols const& symbols = DbgSymbols::getSymbols();
     g_int = random<int>();
@@ -119,6 +149,86 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_b1_a_sym->getChildren().size() == 1);
     VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
     CHECK(g_b2_a_sym->getChildren().size() == 1);
+}
+
+TEST_CASE("Static namespace-scope symbol access") {
+    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+
+    // Statics have internal linkage, so their definition DIE in DWARF lacks
+    // both DW_AT_name and DW_AT_linkage_name. The walker must recover the
+    // qualified name by following DW_AT_specification back to the declaration
+    // nested in the namespace.
+    static_ns::s_int = random<int>();
+    VariantSymbol* s_int_sym = symbols.getSymbol("static_ns::s_int");
+    REQUIRE(s_int_sym != nullptr);
+    CHECK(s_int_sym->read() == static_ns::s_int);
+
+    static_ns::s_double = 42.5;
+    VariantSymbol* s_double_sym = symbols.getSymbol("static_ns::s_double");
+    REQUIRE(s_double_sym != nullptr);
+    CHECK(s_double_sym->read() == Approx(static_ns::s_double));
+
+    static_ns::s_a.m_a = 999;
+    VariantSymbol* s_a_sym = symbols.getSymbol("static_ns::s_a");
+    REQUIRE(s_a_sym != nullptr);
+    CHECK(s_a_sym->getChildren().size() == 1);
+    VariantSymbol* s_a_m_sym = symbols.getSymbol("static_ns::s_a.m_a");
+    REQUIRE(s_a_m_sym != nullptr);
+    CHECK(s_a_m_sym->read() == static_ns::s_a.m_a);
+
+    static_ns::s_b.m_b = 7.25;
+    static_ns::s_b.a.m_a = 11;
+    VariantSymbol* s_b_sym = symbols.getSymbol("static_ns::s_b");
+    REQUIRE(s_b_sym != nullptr);
+    CHECK(s_b_sym->getChildren().size() == 2);
+    VariantSymbol* s_b_a_m_sym = symbols.getSymbol("static_ns::s_b.a.m_a");
+    REQUIRE(s_b_a_m_sym != nullptr);
+    CHECK(s_b_a_m_sym->read() == static_ns::s_b.a.m_a);
+
+    // Variable with non-trivial constructor — forces GCC into the
+    // specification-pattern DWARF encoding that exposed the original bug.
+    VariantSymbol* s_ctor_sym = symbols.getSymbol("static_ns::s_ctor");
+    REQUIRE(s_ctor_sym != nullptr);
+    VariantSymbol* s_ctor_v_sym = symbols.getSymbol("static_ns::s_ctor.value");
+    REQUIRE(s_ctor_v_sym != nullptr);
+    CHECK(s_ctor_v_sym->read() == static_ns::s_ctor.value);
+
+    VariantSymbol* s_arr_sym = symbols.getSymbol("static_ns::s_array");
+    REQUIRE(s_arr_sym != nullptr);
+    VariantSymbol* s_arr1_sym = symbols.getSymbol("static_ns::s_array[1]");
+    REQUIRE(s_arr1_sym != nullptr);
+    CHECK(s_arr1_sym->read() == static_ns::s_array[1]);
+}
+
+TEST_CASE("Forward-declared type definition lookup") {
+    // FwdDeclInner is emitted as a forward declaration in this TU's DWARF
+    // because no methods of it are defined here. The full definition lives
+    // in fwd_decl_types.cpp. The walker must resolve the forward declaration
+    // to the full definition to be able to size up FwdDeclOuter and expose
+    // FwdDeclInner's members.
+    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+
+    g_fwd_outer.inner.a = 17;
+    g_fwd_outer.inner.b = 2.75;
+    g_fwd_outer.outer_value = 99;
+
+    VariantSymbol* outer_sym = symbols.getSymbol("g_fwd_outer");
+    REQUIRE(outer_sym != nullptr);
+
+    VariantSymbol* inner_sym = symbols.getSymbol("g_fwd_outer.inner");
+    REQUIRE(inner_sym != nullptr);
+
+    VariantSymbol* inner_a_sym = symbols.getSymbol("g_fwd_outer.inner.a");
+    REQUIRE(inner_a_sym != nullptr);
+    CHECK(inner_a_sym->read() == g_fwd_outer.inner.a);
+
+    VariantSymbol* inner_b_sym = symbols.getSymbol("g_fwd_outer.inner.b");
+    REQUIRE(inner_b_sym != nullptr);
+    CHECK(inner_b_sym->read() == Approx(g_fwd_outer.inner.b));
+
+    VariantSymbol* outer_value_sym = symbols.getSymbol("g_fwd_outer.outer_value");
+    REQUIRE(outer_value_sym != nullptr);
+    CHECK(outer_value_sym->read() == g_fwd_outer.outer_value);
 }
 
 TEST_CASE("Snapshot from file") {

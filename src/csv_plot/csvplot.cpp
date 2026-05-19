@@ -341,7 +341,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_cols = int(settings["window"]["cols"]);)
             TRY(m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);)
             TRY(m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);)
-            TRY(m_options.x_signal_name = settings["window"]["x_signal_name"];)
+            TRY(m_options.x_signal_name = std::string(settings["window"]["x_signal_name"]);)
             TRY(m_options.link_axis = settings["window"]["link_axis"];)
             TRY(m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];)
             TRY(m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];)

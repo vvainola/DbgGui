@@ -87,6 +87,10 @@ class DbgSymbols {
     /// @return Function name or empty string if not found.
     std::string resolveFunctionAddress(MemoryAddress address) const;
 
+#if LINUX
+    using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
+#endif
+
   private:
     DbgSymbols();
     bool loadSymbolsFromJson(std::string const& json);
@@ -94,11 +98,16 @@ class DbgSymbols {
     void initSymbolsFromPdb();
 
 #if LINUX
+    // unordered_multimap<unqualified type name, DIE offset of full definition>:
+    // populated by a pre-pass over all CUs to enable resolveType to follow a
+    // forward-declared class/struct/union to its full definition in another CU.
     void walkDieTree(Dwarf_Debug dbg,
                      Dwarf_Die die,
                      MemoryAddress load_base,
-                     std::string const& namespace_prefix = "",
-                     std::string const& module_prefix = "");
+                     std::string const& namespace_prefix,
+                     std::string const& module_prefix,
+                     std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
+                     FullTypeDefs const& full_type_defs);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");

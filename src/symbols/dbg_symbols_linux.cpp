@@ -46,7 +46,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <set>
 
 // ============================================================================
 // Address computation helpers
@@ -209,7 +208,15 @@ static Dwarf_Off followTypeChain(Dwarf_Debug dbg, Dwarf_Off type_offset) {
 // tag, size, basic_type, children, and array_element_count.
 // The name, address, and offset_to_parent should already be set by the caller.
 // Returns false if the type DIE could not be resolved.
-static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_sym) {
+//
+// full_type_defs is a cross-CU index of full class/struct/union definitions by
+// unqualified name. When the type DIE at type_offset turns out to be a forward
+// declaration (DW_AT_declaration=1, no DW_AT_byte_size), we look the name up in
+// this map and re-resolve against the full definition's DIE.
+static bool resolveType(Dwarf_Debug dbg,
+                        Dwarf_Off type_offset,
+                        RawSymbol& raw_sym,
+                        DbgSymbols::FullTypeDefs const& full_type_defs) {
     Dwarf_Error err = nullptr;
 
     // Follow typedef/const/volatile chains
@@ -225,6 +232,32 @@ static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
 
     Dwarf_Unsigned type_size = 0;
     dwarf_bytesize(type_die, &type_size, &err);
+
+    // If this is a forward-declared class/struct/union, find the full definition
+    // by name in another CU and resolve against that instead.
+    if ((tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type)
+        && type_size == 0) {
+        Dwarf_Bool is_decl = 0;
+        Dwarf_Attribute decl_attr = nullptr;
+        if (dwarf_attr(type_die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {
+            dwarf_formflag(decl_attr, &is_decl, &err);
+            dwarf_dealloc(dbg, decl_attr, DW_DLA_ATTR);
+        }
+        if (is_decl) {
+            char* tn = nullptr;
+            if (dwarf_diename(type_die, &tn, &err) == DW_DLV_OK && tn) {
+                std::string name(tn);
+                dwarf_dealloc(dbg, tn, DW_DLA_STRING);
+                auto range = full_type_defs.equal_range(name);
+                for (auto it = range.first; it != range.second; ++it) {
+                    if (it->second != type_offset) {
+                        dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+                        return resolveType(dbg, it->second, raw_sym, full_type_defs);
+                    }
+                }
+            }
+        }
+    }
 
     switch (tag) {
         case DW_TAG_base_type: {
@@ -299,7 +332,7 @@ static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
             if (has_elem_type && !dimensions.empty()) {
                 // Resolve the innermost element type
                 auto innermost = std::make_unique<RawSymbol>();
-                if (resolveType(dbg, elem_type_offset, *innermost)) {
+                if (resolveType(dbg, elem_type_offset, *innermost, full_type_defs)) {
                     // Build nested array structure from innermost dimension outward
                     // For dimensions [3, 3] with element type int32_t:
                     // Build: array(3, array(3, int32_t))
@@ -361,46 +394,41 @@ static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
                             });
                             child_sym->offset_to_parent = offset;
 
-                            if (!resolveType(dbg, member_type_offset, *child_sym)) {
-                                if (member_name) {
-                                    dwarf_dealloc(dbg, member_name, DW_DLA_STRING);
-                                }
-                                continue;
-                            }
+                            if (resolveType(dbg, member_type_offset, *child_sym, full_type_defs)) {
+                                // Check for bitfield
+                                Dwarf_Attribute bit_size_attr = nullptr;
+                                if (dwarf_attr(child_die, DW_AT_bit_size, &bit_size_attr, &err) == DW_DLV_OK) {
+                                    Dwarf_Unsigned bit_size;
+                                    dwarf_formudata(bit_size_attr, &bit_size, &err);
+                                    dwarf_dealloc(dbg, bit_size_attr, DW_DLA_ATTR);
 
-                            // Check for bitfield
-                            Dwarf_Attribute bit_size_attr = nullptr;
-                            if (dwarf_attr(child_die, DW_AT_bit_size, &bit_size_attr, &err) == DW_DLV_OK) {
-                                Dwarf_Unsigned bit_size;
-                                dwarf_formudata(bit_size_attr, &bit_size, &err);
-                                dwarf_dealloc(dbg, bit_size_attr, DW_DLA_ATTR);
-
-                                // Get bit offset (DWARF5: DW_AT_data_bit_offset, DWARF4: DW_AT_bit_offset)
-                                Dwarf_Attribute bit_offset_attr = nullptr;
-                                int bit_pos = -1;
-                                if (dwarf_attr(child_die, DW_AT_data_bit_offset, &bit_offset_attr, &err) == DW_DLV_OK) {
-                                    Dwarf_Unsigned bit_offset;
-                                    dwarf_formudata(bit_offset_attr, &bit_offset, &err);
-                                    bit_pos = (int)(bit_offset - offset * 8);
-                                    dwarf_dealloc(dbg, bit_offset_attr, DW_DLA_ATTR);
-                                } else if (dwarf_attr(child_die, DW_AT_bit_offset, &bit_offset_attr, &err) == DW_DLV_OK) {
-                                    // DWARF4 big-endian bit offset: convert to little-endian
-                                    Dwarf_Unsigned bit_offset;
-                                    dwarf_formudata(bit_offset_attr, &bit_offset, &err);
-                                    // For little-endian: bit_pos = container_bits - bit_offset - bit_size
-                                    Dwarf_Unsigned container_bits = type_size * 8;
-                                    if (container_bits == 0) {
-                                        container_bits = 32;
+                                    // Get bit offset (DWARF5: DW_AT_data_bit_offset, DWARF4: DW_AT_bit_offset)
+                                    Dwarf_Attribute bit_offset_attr = nullptr;
+                                    int bit_pos = -1;
+                                    if (dwarf_attr(child_die, DW_AT_data_bit_offset, &bit_offset_attr, &err) == DW_DLV_OK) {
+                                        Dwarf_Unsigned bit_offset;
+                                        dwarf_formudata(bit_offset_attr, &bit_offset, &err);
+                                        bit_pos = (int)(bit_offset - offset * 8);
+                                        dwarf_dealloc(dbg, bit_offset_attr, DW_DLA_ATTR);
+                                    } else if (dwarf_attr(child_die, DW_AT_bit_offset, &bit_offset_attr, &err) == DW_DLV_OK) {
+                                        // DWARF4 big-endian bit offset: convert to little-endian
+                                        Dwarf_Unsigned bit_offset;
+                                        dwarf_formudata(bit_offset_attr, &bit_offset, &err);
+                                        // For little-endian: bit_pos = container_bits - bit_offset - bit_size
+                                        Dwarf_Unsigned container_bits = type_size * 8;
+                                        if (container_bits == 0) {
+                                            container_bits = 32;
+                                        }
+                                        bit_pos = (int)(container_bits - bit_offset - bit_size);
+                                        dwarf_dealloc(dbg, bit_offset_attr, DW_DLA_ATTR);
                                     }
-                                    bit_pos = (int)(container_bits - bit_offset - bit_size);
-                                    dwarf_dealloc(dbg, bit_offset_attr, DW_DLA_ATTR);
+
+                                    child_sym->bitfield_position = bit_pos;
+                                    child_sym->size = (uint32_t)bit_size;
                                 }
 
-                                child_sym->bitfield_position = bit_pos;
-                                child_sym->size = (uint32_t)bit_size;
+                                raw_sym.children.push_back(std::move(child_sym));
                             }
-
-                            raw_sym.children.push_back(std::move(child_sym));
                         }
 
                         if (member_name) {
@@ -433,7 +461,7 @@ static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
                 dwarf_dealloc(dbg, underlying_type_attr, DW_DLA_ATTR);
 
                 RawSymbol temp{};
-                if (resolveType(dbg, underlying_offset, temp)) {
+                if (resolveType(dbg, underlying_offset, temp, full_type_defs)) {
                     raw_sym.basic_type = temp.basic_type;
                     if (raw_sym.size == 0) {
                         raw_sym.size = temp.size;
@@ -489,9 +517,10 @@ static bool resolveType(Dwarf_Debug dbg, Dwarf_Off type_offset, RawSymbol& raw_s
         }
     }
 
-    assert(raw_sym.size > 0);
     dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
-    return true;
+    // Skip symbols whose size we could not determine (e.g. a forward declaration
+    // for which no full definition was found in any CU's DWARF).
+    return raw_sym.size > 0;
 }
 
 // ============================================================================
@@ -526,7 +555,7 @@ static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die
 }
 
 // Walk the DWARF DIE tree and collect global variable symbols
-void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix) {
+void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs const& full_type_defs) {
     Dwarf_Error err = nullptr;
     char* die_name = nullptr;
     Dwarf_Half tag = 0;
@@ -538,6 +567,21 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
     if (tag == DW_TAG_variable) {
         std::string effective_name = die_name ? die_name : "";
         Dwarf_Off spec_die_offset = 0;
+        // True if effective_name is already fully qualified (came from demangling
+        // a linkage name or from the declaration map). In that case namespace_prefix
+        // must NOT be added again at the use site.
+        bool effective_name_is_fully_qualified = false;
+
+        // For named DIEs (declarations or inline definitions), record the fully
+        // qualified name keyed by this DIE's global offset. A later definition DIE
+        // that lacks a name but carries DW_AT_specification → this DIE can recover
+        // the qualified name even when there is no DW_AT_linkage_name (e.g. statics).
+        if (die_name != nullptr) {
+            Dwarf_Off this_offset = 0;
+            if (dwarf_dieoffset(die, &this_offset, &err) == DW_DLV_OK) {
+                decl_qualified_names[this_offset] = namespace_prefix + die_name;
+            }
+        }
 
         if (die_name == nullptr) {
             Dwarf_Attribute spec_attr = nullptr;
@@ -549,8 +593,19 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                     if (dwarf_offdie_b(dbg, spec_die_offset, 1, &spec_die, &err) == DW_DLV_OK) {
                         if (auto demangled = demangleLinkageName(dbg, spec_die)) {
                             effective_name = std::move(*demangled);
+                            effective_name_is_fully_qualified = true;
                         }
                         dwarf_dealloc(dbg, spec_die, DW_DLA_DIE);
+                    }
+                    // Fallback for statics (no DW_AT_linkage_name): recover the
+                    // qualified name from the declaration recorded earlier while
+                    // descending into the enclosing namespace(s).
+                    if (effective_name.empty()) {
+                        auto it = decl_qualified_names.find(spec_die_offset);
+                        if (it != decl_qualified_names.end()) {
+                            effective_name = it->second;
+                            effective_name_is_fully_qualified = true;
+                        }
                     }
                 }
             }
@@ -600,12 +655,14 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 }
 
                 if (has_type) {
-                    std::string sym_name = module_prefix + namespace_prefix + effective_name;
+                    std::string sym_name = effective_name_is_fully_qualified
+                                             ? (module_prefix + effective_name)
+                                             : (module_prefix + namespace_prefix + effective_name);
                     auto raw_sym = std::make_unique<RawSymbol>(RawSymbol{
                         .name = sym_name,
                         .address = addr
                     });
-                    if (resolveType(dbg, type_offset, *raw_sym)) {
+                    if (resolveType(dbg, type_offset, *raw_sym, full_type_defs)) {
                         m_raw_symbols.push_back(std::move(raw_sym));
                         m_root_symbols.push_back(std::make_unique<VariantSymbol>(
                           m_root_symbols, m_raw_symbols.back().get()));
@@ -690,14 +747,63 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
     Dwarf_Die child = nullptr;
     if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
-        walkDieTree(dbg, child, load_base, child_prefix, module_prefix);
+        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs);
         while (true) {
             Dwarf_Die sibling = nullptr;
             if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
                 break;
             }
             dwarf_dealloc(dbg, child, DW_DLA_DIE);
-            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix);
+            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs);
+            child = sibling;
+        }
+        dwarf_dealloc(dbg, child, DW_DLA_DIE);
+    }
+}
+
+// Pre-pass: walk a DIE tree and index every full class/struct/union definition
+// (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified name so
+// resolveType can follow a forward declaration in one CU to the full definition
+// in another.
+static void collectFullTypeDefs(Dwarf_Debug dbg,
+                                Dwarf_Die die,
+                                DbgSymbols::FullTypeDefs& full_type_defs) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Half tag = 0;
+    dwarf_tag(die, &tag, &err);
+
+    if (tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type) {
+        Dwarf_Bool is_decl = 0;
+        Dwarf_Attribute decl_attr = nullptr;
+        if (dwarf_attr(die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {
+            dwarf_formflag(decl_attr, &is_decl, &err);
+            dwarf_dealloc(dbg, decl_attr, DW_DLA_ATTR);
+        }
+        if (!is_decl) {
+            Dwarf_Unsigned byte_size = 0;
+            if (dwarf_bytesize(die, &byte_size, &err) == DW_DLV_OK && byte_size > 0) {
+                char* die_name = nullptr;
+                if (dwarf_diename(die, &die_name, &err) == DW_DLV_OK && die_name != nullptr) {
+                    Dwarf_Off offset = 0;
+                    if (dwarf_dieoffset(die, &offset, &err) == DW_DLV_OK) {
+                        full_type_defs.emplace(die_name, offset);
+                    }
+                    dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+                }
+            }
+        }
+    }
+
+    Dwarf_Die child = nullptr;
+    if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
+        collectFullTypeDefs(dbg, child, full_type_defs);
+        while (true) {
+            Dwarf_Die sibling = nullptr;
+            if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
+                break;
+            }
+            dwarf_dealloc(dbg, child, DW_DLA_DIE);
+            collectFullTypeDefs(dbg, sibling, full_type_defs);
             child = sibling;
         }
         dwarf_dealloc(dbg, child, DW_DLA_DIE);
@@ -718,6 +824,16 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     Dwarf_Unsigned next_cu_header = 0;
     Dwarf_Half header_cu_type = 0;
 
+    // Per-module map of DIE offset → fully qualified name. Built while descending
+    // through DW_TAG_namespace DIEs so that definition DIEs lacking a name (e.g.
+    // static namespace-scope variables, whose definition carries only
+    // DW_AT_specification + DW_AT_location) can recover their qualified name.
+    std::unordered_map<Dwarf_Off, std::string> decl_qualified_names;
+
+    // First pass: collect full class/struct/union definitions across all CUs.
+    // The second pass uses this to resolve forward declarations in one CU
+    // against the full definition in another.
+    FullTypeDefs full_type_defs;
     while (dwarf_next_cu_header_d(dbg,
                                   1,
                                   &cu_header_length,
@@ -734,7 +850,29 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
            == DW_DLV_OK) {
         Dwarf_Die cu_die = nullptr;
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            walkDieTree(dbg, cu_die, load_base, "", module_prefix);
+            collectFullTypeDefs(dbg, cu_die, full_type_defs);
+            dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+        }
+    }
+
+    // Second pass: walk every CU and collect global variable symbols.
+    while (dwarf_next_cu_header_d(dbg,
+                                  1,
+                                  &cu_header_length,
+                                  &cu_header_version,
+                                  &abbrev_offset,
+                                  &address_size,
+                                  &offset_size,
+                                  &extension_size,
+                                  &type_sig,
+                                  &typeoffset,
+                                  &next_cu_header,
+                                  &header_cu_type,
+                                  &err)
+           == DW_DLV_OK) {
+        Dwarf_Die cu_die = nullptr;
+        if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
+            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs);
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
         }
     }
