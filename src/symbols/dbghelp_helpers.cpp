@@ -93,13 +93,6 @@ int getBitPosition(SymbolInfo const& info) {
     return position;
 }
 
-DataKind getDataKind(SymbolInfo const& info) {
-    DataKind data_kind = DataKind::DataIsUnknown;
-    if (!SymGetTypeInfo(current_process, info.ModBase, info.Index, TI_GET_DATAKIND, &data_kind)) {
-    }
-    return data_kind;
-}
-
 BasicType getBasicType(SymbolInfo const& info) {
     BasicType base_type = BasicType::btNoType;
     if (!SymGetTypeInfo(current_process, info.ModBase, info.TypeIndex, TI_GET_BASETYPE, &base_type)) {

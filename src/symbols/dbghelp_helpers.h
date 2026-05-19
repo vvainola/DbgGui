@@ -60,8 +60,6 @@ int getBitPosition(SymbolInfo const& info);
 BasicType getBasicType(SymbolInfo const& info);
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
 void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
-// Currently unused helpers
-DataKind getDataKind(SymbolInfo const& info);
 std::string getUndecoratedSymbolName(std::string const& name);
 std::string getModuleName(ModuleBase module_base);
 RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si);
