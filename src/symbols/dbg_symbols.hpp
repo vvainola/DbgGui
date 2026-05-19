@@ -22,26 +22,29 @@
 
 #pragma once
 
+#include "DbgGui/global_snapshot.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <variant>
-#include "DbgGui/global_snapshot.h"
+
+#if LINUX
+#include <dwarf.h>
+#include <libdwarf.h>
+#endif
 
 struct RawSymbol;
 class VariantSymbol;
 
-class DbgHelpSymbols {
+class DbgSymbols {
   public:
-    /// @brief Load global symbols from PDB file
-    /// @return Singleton object
-    static DbgHelpSymbols const& getSymbolsFromPdb();
+    static DbgSymbols const& getSymbols();
 
     /// @brief Load global symbols from JSON file
     /// @param symbol_json JSON file from which the global symbols are loaded if it matches the current binary.
-    DbgHelpSymbols(std::string const& symbol_json);
+    DbgSymbols(std::string const& symbol_json);
 
     /// @return Symbols succesfully loaded from json file
     bool symbolsLoadedFromJson() const { return m_symbols_loaded_from_json; }
@@ -80,10 +83,46 @@ class DbgHelpSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
+#if LINUX
+    /// @brief Resolve a function address to its demangled name.
+    /// @return Function name or empty string if not found.
+    std::string resolveFunctionAddress(MemoryAddress address) const;
+
+    using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
+#endif
+
   private:
-    DbgHelpSymbols();
+    DbgSymbols();
     bool loadSymbolsFromJson(std::string const& json);
-    void loadSymbolsFromPdb();
+    void sortSymbols();
+    void initSymbolsFromPdb();
+
+#if LINUX
+    // unordered_multimap<unqualified type name, DIE offset of full definition>:
+    // populated by a pre-pass over all CUs to enable resolveType to follow a
+    // forward-declared class/struct/union to its full definition in another CU.
+    //
+    // inside_function: true when the current DIE descends from a DW_TAG_subprogram.
+    // Function-local statics live in static storage but are gated by lazy-init
+    // guards (mangled `_ZGV*` symbols) that the snapshot mechanism filters out by
+    // name. If we exposed the static itself, save/restore would zero the storage
+    // without resetting the guard — the next use would skip re-init and read
+    // garbage. So we walk into subprograms (to keep building qualified-name maps,
+    // resolve function pointers, etc.) but don't add their DW_TAG_variable
+    // children to the symbol list.
+    void walkDieTree(Dwarf_Debug dbg,
+                     Dwarf_Die die,
+                     MemoryAddress load_base,
+                     std::string const& namespace_prefix,
+                     std::string const& module_prefix,
+                     std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
+                     FullTypeDefs const& full_type_defs,
+                     bool inside_function);
+    void processAllCUs(Dwarf_Debug dbg,
+                       MemoryAddress load_base,
+                       std::string const& module_prefix = "");
+    std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#endif
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;

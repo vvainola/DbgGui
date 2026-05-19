@@ -21,64 +21,75 @@
 // SOFTWARE.
 
 #include "raw_symbol.h"
-#include "symbol_helpers.h"
+#include "dbghelp_helpers.h"
 #include <fstream>
 #include <format>
 #include <functional>
 
-RawSymbol::RawSymbol(SymbolInfo const& symbol)
-    : info(symbol),
-      tag(getSymbolTag(info)) {
-    if (tag == SymTagBaseType) {
-        basic_type = getBasicType(*this);
-        if (basic_type == BasicType::btUInt
-            || basic_type == BasicType::btInt
-            || basic_type == BasicType::btLong
-            || basic_type == BasicType::btULong
-            || basic_type == BasicType::btBool) {
-            bitfield_position = getBitPosition(*this);
-        }
-    } else if (tag == SymTagEnumerator) {
-        basic_type = getBasicType(*this);
-    }
-}
-
-RawSymbol::RawSymbol(nlohmann::json const& field) {
+RawSymbol RawSymbol::fromJson(nlohmann::json const& field) {
+    RawSymbol sym;
     static ModuleInfo module_info = getCurrentModuleInfo();
 
-    info.Name = field["name"];
-    info.Address = module_info.base_address + size_t(field["address"]);
-    info.Size = field["size"];
-    info.Value = field["value"];
+    sym.name = field["name"].get<std::string>();
+    sym.address = module_info.base_address + static_cast<size_t>(field["address"].get<uint64_t>());
+    sym.size = field["size"].get<uint32_t>();
 
-    tag = field["tag"];
-    offset_to_parent = field["offset_to_parent"];
-    array_element_count = field["array_element_count"];
-    basic_type = field["basic_type"];
-    bitfield_position = field["bitfield_position"];
-    basic_type = field["basic_type"];
+    sym.tag = field["tag"].get<SymTagEnum>();
+    sym.offset_to_parent = field["offset_to_parent"].get<uint32_t>();
+    sym.array_element_count = field["array_element_count"].get<uint32_t>();
+    sym.basic_type = field["basic_type"].get<BasicType>();
+    sym.bitfield_position = field["bitfield_position"].get<int>();
+    if (field.contains("enum_value")) {
+        sym.enum_value = field["enum_value"].get<int32_t>();
+    }
 
     if (field.contains("children")) {
-        for (nlohmann::json const& child_data : field["children"]) {
-            children.push_back(std::make_unique<RawSymbol>(child_data));
+        for (auto const& child_data : field["children"]) {
+            sym.children.push_back(std::make_unique<RawSymbol>(fromJson(child_data)));
         }
     }
+
+    return sym;
+}
+
+std::unique_ptr<RawSymbol> RawSymbol::clone() const {
+    auto sym = std::make_unique<RawSymbol>();
+    sym->name = name;
+    sym->address = address;
+    sym->size = size;
+    sym->tag = tag;
+    sym->offset_to_parent = offset_to_parent;
+    sym->array_element_count = array_element_count;
+    sym->basic_type = basic_type;
+    sym->bitfield_position = bitfield_position;
+    sym->enum_value = enum_value;
+#if WINDOWS
+    sym->mod_base = mod_base;
+    sym->type_index = type_index;
+    sym->index = index;
+    sym->pdb_tag = pdb_tag;
+#endif
+    sym->children.reserve(children.size());
+    for (auto const& child : children) {
+        sym->children.push_back(child->clone());
+    }
+    return sym;
 }
 
 void to_json(nlohmann::json& field, RawSymbol const& sym) {
-    field["name"] = sym.info.Name;
-    if (sym.info.Address > 0) {
-        field["address"] = sym.info.Address - sym.info.ModBase;
+    static ModuleInfo module_info = getCurrentModuleInfo();
+    field["name"] = sym.name;
+    if (sym.address > 0) {
+        field["address"] = sym.address - module_info.base_address;
     } else {
         field["address"] = 0;
     }
-    field["size"] = sym.info.Size;
+    field["size"] = sym.size;
     field["tag"] = sym.tag;
     field["offset_to_parent"] = sym.offset_to_parent;
     field["array_element_count"] = sym.array_element_count;
     field["basic_type"] = BasicType::btNoType;
     field["bitfield_position"] = NO_VALUE;
-    field["value"] = sym.info.Value;
     if (sym.tag == SymTagBaseType) {
         field["basic_type"] = sym.basic_type;
         if (sym.basic_type == BasicType::btUInt
@@ -90,9 +101,13 @@ void to_json(nlohmann::json& field, RawSymbol const& sym) {
         field["basic_type"] = sym.basic_type;
     }
 
+    if (sym.tag == SymTagEnumerator && sym.enum_value != 0) {
+        field["enum_value"] = sym.enum_value;
+    }
+
     for (int i = 0; auto& child : sym.children) {
-        if (sym.info.Name.starts_with("____")) {
-            child->info.Name = std::format("____{}", std::to_string(i));
+        if (sym.name.starts_with("____")) {
+            child->name = std::format("____{}", std::to_string(i));
         }
         to_json(field["children"][std::to_string(i)], *child);
         ++i;
@@ -104,12 +119,8 @@ void saveSymbolsToJson(std::string const& filename, std::vector<std::unique_ptr<
     nlohmann::json symbols_json;
     symbols_json["write_time"] = module_info.write_time;
     for (int i = 0; auto& sym : symbols) {
-        if (sym->info.ModBase != module_info.base_address) {
-            return;
-        }
-
         if (omit_names) {
-            sym->info.Name = std::format("____{}", std::to_string(i));
+            sym->name = std::format("____{}", std::to_string(i));
         }
         symbols_json["symbols"][std::to_string(i)] = *sym;
         ++i;

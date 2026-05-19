@@ -26,17 +26,44 @@
 #include <memory>
 #include <map>
 #include <iostream>
+#include <string>
 
-using ModuleBase = ULONG64;
-using TypeIndex = ULONG;
+using ModuleBase = uint64_t;
+using TypeIndex = uint32_t;
+
+#if WINDOWS
+#include <Windows.h>
+#include <DbgHelp.h>
+
+struct SymbolInfo {
+    SymbolInfo() {};
+    SymbolInfo(SYMBOL_INFO* symbol)
+        : TypeIndex(symbol->TypeIndex),
+          Index(symbol->Index),
+          Size(symbol->Size),
+          ModBase(symbol->ModBase),
+          Address(symbol->Address),
+          PdbTag((SymTagEnum)symbol->Tag),
+          Name(symbol->Name) {
+    }
+    uint32_t TypeIndex = 0;
+    uint32_t Index = 0;
+    MemoryAddress ModBase = 0;
+    SymTagEnum PdbTag = SymTagNull;
+    uint32_t Size = 0;
+    MemoryAddress Address = 0;
+    std::string Name = "";
+};
 
 void printLastError();
-
-int getBitPosition(RawSymbol const& sym);
+int getBitPosition(SymbolInfo const& info);
+BasicType getBasicType(SymbolInfo const& info);
 SymTagEnum getSymbolTag(SymbolInfo const& sym);
-BasicType getBasicType(RawSymbol const& sym);
 void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
 std::string getUndecoratedSymbolName(std::string const& name);
+std::string getModuleName(ModuleBase module_base);
+RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si);
+#endif
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
 
 inline bool startsWith(std::string const& s, std::string const& w) {
@@ -47,20 +74,37 @@ inline bool endsWith(std::string_view str, std::string_view suffix) {
     return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
+inline bool shouldSkipSymbolName(std::string const& name) {
+    return startsWith(name, "_")
+        || startsWith(name, "std::")
+        || endsWith(name, "$initializer$")
+        || startsWith(name, "IID_")
+        || startsWith(name, "GUID_")
+        || startsWith(name, "CLSID_")
+        || startsWith(name, "LIBID_")
+        || startsWith(name, "FONT_ATLAS_")
+        || startsWith(name, "nlohmann::")
+        || startsWith(name, "Concurrency::")
+        || startsWith(name, "ImPlot::")
+        || startsWith(name, "Catch::")
+        || name == "GImGui"
+        || name == "GImPlot"
+        || name == "g_ContextMap"
+        || name == "imgl3wProcs"
+        || name == "g_dbg_gui";
+}
+
 struct ModuleInfo {
     MemoryAddress base_address;
-    MemoryAddress size;
+    size_t size;
     std::string write_time;
     std::string path;
 };
 ModuleInfo getCurrentModuleInfo();
-std::string getModuleName(ULONG64 module_base);
 
 std::string readFile(std::string const& filename);
 
-// Currently unused helpers
-DataKind getDataKind(RawSymbol const& sym);
-
+#if WINDOWS
 class ScopedSymbolHandler {
   public:
     ScopedSymbolHandler() {
@@ -93,3 +137,4 @@ class ScopedSymbolHandler {
     bool m_symbol_handler_initialized = false;
     HANDLE m_current_process = GetCurrentProcess();
 };
+#endif

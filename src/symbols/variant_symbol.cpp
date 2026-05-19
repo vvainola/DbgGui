@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "variant_symbol.h"
-#include "symbol_helpers.h"
+#include "dbghelp_helpers.h"
 #include <cassert>
 #include <numeric>
 #include <format>
@@ -39,14 +39,14 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     if (parent) {
         m_address = parent->getAddress() + symbol->offset_to_parent;
     } else {
-        m_address = symbol->info.Address;
+        m_address = symbol->address;
     }
 
     if (parent && parent->getType() == Type::Array) {
         std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
         m_name = parent->getName() + idx;
     } else {
-        m_name = symbol->info.Name;
+        m_name = symbol->name;
     }
 
     switch (symbol->tag) {
@@ -55,15 +55,15 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             break;
         case SymTagBaseType: {
             m_type = Type::Arithmetic;
-            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size, symbol->bitfield_position);
+            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->size, symbol->bitfield_position);
             break;
         }
         case SymTagEnumerator: {
-            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->info.Size);
+            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->size);
             m_type = Type::Enum;
             // Children of enum contain the enum values as strings.
             for (auto& child : symbol->children) {
-                m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->info.Value), child->info.Name));
+                m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->enum_value), child->name));
             }
             break;
         }
@@ -77,7 +77,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
                 if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
                     for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
                         m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
-                        m_address += first_element->info.Size;
+                        m_address += first_element->size;
                     }
                 }
                 m_address = original_address;
@@ -92,7 +92,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             }
             break;
         default:
-            assert((0, "Unknown type for variant symbol"));
+            assert(!"Unknown type for variant symbol");
     }
 }
 
@@ -212,17 +212,21 @@ std::string VariantSymbol::valueAsStr() const {
                 return it->second;
             }
 
+#if WINDOWS
             ScopedSymbolHandler scoped_symbol_handler;
+#endif
             auto sym = getSymbolFromAddress(pointed_address);
             std::string name = "??";
             if (sym) {
-                name = sym->info.Name;
+                name = sym->name;
+#if WINDOWS
                 size_t decoration_offset = name.find("?");
                 if (decoration_offset != name.npos) {
                     std::string decorated_name = name.substr(decoration_offset);
                     decorated_name.pop_back(); // Remove trailing ")"
                     name = getUndecoratedSymbolName(decorated_name);
                 }
+#endif
                 symbol_addresses[pointed_address] = name;
             }
             return name;
@@ -242,7 +246,7 @@ std::string VariantSymbol::valueAsStr() const {
         case Type::Object:
             return "Object";
         default:
-            assert((0, "Invalid type"));
+            assert(!"Invalid type");
             return "Unknown";
     }
 }

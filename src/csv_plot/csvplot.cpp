@@ -22,14 +22,19 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#pragma warning(push, 0)
-#define FTS_FUZZY_MATCH_IMPLEMENTATION
-#include "symbols/fts_fuzzy_match.h"
-#pragma warning(pop)
+#include <string>
 
+#if WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include "resource.h"
+#endif
+
+#if WINDOWS
+inline const std::string SETTINGS_LOCATION = "USERPROFILE";
+#else
+inline const std::string SETTINGS_LOCATION = "HOME";
+#endif
 
 #include "csvplot.h"
 #include "themes.h"
@@ -43,6 +48,7 @@
 #include "stb_image.h"
 #include "version.h"
 
+#include <format>
 #include <nfd.h>
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -201,6 +207,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     glfwSwapInterval(1);
     glfwSetWindowPos(m_window, 0, 0);
 
+#if WINDOWS
     // Load icon
     HRSRC resource_handle = FindResource(nullptr, MAKEINTRESOURCEA(ICON_PNG), "PNG");
     HGLOBAL resource_memory_handle = LoadResource(nullptr, resource_handle);
@@ -209,6 +216,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     GLFWimage image;
     image.pixels = stbi_load_from_memory((stbi_uc*)resource_buffer, (int)size_bytes, &image.width, &image.height, 0, STBI_rgb_alpha);
     glfwSetWindowIcon(m_window, 1, &image);
+#endif
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -316,8 +324,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 }
 
 void CsvPlotter::loadPreviousSessionSettings() {
-    std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
-
+    std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
         try {
@@ -334,7 +341,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_cols = int(settings["window"]["cols"]);)
             TRY(m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);)
             TRY(m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);)
-            TRY(m_options.x_signal_name = settings["window"]["x_signal_name"];)
+            TRY(m_options.x_signal_name = std::string(settings["window"]["x_signal_name"]);)
             TRY(m_options.link_axis = settings["window"]["link_axis"];)
             TRY(m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];)
             TRY(m_options.show_vertical_line_in_all_plots = settings["window"]["show_vertical_line_in_all_plots"];)
@@ -349,7 +356,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     double value = scale.value();
                     m_signal_scales[scale.key()] = std::format("{:g}", value);
                 } else {
-                    m_signal_scales[scale.key()] = scale.value();
+                    m_signal_scales[scale.key()] = std::string(scale.value());
                 }
             }
             TRY(m_signals_window_width = settings["window"]["signals_window_width"];)
@@ -402,7 +409,7 @@ void CsvPlotter::updateSavedSettings() {
     if (settings != settings_saved) {
         settings_saved = settings;
 
-        std::string settings_dir = std::getenv("USERPROFILE") + std::string("\\.csvplot\\");
+        std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
         if (!std::filesystem::exists(settings_dir)) {
             std::filesystem::create_directories(settings_dir);
         }
@@ -487,9 +494,17 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename) {
         }
         ++header_line_idx;
     }
+    if (header_line_idx >= csv_lines.size()) {
+        std::cerr << std::format("Unable to find CSV header in file \"{}\"\n", csv_filename);
+        return nullptr;
+    }
     std::string header_line(csv_lines[header_line_idx]);
     str::trim(header_line);
     std::vector<std::string> signal_names = str::split(header_line, delimiter);
+    if (signal_names.empty()) {
+        std::cerr << std::format("No signals found in CSV file \"{}\"\n", csv_filename);
+        return nullptr;
+    }
 
     // Count number of instances with same name
     std::map<std::string, int> signal_name_count;
@@ -708,6 +723,7 @@ void CsvPlotter::showSignalWindow() {
         static char config_buffer[20'000];
         if (ImGui::InputText("Config", config_buffer, IM_ARRAYSIZE(config_buffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
             for (std::string const& path : openDialogMultiple()) {
+#if WINDOWS
                 // Call the current process again with the config and file path
                 char exe_path[MAX_PATH] = {0};
                 if (GetModuleFileNameA(NULL, exe_path, MAX_PATH) == 0) {
@@ -715,6 +731,9 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
                 std::string exe = std::filesystem::path(exe_path).string();
+#else
+                std::string exe = "/proc/self/exe";
+#endif
                 std::string command = std::format("{} --image \"{}.png\" --files \"{}\" {}",
                                                   exe,
                                                   path,
@@ -743,8 +762,8 @@ void CsvPlotter::showSignalWindow() {
         // in case it is still being written
         if (std::filesystem::exists(file->name)) {
             auto last_write_time = std::filesystem::last_write_time(file->name);
-            auto write_time_plus_2s = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time) + std::chrono::seconds(2);
-            auto now = std::chrono::system_clock::now();
+            auto now = std::chrono::file_clock::now();
+            auto write_time_plus_2s = last_write_time + std::chrono::seconds(2);
 
             if (last_write_time != file->write_time
                 && now > write_time_plus_2s
@@ -842,7 +861,7 @@ void CsvPlotter::showSignalWindow() {
             for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
                 if (!std::string(signal_name_filter).empty()
-                    && !fts::fuzzy_match_simple(signal_name_filter, signal.name.c_str())) {
+                    && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
                     continue;
                 }
 

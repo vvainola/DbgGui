@@ -24,6 +24,7 @@
 #include <array>
 #include <kissfft/kissfft.hh>
 #include <future>
+#include <algorithm>
 
 constexpr double PI = 3.1415926535897;
 constexpr double APPROX_LIMIT = 1e-7;

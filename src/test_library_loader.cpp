@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2024 vvainola
+// Copyright (c) 2025 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,31 +20,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
+#include "test_library_loader.h"
+#include <iostream>
 
-#include <string>
-#include <expected>
-#include <vector>
+#if WINDOWS
+#include <windows.h>
+#elif LINUX
+#include <dlfcn.h>
+#endif
 
-namespace str {
+TestLibraryLoader::TestLibraryLoader() {
+#if WINDOWS
+    handle = (void*)LoadLibraryA("test_library.dll");
+    if (!handle) {
+        std::cerr << "Failed to load test_library.dll, error: " << GetLastError() << std::endl;
+    }
+#elif LINUX
+    handle = dlopen("./libtest_library.so", RTLD_NOW | RTLD_GLOBAL);
+    if (!handle) {
+        std::cerr << "Failed to load libtest_library.so: " << dlerror() << std::endl;
+    }
+#endif
+}
 
-std::expected<std::string, std::string> readFile(const std::string& filename);
+TestLibraryLoader::~TestLibraryLoader() {
+#if WINDOWS
+    if (handle) FreeLibrary((HMODULE)handle);
+#elif LINUX
+    if (handle) dlclose(handle);
+#endif
+}
 
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count = 1);
-std::vector<std::string> split(const std::string& s, char delim);
-std::string replaceAll(const std::string& str,
-                       const std::string& find,
-                       const std::string& replace);
-std::string removeWhitespace(std::string_view str);
-
-std::string& ltrim(std::string& str);
-std::string& rtrim(std::string& str);
-std::string& trim(std::string& str);
-
-bool fuzzy_match(char const* pattern, char const* str);
-bool fuzzy_match(std::string_view pattern, std::string_view str);
-bool fuzzy_match(char const* pattern, std::string_view str);
-
-std::expected<double, std::string> evaluateExpression(std::string expression);
-
-} // namespace str
+// Global instance ensures the library is loaded during static initialization,
+// before main() and before the DbgSymbols singleton is created.
+TestLibraryLoader test_library_loader;

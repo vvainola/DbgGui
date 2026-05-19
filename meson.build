@@ -2,19 +2,31 @@ project('DbgGui', ['cpp', 'c'],
     meson_version: '>=1.1.0',
     default_options : [
         'b_vscrt=md',
-        'cpp_std=c++latest',
         'c_std=c17',
         'warning_level=3'
     ]
 )
 
+WINDOWS = (host_machine.system() == 'windows')
+LINUX = (host_machine.system() == 'linux')
+
 project_root = meson.current_source_dir()
-add_project_arguments([
-        '-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR',
-        '-DNOMINMAX',
-        '-DJSON_DIAGNOSTICS=1',
-        '-Zc:preprocessor',
-    ], language : ['c', 'cpp'])
+if WINDOWS
+    add_project_arguments([
+            '-DWINDOWS',
+            '-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR',
+            '-DNOMINMAX',
+            '-DJSON_DIAGNOSTICS=1',
+            '-Zc:preprocessor',
+        ], language : ['c', 'cpp']
+    )
+else
+    add_project_arguments([
+            '-DLINUX',
+            '-DJSON_DIAGNOSTICS=1',
+        ], language : ['c', 'cpp']
+    )
+endif
 
 cpp = meson.get_compiler('cpp')
 windows = import('windows')
@@ -38,8 +50,13 @@ deps = [
     dependency('glfw3'),
     dependency('kissfft-float'),
     dependency('cxxopts'),
-    cpp.find_library('dbghelp'),
 ]
+
+if WINDOWS
+    deps += [cpp.find_library('dbghelp')]
+else
+    deps += [dependency('libdwarf'), dependency('gtk+-3.0')]
+endif
 
 imgui_src = files([
     'src/imgui/calibri.cpp',
@@ -62,8 +79,13 @@ imgui_src = files([
     'src/imgui/implot/implot_items.cpp',
     'src/imgui/implot/implot_items.cpp',
     'src/nativefiledialog/nfd_common.c',
-    'src/nativefiledialog/nfd_win.cpp',
 ])
+
+if WINDOWS
+    imgui_src += files(['src/nativefiledialog/nfd_win.cpp'])
+else
+    imgui_src += files(['src/nativefiledialog/nfd_gtk.c'])
+endif
 inc = []
 inc += include_directories(
     'src/imgui',
@@ -81,16 +103,24 @@ imgui_lib = static_library('imgui',
     override_options : override_options,
 )
 
+platform_src = []
+if WINDOWS
+    platform_src += ['src/symbols/dbghelp_helpers.cpp']
+    platform_src += ['src/symbols/dbg_symbols_win.cpp']
+else
+    platform_src += ['src/symbols/elf_helpers.cpp']
+    platform_src += ['src/symbols/dbg_symbols_linux.cpp']
+endif
+
 lib_symbols = static_library('symbols',
     sources : [
         'src/str_helpers.cpp',
         'src/symbols/arithmetic_symbol.cpp',
-        'src/symbols/dbghelp_symbols_lookup.cpp',
+        'src/symbols/dbg_symbols.cpp',
         'src/symbols/global_snapshot.cpp',
         'src/symbols/raw_symbol.cpp',
-        'src/symbols/symbol_helpers.cpp',
         'src/symbols/variant_symbol.cpp',
-    ],
+    ] + platform_src,
     dependencies : deps,
     include_directories : ['include', 'src'],
     override_options : override_options,
@@ -118,8 +148,13 @@ lib_gui = static_library('dbg_gui',
     override_options : override_options,
 )
 
+test_library = shared_library('test_library',
+    sources : ['src/test_library.cpp'],
+    override_options : override_options,
+)
+
 cpp_gui = executable('test_gui_cpp',
-    sources : 'src/test_main.cpp',
+    sources : ['src/test_main.cpp', 'src/test_library_loader.cpp'],
     include_directories : 'include',
     link_with : lib_gui,
 )
@@ -136,14 +171,17 @@ version_header = vcs_tag(
     output: 'version.h'
 )
 
-
-csv_plotter_icon = windows.compile_resources('src/csv_plot/icon.rc',
-    depend_files : [
-        'src/csv_plot/csv_plotter.png',
-        'src/csv_plot/csv_plotter.ico',
-        'src/csv_plot/resource.h'
-    ],
-)
+if WINDOWS
+    csv_plotter_icon = [windows.compile_resources('src/csv_plot/icon.rc',
+        depend_files : [
+            'src/csv_plot/csv_plotter.png',
+            'src/csv_plot/csv_plotter.ico',
+            'src/csv_plot/resource.h'
+        ],
+    )]
+else
+    csv_plotter_icon = []
+endif
 
 csv_plotter = executable('csv_plotter',
     sources : [
@@ -159,8 +197,7 @@ csv_plotter = executable('csv_plotter',
         'src/str_helpers.cpp',
         'src/themes.cpp',
         version_header,
-        csv_plotter_icon
-    ],
+    ] + csv_plotter_icon,
     include_directories : inc + ['src'],
     link_with : imgui_lib,
     dependencies : deps,
@@ -177,10 +214,11 @@ inf2csv = executable('inf2csv',
     override_options : override_options,
 )
 
-lib_dbghelp_symbols_dep = declare_dependency(
+lib_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
 )
+lib_dbghelp_symbols_dep = lib_symbols_dep
 
 lib_gui_dep = declare_dependency(
     link_with : [lib_gui, lib_symbols],
@@ -189,8 +227,18 @@ lib_gui_dep = declare_dependency(
 
 
 if get_option('tests')
-executable('tests',
-    sources : ['tests/symbols_test.cpp'],
-    dependencies : [lib_dbghelp_symbols_dep, dependency('catch2-with-main')]
-)
+    executable('tests',
+        sources : [
+            'tests/symbols_test.cpp',
+            'tests/fwd_decl_types.cpp',
+            'src/test_library_loader.cpp',
+        ],
+        dependencies : [
+            lib_symbols_dep,
+            dependency('catch2-with-main'),
+            deps
+        ],
+        link_with : test_library,
+        include_directories: ['src', 'tests'],
+    )
 endif

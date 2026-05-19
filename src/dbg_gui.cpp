@@ -39,11 +39,22 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
-#ifdef _WIN32
-constexpr std::string USER_SETTINGS_LOCATION = "USERPROFILE";
-#else
-constexpr std::string USER_SETTINGS_LOCATION = "HOME";
-#endif
+namespace {
+template <typename Fn>
+void forEachSignalId(nlohmann::json const& signals, Fn fn) {
+    // Saved signal maps use names as keys, while older/imported shapes may be
+    // arrays. Iterating values supports both without duplicating restore loops.
+    if (!signals.is_array() && !signals.is_object()) {
+        return;
+    }
+    for (auto const& signal : signals) {
+        if (signal.is_number_unsigned() || signal.is_number_integer()) {
+            fn(signal.get<uint64_t>());
+        }
+    }
+}
+} // namespace
+
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
 uint64_t hash(const std::string& str) {
@@ -65,7 +76,7 @@ static void glfw_error_callback(int error, const char* description) {
 
 DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time),
-      m_dbghelp_symbols(DbgHelpSymbols::getSymbolsFromPdb()) {
+      m_symbols(DbgSymbols::getSymbols()) {
     assert(sampling_time >= 0);
 }
 
@@ -86,7 +97,7 @@ void DbgGui::synchronizeSpeed() {
     static double last_timestamp = m_sample_timestamp;
     static std::future<void> tick;
 
-    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick._Is_ready())) {
+    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
         // Wait until next tick
         if (tick.valid()) {
             tick.wait();
@@ -99,7 +110,7 @@ void DbgGui::synchronizeSpeed() {
 
         auto now = std::chrono::system_clock::now();
         auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
-        real_time_us = std::max(real_time_us, 1ll);
+        real_time_us = std::max<long>(real_time_us, 1);
         double real_time_s = real_time_us * 1e-6;
         last_real_timestamp = now;
 
@@ -190,7 +201,7 @@ void DbgGui::updateLoop() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    loadPreviousSessionSettings();
+    TRY(loadPreviousSessionSettings();)
 
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
@@ -314,7 +325,7 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
             scalar->setScaleStr(scale);
             std::string offset = scalar_data["offset"];
             scalar->setOffsetStr(offset);
-            scalar->alias = scalar_data["alias"];
+            scalar->alias = std::string(scalar_data["alias"]);
             scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
             break;
         }
@@ -329,11 +340,31 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
                 break;
             }
         }
-        for (uint64_t id : scalar_plot_data["signals"]) {
-            if (plot != nullptr && id == scalar->id) {
-                m_sampler.startSampling(scalar);
-                plot->addScalarToPlot(scalar);
+        if (plot == nullptr) {
+            continue;
+        }
+        // New settings store signal placement per subplot. Old settings only
+        // have a top-level signals object, which restores into subplot 0.
+        if (scalar_plot_data.contains("subplots")) {
+            int subplot_idx = 0;
+            for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                if (subplot_data.contains("signals")) {
+                    forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
+                        if (id == scalar->id) {
+                            m_sampler.startSampling(scalar);
+                            plot->addScalarToPlot(scalar, subplot_idx);
+                        }
+                    });
+                }
+                ++subplot_idx;
             }
+        } else if (scalar_plot_data.contains("signals")) {
+            forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+                if (id == scalar->id) {
+                    m_sampler.startSampling(scalar);
+                    plot->addScalarToPlot(scalar);
+                }
+            });
         }
     })
 
@@ -358,7 +389,12 @@ void DbgGui::restoreScalarSettings(Scalar* scalar) {
 
 void DbgGui::loadPreviousSessionSettings() {
     m_initial_focus_set = false;
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    if (env == nullptr) {
+        m_error_message = std::format("The {} environment variable is not set. Settings cannot be saved or loaded.", USER_SETTINGS_LOCATION);
+        return;
+    }
+    std::string settings_dir = std::string(env) + "/.dbg_gui/";
     std::string settings_path = settings_dir + "settings.json";
     std::ifstream f(settings_path);
     if (f.is_open()) {
@@ -394,7 +430,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto symbol : m_settings["scalar_symbols"]) {
             TRY(
-              VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol["name"]);
+              VariantSymbol* sym = m_symbols.getSymbol(symbol["name"]);
               if (sym
                   && (sym->getType() == VariantSymbol::Type::Arithmetic
                       || sym->getType() == VariantSymbol::Type::Enum
@@ -405,8 +441,8 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto symbol : m_settings["vector_symbols"]) {
             TRY(
-              VariantSymbol* sym_x = m_dbghelp_symbols.getSymbol(symbol["x"]);
-              VariantSymbol* sym_y = m_dbghelp_symbols.getSymbol(symbol["y"]);
+              VariantSymbol* sym_x = m_symbols.getSymbol(symbol["x"]);
+              VariantSymbol* sym_y = m_symbols.getSymbol(symbol["y"]);
               if (sym_x && sym_y) {
                   addVectorSymbol(sym_x, sym_y, symbol["group"]);
               };)
@@ -419,7 +455,7 @@ void DbgGui::loadPreviousSessionSettings() {
             std::vector<VariantSymbol*> selected_symbols;
             bool all_symbols_exist = true;
             for (auto& symbol_name : custom_signal["symbols"]) {
-                VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
+                VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
                 if (sym) {
                     selected_symbols.push_back(sym);
                 } else {
@@ -452,13 +488,31 @@ void DbgGui::loadPreviousSessionSettings() {
         m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
             ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data);
-            for (uint64_t id : scalar_plot_data["signals"]) {
-                Scalar* scalar = getScalar(id);
-                if (scalar) {
-                    m_sampler.startSampling(scalar);
-                    plot.addScalarToPlot(scalar);
+            // Prefer the subplot-aware format, but keep old top-level signals
+            // readable for existing settings files.
+            if (scalar_plot_data.contains("subplots")) {
+                int subplot_idx = 0;
+                for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                    if (subplot_data.contains("signals")) {
+                        forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
+                            Scalar* scalar = getScalar(id);
+                            if (scalar) {
+                                m_sampler.startSampling(scalar);
+                                plot.addScalarToPlot(scalar, subplot_idx);
+                            }
+                        });
+                    }
+                    ++subplot_idx;
                 }
-            };
+            } else if (scalar_plot_data.contains("signals")) {
+                forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+                    Scalar* scalar = getScalar(id);
+                    if (scalar) {
+                        m_sampler.startSampling(scalar);
+                        plot.addScalarToPlot(scalar);
+                    }
+                });
+            }
         }
 
         m_vector_plots.clear();
@@ -532,7 +586,8 @@ void DbgGui::loadPreviousSessionSettings() {
         };)
 
         TRY(std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
-            strcpy_s(m_group_to_add_symbols, group_to_add_symbols.data());)
+            strncpy(m_group_to_add_symbols, group_to_add_symbols.data(), MAX_NAME_LENGTH);
+            m_group_to_add_symbols[MAX_NAME_LENGTH - 1] = '\0';)
     }
     f.close();
 }
@@ -555,15 +610,15 @@ void DbgGui::updateSavedSettings() {
         m_settings_saved.clear();
         // Restore symbols
         for (auto const& scalar : m_scalars) {
-            VariantSymbol* scalar_sym = m_dbghelp_symbols.getSymbol(scalar->name);
+            VariantSymbol* scalar_sym = m_symbols.getSymbol(scalar->name);
             if (scalar_sym) {
                 m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
                 m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
             }
         }
         for (auto const& vector : m_vectors) {
-            VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
-            VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+            VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
+            VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
             if (x && y) {
                 m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
                 m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
@@ -574,12 +629,17 @@ void DbgGui::updateSavedSettings() {
     }
 
     // Read current settings from json if there is a parallel process in which they have changed
-    std::string settings_dir = std::getenv(USER_SETTINGS_LOCATION.c_str()) + std::string("/.dbg_gui/");
-    std::string settings_path = settings_dir + "settings.json";
-    if (std::filesystem::exists(settings_path)) {
-        auto current_write_time = std::filesystem::last_write_time(settings_path);
-        if (current_write_time != m_last_settings_write_time) {
-            loadPreviousSessionSettings();
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    std::string settings_dir;
+    std::string settings_path;
+    if (env != nullptr) {
+        settings_dir = std::string(env) + "/.dbg_gui/";
+        settings_path = settings_dir + "settings.json";
+        if (std::filesystem::exists(settings_path)) {
+            auto current_write_time = std::filesystem::last_write_time(settings_path);
+            if (current_write_time != m_last_settings_write_time) {
+                loadPreviousSessionSettings();
+            }
         }
     }
 
@@ -636,16 +696,23 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["scalar_plots"][std::to_string(scalar_plot.id)];
         scalar_plot.updateJson(j);
-        for (int i = int(scalar_plot.scalars.size() - 1); i >= 0; --i) {
-            Scalar* scalar = scalar_plot.scalars[i];
-            if (scalar->deleted) {
-                j["signals"].erase(scalar->name_and_group);
-                if (scalar->replacement != nullptr) {
-                    scalar_plot.addScalarToPlot(scalar->replacement);
+        // Top-level scalar plot signals are a legacy read-only migration path.
+        // New settings write signal placement only under subplots.
+        j.erase("signals");
+        for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
+            auto& scalars = scalar_plot.subplots[subplot_idx].scalars;
+            j["subplots"][subplot_idx]["signals"] = nlohmann::json::object();
+            for (int i = int(scalars.size() - 1); i >= 0; --i) {
+                Scalar* scalar = scalars[i];
+                if (scalar->deleted) {
+                    if (scalar->replacement != nullptr) {
+                        scalars[i] = scalar->replacement;
+                    } else {
+                        remove(scalars, scalar);
+                    }
+                } else {
+                    j["subplots"][subplot_idx]["signals"][scalar->name_and_group] = scalar->id;
                 }
-                remove(scalar_plot.scalars, scalar);
-            } else {
-                j["signals"][scalar->name_and_group] = scalar->id;
             }
         }
     }
@@ -847,7 +914,8 @@ void DbgGui::updateSavedSettings() {
     if (!closing
         && focused
         && m_initial_focus_set
-        && settings_changed) {
+        && settings_changed
+        && !settings_dir.empty()) {
         m_settings_saved = m_settings;
 
         if (!std::filesystem::exists(settings_dir)) {
@@ -993,7 +1061,7 @@ void DbgGui::pause() {
 }
 
 Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale, double offset) {
-    VariantSymbol* sym = m_dbghelp_symbols.getSymbol(symbol_name);
+    VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
     if (sym) {
         Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
         ptr->alias = alias;

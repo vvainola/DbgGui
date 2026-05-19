@@ -22,6 +22,7 @@
 
 #include "DbgGui/dbg_gui_wrapper.h"
 #include <math.h>
+#include <stddef.h>
 
 #define PI 3.14159265358979323846 // pi
 

@@ -22,7 +22,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
-#include "symbols/fts_fuzzy_match.h"
+#include "str_helpers.h"
 #include "imgui_internal.h"
 #include "themes.h"
 
@@ -72,7 +72,8 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
         key_name = key_name[6];
     }
     // Clear text edit and set cursor after first character
-    strcpy_s(data->Buf, 20, key_name.c_str());
+    strncpy(data->Buf, key_name.c_str(), 20);
+    data->Buf[19] = '\0';
     data->BufTextLen = 1;
     data->BufDirty = 1;
     data->CursorPos = 1;
@@ -123,7 +124,8 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
                                    | ImGuiInputTextFlags_CallbackAlways;
     double scaled_value = getSourceValue(value_src) * scale + offset;
     char value[20];
-    strcpy_s(value, numberAsStr(scaled_value).c_str());
+    strncpy(value, numberAsStr(scaled_value).c_str(), 20);
+    value[19] = '\0';
     ImGui::SetNextItemWidth(-FLT_MIN);
     static ImGuiKey pressed_number = ImGuiKey_None;
     if (ImGui::InputText(label.c_str(), value, sizeof(value), edit_flags, setCursorOnFirstNumberPress, (void*)&pressed_number)) {
@@ -457,20 +459,23 @@ void DbgGui::showMainMenuBar() {
 
             ImGui::Separator();
 
-            std::string settings_dir = std::format("{}/.dbg_gui/", std::getenv("USERPROFILE"));
-            if (ImGui::Button("Save settings")) {
-                std::string out_path = getFilenameToSave("json", settings_dir);
-                if (!out_path.empty()) {
-                    std::ofstream(out_path) << std::setw(4) << m_settings;
+            const char* env = std::getenv(USER_SETTINGS_LOCATION);
+            if (env) {
+                std::string settings_dir = std::format("{}/.dbg_gui/", env);
+                if (ImGui::Button("Save settings")) {
+                    std::string out_path = getFilenameToSave("json", settings_dir);
+                    if (!out_path.empty()) {
+                        std::ofstream(out_path) << std::setw(4) << m_settings;
+                    }
                 }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Load settings")) {
-                std::string out_path = getFilenameToOpen("json", settings_dir);
-                if (!out_path.empty()) {
-                    // Overwrite existing settings. The file will be reloaded in updateSavedSettings
-                    std::string settings_path = std::format("{}/settings.json", settings_dir);
-                    std::filesystem::copy_file(out_path, settings_path, std::filesystem::copy_options::overwrite_existing);
+                ImGui::SameLine();
+                if (ImGui::Button("Load settings")) {
+                    std::string out_path = getFilenameToOpen("json", settings_dir);
+                    if (!out_path.empty()) {
+                        // Overwrite existing settings. The file will be reloaded in updateSavedSettings
+                        std::string settings_path = std::format("{}/settings.json", settings_dir);
+                        std::filesystem::copy_file(out_path, settings_path, std::filesystem::copy_options::overwrite_existing);
+                    }
                 }
             }
 
@@ -602,7 +607,7 @@ void DbgGui::showScalarWindow() {
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
                     if (scalar->group != group.full_name) {
-                        VariantSymbol* scalar_symbol = m_dbghelp_symbols.getSymbol(scalar->name);
+                        VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
                         if (scalar_symbol) {
                             Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
                             new_scalar->alias = scalar->alias;
@@ -632,11 +637,11 @@ void DbgGui::showScalarWindow() {
                 }
 
                 // All signals in a group are shown if the group name matches filter
-                bool group_matches_filter = fts::fuzzy_match_simple(scalar_name_filter.c_str(), group.full_name.c_str());
+                bool group_matches_filter = str::fuzzy_match(scalar_name_filter.c_str(), group.full_name.c_str());
                 // Show each scalar
                 for (Scalar* scalar : scalars) {
                     bool hide_by_filter = !scalar_name_filter.empty()
-                                       && !fts::fuzzy_match_simple(scalar_name_filter.c_str(), scalar->alias.c_str())
+                                       && !str::fuzzy_match(scalar_name_filter.c_str(), scalar->alias.c_str())
                                        && !group_matches_filter;
                     if (scalar->hide_from_scalars_window || hide_by_filter) {
                         continue;
@@ -743,8 +748,8 @@ void DbgGui::showVectorWindow() {
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
                     if (vector->group != group.full_name) {
-                        VariantSymbol* x = m_dbghelp_symbols.getSymbol(vector->x->name);
-                        VariantSymbol* y = m_dbghelp_symbols.getSymbol(vector->y->name);
+                        VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
+                        VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
                         if (x && y) {
                             Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
                             new_vector->x->setScaleStr(vector->x->getScaleStr());
@@ -772,10 +777,10 @@ void DbgGui::showVectorWindow() {
                 }
 
                 // All vectors in a group are shown if the group name matches filter
-                bool group_matches_filter = fts::fuzzy_match_simple(vector_name_filter.c_str(), group.full_name.c_str());
+                bool group_matches_filter = str::fuzzy_match(vector_name_filter.c_str(), group.full_name.c_str());
                 for (Vector2D* vector : vectors) {
                     if (!vector_name_filter.empty()
-                        && !fts::fuzzy_match_simple(vector_name_filter.c_str(), vector->name.c_str())
+                        && !str::fuzzy_match(vector_name_filter.c_str(), vector->name.c_str())
                         && !group_matches_filter) {
                         continue;
                     }
@@ -854,7 +859,7 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
             char* symbol_name = (char*)payload->Data;
-            VariantSymbol* dragged_symbol = m_dbghelp_symbols.getSymbol(symbol_name);
+            VariantSymbol* dragged_symbol = m_symbols.getSymbol(symbol_name);
             if (dragged_symbol) {
                 // Add children recursively
                 std::function<void(VariantSymbol*)> add_children = [&](VariantSymbol* sym) {
@@ -960,7 +965,7 @@ void DbgGui::showSymbolsWindow() {
     static char symbols_to_search[MAX_NAME_LENGTH];
     if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
         if (std::string(symbols_to_search).size() > 2) {
-            m_symbol_search_results = m_dbghelp_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
+            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
             auto begin_it = m_symbol_search_results.begin();
             // Don't sort first element if it is an exact match
             if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
@@ -1017,7 +1022,8 @@ void DbgGui::showSymbolsWindow() {
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str());
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strcpy_s(symbol_name_buffer, sym->getFullName().data());
+                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
+                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
                         ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
                         ImGui::Text("Drag to custom window to add all children");
                         ImGui::EndDragDropSource();

@@ -23,8 +23,8 @@
 #pragma once
 
 #include "cvconst.h"
-#include <Windows.h>
-#include <DbgHelp.h>
+
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -34,51 +34,27 @@
 using MemoryAddress = uint64_t;
 inline constexpr int NO_VALUE = -1;
 
-struct SymbolInfo {
-    SymbolInfo(){};
-    SymbolInfo(SYMBOL_INFO* symbol)
-        : TypeIndex(symbol->TypeIndex),
-          Index(symbol->Index),
-          Size(symbol->Size),
-          ModBase(symbol->ModBase),
-          Value(symbol->Value),
-          Address(symbol->Address),
-          PdbTag((SymTagEnum)symbol->Tag),
-          Name(symbol->Name) {
-    }
-    ULONG TypeIndex = 0; // Type Index of symbol
-    ULONG Index = 0;
-    ULONG Size = 0;
-    ULONG64 ModBase = 0;            // Base Address of module containing this symbol
-    ULONG64 Value = 0;              // Value of symbol, ValuePresent should be 1
-    ULONG64 Address = 0;            // Address of symbol including base address of module
-    SymTagEnum PdbTag = SymTagNull; // pdb classification
-    std::string Name = "";
-};
-
-SymTagEnum getSymbolTag(SymbolInfo const& sym);
 struct RawSymbol {
-    RawSymbol(SymbolInfo const& symbol);
-    RawSymbol(nlohmann::json const& j);
-
-    // Copy from another symbol
-    RawSymbol(RawSymbol const& other)
-        : info(other.info),
-          tag(other.tag),
-          offset_to_parent(other.offset_to_parent),
-          array_element_count(other.array_element_count),
-          basic_type(other.basic_type),
-          bitfield_position(other.bitfield_position) {
-    }
-
-    SymbolInfo info;
+    std::string name;
+    MemoryAddress address = 0;
+    uint32_t size = 0;
     SymTagEnum tag = SymTagNull;
-    DWORD offset_to_parent = 0;
+    uint32_t offset_to_parent = 0;
     uint32_t array_element_count = 0;
     BasicType basic_type = BasicType::btNoType;
     int bitfield_position = -1;
-    // Children/members of the symbol
+    int64_t enum_value = 0;
     std::vector<std::unique_ptr<RawSymbol>> children;
+
+#if WINDOWS
+    MemoryAddress mod_base = 0;
+    uint32_t type_index = 0;
+    uint32_t index = 0;
+    SymTagEnum pdb_tag = SymTagNull;
+#endif
+
+    static RawSymbol fromJson(nlohmann::json const& j);
+    std::unique_ptr<RawSymbol> clone() const;
 };
 
 void to_json(nlohmann::json& j, RawSymbol const& sym);

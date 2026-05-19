@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "symbols/dbghelp_symbols_lookup.h"
+#include "symbols/dbg_symbols.hpp"
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include "imgui.h"
@@ -40,6 +40,12 @@ struct GLFWwindow;
 
 inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.6f, 0.6f, 0.6f, 1);
+
+#if WINDOWS
+inline constexpr const char* USER_SETTINGS_LOCATION = "USERPROFILE";
+#else
+inline constexpr const char* USER_SETTINGS_LOCATION = "HOME";
+#endif
 inline constexpr ImVec4 COLOR_TEAL = ImVec4(0.0f, 1.0f, 1.0f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 inline constexpr int32_t MIN_FONT_SIZE = 8;
@@ -142,7 +148,7 @@ class DbgGui {
         return nullptr;
     }
 
-    DbgHelpSymbols const& m_dbghelp_symbols;
+    DbgSymbols const& m_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
     char m_group_to_add_symbols[MAX_NAME_LENGTH]{"dbg"};
     std::set<std::string> m_hidden_symbols;
@@ -192,7 +198,7 @@ class DbgGui {
 
     struct OptionalSettings {
         bool pause_on_close = false;
-        bool link_scalar_x_axis = false;
+        bool link_scalar_x_axis = true;
         bool scalar_plot_tooltip = true;
         bool show_latest_message_on_main_menu_bar = true;
         bool show_vertical_line_in_all_plots = true;

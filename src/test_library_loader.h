@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2024 vvainola
+// Copyright (c) 2025 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,29 +22,15 @@
 
 #pragma once
 
-#include <string>
-#include <expected>
-#include <vector>
+// Loads the test shared library (test_library.dll / libtest_library.so) at
+// construction and unloads it at destruction. A global instance ensures the
+// library is loaded before any test runs so that the DbgSymbols singleton
+// picks up its symbols during enumeration.
 
-namespace str {
+struct TestLibraryLoader {
+    void* handle = nullptr;
+    TestLibraryLoader();
+    ~TestLibraryLoader();
+};
 
-std::expected<std::string, std::string> readFile(const std::string& filename);
-
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count = 1);
-std::vector<std::string> split(const std::string& s, char delim);
-std::string replaceAll(const std::string& str,
-                       const std::string& find,
-                       const std::string& replace);
-std::string removeWhitespace(std::string_view str);
-
-std::string& ltrim(std::string& str);
-std::string& rtrim(std::string& str);
-std::string& trim(std::string& str);
-
-bool fuzzy_match(char const* pattern, char const* str);
-bool fuzzy_match(std::string_view pattern, std::string_view str);
-bool fuzzy_match(char const* pattern, std::string_view str);
-
-std::expected<double, std::string> evaluateExpression(std::string expression);
-
-} // namespace str
+extern TestLibraryLoader test_library_loader;

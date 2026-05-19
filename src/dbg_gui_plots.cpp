@@ -52,11 +52,18 @@ void DbgGui::showScalarPlots() {
     static double vertical_line_time_next = 0;
     double vertical_line_time = vertical_line_time_next;
     vertical_line_time_next = NAN;
+    struct PlotScalarDragDropPayload {
+        ScalarPlot* plot;
+        // Needed to move legend items between subplots without searching all cells.
+        int subplot_idx;
+        Scalar* scalar;
+    };
     for (ScalarPlot& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
             continue;
         }
         Scalar* scalar_to_remove = nullptr;
+        int subplot_to_remove_from = 0;
 
         scalar_plot.focus.focused = ImGui::Begin(scalar_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         scalar_plot.closeOnMiddleClick();
@@ -74,20 +81,28 @@ void DbgGui::showScalarPlots() {
         if (ImGui::BeginPopup("##Menu")) {
             if (ImGui::Button("Save as csv")) {
                 MinMax time_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
-                saveScalarsAsCsv(getFilenameToSave(), scalar_plot.scalars, time_limits);
+                saveScalarsAsCsv(getFilenameToSave(), scalar_plot.allScalars(), time_limits);
                 ImGui::CloseCurrentPopup();
             }
             if (ImGui::Button("Remove all")) {
-                scalar_plot.scalars.clear();
-                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].clear();
+                scalar_plot.clearScalars();
+                m_settings["scalar_plots"][std::to_string(scalar_plot.id)].erase("signals");
+                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["subplots"].clear();
                 ImGui::CloseCurrentPopup();
+            }
+            int rows = scalar_plot.rows();
+            int cols = scalar_plot.cols();
+            if (ImGui::InputInt("Rows", &rows)) {
+                scalar_plot.setSubplotGrid(rows, scalar_plot.cols());
+            }
+            if (ImGui::InputInt("Columns", &cols)) {
+                scalar_plot.setSubplotGrid(scalar_plot.rows(), cols);
             }
             ImGui::EndPopup();
         }
 
         // Selection between common x-axis or separate
         MinMax& x_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
-        MinMax& y_limits = scalar_plot.y_axis;
         double& x_range = m_options.link_scalar_x_axis ? m_options.m_linked_scalar_x_axis_range : scalar_plot.x_range;
 
         // Time range slider
@@ -102,11 +117,48 @@ void DbgGui::showScalarPlots() {
         // Auto fit button
         ImGui::SameLine();
         ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
-        ImPlotAxisFlags y_flags = scalar_plot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-        ImGui::Checkbox("Autofit", &scalar_plot.autofit_y);
-
+        if (scalar_plot.subplotCount() == 1) {
+            ImGui::Checkbox("Autofit", &scalar_plot.subplots[0].autofit_y);
+        } else {
+            int autofit_count = 0;
+            for (ScalarPlot::Subplot const& subplot : scalar_plot.subplots) {
+                if (subplot.autofit_y) {
+                    ++autofit_count;
+                }
+            }
+            std::string autofit_label = std::format("Autofit ({}/{})", autofit_count, scalar_plot.subplotCount());
+            ImGui::PushItemWidth(150);
+            if (ImGui::BeginCombo("##Autofit", autofit_label.c_str())) {
+                // Match the checkbox layout to the actual subplot grid so row/col
+                // labels map directly to the plots the user sees.
+                if (ImGui::BeginTable("##AutofitGrid", scalar_plot.cols())) {
+                    for (int row = 0; row < scalar_plot.rows(); ++row) {
+                        ImGui::TableNextRow();
+                        for (int col = 0; col < scalar_plot.cols(); ++col) {
+                            ImGui::TableSetColumnIndex(col);
+                            int subplot_idx = row * scalar_plot.cols() + col;
+                            std::string label = std::format("R{} C{}##Autofit{}", row + 1, col + 1, subplot_idx);
+                            ImGui::Checkbox(label.c_str(), &scalar_plot.subplots[subplot_idx].autofit_y);
+                        }
+                    }
+                    ImGui::EndTable();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+        }
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
-        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
+        bool running = !m_paused;
+        bool fit_x_to_latest = running || (scalar_plot.last_frame_timestamp < m_plot_timestamp);
+        auto render_subplot = [&](int subplot_idx) {
+            // Each subplot has its own Y state, while the X axis follows the
+            // existing scalar-plot link/range behavior.
+            ScalarPlot::Subplot& subplot = scalar_plot.subplots[subplot_idx];
+            MinMax& y_limits = subplot.y_axis;
+            ImPlotAxisFlags y_flags = subplot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+            if (!ImPlot::BeginPlot(std::format("##Scrolling{}", subplot_idx).c_str(), ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
+                return;
+            }
             // Initial axes values from settings
             ImPlot::SetupAxisLimits(ImAxis_Y1, y_limits.min, y_limits.max, ImGuiCond_Once);
             // Connect link values
@@ -114,9 +166,7 @@ void DbgGui::showScalarPlots() {
             ImPlot::SetupAxisLinks(ImAxis_X1, &x_limits.min, &x_limits.max);
             // Autofit x-axis if running or the latest samples after pausing have not been drawn and x-axis fit to those
             // The x-axis can only be freely moved while paused.
-            bool running = !m_paused;
-            if (running || (scalar_plot.last_frame_timestamp < m_plot_timestamp)) {
-                scalar_plot.last_frame_timestamp = m_plot_timestamp;
+            if (fit_x_to_latest) {
                 ImPlot::SetupAxisLimits(ImAxis_X1, m_plot_timestamp - x_range, m_plot_timestamp, ImGuiCond_Always);
             } else if (time_range_changed) {
                 double mid = 0.5 * (x_limits.max + x_limits.min);
@@ -131,7 +181,7 @@ void DbgGui::showScalarPlots() {
 
             auto time_idx = m_sampler.getTimeIndices(x_limits.min, x_limits.max);
             std::unordered_map<Scalar*, bool> scalar_visible;
-            for (Scalar* scalar : scalar_plot.scalars) {
+            for (Scalar* scalar : subplot.scalars) {
                 ScrollingBuffer::DecimatedValues values = m_sampler.getValuesInRange(scalar,
                                                                                      time_idx,
                                                                                      SCALAR_PLOT_POINT_COUNT,
@@ -182,13 +232,14 @@ void DbgGui::showScalarPlots() {
                     }
                     if (ImGui::Button("Remove")) {
                         scalar_to_remove = scalar;
+                        subplot_to_remove_from = subplot_idx;
                     };
                     ImPlot::EndLegendPopup();
                 }
 
                 // Legend items can be dragged to other plots to move the scalar.
                 if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
-                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = {&scalar_plot, scalar};
+                    PlotScalarDragDropPayload plot_and_scalar = {&scalar_plot, subplot_idx, scalar};
                     ImGui::SetDragDropPayload("PLOT_AND_SCALAR", &plot_and_scalar, sizeof(plot_and_scalar));
                     ImGui::Text("Drag to move another plot");
                     ImPlot::EndDragDropSource();
@@ -200,23 +251,22 @@ void DbgGui::showScalarPlots() {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Scalar* scalar = getScalar(id);
                     m_sampler.startSampling(scalar);
-                    scalar_plot.addScalarToPlot(scalar);
+                    scalar_plot.addScalarToPlot(scalar, subplot_idx);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
                     Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                     m_sampler.startSampling(scalar);
-                    scalar_plot.addScalarToPlot(scalar);
+                    scalar_plot.addScalarToPlot(scalar, subplot_idx);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_SCALAR")) {
-                    std::pair<ScalarPlot*, Scalar*> plot_and_scalar = *(std::pair<ScalarPlot*, Scalar*>*)payload->Data;
-                    ScalarPlot* original_plot = plot_and_scalar.first;
-                    Scalar* scalar = plot_and_scalar.second;
-                    if (original_plot != &scalar_plot) {
-                        remove(original_plot->scalars, scalar);
-                        size_t signals_removed = m_settings["scalar_plots"][std::to_string(original_plot->id)]["signals"].erase(scalar->name_and_group);
-                        assert(signals_removed > 0);
-                        scalar_plot.addScalarToPlot(scalar);
+                    PlotScalarDragDropPayload plot_and_scalar = *(PlotScalarDragDropPayload*)payload->Data;
+                    ScalarPlot* original_plot = plot_and_scalar.plot;
+                    int original_subplot_idx = plot_and_scalar.subplot_idx;
+                    Scalar* scalar = plot_and_scalar.scalar;
+                    if (original_plot != &scalar_plot || original_subplot_idx != subplot_idx) {
+                        original_plot->removeScalar(scalar, original_subplot_idx);
+                        scalar_plot.addScalarToPlot(scalar, subplot_idx);
                     }
                 }
                 ImPlot::EndDragDropTarget();
@@ -232,7 +282,7 @@ void DbgGui::showScalarPlots() {
                 // Add small point to the sample location
                 std::vector<ScrollingBuffer::DecimatedValues> scalar_values_in_tooltip;
                 auto mouse_time_idx = m_sampler.getTimeIndices(mouse.x, mouse.x);
-                for (Scalar* scalar : scalar_plot.scalars) {
+                for (Scalar* scalar : subplot.scalars) {
                     ScrollingBuffer::DecimatedValues value = m_sampler.getValuesInRange(scalar,
                                                                                         mouse_time_idx,
                                                                                         1,
@@ -249,8 +299,8 @@ void DbgGui::showScalarPlots() {
 
                 // Show tooltip with values of all scalars at the hovered time
                 ImGui::BeginTooltip();
-                for (size_t i = 0; i < scalar_plot.scalars.size(); ++i) {
-                    Scalar* scalar = scalar_plot.scalars[i];
+                for (size_t i = 0; i < subplot.scalars.size(); ++i) {
+                    Scalar* scalar = subplot.scalars[i];
                     ScrollingBuffer::DecimatedValues value = scalar_values_in_tooltip[i];
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
@@ -291,14 +341,27 @@ void DbgGui::showScalarPlots() {
             }
 
             ImPlot::EndPlot();
+        };
+        if (scalar_plot.subplotCount() == 1) {
+            render_subplot(0);
+        } else if (ImPlot::BeginSubplots("##ScalarSubplots",
+                                         scalar_plot.rows(),
+                                         scalar_plot.cols(),
+                                         ImVec2(-1, ImGui::GetContentRegionAvail().y),
+                                         ImPlotSubplotFlags_NoTitle)) {
+            for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
+                render_subplot(subplot_idx);
+            }
+            ImPlot::EndSubplots();
+        }
+        if (fit_x_to_latest) {
+            scalar_plot.last_frame_timestamp = m_plot_timestamp;
         }
         ImPlot::PopStyleVar();
         ImGui::End();
 
         if (scalar_to_remove) {
-            remove(scalar_plot.scalars, scalar_to_remove);
-            size_t signals_removed = m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["signals"].erase(scalar_to_remove->name_and_group);
-            assert(signals_removed > 0);
+            scalar_plot.removeScalar(scalar_to_remove, subplot_to_remove_from);
         }
     }
 }

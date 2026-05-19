@@ -63,6 +63,7 @@ void SNP_loadSnapshotFromFile(void* symbols, const char* snapshot_file);
 
 #ifdef __cplusplus
 
+#include <cstdint>
 #include <vector>
 #include <variant>
 #include <string>

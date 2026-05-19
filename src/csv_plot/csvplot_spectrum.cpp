@@ -30,6 +30,7 @@
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
 
+#include <algorithm>
 #include <format>
 #include <span>
 
