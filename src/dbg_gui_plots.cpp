@@ -117,7 +117,6 @@ void DbgGui::showScalarPlots() {
         // Auto fit button
         ImGui::SameLine();
         ImPlotAxisFlags x_flags = ImPlotAxisFlags_None;
-        scalar_plot.selected_subplot = std::clamp(scalar_plot.selected_subplot, 0, scalar_plot.subplotCount() - 1);
         if (scalar_plot.subplotCount() == 1) {
             ImGui::Checkbox("Autofit", &scalar_plot.subplots[0].autofit_y);
         } else {
@@ -148,10 +147,6 @@ void DbgGui::showScalarPlots() {
             }
             ImGui::PopItemWidth();
         }
-        // Keep the legacy field synchronized for old single-plot settings and
-        // for any code still reading scalar_plot.autofit_y.
-        scalar_plot.autofit_y = scalar_plot.subplots[0].autofit_y;
-
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         bool running = !m_paused;
         bool fit_x_to_latest = running || (scalar_plot.last_frame_timestamp < m_plot_timestamp);

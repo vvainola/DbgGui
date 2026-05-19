@@ -335,18 +335,9 @@ struct ScalarPlot : Window {
         x_range = j.value("x_range", x_range);
         x_axis.min = 0;
         x_axis.max = x_range;
-        autofit_y = j.value("autofit_y", autofit_y);
-        if (!autofit_y) {
-            y_axis.min = j.value("y_min", y_axis.min);
-            y_axis.max = j.value("y_max", y_axis.max);
-        }
         rows = std::clamp(j.value("rows", rows), 1, MAX_SUBPLOT_ROWS);
         cols = std::clamp(j.value("cols", cols), 1, MAX_SUBPLOT_COLS);
         ensureSubplots();
-        // Old settings stored one Y-axis/autofit state for the whole plot.
-        // Use that as the first subplot default before applying per-subplot data.
-        subplots[0].y_axis = y_axis;
-        subplots[0].autofit_y = autofit_y;
         if (j.contains("subplots")) {
             int subplot_idx = 0;
             for (auto const& subplot_data : j["subplots"]) {
@@ -365,14 +356,7 @@ struct ScalarPlot : Window {
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
-        // Update range only if autofit is not on because otherwise the file
-        // could be continously rewritten when autofit range changes
-        if (!autofit_y) {
-            j["y_min"] = y_axis.min;
-            j["y_max"] = y_axis.max;
-        }
         j["x_range"] = x_range;
-        j["autofit_y"] = autofit_y;
         j["rows"] = rows;
         j["cols"] = cols;
         // Signal placement is saved by updateSavedSettings() after deleted
@@ -392,14 +376,11 @@ struct ScalarPlot : Window {
 
     int rows = 1;
     int cols = 1;
-    int selected_subplot = 0;
     std::vector<Scalar*> scalars;
     std::vector<Subplot> subplots;
-    MinMax y_axis = {-1, 1};
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp = 0;
-    bool autofit_y = true;
 
     int subplotCount() const {
         return rows * cols;
@@ -503,7 +484,6 @@ struct ScalarPlot : Window {
         rows = std::clamp(rows, 1, MAX_SUBPLOT_ROWS);
         cols = std::clamp(cols, 1, MAX_SUBPLOT_COLS);
         subplots.resize(subplotCount());
-        selected_subplot = std::clamp(selected_subplot, 0, subplotCount() - 1);
     }
 };
 
