@@ -951,6 +951,14 @@ void DbgSymbols::initSymbolsFromPdb() {
     }
 }
 
+std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
+    auto it = m_function_addresses.find(address);
+    if (it != m_function_addresses.end()) {
+        return it->second;
+    }
+    return "";
+}
+
 // ============================================================================
 // Snapshot support
 // ============================================================================
