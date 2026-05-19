@@ -102,6 +102,17 @@ static int s_array[3] = {10, 20, 30};
 // member.
 FwdDeclOuter g_fwd_outer;
 
+// A function with a function-local static — same pattern Catch2 uses inside
+// CATCH_REGISTER_ENUM. The static must NOT be exposed by DbgSymbols, because
+// its lazy-init guard (a `_ZGV*` symbol) is filtered out by name and so a
+// snapshot save/restore would zero the static's storage without resetting
+// the guard — the next use would skip re-init and dereference garbage.
+int* getLocalStaticPtr() {
+    static int  s_local_static_int = 12345;
+    static int* s_local_static_ptr = &s_local_static_int;
+    return s_local_static_ptr;
+}
+
 TEST_CASE("Basic symbol access") {
     DbgSymbols const& symbols = DbgSymbols::getSymbols();
     g_int = random<int>();
@@ -198,6 +209,24 @@ TEST_CASE("Static namespace-scope symbol access") {
     VariantSymbol* s_arr1_sym = symbols.getSymbol("static_ns::s_array[1]");
     REQUIRE(s_arr1_sym != nullptr);
     CHECK(s_arr1_sym->read() == static_ns::s_array[1]);
+}
+
+TEST_CASE("Function-local statics are not exposed") {
+    // Make sure the function actually runs so the linker keeps the statics —
+    // otherwise the compiler/linker may strip them and the test trivially
+    // passes for the wrong reason.
+    REQUIRE(getLocalStaticPtr() != nullptr);
+
+    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+
+    // The statics are inside a DW_TAG_subprogram, so the walker must skip them.
+    // If exposed, snapshot save/restore could zero the storage while leaving the
+    // C++ init guard set, producing a SIGSEGV on the next use (the Catch2
+    // CATCH_REGISTER_ENUM crash mechanism).
+    CHECK(symbols.getSymbol("s_local_static_int") == nullptr);
+    CHECK(symbols.getSymbol("s_local_static_ptr") == nullptr);
+    CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_int") == nullptr);
+    CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_ptr") == nullptr);
 }
 
 TEST_CASE("Forward-declared type definition lookup") {

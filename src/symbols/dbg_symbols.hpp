@@ -101,13 +101,23 @@ class DbgSymbols {
     // unordered_multimap<unqualified type name, DIE offset of full definition>:
     // populated by a pre-pass over all CUs to enable resolveType to follow a
     // forward-declared class/struct/union to its full definition in another CU.
+    //
+    // inside_function: true when the current DIE descends from a DW_TAG_subprogram.
+    // Function-local statics live in static storage but are gated by lazy-init
+    // guards (mangled `_ZGV*` symbols) that the snapshot mechanism filters out by
+    // name. If we exposed the static itself, save/restore would zero the storage
+    // without resetting the guard — the next use would skip re-init and read
+    // garbage. So we walk into subprograms (to keep building qualified-name maps,
+    // resolve function pointers, etc.) but don't add their DW_TAG_variable
+    // children to the symbol list.
     void walkDieTree(Dwarf_Debug dbg,
                      Dwarf_Die die,
                      MemoryAddress load_base,
                      std::string const& namespace_prefix,
                      std::string const& module_prefix,
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
-                     FullTypeDefs const& full_type_defs);
+                     FullTypeDefs const& full_type_defs,
+                     bool inside_function);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");
