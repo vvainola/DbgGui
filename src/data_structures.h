@@ -328,16 +328,16 @@ struct ScalarPlot : Window {
 
     ScalarPlot(std::string const& name, uint64_t id)
         : Window(name, id) {
-        ensureSubplots();
+        subplots.resize(subplotCount());
     }
     ScalarPlot(nlohmann::json const& j)
         : Window(j) {
         x_range = j.value("x_range", x_range);
         x_axis.min = 0;
         x_axis.max = x_range;
-        rows = std::clamp(j.value("rows", rows), 1, MAX_SUBPLOT_ROWS);
-        cols = std::clamp(j.value("cols", cols), 1, MAX_SUBPLOT_COLS);
-        ensureSubplots();
+        m_rows = std::clamp(j.value("rows", m_rows), 1, MAX_SUBPLOT_ROWS);
+        m_cols = std::clamp(j.value("cols", m_cols), 1, MAX_SUBPLOT_COLS);
+        subplots.resize(subplotCount());
         if (j.contains("subplots")) {
             int subplot_idx = 0;
             for (auto const& subplot_data : j["subplots"]) {
@@ -357,8 +357,8 @@ struct ScalarPlot : Window {
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["x_range"] = x_range;
-        j["rows"] = rows;
-        j["cols"] = cols;
+        j["rows"] = m_rows;
+        j["cols"] = m_cols;
         // Signal placement is saved by updateSavedSettings() after deleted
         // scalars have been resolved. This keeps updateJson() focused on plot state.
         j["subplots"] = nlohmann::json::array();
@@ -374,16 +374,22 @@ struct ScalarPlot : Window {
         return j;
     }
 
-    int rows = 1;
-    int cols = 1;
     std::vector<Scalar*> scalars;
     std::vector<Subplot> subplots;
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp = 0;
 
+    int rows() const {
+        return m_rows;
+    }
+
+    int cols() const {
+        return m_cols;
+    }
+
     int subplotCount() const {
-        return rows * cols;
+        return m_rows * m_cols;
     }
 
     void setSubplotGrid(int new_rows, int new_cols) {
@@ -391,8 +397,8 @@ struct ScalarPlot : Window {
         new_cols = std::clamp(new_cols, 1, MAX_SUBPLOT_COLS);
         int new_count = new_rows * new_cols;
         std::vector<Subplot> old_subplots = std::move(subplots);
-        rows = new_rows;
-        cols = new_cols;
+        m_rows = new_rows;
+        m_cols = new_cols;
         subplots.resize(new_count);
         int copied_count = std::min<int>(static_cast<int>(old_subplots.size()), static_cast<int>(subplots.size()));
         for (int i = 0; i < copied_count; ++i) {
@@ -408,7 +414,6 @@ struct ScalarPlot : Window {
     }
 
     void addScalarToPlot(Scalar* new_scalar, int subplot_idx = 0) {
-        ensureSubplots();
         subplot_idx = std::clamp(subplot_idx, 0, subplotCount() - 1);
         // A scalar appears at most once inside a scalar plot window. Dropping it
         // on another subplot moves it there.
@@ -424,14 +429,12 @@ struct ScalarPlot : Window {
     }
 
     void removeScalar(Scalar* scalar) {
-        ensureSubplots();
         for (Subplot& subplot : subplots) {
             remove(subplot.scalars, scalar);
         }
     }
 
     void removeScalar(Scalar* scalar, int subplot_idx) {
-        ensureSubplots();
         if (subplot_idx >= 0 && subplot_idx < subplotCount()) {
             remove(subplots[subplot_idx].scalars, scalar);
         }
@@ -450,7 +453,6 @@ struct ScalarPlot : Window {
     }
 
     void clearScalars() {
-        ensureSubplots();
         for (Subplot& subplot : subplots) {
             subplot.scalars.clear();
         }
@@ -465,26 +467,21 @@ struct ScalarPlot : Window {
                                  MAX_NAME_LENGTH)) {
                 name = std::string(name.data());
             }
-            int new_rows = rows;
-            int new_cols = cols;
+            int new_rows = m_rows;
+            int new_cols = m_cols;
             if (ImGui::InputInt("Rows", &new_rows)) {
-                setSubplotGrid(new_rows, cols);
+                setSubplotGrid(new_rows, m_cols);
             }
             if (ImGui::InputInt("Columns", &new_cols)) {
-                setSubplotGrid(rows, new_cols);
+                setSubplotGrid(m_rows, new_cols);
             }
             ImGui::EndPopup();
         }
     }
 
   private:
-    void ensureSubplots() {
-        // Constructors and public mutators keep this invariant so callers do
-        // not need to guard every access to subplots.
-        rows = std::clamp(rows, 1, MAX_SUBPLOT_ROWS);
-        cols = std::clamp(cols, 1, MAX_SUBPLOT_COLS);
-        subplots.resize(subplotCount());
-    }
+    int m_rows = 1;
+    int m_cols = 1;
 };
 
 struct VectorPlot : Window {

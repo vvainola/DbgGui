@@ -90,13 +90,13 @@ void DbgGui::showScalarPlots() {
                 m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["subplots"].clear();
                 ImGui::CloseCurrentPopup();
             }
-            int rows = scalar_plot.rows;
-            int cols = scalar_plot.cols;
+            int rows = scalar_plot.rows();
+            int cols = scalar_plot.cols();
             if (ImGui::InputInt("Rows", &rows)) {
-                scalar_plot.setSubplotGrid(rows, scalar_plot.cols);
+                scalar_plot.setSubplotGrid(rows, scalar_plot.cols());
             }
             if (ImGui::InputInt("Columns", &cols)) {
-                scalar_plot.setSubplotGrid(scalar_plot.rows, cols);
+                scalar_plot.setSubplotGrid(scalar_plot.rows(), cols);
             }
             ImGui::EndPopup();
         }
@@ -131,12 +131,12 @@ void DbgGui::showScalarPlots() {
             if (ImGui::BeginCombo("##Autofit", autofit_label.c_str())) {
                 // Match the checkbox layout to the actual subplot grid so row/col
                 // labels map directly to the plots the user sees.
-                if (ImGui::BeginTable("##AutofitGrid", scalar_plot.cols)) {
-                    for (int row = 0; row < scalar_plot.rows; ++row) {
+                if (ImGui::BeginTable("##AutofitGrid", scalar_plot.cols())) {
+                    for (int row = 0; row < scalar_plot.rows(); ++row) {
                         ImGui::TableNextRow();
-                        for (int col = 0; col < scalar_plot.cols; ++col) {
+                        for (int col = 0; col < scalar_plot.cols(); ++col) {
                             ImGui::TableSetColumnIndex(col);
-                            int subplot_idx = row * scalar_plot.cols + col;
+                            int subplot_idx = row * scalar_plot.cols() + col;
                             std::string label = std::format("R{} C{}##Autofit{}", row + 1, col + 1, subplot_idx);
                             ImGui::Checkbox(label.c_str(), &scalar_plot.subplots[subplot_idx].autofit_y);
                         }
@@ -345,8 +345,8 @@ void DbgGui::showScalarPlots() {
         if (scalar_plot.subplotCount() == 1) {
             render_subplot(0);
         } else if (ImPlot::BeginSubplots("##ScalarSubplots",
-                                         scalar_plot.rows,
-                                         scalar_plot.cols,
+                                         scalar_plot.rows(),
+                                         scalar_plot.cols(),
                                          ImVec2(-1, ImGui::GetContentRegionAvail().y),
                                          ImPlotSubplotFlags_NoTitle)) {
             for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
