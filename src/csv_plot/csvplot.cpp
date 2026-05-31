@@ -57,6 +57,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include <iostream>
 #include <filesystem>
 #include <span>
+#include <set>
 
 #define TRY(expression)                              \
     try {                                            \
@@ -156,9 +157,50 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double 
 void CsvPlotter::applySignalTransforms(CsvFileData& file) {
     for (CsvSignal& signal : file.signals) {
         auto transform_it = m_signal_transform_settings.find(signal.name);
-        signal.transform = transform_it == m_signal_transform_settings.end()
-                         ? CsvSignalTransform{}
-                         : transform_it->second;
+        signal.transform = transform_it == m_signal_transform_settings.end() ? CsvSignalTransform{} : transform_it->second;
+    }
+}
+
+void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
+    for (CsvSignal& signal : file.signals) {
+        auto it = m_plotted_signal_settings.find(signal.name);
+        if (it == m_plotted_signal_settings.end()) {
+            continue;
+        }
+        for (int plot_idx : it->second) {
+            if (plot_idx >= 0 && plot_idx < (int)m_scalar_plots.size()) {
+                m_scalar_plots[plot_idx].addSignal(&signal);
+            }
+        }
+    }
+}
+
+void CsvPlotter::updatePlottedSignalSettings() {
+    // Update the saved map only for currently loaded signal names so that signals belonging to
+    // files that are not currently open are preserved and restored when their file is reopened.
+    std::set<std::string> loaded_names;
+    for (auto& file : m_csv_data) {
+        for (CsvSignal& signal : file->signals) {
+            loaded_names.insert(signal.name);
+        }
+    }
+
+    std::map<std::string, std::vector<int>> current; // name -> plot indices
+    for (int i = 0; i < (int)m_scalar_plots.size(); ++i) {
+        for (CsvSignal* signal : m_scalar_plots[i].signals) {
+            if (!contains(current[signal->name], i)) {
+                current[signal->name].push_back(i);
+            }
+        }
+    }
+
+    for (std::string const& name : loaded_names) {
+        auto it = current.find(name);
+        if (it != current.end()) {
+            m_plotted_signal_settings[name] = it->second;
+        } else {
+            m_plotted_signal_settings.erase(name);
+        }
     }
 }
 
@@ -231,6 +273,9 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.min = std::min(xlimits.min, xlimits.max);
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
+
+    // Command line signal selection overrides the persisted plotted signals
+    m_use_saved_plotted_signals = name_and_plot_idx.empty();
 
     for (std::string file : files) {
         std::unique_ptr<CsvFileData> data = parseCsvData(file);
@@ -439,8 +484,16 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     ++it;
                 }
             }
+            if (settings.contains("plotted_signals") && settings["plotted_signals"].is_object()) {
+                for (auto const& item : settings["plotted_signals"].items()) {
+                    TRY(m_plotted_signal_settings[item.key()] = item.value().get<std::vector<int>>();)
+                }
+            }
             for (auto& file : m_csv_data) {
                 applySignalTransforms(*file);
+                if (m_use_saved_plotted_signals) {
+                    applyPlottedSignals(*file);
+                }
             }
             TRY(m_signals_window_width = settings["window"]["signals_window_width"];)
 
@@ -493,6 +546,14 @@ void CsvPlotter::updateSavedSettings() {
         if (transform.offset != 0) {
             settings["offsets"][name] = transform.offset_expression;
         }
+    }
+    // In command line mode leave the persisted plotted signals untouched so they are not
+    // overwritten or lost for the next normal launch.
+    if (m_use_saved_plotted_signals) {
+        updatePlottedSignalSettings();
+    }
+    for (auto const& [name, plots] : m_plotted_signal_settings) {
+        settings["plotted_signals"][name] = plots;
     }
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
@@ -740,8 +801,16 @@ void CsvPlotter::showSignalWindow() {
     ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
         std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
+        if (!csv_datas.empty()) {
+            // Opening files interactively resumes normal behavior: the saved plotted signals
+            // are restored and persisted again even if signals were given on the command line.
+            m_use_saved_plotted_signals = true;
+        }
         for (auto& csv_data : csv_datas) {
             applySignalTransforms(*csv_data);
+            if (m_use_saved_plotted_signals) {
+                applyPlottedSignals(*csv_data);
+            }
             m_csv_data.push_back(std::move(csv_data));
         }
     }
@@ -910,16 +979,22 @@ void CsvPlotter::showSignalWindow() {
                     }
                 }
             }
-            if (ImGui::Button("Remove signals from plots")) {
+            if (ImGui::Button("Replace plotted signals with this file's")) {
                 for (auto& signal : file->signals) {
                     for (ScalarPlot& plot : m_scalar_plots) {
-                        plot.removeSignal(&signal);
-                    }
-                    for (VectorPlot& plot : m_vector_plots) {
-                        plot.removeSignal(&signal);
-                    }
-                    for (SpectrumPlot& plot : m_spectrum_plots) {
-                        plot.removeSignal(&signal);
+                        // Collect same-named signals from other files that are currently plotted
+                        std::vector<CsvSignal*> same_named;
+                        for (CsvSignal* plot_signal : plot.signals) {
+                            if (plot_signal->name == signal.name && plot_signal != &signal) {
+                                same_named.push_back(plot_signal);
+                            }
+                        }
+                        if (!same_named.empty()) {
+                            for (CsvSignal* plot_signal : same_named) {
+                                plot.removeSignal(plot_signal);
+                            }
+                            plot.addSignal(&signal);
+                        }
                     }
                 }
             }
@@ -942,6 +1017,19 @@ void CsvPlotter::showSignalWindow() {
                     saveAsCsv(out, header, samples);
                 }
             }
+            if (ImGui::Button("Remove signals from plots")) {
+                for (auto& signal : file->signals) {
+                    for (ScalarPlot& plot : m_scalar_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                    for (VectorPlot& plot : m_vector_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                    for (SpectrumPlot& plot : m_spectrum_plots) {
+                        plot.removeSignal(&signal);
+                    }
+                }
+            }
             if (ImGui::Button("Remove file")) {
                 file_to_remove = &file;
             }
@@ -957,9 +1045,9 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 ImGui::PushStyleColor(ImGuiCol_Text,
-                                      signal.transform.isDefault()
-                                        ? ImGui::GetStyle().Colors[ImGuiCol_Text]
-                                        : COLOR_LIGHT_BLUE);
+                                      signal.transform.isDefault() ?
+                                        ImGui::GetStyle().Colors[ImGuiCol_Text] :
+                                        COLOR_LIGHT_BLUE);
                 // Highlight selected/plotted signals
                 bool selected = contains(m_selected_signals, &signal);
                 for (ScalarPlot& plot : m_scalar_plots) {

@@ -175,6 +175,8 @@ class CsvPlotter {
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
     void applySignalTransforms(CsvFileData& file);
+    void applyPlottedSignals(CsvFileData& file);
+    void updatePlottedSignalSettings();
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
 
     void updateSavedSettings();
@@ -183,6 +185,13 @@ class CsvPlotter {
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
+    // signal name -> plot indices it is plotted on; persisted across sessions
+    std::map<std::string, std::vector<int>> m_plotted_signal_settings;
+    // When signals are given on the command line they override the persisted selection at
+    // startup: the saved plotted signals are not auto-restored on launch and are not
+    // overwritten. The first interactive "Open" flips this back on, resuming normal restore
+    // and persistence of plotted signals.
+    bool m_use_saved_plotted_signals = true;
     int m_rows = 1;
     int m_cols = 1;
     int m_vector_plot_cnt = 0;
