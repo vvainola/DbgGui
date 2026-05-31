@@ -26,14 +26,14 @@ setup build *opts:
 build build_folder="build" *opts="":
     #! powershell
     .venv/scripts/activate
-    meson compile -C {{build_folder}}
+    meson compile -C {{build_folder}} {{opts}}
 
 [no-cd]
 [windows]
 test build_folder="build" *opts="":
     #! powershell
     .venv/scripts/activate
-    meson compile -C {{build_folder}}
+    meson compile -C {{build_folder}} {{opts}}
     cd {{build_folder}}
     ./tests.exe
 
@@ -55,13 +55,13 @@ setup build *opts:
 build build_folder="build" *opts="":
     #!/usr/bin/env bash
     source .venv_linux/bin/activate
-    ninja -C {{build_folder}}
+    ninja -C {{build_folder}} {{opts}}
 
 [no-cd]
 [linux]
 test build_folder="build" *opts="":
     #!/usr/bin/env bash
     source .venv_linux/bin/activate
-    ninja -C {{build_folder}}
+    ninja -C {{build_folder}} {{opts}}
     cd ./{{build_folder}}
     ./tests
