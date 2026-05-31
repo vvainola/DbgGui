@@ -72,6 +72,9 @@ void CsvPlotter::showCustomSignalCreator() {
             CsvSignal c;
             c.name = custom_signal_name;
             c.file = m_selected_signals[0]->file;
+            if (auto transform = m_signal_transform_settings.find(c.name); transform != m_signal_transform_settings.end()) {
+                c.transform = transform->second;
+            }
             for (int i = 0; i < m_selected_signals[0]->samples.size(); ++i) {
                 std::vector<double> samples;
                 for (CsvSignal* signal : m_selected_signals) {

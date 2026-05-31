@@ -68,10 +68,22 @@ struct CsvFileData {
     }
 };
 
+struct CsvSignalTransform {
+    std::string scale_expression = "1";
+    double scale = 1;
+    std::string offset_expression = "0";
+    double offset = 0;
+
+    bool isDefault() const {
+        return scale == 1 && offset == 0;
+    }
+};
+
 struct CsvSignal {
     std::string name;
     std::vector<double> samples;
     CsvFileData* file;
+    CsvSignalTransform transform;
 };
 
 struct ScalarPlot {
@@ -162,13 +174,15 @@ class CsvPlotter {
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
+    void applySignalTransforms(CsvFileData& file);
+    void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
-    std::map<std::string, std::string> m_signal_scales;
+    std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     int m_rows = 1;
     int m_cols = 1;
     int m_vector_plot_cnt = 0;

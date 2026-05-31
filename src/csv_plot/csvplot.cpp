@@ -58,13 +58,13 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include <filesystem>
 #include <span>
 
-#define TRY(expression)                       \
-    try {                                     \
-        expression                            \
-    } catch (nlohmann::json::exception err) { \
-        std::cerr << err.what() << std::endl; \
-    } catch (std::exception err) {            \
-        std::cerr << err.what() << std::endl; \
+#define TRY(expression)                              \
+    try {                                            \
+        expression                                   \
+    } catch (nlohmann::json::exception const& err) { \
+        addSettingsLoadError(err.what());            \
+    } catch (std::exception const& err) {            \
+        addSettingsLoadError(err.what());            \
     }
 
 inline constexpr int32_t MIN_FONT_SIZE = 8;
@@ -72,6 +72,7 @@ inline constexpr int32_t MAX_FONT_SIZE = 100;
 inline constexpr ImVec4 COLOR_TOOLTIP_LINE = ImVec4(0.7f, 0.7f, 0.7f, 0.6f);
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
+inline constexpr ImVec4 COLOR_LIGHT_BLUE = ImVec4(0.4f, 0.6f, 0.9f, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
@@ -86,6 +87,41 @@ std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
+
+static std::string jsonValueToExpressionString(nlohmann::json const& value) {
+    if (value.is_number()) {
+        return std::format("{:g}", value.get<double>());
+    }
+    return value.get<std::string>();
+}
+
+static bool setSignalScale(CsvSignalTransform& transform, std::string const& scale_expression, std::string* error = nullptr) {
+    auto scale = str::evaluateExpression(scale_expression);
+    if (!scale.has_value()) {
+        if (error != nullptr) {
+            *error = scale.error();
+        }
+        return false;
+    }
+
+    transform.scale_expression = scale_expression;
+    transform.scale = scale.value();
+    return true;
+}
+
+static bool setSignalOffset(CsvSignalTransform& transform, std::string const& offset_expression, std::string* error = nullptr) {
+    auto offset = str::evaluateExpression(offset_expression);
+    if (!offset.has_value()) {
+        if (error != nullptr) {
+            *error = offset.error();
+        }
+        return false;
+    }
+
+    transform.offset_expression = offset_expression;
+    transform.offset = offset.value();
+    return true;
+}
 
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
@@ -117,6 +153,32 @@ std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double 
     return {start_idx, end_idx};
 }
 
+void CsvPlotter::applySignalTransforms(CsvFileData& file) {
+    for (CsvSignal& signal : file.signals) {
+        auto transform_it = m_signal_transform_settings.find(signal.name);
+        signal.transform = transform_it == m_signal_transform_settings.end()
+                         ? CsvSignalTransform{}
+                         : transform_it->second;
+    }
+}
+
+void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform) {
+    if (transform.isDefault()) {
+        m_signal_transform_settings.erase(signal_name);
+    } else {
+        m_signal_transform_settings[signal_name] = transform;
+    }
+
+    // Keep cached per-signal transforms in sync with the per-name settings map.
+    for (auto& file : m_csv_data) {
+        for (CsvSignal& signal : file->signals) {
+            if (signal.name == signal_name) {
+                signal.transform = transform;
+            }
+        }
+    }
+}
+
 std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
     std::span<double const> x_samples = getXSignalSamples(*signal.file);
     std::vector<double> const& all_samples = signal.samples;
@@ -131,14 +193,8 @@ std::vector<double> CsvPlotter::getVisibleSamples(CsvSignal const& signal) {
         indices = getTimeIndices(x_samples, m_x_axis.min + x_offset, m_x_axis.max + x_offset);
     }
     std::vector<double> plotted_samples(all_samples.begin() + indices.first, all_samples.begin() + indices.second);
-    // Scale samples. Use default scale if signal has no scale
-    double signal_scale = 1;
-    if (m_signal_scales.contains(signal.name)) {
-        signal_scale = *str::evaluateExpression(m_signal_scales.at(signal.name));
-    }
-
     for (double& sample : plotted_samples) {
-        sample *= signal_scale;
+        sample = sample * signal.transform.scale + signal.transform.offset;
     }
 
     return plotted_samples;
@@ -327,6 +383,13 @@ void CsvPlotter::loadPreviousSessionSettings() {
     std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
     std::ifstream f(settings_dir + "settings.json");
     if (f.is_open()) {
+        auto addSettingsLoadError = [&](std::string const& error) {
+            if (m_error_message.empty()) {
+                m_error_message = "Failed to load previous session settings:\n";
+            }
+            m_error_message += error + "\n";
+        };
+
         try {
             auto settings = nlohmann::json::parse(f);
 
@@ -351,13 +414,33 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_options.theme = settings["window"]["theme"];)
             TRY(m_options.font_size = settings["window"]["font_size"];)
             setTheme(m_options.theme, m_window);
-            for (auto scale : settings["scales"].items()) {
-                if (scale.value().is_number()) {
-                    double value = scale.value();
-                    m_signal_scales[scale.key()] = std::format("{:g}", value);
-                } else {
-                    m_signal_scales[scale.key()] = std::string(scale.value());
+            if (settings.contains("scales") && settings["scales"].is_object()) {
+                for (auto const& scale : settings["scales"].items()) {
+                    std::string scale_expression = jsonValueToExpressionString(scale.value());
+                    std::string error;
+                    if (!setSignalScale(m_signal_transform_settings[scale.key()], scale_expression, &error)) {
+                        addSettingsLoadError(error);
+                    }
                 }
+            }
+            if (settings.contains("offsets") && settings["offsets"].is_object()) {
+                for (auto const& offset : settings["offsets"].items()) {
+                    std::string offset_expression = jsonValueToExpressionString(offset.value());
+                    std::string error;
+                    if (!setSignalOffset(m_signal_transform_settings[offset.key()], offset_expression, &error)) {
+                        addSettingsLoadError(error);
+                    }
+                }
+            }
+            for (auto it = m_signal_transform_settings.begin(); it != m_signal_transform_settings.end();) {
+                if (it->second.isDefault()) {
+                    it = m_signal_transform_settings.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            for (auto& file : m_csv_data) {
+                applySignalTransforms(*file);
             }
             TRY(m_signals_window_width = settings["window"]["signals_window_width"];)
 
@@ -365,9 +448,10 @@ void CsvPlotter::loadPreviousSessionSettings() {
             int ypos = std::max(0, int(settings["window"]["ypos"]));
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
-        } catch (nlohmann::json::exception err) {
-            std::cerr << "Failed to load previous session settings" << std::endl;
-            std::cerr << err.what();
+        } catch (nlohmann::json::exception const& err) {
+            addSettingsLoadError(err.what());
+        } catch (std::exception const& err) {
+            addSettingsLoadError(err.what());
         }
     }
 }
@@ -402,8 +486,13 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["font_size"] = m_options.font_size;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     settings["window"]["signals_window_width"] = m_signals_window_width;
-    for (auto& [name, scale] : m_signal_scales) {
-        settings["scales"][name] = scale;
+    for (auto const& [name, transform] : m_signal_transform_settings) {
+        if (transform.scale != 1) {
+            settings["scales"][name] = transform.scale_expression;
+        }
+        if (transform.offset != 0) {
+            settings["offsets"][name] = transform.offset_expression;
+        }
     }
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
@@ -652,6 +741,7 @@ void CsvPlotter::showSignalWindow() {
     if (ImGui::Button("Open")) {
         std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
         for (auto& csv_data : csv_datas) {
+            applySignalTransforms(*csv_data);
             m_csv_data.push_back(std::move(csv_data));
         }
     }
@@ -770,6 +860,7 @@ void CsvPlotter::showSignalWindow() {
                 && file->write_time != std::filesystem::file_time_type()) {
                 std::unique_ptr<CsvFileData> csv_data = parseCsvData(file->name);
                 if (csv_data && csv_data->signals.size() == file->signals.size()) {
+                    applySignalTransforms(*csv_data);
                     for (int i = 0; i < file->signals.size(); ++i) {
                         for (ScalarPlot& plot : m_scalar_plots) {
                             if (contains(plot.signals, &file->signals[i])) {
@@ -865,12 +956,10 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
 
-                // Use default scale if signal has no scale
-                double signal_scale = 1;
-                if (m_signal_scales.contains(signal.name)) {
-                    signal_scale = *str::evaluateExpression(m_signal_scales.at(signal.name));
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, signal_scale == 1 ? ImGui::GetStyle().Colors[ImGuiCol_Text] : COLOR_GRAY);
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                                      signal.transform.isDefault()
+                                        ? ImGui::GetStyle().Colors[ImGuiCol_Text]
+                                        : COLOR_LIGHT_BLUE);
                 // Highlight selected/plotted signals
                 bool selected = contains(m_selected_signals, &signal);
                 for (ScalarPlot& plot : m_scalar_plots) {
@@ -916,18 +1005,29 @@ void CsvPlotter::showSignalWindow() {
                 }
 
                 if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
-                    std::string scale_str = "1";
-                    if (m_signal_scales.contains(signal.name)) {
-                        scale_str = m_signal_scales.at(signal.name);
+                    CsvSignalTransform signal_transform = signal.transform;
+
+                    std::array<char, 1024> scale_buffer = {};
+                    signal_transform.scale_expression.copy(scale_buffer.data(),
+                                                           std::min(signal_transform.scale_expression.size(), scale_buffer.size() - 1));
+                    if (ImGui::InputText("Scale", scale_buffer.data(), scale_buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        std::string error;
+                        if (setSignalScale(signal_transform, scale_buffer.data(), &error)) {
+                            setSignalTransform(signal.name, signal_transform);
+                        } else if (!error.empty()) {
+                            m_error_message = error;
+                        }
                     }
-                    scale_str.reserve(1024);
-                    if (ImGui::InputText("Scale", scale_str.data(), scale_str.capacity(), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        scale_str = std::string(scale_str.data());
-                        auto scale = str::evaluateExpression(scale_str);
-                        if (scale.has_value()) {
-                            m_signal_scales[signal.name] = scale_str;
-                        } else {
-                            m_error_message = scale.error();
+
+                    std::array<char, 1024> offset_buffer = {};
+                    signal_transform.offset_expression.copy(offset_buffer.data(),
+                                                            std::min(signal_transform.offset_expression.size(), offset_buffer.size() - 1));
+                    if (ImGui::InputText("Offset", offset_buffer.data(), offset_buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        std::string error;
+                        if (setSignalOffset(signal_transform, offset_buffer.data(), &error)) {
+                            setSignalTransform(signal.name, signal_transform);
+                        } else if (!error.empty()) {
+                            m_error_message = error;
                         }
                     }
 
@@ -1018,12 +1118,8 @@ void CsvPlotter::showScalarPlots() {
                     std::vector<double> const& all_y_values = signal->samples;
                     int idx1 = binarySearch(all_x_values, m_drag_x1 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
                     int idx2 = binarySearch(all_x_values, m_drag_x2 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
-                    double signal_scale = 1;
-                    if (m_signal_scales.contains(signal->name)) {
-                        signal_scale = *str::evaluateExpression(m_signal_scales.at(signal->name));
-                    }
-                    double y1 = all_y_values[idx1] * signal_scale;
-                    double y2 = all_y_values[idx2] * signal_scale;
+                    double y1 = all_y_values[idx1] * signal->transform.scale + signal->transform.offset;
+                    double y2 = all_y_values[idx2] * signal->transform.scale + signal->transform.offset;
 
                     std::stringstream ss;
                     ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
@@ -1100,15 +1196,10 @@ void CsvPlotter::showScalarPlots() {
                     }
                 }
 
-                // Scale samples. Set default scale if signal has no scale
-                double signal_scale = 1;
-                if (m_signal_scales.contains(signal->name)) {
-                    signal_scale = *str::evaluateExpression(m_signal_scales.at(signal->name));
-                }
-                // Shift x-axis and scale y-axis
+                // Shift x-axis and transform y-axis
                 for (int i = 0; i < y_samples_in_range.size(); ++i) {
                     x_samples_in_range[i] -= x_offset;
-                    y_samples_in_range[i] *= signal_scale;
+                    y_samples_in_range[i] = y_samples_in_range[i] * signal->transform.scale + signal->transform.offset;
                 }
 
                 // Decimate values because plotting very large amount of samples is slow and the GUI becomes unresponsive
