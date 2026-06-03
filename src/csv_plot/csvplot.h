@@ -178,6 +178,8 @@ class CsvPlotter {
     void applyPlottedSignals(CsvFileData& file);
     void updatePlottedSignalSettings();
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
+    CsvPlotStyle getSignalPlotStyle(CsvSignal const& signal) const;
+    void showSignalPlotStyleCombo(std::string const& signal_name);
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
@@ -185,6 +187,7 @@ class CsvPlotter {
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
+    std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
     // signal name -> plot indices it is plotted on; persisted across sessions
     std::map<std::string, std::vector<int>> m_plotted_signal_settings;
     // When signals are given on the command line they override the persisted selection at
@@ -206,6 +209,7 @@ class CsvPlotter {
         bool cursor_measurements = false;
         bool show_vertical_line_in_all_plots = true;
         bool interpolate_tooltip = false;
+        CsvPlotStyle plot_style = CsvPlotStyle::Linear;
         Theme theme;
         int font_size = 13;
     } m_options;

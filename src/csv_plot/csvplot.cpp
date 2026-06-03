@@ -47,6 +47,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "csv_helpers.h"
 #include "stb_image.h"
 #include "version.h"
+#include "magic_enum.hpp"
 
 #include <format>
 #include <nfd.h>
@@ -218,6 +219,45 @@ void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTra
                 signal.transform = transform;
             }
         }
+    }
+}
+
+CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
+    auto it = m_signal_plot_style_settings.find(signal.name);
+    return it == m_signal_plot_style_settings.end() ? m_options.plot_style : it->second;
+}
+
+void CsvPlotter::showSignalPlotStyleCombo(std::string const& signal_name) {
+    std::string global_name(magic_enum::enum_name(m_options.plot_style));
+    std::string global_label = std::format("Global ({})", global_name);
+    auto signal_style_it = m_signal_plot_style_settings.find(signal_name);
+    bool has_signal_style = signal_style_it != m_signal_plot_style_settings.end();
+    CsvPlotStyle signal_style = has_signal_style ? signal_style_it->second : m_options.plot_style;
+    std::string preview = has_signal_style ? std::string(magic_enum::enum_name(signal_style)) : global_label;
+
+    ImGui::SetNextItemWidth(185);
+    if (ImGui::BeginCombo("Plot style", preview.c_str())) {
+        if (ImGui::Selectable(global_label.c_str(), !has_signal_style)) {
+            m_signal_plot_style_settings.erase(signal_name);
+            has_signal_style = false;
+        }
+        if (!has_signal_style) {
+            ImGui::SetItemDefaultFocus();
+        }
+
+        for (CsvPlotStyle plot_style : magic_enum::enum_values<CsvPlotStyle>()) {
+            std::string plot_style_name(magic_enum::enum_name(plot_style));
+            bool is_selected = has_signal_style && signal_style == plot_style;
+            if (ImGui::Selectable(plot_style_name.c_str(), is_selected)) {
+                m_signal_plot_style_settings[signal_name] = plot_style;
+                has_signal_style = true;
+                signal_style = plot_style;
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
     }
 }
 
@@ -456,6 +496,9 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_options.shift_samples_to_start_from_zero = settings["window"]["shift_samples_to_start_from_zero"];)
             TRY(m_options.keep_old_signals_on_reload = settings["window"]["keep_old_signals_on_reload"];)
             TRY(m_options.interpolate_tooltip = settings["window"]["interpolate_tooltip"];)
+            TRY(m_options.plot_style = magic_enum::enum_cast<CsvPlotStyle>(
+                                         settings["window"].value("plot_style", std::string(magic_enum::enum_name(CsvPlotStyle::Linear))))
+                                         .value_or(CsvPlotStyle::Linear);)
             TRY(m_options.theme = settings["window"]["theme"];)
             TRY(m_options.font_size = settings["window"]["font_size"];)
             setTheme(m_options.theme, m_window);
@@ -482,6 +525,14 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     it = m_signal_transform_settings.erase(it);
                 } else {
                     ++it;
+                }
+            }
+            if (settings.contains("plot_styles") && settings["plot_styles"].is_object()) {
+                for (auto const& item : settings["plot_styles"].items()) {
+                    TRY(auto plot_style = magic_enum::enum_cast<CsvPlotStyle>(item.value().get<std::string>());
+                        if (plot_style.has_value()) {
+                            m_signal_plot_style_settings[item.key()] = plot_style.value();
+                        })
                 }
             }
             if (settings.contains("plotted_signals") && settings["plotted_signals"].is_object()) {
@@ -535,6 +586,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["shift_samples_to_start_from_zero"] = m_options.shift_samples_to_start_from_zero;
     settings["window"]["keep_old_signals_on_reload"] = m_options.keep_old_signals_on_reload;
     settings["window"]["interpolate_tooltip"] = m_options.interpolate_tooltip;
+    settings["window"]["plot_style"] = magic_enum::enum_name(m_options.plot_style);
     settings["window"]["theme"] = m_options.theme;
     settings["window"]["font_size"] = m_options.font_size;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
@@ -546,6 +598,9 @@ void CsvPlotter::updateSavedSettings() {
         if (transform.offset != 0) {
             settings["offsets"][name] = transform.offset_expression;
         }
+    }
+    for (auto const& [name, plot_style] : m_signal_plot_style_settings) {
+        settings["plot_styles"][name] = magic_enum::enum_name(plot_style);
     }
     // In command line mode leave the persisted plotted signals untouched so they are not
     // overwritten or lost for the next normal launch.
@@ -864,7 +919,27 @@ void CsvPlotter::showSignalWindow() {
         m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
         m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
         showXSignalCombo();
+        ImGui::SetNextItemWidth(185);
         themeCombo(m_options.theme, m_window);
+        std::string plot_style_preview(magic_enum::enum_name(m_options.plot_style));
+        ImGui::SetNextItemWidth(185);
+        if (ImGui::BeginCombo("Plot style", plot_style_preview.c_str())) {
+            for (CsvPlotStyle plot_style : magic_enum::enum_values<CsvPlotStyle>()) {
+                std::string plot_style_name(magic_enum::enum_name(plot_style));
+                bool is_selected = plot_style == m_options.plot_style;
+                if (ImGui::Selectable(plot_style_name.c_str(), is_selected)) {
+                    m_options.plot_style = plot_style;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
+            ImGui::GetStyle()._NextFrameFontSizeBase = (float)m_options.font_size;
+        }
         ImGui::Checkbox("Shift samples to start from zero", &m_options.shift_samples_to_start_from_zero);
         ImGui::Checkbox("Link x-axis", &m_options.link_axis);
         ImGui::Checkbox("Autofix y-axis", &m_options.autofit_y_axis);
@@ -872,10 +947,6 @@ void CsvPlotter::showSignalWindow() {
         ImGui::Checkbox("Cursor measurements", &m_options.cursor_measurements);
         ImGui::Checkbox("Show vertical line in all plots", &m_options.show_vertical_line_in_all_plots);
         ImGui::Checkbox("Interpolate tooltip values", &m_options.interpolate_tooltip);
-        if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
-            m_options.font_size = std::clamp((int)m_options.font_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
-            ImGui::GetStyle()._NextFrameFontSizeBase = (float)m_options.font_size;
-        }
     }
 
     if (ImGui::CollapsingHeader("Process .csv files into images")) {
@@ -1119,6 +1190,8 @@ void CsvPlotter::showSignalWindow() {
                         }
                     }
 
+                    showSignalPlotStyleCombo(signal.name);
+
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
                         ImGui::CloseCurrentPopup();
@@ -1204,10 +1277,13 @@ void CsvPlotter::showScalarPlots() {
                     CsvSignal* signal = plot.signals[i];
                     std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                     std::vector<double> const& all_y_values = signal->samples;
-                    int idx1 = binarySearch(all_x_values, m_drag_x1 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
-                    int idx2 = binarySearch(all_x_values, m_drag_x2 - signal->file->x_axis_shift, 0, int(all_x_values.size() - 1));
-                    double y1 = all_y_values[idx1] * signal->transform.scale + signal->transform.offset;
-                    double y2 = all_y_values[idx2] * signal->transform.scale + signal->transform.offset;
+                    double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
+                    x_offset -= signal->file->x_axis_shift;
+                    CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
+                    double y1 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x1 + x_offset, true);
+                    double y2 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x2 + x_offset, true);
+                    y1 = y1 * signal->transform.scale + signal->transform.offset;
+                    y2 = y2 * signal->transform.scale + signal->transform.offset;
 
                     std::stringstream ss;
                     ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
@@ -1297,24 +1373,27 @@ void CsvPlotter::showScalarPlots() {
                 ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
                 std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
                 std::unordered_map<CsvSignal*, bool> signal_visible;
+                CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
+                StairValues plotted_min = makeStairValues(plotted_values.x, plotted_values.y_min, signal_plot_style);
+                StairValues plotted_max = makeStairValues(plotted_values.x, plotted_values.y_max, signal_plot_style);
                 bool visible = ImPlot::PlotLine(label_id.c_str(),
-                                                plotted_values.x.data(),
-                                                plotted_values.y_min.data(),
-                                                int(plotted_values.x.size()),
+                                                plotted_min.x.data(),
+                                                plotted_min.y.data(),
+                                                int(plotted_min.x.size()),
                                                 ImPlotLineFlags_None);
                 signal_visible[signal] = visible;
                 ImVec4 line_color = ImPlot::GetLastItemColor();
                 ImPlot::PlotLine(label_id.c_str(),
-                                 plotted_values.x.data(),
-                                 plotted_values.y_max.data(),
-                                 int(plotted_values.x.size()),
+                                 plotted_max.x.data(),
+                                 plotted_max.y.data(),
+                                 int(plotted_max.x.size()),
                                  ImPlotLineFlags_None);
                 ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
                 ImPlot::PlotShaded(label_id.c_str(),
-                                   plotted_values.x.data(),
-                                   plotted_values.y_min.data(),
-                                   plotted_values.y_max.data(),
-                                   int(plotted_values.x.size()),
+                                   plotted_min.x.data(),
+                                   plotted_min.y.data(),
+                                   plotted_max.y.data(),
+                                   int(plotted_min.x.size()),
                                    ImPlotLineFlags_None);
 
                 // Tooltip
@@ -1325,27 +1404,26 @@ void CsvPlotter::showScalarPlots() {
                     ImPlot::PopStyleColor();
 
                     int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
-                    int next_idx = std::min(idx + 1, (int)y_samples_in_range.size() - 1);
-                    double interpolated_value = std::lerp(y_samples_in_range[idx], y_samples_in_range[next_idx], (mouse.x - x_samples_in_range[idx]) / (x_samples_in_range[next_idx] - x_samples_in_range[idx]));
+                    double tooltip_value = getPlotValueAtX(signal_plot_style,
+                                                           x_samples_in_range,
+                                                           y_samples_in_range,
+                                                           mouse.x,
+                                                           m_options.interpolate_tooltip);
+                    double tooltip_x = mouse.x;
+                    if (signal_plot_style == CsvPlotStyle::Linear && !m_options.interpolate_tooltip) {
+                        tooltip_x = x_samples_in_range[idx];
+                    }
                     if (signal_visible[signal]) {
                         ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
                         ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
-                        if (m_options.interpolate_tooltip) {
-                            ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &mouse.x, &interpolated_value, 1);
-                        } else {
-                            ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &x_samples_in_range[idx], &y_samples_in_range[idx], 1);
-                        }
+                        ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &tooltip_x, &tooltip_value, 1);
                         ImPlot::PopStyleColor();
                     }
 
                     vertical_line_time_next = mouse.x;
                     ImGui::BeginTooltip();
                     ss.str("");
-                    if (m_options.interpolate_tooltip) {
-                        ss << signal->name << " : " << interpolated_value;
-                    } else {
-                        ss << signal->name << " : " << y_samples_in_range[idx];
-                    }
+                    ss << signal->name << " : " << tooltip_value;
                     ImGui::PushStyleColor(ImGuiCol_Text, line_color);
                     ImGui::Text(ss.str().c_str());
                     ImGui::PopStyleColor();
@@ -1361,6 +1439,7 @@ void CsvPlotter::showScalarPlots() {
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     }
+                    showSignalPlotStyleCombo(signal->name);
                     ImPlot::EndLegendPopup();
                 }
 

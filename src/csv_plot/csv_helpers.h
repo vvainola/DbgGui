@@ -23,10 +23,17 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <span>
 
 #include "str_helpers.h"
 
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count = 1);
+
+enum class CsvPlotStyle {
+    Linear,
+    LeadingStairs,
+    LaggingStairs,
+};
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.
@@ -53,6 +60,18 @@ struct DecimatedValues {
     std::vector<double> y_max;
 };
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
+
+struct StairValues {
+    std::vector<double> x;
+    std::vector<double> y;
+};
+
+StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style);
+double getPlotValueAtX(CsvPlotStyle plot_style,
+                       std::span<double const> x,
+                       std::span<double const> y,
+                       double x_position,
+                       bool interpolate_linear);
 
 void saveAsCsv(std::string const& filename,
                std::vector<std::string> const& header,

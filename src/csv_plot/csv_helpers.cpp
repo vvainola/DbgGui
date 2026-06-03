@@ -27,6 +27,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <limits>
 
 template <typename T>
 T inline min(T a, T b) {
@@ -176,6 +177,76 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     decimated_values.y_min.push_back(y[sample_count - 1]);
     decimated_values.y_max.push_back(y[sample_count - 1]);
     return decimated_values;
+}
+
+StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style) {
+    StairValues stair_values;
+    size_t sample_count = std::min(x.size(), y.size());
+    if (sample_count == 0) {
+        return stair_values;
+    }
+    if (plot_style == CsvPlotStyle::Linear || sample_count == 1) {
+        stair_values.x.assign(x.begin(), x.begin() + sample_count);
+        stair_values.y.assign(y.begin(), y.begin() + sample_count);
+        return stair_values;
+    }
+
+    stair_values.x.reserve(2 * sample_count - 1);
+    stair_values.y.reserve(2 * sample_count - 1);
+    stair_values.x.push_back(x[0]);
+    stair_values.y.push_back(y[0]);
+
+    for (size_t i = 1; i < sample_count; ++i) {
+        if (plot_style == CsvPlotStyle::LeadingStairs) {
+            stair_values.x.push_back(x[i - 1]);
+            stair_values.y.push_back(y[i]);
+        } else {
+            stair_values.x.push_back(x[i]);
+            stair_values.y.push_back(y[i - 1]);
+        }
+        stair_values.x.push_back(x[i]);
+        stair_values.y.push_back(y[i]);
+    }
+    return stair_values;
+}
+
+double getPlotValueAtX(CsvPlotStyle plot_style,
+                       std::span<double const> x,
+                       std::span<double const> y,
+                       double x_position,
+                       bool interpolate_linear) {
+    size_t sample_count = std::min(x.size(), y.size());
+    if (sample_count == 0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (sample_count == 1 || x_position <= x[0]) {
+        return y[0];
+    }
+    if (x_position >= x[sample_count - 1]) {
+        return y[sample_count - 1];
+    }
+
+    auto x_begin = x.begin();
+    auto x_end = x.begin() + sample_count;
+    if (plot_style == CsvPlotStyle::LeadingStairs) {
+        auto it = std::lower_bound(x_begin, x_end, x_position);
+        size_t idx = size_t(std::distance(x_begin, it));
+        return y[std::min(idx, sample_count - 1)];
+    }
+
+    auto it = std::upper_bound(x_begin, x_end, x_position);
+    size_t idx = size_t(std::distance(x_begin, it) - 1);
+    if (plot_style == CsvPlotStyle::LaggingStairs || !interpolate_linear) {
+        return y[idx];
+    }
+
+    size_t next_idx = std::min(idx + 1, sample_count - 1);
+    double x0 = x[idx];
+    double x1 = x[next_idx];
+    if (next_idx == idx || x1 == x0) {
+        return y[idx];
+    }
+    return std::lerp(y[idx], y[next_idx], (x_position - x0) / (x1 - x0));
 }
 
 void saveAsCsv(std::string const& filename,

@@ -230,8 +230,10 @@ if get_option('tests')
     executable('tests',
         sources : [
             'tests/symbols_test.cpp',
+            'tests/csv_helpers_test.cpp',
             'tests/fwd_decl_types.cpp',
             'src/test_library_loader.cpp',
+            'src/csv_plot/csv_helpers.cpp',
         ],
         dependencies : [
             lib_symbols_dep,
