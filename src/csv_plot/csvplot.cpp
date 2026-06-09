@@ -1439,7 +1439,6 @@ void CsvPlotter::showScalarPlots() {
                     if (ImGui::Button("Remove")) {
                         signal_to_remove = signal;
                     }
-                    showSignalPlotStyleCombo(signal->name);
                     ImPlot::EndLegendPopup();
                 }
 
