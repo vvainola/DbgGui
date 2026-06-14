@@ -299,6 +299,44 @@ std::span<double const> CsvPlotter::getXSignalSamples(CsvFileData const& file) {
     return ASCENDING_NUMBERS;
 }
 
+double CsvPlotter::getScalarPlotXOrigin(ScalarPlot const& plot) {
+    if (!m_options.shift_samples_to_start_from_zero) {
+        return 0;
+    }
+
+    bool has_origin = false;
+    double origin = 0;
+    auto update_origin = [&](ScalarPlot const& plot_to_check) {
+        for (CsvSignal const* signal : plot_to_check.signals) {
+            std::span<double const> x_samples = getXSignalSamples(*signal->file);
+            if (x_samples.empty()) {
+                continue;
+            }
+            // Manual x-axis shift moves the file in raw plot space, so include it
+            // when choosing which signal should become the displayed zero point.
+            double signal_origin = x_samples[0] + signal->file->x_axis_shift;
+            if (!has_origin || signal_origin < origin) {
+                origin = signal_origin;
+                has_origin = true;
+            }
+        }
+    };
+
+    if (m_options.link_axis) {
+        // Linked scalar plots share x-axis limits, so they also need one shared
+        // zero origin. Otherwise the same file can appear at different x values
+        // depending on which other files happen to be present in each plot.
+        for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
+            update_origin(m_scalar_plots[plot_idx]);
+        }
+    } else {
+        // Unlinked plots keep their origin local to the signals in this plot.
+        update_origin(plot);
+    }
+
+    return has_origin ? origin : 0;
+}
+
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
@@ -1235,6 +1273,7 @@ void CsvPlotter::showScalarPlots() {
     bool aligned = ImPlot::BeginAlignedPlots("AlignedGroup");
     for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
         ScalarPlot& plot = m_scalar_plots[plot_idx];
+        double plot_x_origin = getScalarPlotXOrigin(plot);
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
         bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
         bool fit_data = plot.autofit_next_frame;
@@ -1277,8 +1316,7 @@ void CsvPlotter::showScalarPlots() {
                     CsvSignal* signal = plot.signals[i];
                     std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                     std::vector<double> const& all_y_values = signal->samples;
-                    double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
-                    x_offset -= signal->file->x_axis_shift;
+                    double x_offset = plot_x_origin - signal->file->x_axis_shift;
                     CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
                     double y1 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x1 + x_offset, true);
                     double y2 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x2 + x_offset, true);
@@ -1346,8 +1384,7 @@ void CsvPlotter::showScalarPlots() {
                 }
                 std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                 std::vector<double> const& all_y_values = signal->samples;
-                double x_offset = m_options.shift_samples_to_start_from_zero ? all_x_values[0] : 0;
-                x_offset -= signal->file->x_axis_shift;
+                double x_offset = plot_x_origin - signal->file->x_axis_shift;
                 std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
                 indices.second = std::min((int32_t)all_y_values.size() - 1, indices.second);
                 std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);

@@ -174,6 +174,7 @@ class CsvPlotter {
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
+    double getScalarPlotXOrigin(ScalarPlot const& plot);
     void applySignalTransforms(CsvFileData& file);
     void applyPlottedSignals(CsvFileData& file);
     void updatePlottedSignalSettings();
