@@ -24,9 +24,37 @@
 #include "str_helpers.h"
 #include "custom_signal.hpp"
 
+#include <algorithm>
 #include <stack>
 #include <stdexcept>
 #include <format>
+
+namespace {
+
+void updateRecentCustomEquations(std::vector<RecentCustomEquation>& recent_equations,
+                                 std::string const& name,
+                                 std::string const& equation) {
+    auto existing = std::find_if(recent_equations.begin(),
+                                 recent_equations.end(),
+                                 [&](RecentCustomEquation const& recent) {
+                                     return recent.equation == equation;
+                                 });
+
+    if (existing != recent_equations.end()) {
+        existing->name = name;
+        RecentCustomEquation recent = std::move(*existing);
+        recent_equations.erase(existing);
+        recent_equations.insert(recent_equations.begin(), std::move(recent));
+        return;
+    }
+
+    recent_equations.insert(recent_equations.begin(), RecentCustomEquation{.name = name, .equation = equation});
+    if (recent_equations.size() > MAX_RECENT_CUSTOM_EQUATIONS) {
+        recent_equations.resize(MAX_RECENT_CUSTOM_EQUATIONS);
+    }
+}
+
+} // namespace
 
 void CsvPlotter::showCustomSignalCreator() {
     static std::string custom_signal_eq;
@@ -38,9 +66,24 @@ void CsvPlotter::showCustomSignalCreator() {
         custom_signal_name.reserve(MAX_CUSTOM_EQ_NAME);
     }
 
+    if (ImGui::BeginCombo("Recent", m_recent_custom_equations.empty() ? "" : "Select recent equation")) {
+        for (int i = 0; i < (int)m_recent_custom_equations.size(); ++i) {
+            RecentCustomEquation const& recent = m_recent_custom_equations[i];
+            std::string label = std::format("{}: {}", recent.name, recent.equation);
+            ImGui::PushID(i);
+            if (ImGui::Selectable(label.c_str(), false)) {
+                custom_signal_name = recent.name;
+                custom_signal_eq = recent.equation;
+                custom_signal_name.reserve(MAX_CUSTOM_EQ_NAME);
+                custom_signal_eq.reserve(MAX_CUSTOM_EQ_LENGTH);
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
     ImGui::InputText("Equation", custom_signal_eq.data(), MAX_CUSTOM_EQ_LENGTH);
     ImGui::SameLine();
-    HelpMarker("Curly brackets in the equation are replaced with the selected signals in the same order. Same signal cann be selected multiple times.\nSupports sqrt,+-*/ and parenthesis. Example:\n-({} + sqrt({}))");
+    HelpMarker("Curly brackets in the equation are replaced with the selected signals in the same order. Same signal can be selected multiple times.\nSupports sqrt,+-*/ and parenthesis. Example:\n-({} + sqrt({}))");
     ImGui::InputText("Name", custom_signal_name.data(), MAX_CUSTOM_EQ_NAME);
     if (ImGui::Button("Add")) {
         custom_signal_eq = custom_signal_eq.data();
@@ -90,6 +133,7 @@ void CsvPlotter::showCustomSignalCreator() {
                 c.samples.push_back(expr_value.value());
             }
             m_selected_signals[0]->file->signals.push_back(std::move(c));
+            updateRecentCustomEquations(m_recent_custom_equations, custom_signal_name, custom_signal_eq);
         } catch (std::runtime_error e) {
             m_error_message = e.what();
             return;

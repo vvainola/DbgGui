@@ -30,6 +30,7 @@
 #include <array>
 #include <future>
 #include <span>
+#include <vector>
 #include "csv_helpers.h"
 
 struct MinMax {
@@ -48,6 +49,7 @@ inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
 inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 inline constexpr int MAX_PLOTS = 10;
+inline constexpr int MAX_RECENT_CUSTOM_EQUATIONS = 10;
 
 struct CsvSignal;
 struct GLFWwindow;
@@ -84,6 +86,11 @@ struct CsvSignal {
     std::vector<double> samples;
     CsvFileData* file;
     CsvSignalTransform transform;
+};
+
+struct RecentCustomEquation {
+    std::string name;
+    std::string equation;
 };
 
 struct ScalarPlot {
@@ -191,6 +198,7 @@ class CsvPlotter {
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
     // signal name -> plot indices it is plotted on; persisted across sessions
     std::map<std::string, std::vector<int>> m_plotted_signal_settings;
+    std::vector<RecentCustomEquation> m_recent_custom_equations;
     // When signals are given on the command line they override the persisted selection at
     // startup: the saved plotted signals are not auto-restored on launch and are not
     // overwritten. The first interactive "Open" flips this back on, resuming normal restore

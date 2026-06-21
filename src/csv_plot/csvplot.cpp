@@ -45,6 +45,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "implot.h"
 #include "save_image.h"
 #include "csv_helpers.h"
+#include "custom_signal.hpp"
 #include "stb_image.h"
 #include "version.h"
 #include "magic_enum.hpp"
@@ -578,6 +579,31 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     TRY(m_plotted_signal_settings[item.key()] = item.value().get<std::vector<int>>();)
                 }
             }
+            if (settings.contains("recent_custom_equations") && settings["recent_custom_equations"].is_array()) {
+                m_recent_custom_equations.clear();
+                for (auto const& item : settings["recent_custom_equations"]) {
+                    if (m_recent_custom_equations.size() >= MAX_RECENT_CUSTOM_EQUATIONS) {
+                        break;
+                    }
+                    if (!item.is_object()
+                        || !item.contains("name")
+                        || !item.contains("equation")
+                        || !item["name"].is_string()
+                        || !item["equation"].is_string()) {
+                        continue;
+                    }
+
+                    std::string name = item["name"].get<std::string>();
+                    std::string equation = item["equation"].get<std::string>();
+                    if (name.empty()
+                        || equation.empty()
+                        || name.size() >= MAX_CUSTOM_EQ_NAME
+                        || equation.size() >= MAX_CUSTOM_EQ_LENGTH) {
+                        continue;
+                    }
+                    m_recent_custom_equations.push_back(RecentCustomEquation{.name = name, .equation = equation});
+                }
+            }
             for (auto& file : m_csv_data) {
                 applySignalTransforms(*file);
                 if (m_use_saved_plotted_signals) {
@@ -647,6 +673,9 @@ void CsvPlotter::updateSavedSettings() {
     }
     for (auto const& [name, plots] : m_plotted_signal_settings) {
         settings["plotted_signals"][name] = plots;
+    }
+    for (auto const& recent : m_recent_custom_equations) {
+        settings["recent_custom_equations"].push_back({{"name", recent.name}, {"equation", recent.equation}});
     }
     static nlohmann::json settings_saved = settings;
     if (settings != settings_saved) {
