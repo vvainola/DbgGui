@@ -23,6 +23,7 @@
 #pragma once
 
 #include "DbgGui/global_snapshot.h"
+#include "symbol_descriptor.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,7 +36,6 @@
 #include <libdwarf.h>
 #endif
 
-struct RawSymbol;
 class VariantSymbol;
 
 class DbgSymbols {
@@ -127,7 +127,7 @@ class DbgSymbols {
     mutable bool m_function_addresses_loaded = false;
 #endif
 
-    std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
+    std::vector<std::unique_ptr<SymbolDescriptor>> m_symbol_descriptors;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
     bool m_symbols_loaded_from_json = false;
 };

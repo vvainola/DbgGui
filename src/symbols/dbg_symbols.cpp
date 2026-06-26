@@ -35,7 +35,7 @@
 #include <nlohmann/json.hpp>
 
 void DbgSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
-    saveSymbolsToJson(filename, m_raw_symbols, omit_names);
+    saveSymbolDescriptorsToJson(filename, m_symbol_descriptors, omit_names);
 }
 
 DbgSymbols::DbgSymbols() {
@@ -199,8 +199,8 @@ bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
 
         m_root_symbols.reserve(symbols_json.size());
         for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
-            auto raw_symbol = RawSymbol::fromJson(symbol_data);
-            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
+            auto symbol = SymbolDescriptor::fromJson(symbol_data);
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &symbol));
         }
     } catch (nlohmann::json::exception& err) {
         std::cerr << err.what();

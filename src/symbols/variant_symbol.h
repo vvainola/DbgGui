@@ -28,7 +28,7 @@
 class VariantSymbol {
   public:
     VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
-                  RawSymbol* symbol,
+                  SymbolDescriptor const* symbol,
                   VariantSymbol* parent = nullptr);
 
     enum class Type {

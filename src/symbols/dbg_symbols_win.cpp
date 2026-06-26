@@ -59,10 +59,8 @@ namespace {
 
 // Windows symbol loading bypasses DbgHelp for bulk enumeration. RawPDB gives
 // direct access to the PDB streams, so this file maps each loaded module's PDB,
-// reads CodeView DBI/TPI records, translates them into RawSymbol trees, and
-// then exposes those roots through VariantSymbol. RawSymbol still uses the
-// DbgHelp-compatible SymTag/BasicType enums so the rest of DbgGui does not need
-// to care which backend produced the symbols.
+// reads CodeView DBI/TPI records, translates them into backend-neutral symbol
+// descriptor trees, and then exposes those roots through VariantSymbol.
 using DbiRecord = PDB::CodeView::DBI::Record;
 using DbiRecordKind = PDB::CodeView::DBI::SymbolRecordKind;
 using TpiRecord = PDB::CodeView::TPI::Record;
@@ -145,8 +143,8 @@ class MappedFile {
 
 // CodeView type indices are dense inside the TPI stream. TypeTable turns the
 // RawPDB record offsets into stable record pointers and caches resolved
-// RawSymbol layouts so repeated uses of the same type do not need to rebuild the
-// full child tree.
+// SymbolDescriptor layouts so repeated uses of the same type do not need to
+// rebuild the full child tree.
 class TypeTable {
   public:
     explicit TypeTable(PDB::TPIStream const& tpi_stream)
@@ -181,7 +179,7 @@ class TypeTable {
         return m_records[type_index - m_type_index_begin];
     }
 
-    RawSymbol const* cachedType(uint32_t type_index) const {
+    SymbolDescriptor const* cachedType(uint32_t type_index) const {
         auto it = m_resolved_types.find(type_index);
         if (it == m_resolved_types.end()) {
             return nullptr;
@@ -189,8 +187,8 @@ class TypeTable {
         return it->second.get();
     }
 
-    void cacheType(uint32_t type_index, RawSymbol const& raw_symbol) const {
-        m_resolved_types.try_emplace(type_index, raw_symbol.clone());
+    void cacheType(uint32_t type_index, SymbolDescriptor const& symbol) const {
+        m_resolved_types.try_emplace(type_index, symbol.clone());
     }
 
     TpiRecord const* findFullDefinition(TpiRecord const* forward_record) const;
@@ -202,7 +200,7 @@ class TypeTable {
     uint32_t m_type_index_end = 0;
     PDB::CoalescedMSFStream m_stream;
     std::vector<TpiRecord const*> m_records;
-    mutable std::unordered_map<uint32_t, std::unique_ptr<RawSymbol>> m_resolved_types;
+    mutable std::unordered_map<uint32_t, std::unique_ptr<SymbolDescriptor>> m_resolved_types;
     mutable std::unordered_map<TypeDefinitionKey, TpiRecord const*, TypeDefinitionKeyHash> m_full_definitions;
     mutable bool m_full_definitions_built = false;
 };
@@ -453,10 +451,10 @@ bool isSpecialPointerType(uint32_t type_index) {
     return (type_index & 0x0700u) != 0;
 }
 
-void setBuiltinType(uint32_t type_index, RawSymbol& raw_symbol) {
+void setBuiltinType(uint32_t type_index, SymbolDescriptor& symbol) {
     if (isSpecialPointerType(type_index)) {
-        raw_symbol.tag = SymTagPointerType;
-        raw_symbol.size = sizeof(void*);
+        symbol.kind = SymbolKind::Pointer;
+        symbol.size = sizeof(void*);
         return;
     }
 
@@ -464,119 +462,119 @@ void setBuiltinType(uint32_t type_index, RawSymbol& raw_symbol) {
         case TypeIndexKind::T_CHAR:
         case TypeIndexKind::T_RCHAR:
         case TypeIndexKind::T_INT1:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btInt;
-            raw_symbol.size = 1;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::SignedInteger;
+            symbol.size = 1;
             break;
         case TypeIndexKind::T_UCHAR:
         case TypeIndexKind::T_UINT1:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btUInt;
-            raw_symbol.size = 1;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::UnsignedInteger;
+            symbol.size = 1;
             break;
         case TypeIndexKind::T_SHORT:
         case TypeIndexKind::T_INT2:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btInt;
-            raw_symbol.size = 2;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::SignedInteger;
+            symbol.size = 2;
             break;
         case TypeIndexKind::T_USHORT:
         case TypeIndexKind::T_UINT2:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btUInt;
-            raw_symbol.size = 2;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::UnsignedInteger;
+            symbol.size = 2;
             break;
         case TypeIndexKind::T_LONG:
         case TypeIndexKind::T_INT4:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btInt;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::SignedInteger;
+            symbol.size = 4;
             break;
         case TypeIndexKind::T_ULONG:
         case TypeIndexKind::T_UINT4:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btUInt;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::UnsignedInteger;
+            symbol.size = 4;
             break;
         case TypeIndexKind::T_QUAD:
         case TypeIndexKind::T_INT8:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btInt;
-            raw_symbol.size = 8;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::SignedInteger;
+            symbol.size = 8;
             break;
         case TypeIndexKind::T_UQUAD:
         case TypeIndexKind::T_UINT8:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btUInt;
-            raw_symbol.size = 8;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::UnsignedInteger;
+            symbol.size = 8;
             break;
         case TypeIndexKind::T_REAL32:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btFloat;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::FloatingPoint;
+            symbol.size = 4;
             break;
         case TypeIndexKind::T_REAL64:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btFloat;
-            raw_symbol.size = 8;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::FloatingPoint;
+            symbol.size = 8;
             break;
         case TypeIndexKind::T_BOOL08:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btBool;
-            raw_symbol.size = 1;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Boolean;
+            symbol.size = 1;
             break;
         case TypeIndexKind::T_BOOL16:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btBool;
-            raw_symbol.size = 2;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Boolean;
+            symbol.size = 2;
             break;
         case TypeIndexKind::T_BOOL32:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btBool;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Boolean;
+            symbol.size = 4;
             break;
         case TypeIndexKind::T_BOOL64:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btBool;
-            raw_symbol.size = 8;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Boolean;
+            symbol.size = 8;
             break;
         case TypeIndexKind::T_WCHAR:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btWChar;
-            raw_symbol.size = 2;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::WChar;
+            symbol.size = 2;
             break;
         case TypeIndexKind::T_CHAR16:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btChar16;
-            raw_symbol.size = 2;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Char16;
+            symbol.size = 2;
             break;
         case TypeIndexKind::T_CHAR32:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btChar32;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::Char32;
+            symbol.size = 4;
             break;
         default:
-            raw_symbol.tag = SymTagBaseType;
-            raw_symbol.basic_type = BasicType::btNoType;
-            raw_symbol.size = 4;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::None;
+            symbol.size = 4;
             break;
     }
 }
 
-void copyTypePayload(RawSymbol& dst, RawSymbol const& src) {
+void copyTypePayload(SymbolDescriptor& dst, SymbolDescriptor const& src) {
     std::string name = dst.name;
     MemoryAddress address = dst.address;
     uint32_t offset_to_parent = dst.offset_to_parent;
 
     auto cloned = src.clone();
-    dst = RawSymbol{};
+    dst = SymbolDescriptor{};
     dst.name = std::move(name);
     dst.address = address;
     dst.offset_to_parent = offset_to_parent;
     dst.size = cloned->size;
-    dst.tag = cloned->tag;
+    dst.kind = cloned->kind;
     dst.array_element_count = cloned->array_element_count;
-    dst.basic_type = cloned->basic_type;
+    dst.scalar_type = cloned->scalar_type;
     dst.bitfield_position = cloned->bitfield_position;
     dst.enum_value = cloned->enum_value;
     dst.children = std::move(cloned->children);
@@ -584,12 +582,12 @@ void copyTypePayload(RawSymbol& dst, RawSymbol const& src) {
 
 bool resolveType(TypeTable const& type_table,
                  uint32_t type_index,
-                 RawSymbol& raw_symbol,
+                 SymbolDescriptor& symbol,
                  std::unordered_set<uint32_t>& resolving);
 
 void addFields(TypeTable const& type_table,
                TpiRecord const* field_list,
-               RawSymbol& raw_symbol,
+               SymbolDescriptor& symbol,
                std::unordered_set<uint32_t>& resolving) {
     if (field_list == nullptr || field_list->header.kind != TpiRecordKind::LF_FIELDLIST) {
         return;
@@ -607,7 +605,7 @@ void addFields(TypeTable const& type_table,
         if (field_record->kind == TpiRecordKind::LF_MEMBER || field_record->kind == TpiRecordKind::LF_MEMBER_ST) {
             bool const string_table_format = field_record->kind == TpiRecordKind::LF_MEMBER_ST;
             char const* name = getLeafName(field_record->data.LF_MEMBER.offset);
-            auto child = std::make_unique<RawSymbol>();
+            auto child = std::make_unique<SymbolDescriptor>();
             child->name = readCodeViewString(name, string_table_format);
             child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(field_record->data.LF_MEMBER.offset));
 
@@ -615,14 +613,14 @@ void addFields(TypeTable const& type_table,
             if (!startsWith(child_name, "std::")
                 && !(child_name.size() > 2 && child_name[0] == '_' && std::isupper(static_cast<unsigned char>(child_name[1])))
                 && resolveType(type_table, field_record->data.LF_MEMBER.index, *child, resolving)) {
-                raw_symbol.children.push_back(std::move(child));
+                symbol.children.push_back(std::move(child));
             }
 
             i += static_cast<size_t>(name - reinterpret_cast<char const*>(field_record));
             i += codeViewStringSize(name, string_table_format);
         } else if (field_record->kind == TpiRecordKind::LF_BCLASS) {
             char const* offset = field_record->data.LF_BCLASS.offset;
-            auto child = std::make_unique<RawSymbol>();
+            auto child = std::make_unique<SymbolDescriptor>();
             TpiRecord const* base_record = type_table.getTypeRecord(field_record->data.LF_BCLASS.index);
             child->name = recordName(base_record);
             child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(offset));
@@ -631,7 +629,7 @@ void addFields(TypeTable const& type_table,
             if (!startsWith(child_name, "std::")
                 && !(child_name.size() > 2 && child_name[0] == '_' && std::isupper(static_cast<unsigned char>(child_name[1])))
                 && resolveType(type_table, field_record->data.LF_BCLASS.index, *child, resolving)) {
-                raw_symbol.children.push_back(std::move(child));
+                symbol.children.push_back(std::move(child));
             }
 
             i += static_cast<size_t>(getLeafName(offset) - reinterpret_cast<char const*>(field_record));
@@ -642,7 +640,7 @@ void addFields(TypeTable const& type_table,
         } else if (field_record->kind == TpiRecordKind::LF_INDEX) {
             // Large field lists can be continued in another TPI record.
             TpiRecord const* continued = type_table.getTypeRecord(field_record->data.LF_INDEX.type);
-            addFields(type_table, continued, raw_symbol, resolving);
+            addFields(type_table, continued, symbol, resolving);
             i += sizeof(PDB::CodeView::TPI::FieldList::Data::LF_INDEX);
         } else if (field_record->kind == TpiRecordKind::LF_VFUNCTAB) {
             i += sizeof(PDB::CodeView::TPI::FieldList::Data::LF_VFUNCTAB);
@@ -710,7 +708,7 @@ void addFields(TypeTable const& type_table,
 
 void addEnumerators(TypeTable const& type_table,
                     TpiRecord const* field_list,
-                    RawSymbol& raw_symbol) {
+                    SymbolDescriptor& symbol) {
     if (field_list == nullptr || field_list->header.kind != TpiRecordKind::LF_FIELDLIST) {
         return;
     }
@@ -724,17 +722,17 @@ void addEnumerators(TypeTable const& type_table,
 
         if (field_record->kind == TpiRecordKind::LF_ENUMERATE) {
             char const* name = getLeafName(field_record->data.LF_ENUMERATE.value);
-            auto child = std::make_unique<RawSymbol>();
+            auto child = std::make_unique<SymbolDescriptor>();
             child->name = name;
-            child->tag = SymTagData;
+            child->kind = SymbolKind::EnumValue;
             child->enum_value = readSignedLeaf(field_record->data.LF_ENUMERATE.value);
-            raw_symbol.children.push_back(std::move(child));
+            symbol.children.push_back(std::move(child));
 
             i += static_cast<size_t>(name - reinterpret_cast<char const*>(field_record));
             i += std::strlen(name) + 1;
         } else if (field_record->kind == TpiRecordKind::LF_INDEX) {
             TpiRecord const* continued = type_table.getTypeRecord(field_record->data.LF_INDEX.type);
-            addEnumerators(type_table, continued, raw_symbol);
+            addEnumerators(type_table, continued, symbol);
             i += sizeof(PDB::CodeView::TPI::FieldList::Data::LF_INDEX);
         } else {
             break;
@@ -746,12 +744,12 @@ void addEnumerators(TypeTable const& type_table,
 
 bool resolveType(TypeTable const& type_table,
                  uint32_t type_index,
-                 RawSymbol& raw_symbol,
+                 SymbolDescriptor& symbol,
                  std::unordered_set<uint32_t>& resolving) {
     // CodeView simple type indices below the TPI range encode built-in scalar
     // and pointer types directly; everything else indexes a TPI record.
     if (type_index < type_table.firstTypeIndex()) {
-        setBuiltinType(type_index, raw_symbol);
+        setBuiltinType(type_index, symbol);
         return true;
     }
 
@@ -759,15 +757,15 @@ bool resolveType(TypeTable const& type_table,
     // is currently being expanded. Stop there and keep the child as an opaque UDT
     // instead of recursing forever.
     if (resolving.contains(type_index)) {
-        raw_symbol.tag = SymTagUDT;
+        symbol.kind = SymbolKind::Object;
         return true;
     }
 
     // Type records are shared by every symbol that uses the type. Reuse the
-    // already translated RawSymbol payload, preserving the caller-provided name,
+    // already translated descriptor payload, preserving the caller-provided name,
     // address, and member offset.
-    if (RawSymbol const* cached = type_table.cachedType(type_index)) {
-        copyTypePayload(raw_symbol, *cached);
+    if (SymbolDescriptor const* cached = type_table.cachedType(type_index)) {
+        copyTypePayload(symbol, *cached);
         return true;
     }
 
@@ -781,32 +779,32 @@ bool resolveType(TypeTable const& type_table,
 
     switch (record->header.kind) {
         case TpiRecordKind::LF_MODIFIER:
-            resolved = resolveType(type_table, record->data.LF_MODIFIER.type, raw_symbol, resolving);
+            resolved = resolveType(type_table, record->data.LF_MODIFIER.type, symbol, resolving);
             break;
         case TpiRecordKind::LF_POINTER:
-            raw_symbol.tag = SymTagPointerType;
-            raw_symbol.size = record->data.LF_POINTER.attr.size != 0 ? record->data.LF_POINTER.attr.size : sizeof(void*);
+            symbol.kind = SymbolKind::Pointer;
+            symbol.size = record->data.LF_POINTER.attr.size != 0 ? record->data.LF_POINTER.attr.size : sizeof(void*);
             break;
         case TpiRecordKind::LF_BITFIELD: {
-            RawSymbol underlying;
+            SymbolDescriptor underlying;
             resolved = resolveType(type_table, record->data.LF_BITFIELD.type, underlying, resolving);
             if (resolved) {
-                copyTypePayload(raw_symbol, underlying);
-                raw_symbol.size = record->data.LF_BITFIELD.length;
-                raw_symbol.bitfield_position = record->data.LF_BITFIELD.position;
+                copyTypePayload(symbol, underlying);
+                symbol.size = record->data.LF_BITFIELD.length;
+                symbol.bitfield_position = record->data.LF_BITFIELD.position;
             }
             break;
         }
         case TpiRecordKind::LF_ARRAY: {
-            raw_symbol.tag = SymTagArrayType;
-            raw_symbol.size = static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_ARRAY.data));
+            symbol.kind = SymbolKind::Array;
+            symbol.size = static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_ARRAY.data));
 
-            auto element = std::make_unique<RawSymbol>();
-            element->name = raw_symbol.name;
+            auto element = std::make_unique<SymbolDescriptor>();
+            element->name = symbol.name;
             resolved = resolveType(type_table, record->data.LF_ARRAY.elemtype, *element, resolving);
             if (resolved && element->size != 0) {
-                raw_symbol.array_element_count = raw_symbol.size / element->size;
-                raw_symbol.children.push_back(std::move(element));
+                symbol.array_element_count = symbol.size / element->size;
+                symbol.children.push_back(std::move(element));
             }
             break;
         }
@@ -818,34 +816,34 @@ bool resolveType(TypeTable const& type_table,
             // Data symbols often reference a forward declaration record. Swap it
             // for the full definition before reading size and member layout.
             TpiRecord const* full_record = isForwardDeclaration(record) ? type_table.findFullDefinition(record) : record;
-            raw_symbol.tag = SymTagUDT;
+            symbol.kind = SymbolKind::Object;
 
             uint32_t field_type = 0;
             if (full_record->header.kind == TpiRecordKind::LF_CLASS || full_record->header.kind == TpiRecordKind::LF_STRUCTURE) {
-                raw_symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_CLASS.data));
+                symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_CLASS.data));
                 field_type = full_record->data.LF_CLASS.field;
             } else if (full_record->header.kind == TpiRecordKind::LF_CLASS2 || full_record->header.kind == TpiRecordKind::LF_STRUCTURE2) {
-                raw_symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_CLASS2.data));
+                symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_CLASS2.data));
                 field_type = full_record->data.LF_CLASS2.field;
             } else {
-                raw_symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_UNION.data));
+                symbol.size = static_cast<uint32_t>(readUnsignedLeaf(full_record->data.LF_UNION.data));
                 field_type = full_record->data.LF_UNION.field;
             }
 
-            addFields(type_table, type_table.getTypeRecord(field_type), raw_symbol, resolving);
+            addFields(type_table, type_table.getTypeRecord(field_type), symbol, resolving);
             break;
         }
         case TpiRecordKind::LF_ENUM: {
-            raw_symbol.tag = SymTagEnumerator;
-            RawSymbol underlying;
+            symbol.kind = SymbolKind::Enum;
+            SymbolDescriptor underlying;
             if (resolveType(type_table, record->data.LF_ENUM.utype, underlying, resolving)) {
-                raw_symbol.size = underlying.size;
-                raw_symbol.basic_type = underlying.basic_type == BasicType::btNoType ? BasicType::btInt : underlying.basic_type;
+                symbol.size = underlying.size;
+                symbol.scalar_type = underlying.scalar_type == ScalarType::None ? ScalarType::SignedInteger : underlying.scalar_type;
             } else {
-                raw_symbol.size = 4;
-                raw_symbol.basic_type = BasicType::btInt;
+                symbol.size = 4;
+                symbol.scalar_type = ScalarType::SignedInteger;
             }
-            addEnumerators(type_table, type_table.getTypeRecord(record->data.LF_ENUM.field), raw_symbol);
+            addEnumerators(type_table, type_table.getTypeRecord(record->data.LF_ENUM.field), symbol);
             break;
         }
         default:
@@ -855,14 +853,14 @@ bool resolveType(TypeTable const& type_table,
 
     resolving.erase(type_index);
     if (resolved) {
-        type_table.cacheType(type_index, raw_symbol);
+        type_table.cacheType(type_index, symbol);
     }
     return resolved;
 }
 
-bool resolveType(TypeTable const& type_table, uint32_t type_index, RawSymbol& raw_symbol) {
+bool resolveType(TypeTable const& type_table, uint32_t type_index, SymbolDescriptor& symbol) {
     std::unordered_set<uint32_t> resolving;
-    return resolveType(type_table, type_index, raw_symbol, resolving);
+    return resolveType(type_table, type_index, symbol, resolving);
 }
 
 MemoryAddress sectionOffsetToAddress(ModuleContext const& module,
@@ -1005,7 +1003,7 @@ std::vector<ModuleContext> loadedModules() {
     return contexts;
 }
 
-void storeDataSymbol(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
+void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
                      std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                      TypeTable const& type_table,
                      ModuleContext const& module,
@@ -1033,16 +1031,16 @@ void storeDataSymbol(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
         return;
     }
 
-    auto raw_symbol = std::make_unique<RawSymbol>();
-    raw_symbol->name = std::move(symbol_name);
-    raw_symbol->address = address;
-    if (!resolveType(type_table, type_index, *raw_symbol)) {
+    auto symbol = std::make_unique<SymbolDescriptor>();
+    symbol->name = std::move(symbol_name);
+    symbol->address = address;
+    if (!resolveType(type_table, type_index, *symbol)) {
         return;
     }
 
-    raw_symbols.push_back(std::move(raw_symbol));
+    symbol_descriptors.push_back(std::move(symbol));
     root_symbols.push_back(std::make_unique<VariantSymbol>(
-      root_symbols, raw_symbols.back().get()));
+      root_symbols, symbol_descriptors.back().get()));
 }
 
 bool isDataRecord(DbiRecordKind kind) {
@@ -1091,7 +1089,7 @@ void storeFunctionAddress(std::unordered_map<MemoryAddress, std::string>& functi
     function_addresses.try_emplace(address, std::move(function_name));
 }
 
-void processGlobalSymbols(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
+void processGlobalSymbols(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
                           std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                           PDB::RawFile const& raw_pdb,
                           PDB::DBIStream const& dbi_stream,
@@ -1113,7 +1111,7 @@ void processGlobalSymbols(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
         switch (record->header.kind) {
             case DbiRecordKind::S_GDATA32:
             case DbiRecordKind::S_LDATA32:
-                storeDataSymbol(raw_symbols,
+                storeDataSymbol(symbol_descriptors,
                                 root_symbols,
                                 type_table,
                                 module,
@@ -1130,7 +1128,7 @@ void processGlobalSymbols(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
     }
 }
 
-void processModuleDataSymbols(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
+void processModuleDataSymbols(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
                               std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                               PDB::RawFile const& raw_pdb,
                               PDB::DBIStream const& dbi_stream,
@@ -1160,7 +1158,7 @@ void processModuleDataSymbols(std::vector<std::unique_ptr<RawSymbol>>& raw_symbo
             }
 
             if (scope_depth == 0 && isDataRecord(kind)) {
-                storeDataSymbol(raw_symbols,
+                storeDataSymbol(symbol_descriptors,
                                 root_symbols,
                                 type_table,
                                 module,
@@ -1244,7 +1242,7 @@ void processPublicFunctions(std::unordered_map<MemoryAddress, std::string>& func
     }
 }
 
-void processModulePdb(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
+void processModulePdb(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
                       std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
                       ModuleContext const& module) {
     // Load the PDB streams needed for globals:
@@ -1280,8 +1278,8 @@ void processModulePdb(std::vector<std::unique_ptr<RawSymbol>>& raw_symbols,
     TypeTable type_table(tpi_stream);
     SeenSymbols seen_symbols;
 
-    processGlobalSymbols(raw_symbols, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols, symbol_records);
-    processModuleDataSymbols(raw_symbols, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols);
+    processGlobalSymbols(symbol_descriptors, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols, symbol_records);
+    processModuleDataSymbols(symbol_descriptors, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols);
 }
 
 void processModuleFunctionAddresses(std::unordered_map<MemoryAddress, std::string>& function_addresses,
@@ -1369,16 +1367,16 @@ std::string readFile(std::string const& filename) {
     return (std::stringstream() << std::ifstream(filename).rdbuf()).str();
 }
 
-std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
+std::unique_ptr<SymbolDescriptor> getSymbolFromAddress(MemoryAddress address) {
     std::string const resolved = DbgSymbols::getSymbols().resolveFunctionAddress(address);
     if (resolved.empty()) {
         return nullptr;
     }
 
-    return std::make_unique<RawSymbol>(RawSymbol{
+    return std::make_unique<SymbolDescriptor>(SymbolDescriptor{
       .name = resolved,
       .address = address,
-      .tag = SymTagPublicSymbol});
+      .kind = SymbolKind::Function});
 }
 
 void DbgSymbols::initSymbolsFromPdb() {
@@ -1386,7 +1384,7 @@ void DbgSymbols::initSymbolsFromPdb() {
     // PDB. Missing or invalid PDBs are skipped so one dependency without symbols
     // does not prevent the rest of the process from being inspected.
     for (ModuleContext const& module : loadedModules()) {
-        processModulePdb(m_raw_symbols, m_root_symbols, module);
+        processModulePdb(m_symbol_descriptors, m_root_symbols, module);
     }
 }
 

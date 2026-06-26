@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "raw_symbol.h"
+#include "symbol_descriptor.h"
 
 #include <memory>
 #include <optional>
@@ -44,7 +44,7 @@ void printLastError();
 #endif
 
 ModuleInfo getCurrentModuleInfo();
-std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
+std::unique_ptr<SymbolDescriptor> getSymbolFromAddress(MemoryAddress address);
 std::string readFile(std::string const& filename);
 
 inline bool startsWith(std::string const& s, std::string const& w) {

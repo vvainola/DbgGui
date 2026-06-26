@@ -22,42 +22,54 @@
 
 #pragma once
 
-#include "cvconst.h"
-
 #include <cstdint>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <optional>
-#include <nlohmann/json.hpp>
 
 using MemoryAddress = uint64_t;
 inline constexpr int NO_VALUE = -1;
 
-struct RawSymbol {
+enum class SymbolKind {
+    Unknown,
+    Scalar,
+    Pointer,
+    Array,
+    Object,
+    Enum,
+    EnumValue,
+    Function
+};
+
+enum class ScalarType {
+    None,
+    SignedInteger,
+    UnsignedInteger,
+    FloatingPoint,
+    Boolean,
+    WChar,
+    Char16,
+    Char32
+};
+
+struct SymbolDescriptor {
     std::string name;
     MemoryAddress address = 0;
     uint32_t size = 0;
-    SymTagEnum tag = SymTagNull;
+    SymbolKind kind = SymbolKind::Unknown;
     uint32_t offset_to_parent = 0;
     uint32_t array_element_count = 0;
-    BasicType basic_type = BasicType::btNoType;
+    ScalarType scalar_type = ScalarType::None;
     int bitfield_position = -1;
     int64_t enum_value = 0;
-    std::vector<std::unique_ptr<RawSymbol>> children;
+    std::vector<std::unique_ptr<SymbolDescriptor>> children;
 
-#if WINDOWS
-    MemoryAddress mod_base = 0;
-    uint32_t type_index = 0;
-    uint32_t index = 0;
-    SymTagEnum pdb_tag = SymTagNull;
-#endif
-
-    static RawSymbol fromJson(nlohmann::json const& j);
-    std::unique_ptr<RawSymbol> clone() const;
+    static SymbolDescriptor fromJson(nlohmann::json const& j);
+    std::unique_ptr<SymbolDescriptor> clone() const;
 };
 
-void to_json(nlohmann::json& j, RawSymbol const& sym);
-void saveSymbolsToJson(std::string const& filename,
-                       std::vector<std::unique_ptr<RawSymbol>> const& symbols,
-                       bool omit_names);
+void to_json(nlohmann::json& j, SymbolDescriptor const& symbol);
+void saveSymbolDescriptorsToJson(std::string const& filename,
+                                 std::vector<std::unique_ptr<SymbolDescriptor>> const& symbols,
+                                 bool omit_names);
