@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 #include "dbg_symbols.hpp"
 
 #include <fstream>

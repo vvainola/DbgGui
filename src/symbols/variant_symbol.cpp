@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "variant_symbol.h"
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 #include <cassert>
 #include <numeric>
 #include <format>
@@ -204,29 +204,18 @@ std::string VariantSymbol::valueAsStr() const {
                 return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
             }
 
-            // Try find name just a name with DbgHelp API
-            // Cache symbols because constantly reinitializing DbgHelp is slow
+            // Cache address lookups because resolving function names may require
+            // searching the loaded module symbol maps.
             static std::unordered_map<MemoryAddress, std::string> symbol_addresses;
             auto it = symbol_addresses.find(pointed_address);
             if (it != symbol_addresses.end()) {
                 return it->second;
             }
 
-#if WINDOWS
-            ScopedSymbolHandler scoped_symbol_handler;
-#endif
             auto sym = getSymbolFromAddress(pointed_address);
             std::string name = "??";
             if (sym) {
                 name = sym->name;
-#if WINDOWS
-                size_t decoration_offset = name.find("?");
-                if (decoration_offset != name.npos) {
-                    std::string decorated_name = name.substr(decoration_offset);
-                    decorated_name.pop_back(); // Remove trailing ")"
-                    name = getUndecoratedSymbolName(decorated_name);
-                }
-#endif
                 symbol_addresses[pointed_address] = name;
             }
             return name;

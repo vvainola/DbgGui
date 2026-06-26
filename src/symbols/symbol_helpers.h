@@ -21,50 +21,31 @@
 // SOFTWARE.
 
 #pragma once
+
 #include "raw_symbol.h"
-#include <optional>
+
 #include <memory>
-#include <map>
-#include <iostream>
+#include <optional>
 #include <string>
+#include <string_view>
 
 using ModuleBase = uint64_t;
 using TypeIndex = uint32_t;
 
-#if WINDOWS
-#include <Windows.h>
-#include <DbgHelp.h>
-
-struct SymbolInfo {
-    SymbolInfo() {};
-    SymbolInfo(SYMBOL_INFO* symbol)
-        : TypeIndex(symbol->TypeIndex),
-          Index(symbol->Index),
-          Size(symbol->Size),
-          ModBase(symbol->ModBase),
-          Address(symbol->Address),
-          PdbTag((SymTagEnum)symbol->Tag),
-          Name(symbol->Name) {
-    }
-    uint32_t TypeIndex = 0;
-    uint32_t Index = 0;
-    MemoryAddress ModBase = 0;
-    SymTagEnum PdbTag = SymTagNull;
-    uint32_t Size = 0;
-    MemoryAddress Address = 0;
-    std::string Name = "";
+struct ModuleInfo {
+    MemoryAddress base_address = 0;
+    size_t size = 0;
+    std::string write_time;
+    std::string path;
 };
 
+#if WINDOWS
 void printLastError();
-int getBitPosition(SymbolInfo const& info);
-BasicType getBasicType(SymbolInfo const& info);
-SymTagEnum getSymbolTag(SymbolInfo const& sym);
-void addChildrenToSymbol(RawSymbol& parent_symbol, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols);
-std::string getUndecoratedSymbolName(std::string const& name);
-std::string getModuleName(ModuleBase module_base);
-RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si);
 #endif
+
+ModuleInfo getCurrentModuleInfo();
 std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address);
+std::string readFile(std::string const& filename);
 
 inline bool startsWith(std::string const& s, std::string const& w) {
     return s.rfind(w, 0) == 0;
@@ -93,48 +74,3 @@ inline bool shouldSkipSymbolName(std::string const& name) {
         || name == "imgl3wProcs"
         || name == "g_dbg_gui";
 }
-
-struct ModuleInfo {
-    MemoryAddress base_address;
-    size_t size;
-    std::string write_time;
-    std::string path;
-};
-ModuleInfo getCurrentModuleInfo();
-
-std::string readFile(std::string const& filename);
-
-#if WINDOWS
-class ScopedSymbolHandler {
-  public:
-    ScopedSymbolHandler() {
-        // Symbols are not loaded until a reference is made requiring the symbols be loaded.
-        // This is the fastest, most efficient way to use the symbol handler.
-        SymSetOptions(SYMOPT_DEFERRED_LOADS);
-        m_symbol_handler_initialized = SymInitialize(m_current_process, NULL, TRUE);
-        if (!m_symbol_handler_initialized) {
-            std::cerr << "SymInitialize failed with error:\n";
-            printLastError();
-            std::cerr << "Unable to load symbols from PDB file.\n";
-        }
-    }
-
-    bool initialized() {
-        return m_symbol_handler_initialized;
-    }
-
-    HANDLE getCurrentProcess() {
-        return m_current_process;
-    }
-
-    ~ScopedSymbolHandler() {
-        if (m_symbol_handler_initialized) {
-            SymCleanup(m_current_process);
-        }
-    }
-
-  private:
-    bool m_symbol_handler_initialized = false;
-    HANDLE m_current_process = GetCurrentProcess();
-};
-#endif

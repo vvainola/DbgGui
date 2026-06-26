@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 // Linux-specific symbol loading using DWARF debug information from ELF binaries.
-// Unlike Windows which uses DbgHelp API with PDB files, Linux uses libdwarf
+// Unlike Windows which uses RawPDB with PDB files, Linux uses libdwarf
 // to read DWARF debug info directly from the executable's .debug_* sections.
 // Also supports reading symbols from loaded shared libraries via dl_iterate_phdr.
 
@@ -30,7 +30,7 @@
 #include "variant_symbol.h"
 
 #include <cassert>
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 
 #include <fcntl.h>
 #include <link.h>

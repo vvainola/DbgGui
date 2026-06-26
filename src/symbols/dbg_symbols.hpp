@@ -83,11 +83,11 @@ class DbgSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
-#if LINUX
     /// @brief Resolve a function address to its demangled name.
     /// @return Function name or empty string if not found.
     std::string resolveFunctionAddress(MemoryAddress address) const;
 
+#if LINUX
     using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
 #endif
 
@@ -121,7 +121,10 @@ class DbgSymbols {
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");
-    std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#endif
+    mutable std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#if WINDOWS
+    mutable bool m_function_addresses_loaded = false;
 #endif
 
     std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;

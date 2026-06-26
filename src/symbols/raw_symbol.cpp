@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "raw_symbol.h"
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 #include <fstream>
 #include <format>
 #include <functional>

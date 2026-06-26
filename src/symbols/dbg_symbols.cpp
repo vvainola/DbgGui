@@ -23,7 +23,7 @@
 #include "dbg_symbols.hpp"
 #include "str_helpers.h"
 #include "variant_symbol.h"
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 
 #include <cassert>
 #include <sstream>

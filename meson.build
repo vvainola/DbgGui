@@ -52,9 +52,7 @@ deps = [
     dependency('cxxopts'),
 ]
 
-if WINDOWS
-    deps += [cpp.find_library('dbghelp')]
-else
+if not WINDOWS
     deps += [dependency('libdwarf'), dependency('gtk+-3.0')]
 endif
 
@@ -105,8 +103,29 @@ imgui_lib = static_library('imgui',
 
 platform_src = []
 if WINDOWS
-    platform_src += ['src/symbols/dbghelp_helpers.cpp']
-    platform_src += ['src/symbols/dbg_symbols_win.cpp']
+    platform_src += [
+        'src/raw_pdb/PDB_CoalescedMSFStream.cpp',
+        'src/raw_pdb/PDB_DBIStream.cpp',
+        'src/raw_pdb/PDB_DBITypes.cpp',
+        'src/raw_pdb/PDB_DirectMSFStream.cpp',
+        'src/raw_pdb/PDB_GlobalSymbolStream.cpp',
+        'src/raw_pdb/PDB_ImageSectionStream.cpp',
+        'src/raw_pdb/PDB_InfoStream.cpp',
+        'src/raw_pdb/PDB_IPIStream.cpp',
+        'src/raw_pdb/PDB_ModuleInfoStream.cpp',
+        'src/raw_pdb/PDB_ModuleLineStream.cpp',
+        'src/raw_pdb/PDB_ModuleSymbolStream.cpp',
+        'src/raw_pdb/PDB_NamesStream.cpp',
+        'src/raw_pdb/PDB_PCH.cpp',
+        'src/raw_pdb/PDB_PublicSymbolStream.cpp',
+        'src/raw_pdb/PDB_RawFile.cpp',
+        'src/raw_pdb/PDB_SectionContributionStream.cpp',
+        'src/raw_pdb/PDB_SourceFileStream.cpp',
+        'src/raw_pdb/PDB_TPIStream.cpp',
+        'src/raw_pdb/PDB_Types.cpp',
+        'src/raw_pdb/PDB.cpp',
+        'src/symbols/dbg_symbols_win.cpp',
+    ]
 else
     platform_src += ['src/symbols/elf_helpers.cpp']
     platform_src += ['src/symbols/dbg_symbols_linux.cpp']
@@ -122,7 +141,7 @@ lib_symbols = static_library('symbols',
         'src/symbols/variant_symbol.cpp',
     ] + platform_src,
     dependencies : deps,
-    include_directories : ['include', 'src'],
+    include_directories : ['include', 'src', 'src/raw_pdb'],
     override_options : override_options,
 )
 
@@ -218,7 +237,6 @@ lib_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
 )
-lib_dbghelp_symbols_dep = lib_symbols_dep
 
 lib_gui_dep = declare_dependency(
     link_with : [lib_gui, lib_symbols],
