@@ -372,13 +372,13 @@ static bool resolveType(Dwarf_Debug dbg,
 
             if (has_elem_type && !dimensions.empty()) {
                 // Resolve the innermost element type
-                auto innermost = std::make_unique<SymbolDescriptor>();
+                auto innermost = std::make_shared<SymbolDescriptor>();
                 if (resolveType(dbg, elem_type_offset, *innermost, full_type_defs)) {
                     // Build nested array structure from innermost dimension outward
                     // For dimensions [3, 3] with element type int32_t:
                     // Build: array(3, array(3, int32_t))
                     for (int i = (int)dimensions.size() - 1; i >= 1; --i) {
-                        auto array_elem = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+                        auto array_elem = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
                             .kind = SymbolKind::Array
                         });
                         array_elem->array_element_count = dimensions[i];
@@ -422,7 +422,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_global_formref(mem_type_attr, &member_type_offset, &err);
                             dwarf_dealloc(dbg, mem_type_attr, DW_DLA_ATTR);
 
-                        auto child_sym = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+                        auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
                                 .name = member_name ? member_name : ""
                             });
                             child_sym->offset_to_parent = offset;
@@ -474,7 +474,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_global_formref(base_type_attr, &base_type_offset, &err);
                             dwarf_dealloc(dbg, base_type_attr, DW_DLA_ATTR);
 
-                            auto child_sym = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+                            auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
                                 .name = getTypeName(dbg, base_type_offset)
                             });
                             child_sym->offset_to_parent = getDataMemberLocationOffset(dbg, child_die);
@@ -535,7 +535,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             }
                             dwarf_dealloc(dbg, const_val_attr, DW_DLA_ATTR);
                         }
-                        auto enum_child = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+                        auto enum_child = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
                             .name = enum_name ? enum_name : "",
                             .kind = SymbolKind::EnumValue
                         });

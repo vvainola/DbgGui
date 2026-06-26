@@ -566,18 +566,17 @@ void copyTypePayload(SymbolDescriptor& dst, SymbolDescriptor const& src) {
     MemoryAddress address = dst.address;
     uint32_t offset_to_parent = dst.offset_to_parent;
 
-    auto cloned = src.clone();
     dst = SymbolDescriptor{};
     dst.name = std::move(name);
     dst.address = address;
     dst.offset_to_parent = offset_to_parent;
-    dst.size = cloned->size;
-    dst.kind = cloned->kind;
-    dst.array_element_count = cloned->array_element_count;
-    dst.scalar_type = cloned->scalar_type;
-    dst.bitfield_position = cloned->bitfield_position;
-    dst.enum_value = cloned->enum_value;
-    dst.children = std::move(cloned->children);
+    dst.size = src.size;
+    dst.kind = src.kind;
+    dst.array_element_count = src.array_element_count;
+    dst.scalar_type = src.scalar_type;
+    dst.bitfield_position = src.bitfield_position;
+    dst.enum_value = src.enum_value;
+    dst.children = src.children;
 }
 
 bool resolveType(TypeTable const& type_table,
@@ -605,7 +604,7 @@ void addFields(TypeTable const& type_table,
         if (field_record->kind == TpiRecordKind::LF_MEMBER || field_record->kind == TpiRecordKind::LF_MEMBER_ST) {
             bool const string_table_format = field_record->kind == TpiRecordKind::LF_MEMBER_ST;
             char const* name = getLeafName(field_record->data.LF_MEMBER.offset);
-            auto child = std::make_unique<SymbolDescriptor>();
+            auto child = std::make_shared<SymbolDescriptor>();
             child->name = readCodeViewString(name, string_table_format);
             child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(field_record->data.LF_MEMBER.offset));
 
@@ -620,7 +619,7 @@ void addFields(TypeTable const& type_table,
             i += codeViewStringSize(name, string_table_format);
         } else if (field_record->kind == TpiRecordKind::LF_BCLASS) {
             char const* offset = field_record->data.LF_BCLASS.offset;
-            auto child = std::make_unique<SymbolDescriptor>();
+            auto child = std::make_shared<SymbolDescriptor>();
             TpiRecord const* base_record = type_table.getTypeRecord(field_record->data.LF_BCLASS.index);
             child->name = recordName(base_record);
             child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(offset));
@@ -722,7 +721,7 @@ void addEnumerators(TypeTable const& type_table,
 
         if (field_record->kind == TpiRecordKind::LF_ENUMERATE) {
             char const* name = getLeafName(field_record->data.LF_ENUMERATE.value);
-            auto child = std::make_unique<SymbolDescriptor>();
+            auto child = std::make_shared<SymbolDescriptor>();
             child->name = name;
             child->kind = SymbolKind::EnumValue;
             child->enum_value = readSignedLeaf(field_record->data.LF_ENUMERATE.value);
@@ -799,8 +798,7 @@ bool resolveType(TypeTable const& type_table,
             symbol.kind = SymbolKind::Array;
             symbol.size = static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_ARRAY.data));
 
-            auto element = std::make_unique<SymbolDescriptor>();
-            element->name = symbol.name;
+            auto element = std::make_shared<SymbolDescriptor>();
             resolved = resolveType(type_table, record->data.LF_ARRAY.elemtype, *element, resolving);
             if (resolved && element->size != 0) {
                 symbol.array_element_count = symbol.size / element->size;

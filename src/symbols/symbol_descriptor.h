@@ -63,7 +63,10 @@ struct SymbolDescriptor {
     ScalarType scalar_type = ScalarType::None;
     int bitfield_position = -1;
     int64_t enum_value = 0;
-    std::vector<std::unique_ptr<SymbolDescriptor>> children;
+    // Child descriptors describe immutable type layout after construction.
+    // Sharing them lets type caches reuse large member trees across globals of
+    // the same type without deep-cloning the intermediate descriptor graph.
+    std::vector<std::shared_ptr<SymbolDescriptor>> children;
 
     static SymbolDescriptor fromJson(nlohmann::json const& j);
     std::unique_ptr<SymbolDescriptor> clone() const;

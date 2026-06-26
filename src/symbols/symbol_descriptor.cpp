@@ -93,7 +93,7 @@ SymbolDescriptor SymbolDescriptor::fromJson(nlohmann::json const& field) {
 
     if (field.contains("children")) {
         for (auto const& child_data : field["children"]) {
-            sym.children.push_back(std::make_unique<SymbolDescriptor>(fromJson(child_data)));
+            sym.children.push_back(std::make_shared<SymbolDescriptor>(fromJson(child_data)));
         }
     }
 
@@ -111,10 +111,7 @@ std::unique_ptr<SymbolDescriptor> SymbolDescriptor::clone() const {
     sym->scalar_type = scalar_type;
     sym->bitfield_position = bitfield_position;
     sym->enum_value = enum_value;
-    sym->children.reserve(children.size());
-    for (auto const& child : children) {
-        sym->children.push_back(child->clone());
-    }
+    sym->children = children;
     return sym;
 }
 
