@@ -44,6 +44,15 @@ struct B {
     A a;
 };
 
+struct ResetBase {
+    int base_value = 0;
+    double base_double = 0;
+};
+
+struct ResetDerived : ResetBase {
+    int derived_value = 0;
+};
+
 enum Enumeration {
     EnumValue_1n = -1,
     EnumValue0 = 0,
@@ -72,6 +81,7 @@ void (*g_fn_ptr2)();
 void (*g_fn_ptr3)(int);
 BitField g_bitfield;
 Enumeration g_enum;
+ResetDerived g_reset_derived;
 
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
@@ -160,6 +170,27 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_b1_a_sym->getChildren().size() == 1);
     VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
     CHECK(g_b2_a_sym->getChildren().size() == 1);
+
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
+    VariantSymbol* derived_sym = symbols.getSymbol("g_reset_derived");
+    REQUIRE(derived_sym != nullptr);
+
+    VariantSymbol* base_value_sym = nullptr;
+    VariantSymbol* base_double_sym = nullptr;
+    for (auto& child : derived_sym->getChildren()) {
+        for (auto& grandchild : child->getChildren()) {
+            if (grandchild->getName() == "base_value") {
+                base_value_sym = grandchild.get();
+            } else if (grandchild->getName() == "base_double") {
+                base_double_sym = grandchild.get();
+            }
+        }
+    }
+    REQUIRE(base_value_sym != nullptr);
+    REQUIRE(base_double_sym != nullptr);
+    CHECK(base_value_sym->read() == g_reset_derived.base_value);
+    CHECK(base_double_sym->read() == Approx(g_reset_derived.base_double));
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
@@ -270,6 +301,8 @@ TEST_CASE("Snapshot from file") {
     double temp_double2 = random<double>();
     uint32_t temp_bf0 = random<uint32_t>() % 7;
     uint32_t temp_bf9 = random<uint32_t>() % 17;
+    int temp_reset_base_value = random<int>();
+    double temp_reset_base_double = random<double>();
 
     // Assign random values to global variables
     g_int = temp_int;
@@ -281,6 +314,8 @@ TEST_CASE("Snapshot from file") {
     g_multidim_double[idx1][idx2] = temp_double2;
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
+    g_reset_derived.base_value = temp_reset_base_value;
+    g_reset_derived.base_double = temp_reset_base_double;
 
     // Try loading non-existent json file
     std::string const& symbols_json = "test_symbols.json";
@@ -310,6 +345,8 @@ TEST_CASE("Snapshot from file") {
     g_multidim_double[idx1][idx2] = random<double>();
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
     // Load snapshot
     SNP_loadSnapshotFromFile(symbols, "test_snapshot.json");
 
@@ -323,6 +360,8 @@ TEST_CASE("Snapshot from file") {
     REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
+    REQUIRE(g_reset_derived.base_value == temp_reset_base_value);
+    REQUIRE(g_reset_derived.base_double == temp_reset_base_double);
 
     SNP_deleteSymbolLookup(symbols);
 }
@@ -337,6 +376,8 @@ TEST_CASE("Snapshot from memory") {
     double temp_double2 = random<double>();
     uint32_t temp_bf0 = random<uint32_t>() % 7;
     uint32_t temp_bf9 = random<uint32_t>() % 17;
+    int temp_reset_base_value = random<int>();
+    double temp_reset_base_double = random<double>();
 
     // Assign random values to global variables
     g_int = temp_int;
@@ -348,6 +389,8 @@ TEST_CASE("Snapshot from memory") {
     g_multidim_double[idx1][idx2] = temp_double2;
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
+    g_reset_derived.base_value = temp_reset_base_value;
+    g_reset_derived.base_double = temp_reset_base_double;
 
     void* symbols = SNP_getSymbolsFromPdb();
     auto snapshot = SNP_saveSnapshotToMemory(symbols);
@@ -362,6 +405,8 @@ TEST_CASE("Snapshot from memory") {
     g_multidim_double[idx1][idx2] = random<double>();
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
 
     // Load snapshot
     SNP_loadSnapshotFromMemory(symbols, snapshot);
@@ -376,14 +421,16 @@ TEST_CASE("Snapshot from memory") {
     REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
+    REQUIRE(g_reset_derived.base_value == temp_reset_base_value);
+    REQUIRE(g_reset_derived.base_double == temp_reset_base_double);
 
     SNP_deleteSymbolLookup(symbols);
 }
 
 // ============================================================================
 // Shared library symbol reading tests
-// On Windows, DbgHelp enumerates symbols from all loaded modules and prefixes
-// symbols from other modules with "modulename|symbolname".
+// On Windows, RawPDB reads symbols from loaded modules and prefixes symbols
+// from other modules with "modulename|symbolname".
 // On Linux, libdwarf reads DWARF debug info from loaded shared libraries
 // via dl_iterate_phdr.
 // ============================================================================
