@@ -204,6 +204,47 @@ static Dwarf_Off followTypeChain(Dwarf_Debug dbg, Dwarf_Off type_offset) {
     return type_offset;
 }
 
+static uint32_t getDataMemberLocationOffset(Dwarf_Debug dbg, Dwarf_Die die) {
+    Dwarf_Error err = nullptr;
+    uint32_t offset = 0;
+
+    Dwarf_Attribute loc_attr = nullptr;
+    if (dwarf_attr(die, DW_AT_data_member_location, &loc_attr, &err) == DW_DLV_OK) {
+        Dwarf_Unsigned uval;
+        if (dwarf_formudata(loc_attr, &uval, &err) == DW_DLV_OK) {
+            offset = (uint32_t)uval;
+        } else {
+            Dwarf_Signed sval;
+            if (dwarf_formsdata(loc_attr, &sval, &err) == DW_DLV_OK && sval >= 0) {
+                offset = (uint32_t)sval;
+            }
+        }
+        dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+    }
+
+    return offset;
+}
+
+static std::string getTypeName(Dwarf_Debug dbg, Dwarf_Off type_offset) {
+    Dwarf_Error err = nullptr;
+    type_offset = followTypeChain(dbg, type_offset);
+
+    Dwarf_Die type_die = nullptr;
+    if (dwarf_offdie_b(dbg, type_offset, 1, &type_die, &err) != DW_DLV_OK) {
+        return "";
+    }
+
+    std::string name;
+    char* type_name = nullptr;
+    if (dwarf_diename(type_die, &type_name, &err) == DW_DLV_OK && type_name != nullptr) {
+        name = type_name;
+        dwarf_dealloc(dbg, type_name, DW_DLA_STRING);
+    }
+    dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+
+    return name;
+}
+
 // Resolve a DWARF type (given by offset) and populate the RawSymbol's
 // tag, size, basic_type, children, and array_element_count.
 // The name, address, and offset_to_parent should already be set by the caller.
@@ -372,15 +413,7 @@ static bool resolveType(Dwarf_Debug dbg,
                         dwarf_diename(child_die, &member_name, &err);
 
                         // Get member offset from containing structure
-                        uint32_t offset = 0;
-                        Dwarf_Attribute loc_attr = nullptr;
-                        if (dwarf_attr(child_die, DW_AT_data_member_location, &loc_attr, &err) == DW_DLV_OK) {
-                            Dwarf_Unsigned uval;
-                            if (dwarf_formudata(loc_attr, &uval, &err) == DW_DLV_OK) {
-                                offset = (uint32_t)uval;
-                            }
-                            dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
-                        }
+                        uint32_t offset = getDataMemberLocationOffset(dbg, child_die);
 
                         // Get member type
                         Dwarf_Attribute mem_type_attr = nullptr;
@@ -433,6 +466,22 @@ static bool resolveType(Dwarf_Debug dbg,
 
                         if (member_name) {
                             dwarf_dealloc(dbg, member_name, DW_DLA_STRING);
+                        }
+                    } else if (child_tag == DW_TAG_inheritance) {
+                        Dwarf_Attribute base_type_attr = nullptr;
+                        if (dwarf_attr(child_die, DW_AT_type, &base_type_attr, &err) == DW_DLV_OK) {
+                            Dwarf_Off base_type_offset;
+                            dwarf_global_formref(base_type_attr, &base_type_offset, &err);
+                            dwarf_dealloc(dbg, base_type_attr, DW_DLA_ATTR);
+
+                            auto child_sym = std::make_unique<RawSymbol>(RawSymbol{
+                                .name = getTypeName(dbg, base_type_offset)
+                            });
+                            child_sym->offset_to_parent = getDataMemberLocationOffset(dbg, child_die);
+
+                            if (resolveType(dbg, base_type_offset, *child_sym, full_type_defs)) {
+                                raw_sym.children.push_back(std::move(child_sym));
+                            }
                         }
                     }
 
