@@ -1,0 +1,4 @@
+RawPDB vendored from https://github.com/MolecularMatters/raw_pdb
+Commit: 43cc59b7037238ad84e1d5abe10711a06d998fa0
+Copied: src/*.cpp, src/*.h, src/Foundation, LICENSE
+Excluded: src/Examples
