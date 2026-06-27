@@ -585,9 +585,7 @@ void DbgGui::loadPreviousSessionSettings() {
             m_hidden_symbols.insert(hidden_symbol);
         };)
 
-        TRY(std::string group_to_add_symbols = m_settings["group_to_add_symbols"];
-            strncpy(m_group_to_add_symbols, group_to_add_symbols.data(), MAX_NAME_LENGTH);
-            m_group_to_add_symbols[MAX_NAME_LENGTH - 1] = '\0';)
+        TRY(m_group_to_add_symbols = m_settings["group_to_add_symbols"].get<std::string>();)
     }
     f.close();
 }

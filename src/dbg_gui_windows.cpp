@@ -22,6 +22,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "str_helpers.h"
 #include "imgui_internal.h"
 #include "themes.h"
@@ -169,15 +170,11 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
             ImGui::CloseCurrentPopup();
         }
 
-        scalar->alias.reserve(MAX_NAME_LENGTH);
-        if (ImGui::InputText("Alias##scalar_context_menu",
-                             scalar->alias.data(),
-                             MAX_NAME_LENGTH)) {
-            scalar->alias = std::string(scalar->alias.data());
+        if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
             if (scalar->alias.empty()) {
                 scalar->alias = scalar->name;
             }
-            scalar->alias_and_group = std::string(scalar->alias.data()) + " (" + scalar->group + ")";
+            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
         }
         ImGui::EndPopup();
     }
@@ -582,9 +579,8 @@ void DbgGui::showScalarWindow() {
         ImGui::End();
         return;
     }
-    static char scalar_name_filter_buffer[256] = "";
-    ImGui::InputText("Filter", scalar_name_filter_buffer, IM_ARRAYSIZE(scalar_name_filter_buffer));
-    std::string scalar_name_filter = std::string(scalar_name_filter_buffer);
+    static std::string scalar_name_filter;
+    ImGui::InputText("Filter", &scalar_name_filter);
 
     if (ImGui::BeginTable("scalar_table",
                           2,
@@ -739,9 +735,8 @@ void DbgGui::showVectorWindow() {
         return;
     }
 
-    static char vector_name_filter_buffer[256] = "";
-    ImGui::InputText("Filter", vector_name_filter_buffer, IM_ARRAYSIZE(vector_name_filter_buffer));
-    std::string vector_name_filter = std::string(vector_name_filter_buffer);
+    static std::string vector_name_filter;
+    ImGui::InputText("Filter", &vector_name_filter);
 
     if (ImGui::BeginTable("vector_table",
                           3,
@@ -996,9 +991,9 @@ void DbgGui::showSymbolsWindow() {
     // Just manually tested width that name, group and menu boxes are visible.
     float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 20 * ImGui::CalcTextSize("x").x;
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
-    static char symbols_to_search[MAX_NAME_LENGTH];
-    if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
-        if (std::string(symbols_to_search).size() > 2) {
+    static std::string symbols_to_search;
+    if (ImGui::InputText("Name", &symbols_to_search, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
+        if (symbols_to_search.size() > 2) {
             m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
             auto begin_it = m_symbol_search_results.begin();
             // Don't sort first element if it is an exact match
@@ -1016,7 +1011,7 @@ void DbgGui::showSymbolsWindow() {
     // Group box
     ImGui::SameLine();
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.35f);
-    ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
+    ImGui::InputText("Group", &m_group_to_add_symbols);
     // Recursive checkbox
     ImGui::SameLine();
     if (ImGui::BeginMenu("Menu")) {
@@ -1253,7 +1248,7 @@ void DbgGui::showScriptWindow() {
                     ImGui::Text(lines[i].c_str());
                 }
             } else {
-                ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y));
+                ImGui::InputTextMultiline("##source", &script_window.text, ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y));
             }
 
             ImGui::End();

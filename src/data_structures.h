@@ -25,6 +25,7 @@
 #include "symbols/dbg_symbols.hpp"
 #include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "spectrum.h"
 #include "str_helpers.h"
 #include "nlohmann/json.hpp"
@@ -305,12 +306,7 @@ struct Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::EndPopup();
         }
     }
@@ -461,12 +457,7 @@ struct ScalarPlot : Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             int new_rows = m_rows;
             int new_cols = m_cols;
             if (ImGui::InputInt("Rows", &new_rows)) {
@@ -643,12 +634,7 @@ struct GridWindow : Window {
         rows = std::clamp(rows, 1, MAX_ROWS);
         columns = std::clamp(columns, 1, MAX_COLUMNS);
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::InputInt("Rows", &rows, 0, 0);
             ImGui::InputInt("Columms", &columns, 0, 0);
             ImGui::InputFloat("Text to value ratio", &text_to_value_ratio, 0, 0, "%.2f");
@@ -676,12 +662,7 @@ struct DockSpace : Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::Checkbox("Even split", &even_split);
             ImGui::EndPopup();
         }
@@ -713,9 +694,7 @@ struct ScriptWindow : Window {
     ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_);
     ScriptWindow(DbgGui* gui, nlohmann::json const& j)
         : Window(j), m_gui(gui) {
-        std::string json_text = j.value("text", "");
-        std::memcpy((void*)text, (void*)json_text.data(), json_text.size());
-        text[json_text.size()] = '\0';
+        text = j.value("text", "");
         loop = j.value("loop", loop);
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
@@ -725,7 +704,7 @@ struct ScriptWindow : Window {
         return j;
     }
 
-    char text[1024 * 16];
+    std::string text;
     bool loop = false;
     bool text_edit_open = false;
 

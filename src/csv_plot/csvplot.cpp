@@ -39,6 +39,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "csvplot.h"
 #include "themes.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -1017,8 +1018,8 @@ void CsvPlotter::showSignalWindow() {
     }
 
     if (ImGui::CollapsingHeader("Process .csv files into images")) {
-        static char config_buffer[20'000];
-        if (ImGui::InputText("Config", config_buffer, IM_ARRAYSIZE(config_buffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+        static std::string config_buffer;
+        if (ImGui::InputText("Config", &config_buffer, ImGuiInputTextFlags_EnterReturnsTrue)) {
             for (std::string const& path : openDialogMultiple()) {
 #if WINDOWS
                 // Call the current process again with the config and file path
@@ -1035,7 +1036,7 @@ void CsvPlotter::showSignalWindow() {
                                                   exe,
                                                   path,
                                                   path,
-                                                  std::string(config_buffer));
+                                                  config_buffer);
                 system(command.c_str());
             }
         }
@@ -1045,8 +1046,8 @@ void CsvPlotter::showSignalWindow() {
     if (ImGui::CollapsingHeader("Create custom signal")) {
         showCustomSignalCreator();
     }
-    static char signal_name_filter[256] = "";
-    ImGui::InputText("Filter", signal_name_filter, IM_ARRAYSIZE(signal_name_filter));
+    static std::string signal_name_filter;
+    ImGui::InputText("Filter", &signal_name_filter);
     ImGui::Separator();
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
@@ -1093,13 +1094,9 @@ void CsvPlotter::showSignalWindow() {
         // Make displayed name editable
         if (ImGui::BeginPopupContextItem((file->displayed_name + "context_menu").c_str())) {
             static std::string displayed_name_edit = file->displayed_name;
-            displayed_name_edit.reserve(MAX_NAME_LENGTH);
             displayed_name_edit = file->displayed_name;
-            if (ImGui::InputText("Name##scalar_context_menu",
-                                 displayed_name_edit.data(),
-                                 MAX_NAME_LENGTH,
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-                file->displayed_name = std::string(displayed_name_edit.data());
+            if (ImGui::InputText("Name##scalar_context_menu", &displayed_name_edit, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                file->displayed_name = displayed_name_edit;
                 if (file->displayed_name.empty()) {
                     file->displayed_name = file->name;
                 }
@@ -1177,7 +1174,7 @@ void CsvPlotter::showSignalWindow() {
         if (opened) {
             for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
-                if (!std::string(signal_name_filter).empty()
+                if (!signal_name_filter.empty()
                     && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
                     continue;
                 }

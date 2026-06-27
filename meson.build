@@ -57,25 +57,27 @@ if not WINDOWS
 endif
 
 imgui_src = files([
-    'src/imgui/calibri.cpp',
-    'src/imgui/cousine_regular.cpp',
-    'src/imgui/backend/imgui_impl_opengl3.cpp',
-    'src/imgui/backend/imgui_impl_opengl3.h',
     'src/imgui/backend/imgui_impl_glfw.cpp',
     'src/imgui/backend/imgui_impl_glfw.h',
-    'src/imgui/imgui.cpp',
-    'src/imgui/imgui.h',
+    'src/imgui/backend/imgui_impl_opengl3.cpp',
+    'src/imgui/backend/imgui_impl_opengl3.h',
+    'src/imgui/calibri.cpp',
+    'src/imgui/cousine_regular.cpp',
     'src/imgui/imgui_demo.cpp',
     'src/imgui/imgui_draw.cpp',
     'src/imgui/imgui_internal.h',
     'src/imgui/imgui_tables.cpp',
     'src/imgui/imgui_widgets.cpp',
-    'src/imgui/implot/implot.cpp',
-    'src/imgui/implot/implot.h',
+    'src/imgui/imgui.cpp',
+    'src/imgui/imgui.h',
     'src/imgui/implot/implot_demo.cpp',
     'src/imgui/implot/implot_internal.h',
     'src/imgui/implot/implot_items.cpp',
     'src/imgui/implot/implot_items.cpp',
+    'src/imgui/implot/implot.cpp',
+    'src/imgui/implot/implot.h',
+    'src/imgui/misc/cpp/imgui_stdlib.cpp',
+    'src/imgui/misc/cpp/imgui_stdlib.h',
     'src/nativefiledialog/nfd_common.c',
 ])
 
@@ -86,12 +88,13 @@ else
 endif
 inc = []
 inc += include_directories(
+    'include',
     'src/imgui',
-    'src/imgui/implot',
     'src/imgui/backend',
+    'src/imgui/implot',
+    'src/imgui/misc/cpp',
     'src/nativefiledialog/include',
     'src/symbols',
-    'include'
 )
 
 imgui_lib = static_library('imgui',

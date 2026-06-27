@@ -22,6 +22,7 @@
 
 #include "dbg_gui.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
 #include <assert.h>
 
@@ -29,20 +30,17 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         return;
     }
-    static char window_or_plot_name[256] = "";
+    static std::string window_or_plot_name;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
     if (modal_name == str::ADD_SCALAR_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 ScalarPlot plot(window_or_plot_name, hashWithTime(window_or_plot_name));
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
                 m_scalar_plots.push_back(plot);
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -50,12 +48,9 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     } else if (modal_name == str::ADD_VECTOR_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Vector plot name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Vector plot name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_vector_plots.push_back(VectorPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -63,12 +58,9 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     } else if (modal_name == str::ADD_CUSTOM_WINDOW) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Custom window name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Custom window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_custom_windows.push_back(CustomWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -76,12 +68,9 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     } else if (modal_name == str::ADD_SCRIPT_WINDOW) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Script window name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Script window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_script_windows.push_back(ScriptWindow{this, window_or_plot_name, hashWithTime(window_or_plot_name)});
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -89,12 +78,9 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     } else if (modal_name == str::ADD_GRID_WINDOW) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Grid window name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Grid window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_grid_windows.emplace_back(GridWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -102,12 +88,9 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     } else if (modal_name == str::ADD_SPECTRUM_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Spectrum plot name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Spectrum plot name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_spectrum_plots.push_back(SpectrumPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
@@ -116,14 +99,11 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Dockspace name",
-                                 window_or_plot_name,
-                                 IM_ARRAYSIZE(window_or_plot_name),
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Dockspace name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 // Add clock to hash calculation because dockspace name can change later and the user might
                 // create a new dockspace which could have same name as the original and they would result in same id
                 m_dockspaces.push_back(DockSpace(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name[0] = '\0';
+                window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
             ImGui::EndPopup();
