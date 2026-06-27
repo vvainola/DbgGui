@@ -68,6 +68,7 @@ class VariantSymbol {
     ValueSource getValueSource();
     std::string valueAsStr() const;
 
+    bool opened_manually = false; // Leaky abstraction for GUI to fold/unfold all
   private:
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;

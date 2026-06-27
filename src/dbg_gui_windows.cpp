@@ -214,6 +214,40 @@ void DbgGui::addScalarOffsetInput(Scalar* scalar) {
 void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
+        bool can_fold_children = !sym.getChildren().empty()
+                              || (sym.getType() == VariantSymbol::Type::Pointer && sym.getPointedSymbol() != nullptr);
+        std::function<void(VariantSymbol&, bool, std::set<VariantSymbol*>&)> fold_all =
+          [&](VariantSymbol& symbol, bool opened, std::set<VariantSymbol*>& visiting) {
+              // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
+              if (visiting.contains(&symbol)) {
+                  return;
+              }
+              visiting.insert(&symbol);
+              symbol.opened_manually = opened;
+              if (symbol.getType() == VariantSymbol::Type::Pointer) {
+                  if (VariantSymbol* pointed_symbol = symbol.getPointedSymbol()) {
+                      fold_all(*pointed_symbol, opened, visiting);
+                  }
+              } else {
+                  for (std::unique_ptr<VariantSymbol>& child : symbol.getChildren()) {
+                      fold_all(*child, opened, visiting);
+                  }
+              }
+              visiting.erase(&symbol);
+          };
+        if (can_fold_children) {
+            ImGui::Separator();
+            if (ImGui::Button("Unfold all")) {
+                std::set<VariantSymbol*> visiting;
+                fold_all(sym, true, visiting);
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::Button("Fold all")) {
+                std::set<VariantSymbol*> visiting;
+                fold_all(sym, false, visiting);
+                ImGui::CloseCurrentPopup();
+            }
+        }
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(full_name.c_str());
             ImGui::CloseCurrentPopup();
@@ -998,10 +1032,14 @@ void DbgGui::showSymbolsWindow() {
     if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
         for (VariantSymbol* symbol : m_symbol_search_results) {
             // Recursive lambda for displaying children in the table
-            std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
+            std::function<void(VariantSymbol*, std::set<VariantSymbol*>&)> show_children = [&](VariantSymbol* sym, std::set<VariantSymbol*>& visiting) {
                 // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
                 if (sym == nullptr) {
                     assert(false);
+                    return;
+                }
+                // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
+                if (visiting.contains(sym)) {
                     return;
                 }
 
@@ -1010,42 +1048,28 @@ void DbgGui::showSymbolsWindow() {
                 if (!show_hidden_symbols && hidden) {
                     return;
                 }
+
+                visiting.insert(sym);
                 ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 // Full name has to be displayed with recursive search
                 std::string symbol_name = recursive_symbol_search ? sym->getFullName() : sym->getName();
-                std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
-                if (children.size() > 0) {
-                    // Object/array
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
-                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
-                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
-                        ImGui::Text("Drag to custom window to add all children");
-                        ImGui::EndDragDropSource();
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        for (std::unique_ptr<VariantSymbol>& child : children) {
-                            show_children(child.get());
-                        }
-                        ImGui::TreePop();
-                    }
-                } else if (sym->getType() == VariantSymbol::Type::Pointer) {
+                if (sym->getType() == VariantSymbol::Type::Pointer) {
                     // Pointer
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
                     VariantSymbol* pointed_symbol = sym->getPointedSymbol();
                     if (!pointed_symbol) {
                         flags |= ImGuiTreeNodeFlags_Leaf;
+                        sym->opened_manually = false;
+                    } else {
+                        ImGui::SetNextItemOpen(sym->opened_manually, ImGuiCond_Always);
                     }
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+                    if (pointed_symbol) {
+                        sym->opened_manually = open;
+                    }
                     addSymbolContextMenu(*sym);
 
                     // Add symbol to scalar window on double click. The pointer can be null pointer or
@@ -1066,7 +1090,30 @@ void DbgGui::showSymbolsWindow() {
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
                         if (pointed_symbol) {
-                            show_children(pointed_symbol);
+                            show_children(pointed_symbol, visiting);
+                        }
+                        ImGui::TreePop();
+                    }
+                } else if (sym->getChildren().size() > 0) {
+                    // Object/array
+                    ImGui::SetNextItemOpen(sym->opened_manually, ImGuiCond_Always);
+                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
+                    sym->opened_manually = open;
+                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                        static char symbol_name_buffer[MAX_NAME_LENGTH];
+                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
+                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
+                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
+                        ImGui::Text("Drag to custom window to add all children");
+                        ImGui::EndDragDropSource();
+                    }
+                    addSymbolContextMenu(*sym);
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text(sym->valueAsStr().c_str());
+                    if (open) {
+                        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
+                            show_children(child.get(), visiting);
                         }
                         ImGui::TreePop();
                     }
@@ -1123,8 +1170,10 @@ void DbgGui::showSymbolsWindow() {
                     }
                 }
                 ImGui::PopStyleColor();
+                visiting.erase(sym);
             };
-            show_children(symbol);
+            std::set<VariantSymbol*> visiting;
+            show_children(symbol, visiting);
         }
         ImGui::EndTable();
     }
