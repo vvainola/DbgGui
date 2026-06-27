@@ -27,9 +27,109 @@
 #include "imgui_internal.h"
 #include "themes.h"
 
+#include <algorithm>
 #include <format>
 #include <iostream>
 #include <fstream>
+#include <string_view>
+
+namespace {
+
+int scriptLineCount(std::string_view text) {
+    return static_cast<int>(std::ranges::count(text, '\n')) + 1;
+}
+
+float scriptLineNumberGutterWidth(int line_count) {
+    ImGuiStyle const& style = ImGui::GetStyle();
+    return ImGui::CalcTextSize(std::to_string(std::max(1, line_count)).c_str()).x + 2.0f * style.FramePadding.x;
+}
+
+void drawScriptLineNumberGutter(std::string const& text, ImVec2 min, ImVec2 max, float scroll_y) {
+    ImGuiStyle const& style = ImGui::GetStyle();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImU32 const text_color = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    float const line_height = ImGui::GetFontSize();
+    int const line_count = scriptLineCount(text);
+
+    draw_list->PushClipRect(min, max, true);
+    for (int line = 1; line <= line_count; ++line) {
+        // InputTextMultiline scrolls internally, so draw the gutter with the
+        // same vertical scroll instead of making line numbers their own child.
+        float const y = min.y + style.FramePadding.y + static_cast<float>(line - 1) * line_height - scroll_y;
+        if (y + line_height < min.y) {
+            continue;
+        }
+        if (y > max.y) {
+            break;
+        }
+        std::string line_number = std::to_string(line);
+        float const x = max.x - style.FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x;
+        draw_list->AddText(ImVec2(x, y), text_color, line_number.c_str());
+    }
+    draw_list->PopClipRect();
+}
+
+ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
+    ImGuiContext& g = *GImGui;
+    for (ImGuiWindow* window : g.Windows) {
+        if (window->ChildId == child_id) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
+    ImGuiID const input_id = ImGui::GetID("##source");
+    float const gutter_width = scriptLineNumberGutterWidth(scriptLineCount(text));
+    float const editor_width = std::max(1.0f, size.x - gutter_width);
+
+    // Layout order is intentional:
+    // 1. Reserve gutter space with Dummy().
+    // 2. Submit InputTextMultiline() so ImGui updates its internal scroll state.
+    // 3. Draw line numbers into the reserved gutter using that scroll offset.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+    ImVec2 const gutter_min = ImGui::GetCursorScreenPos();
+    ImVec2 const gutter_size = ImVec2(gutter_width, size.y);
+    ImGui::Dummy(gutter_size);
+    ImVec2 const gutter_max = ImVec2(gutter_min.x + gutter_size.x, gutter_min.y + gutter_size.y);
+    ImGui::SameLine();
+    ImGui::InputTextMultiline("##source", &text, ImVec2(editor_width, size.y));
+    // InputTextMultiline is implemented as a child window. Its ChildId is the
+    // input ID, but its window ID is generated from the parent/window name.
+    ImGuiWindow* input_window = findChildWindowByChildId(input_id);
+    ImGuiInputTextState* input_state = ImGui::GetInputTextState(input_id);
+    float const scroll_y = input_window ? input_window->Scroll.y : input_state ? input_state->Scroll.y : 0.0f;
+    drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
+    ImGui::PopStyleVar();
+}
+
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line) {
+    int const line_count = static_cast<int>(lines.size());
+    float const gutter_width = scriptLineNumberGutterWidth(line_count);
+    if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("##line", ImGuiTableColumnFlags_WidthFixed, gutter_width);
+        ImGui::TableSetupColumn("##source", ImGuiTableColumnFlags_WidthStretch);
+        for (int i = 0; i < line_count; ++i) {
+            if (i == current_line) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TableNextColumn();
+                ImGui::Separator();
+            }
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            std::string line_number = std::to_string(i + 1);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - ImGui::GetStyle().FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x);
+            ImGui::TextDisabled("%s", line_number.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
+        }
+        ImGui::EndTable();
+    }
+}
+
+} // namespace
 
 std::string getSourceValueStr(ValueSource src) {
     return std::visit(
@@ -1243,16 +1343,10 @@ void DbgGui::showScriptWindow() {
                 ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
 
                 // Show progress of the script by adding a separator where it is currently waiting
-                std::vector<std::string> lines = str::split(script_window.text, '\n');
-                for (int i = 0; i < script_window.currentLine(); ++i) {
-                    ImGui::Text(lines[i].c_str());
-                }
-                ImGui::Separator();
-                for (int i = script_window.currentLine(); i < lines.size(); ++i) {
-                    ImGui::Text(lines[i].c_str());
-                }
+                std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
+                showRunningScriptWithLineNumbers(lines, script_window.currentLine());
             } else {
-                ImGui::InputTextMultiline("##source", &script_window.text, ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y));
+                inputScriptTextWithLineNumbers(script_window.text, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
             }
 
             ImGui::End();
