@@ -222,6 +222,16 @@ struct ModuleContext {
 // distinct.
 using SeenSymbols = std::set<std::pair<MemoryAddress, std::string>>;
 
+static void appendInheritedMembers(SymbolDescriptor& symbol,
+                                   SymbolDescriptor const& base_symbol,
+                                   uint32_t base_offset) {
+    for (auto const& base_child : base_symbol.children) {
+        auto inherited_child = std::make_shared<SymbolDescriptor>(*base_child);
+        inherited_child->offset_to_parent += base_offset;
+        symbol.children.push_back(std::move(inherited_child));
+    }
+}
+
 // CodeView stores many sizes and offsets as "numeric leaves": small values are
 // encoded directly in the first 16 bits, while larger values start with an
 // LF_* discriminator followed by the payload of that leaf kind.
@@ -619,16 +629,15 @@ void addFields(TypeTable const& type_table,
             i += codeViewStringSize(name, string_table_format);
         } else if (field_record->kind == TpiRecordKind::LF_BCLASS) {
             char const* offset = field_record->data.LF_BCLASS.offset;
-            auto child = std::make_shared<SymbolDescriptor>();
+            SymbolDescriptor base_symbol;
             TpiRecord const* base_record = type_table.getTypeRecord(field_record->data.LF_BCLASS.index);
-            child->name = recordName(base_record);
-            child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(offset));
+            base_symbol.name = recordName(base_record);
+            uint32_t const base_offset = static_cast<uint32_t>(readUnsignedLeaf(offset));
 
-            std::string const child_name = child->name;
-            if (!startsWith(child_name, "std::")
-                && !(child_name.size() > 2 && child_name[0] == '_' && std::isupper(static_cast<unsigned char>(child_name[1])))
-                && resolveType(type_table, field_record->data.LF_BCLASS.index, *child, resolving)) {
-                symbol.children.push_back(std::move(child));
+            if (!startsWith(base_symbol.name, "std::")
+                && !(base_symbol.name.size() > 2 && base_symbol.name[0] == '_' && std::isupper(static_cast<unsigned char>(base_symbol.name[1])))
+                && resolveType(type_table, field_record->data.LF_BCLASS.index, base_symbol, resolving)) {
+                appendInheritedMembers(symbol, base_symbol, base_offset);
             }
 
             i += static_cast<size_t>(getLeafName(offset) - reinterpret_cast<char const*>(field_record));

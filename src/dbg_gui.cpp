@@ -586,6 +586,7 @@ void DbgGui::loadPreviousSessionSettings() {
         };)
 
         TRY(m_group_to_add_symbols = m_settings["group_to_add_symbols"].get<std::string>();)
+        TRY(m_symbol_search_depth = std::max(0, m_settings.value("symbol_search_depth", m_symbol_search_depth));)
     }
     f.close();
 }
@@ -905,6 +906,7 @@ void DbgGui::updateSavedSettings() {
 
     m_settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
+    m_settings["symbol_search_depth"] = m_symbol_search_depth;
     // Settings are only saved if window is focused so that there is no competition which process is writing
     bool closing = glfwWindowShouldClose(m_window);
     bool focused = (bool)glfwGetWindowAttrib(m_window, GLFW_FOCUSED);

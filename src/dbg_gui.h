@@ -150,6 +150,7 @@ class DbgGui {
 
     DbgSymbols const& m_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
+    int m_symbol_search_depth = 0;
     std::string m_group_to_add_symbols{"dbg"};
     std::set<std::string> m_hidden_symbols;
     std::vector<SymbolValue> m_saved_snapshot;

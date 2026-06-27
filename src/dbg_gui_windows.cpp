@@ -984,17 +984,32 @@ void DbgGui::showSymbolsWindow() {
         return;
     }
 
-    static bool recursive_symbol_search = false;
-    static bool recursive_search_toggled = false;
     static bool show_hidden_symbols = false;
 
     // Just manually tested width that name, group and menu boxes are visible.
     float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 20 * ImGui::CalcTextSize("x").x;
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
     static std::string symbols_to_search;
-    if (ImGui::InputText("Name", &symbols_to_search, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
+    bool search_changed = ImGui::InputText("Name", &symbols_to_search, ImGuiInputTextFlags_CharsNoBlank);
+    // Group box
+    ImGui::SameLine();
+    ImGui::PushItemWidth(name_and_group_boxes_width * 0.35f);
+    ImGui::InputText("Group", &m_group_to_add_symbols);
+    // Search options
+    ImGui::SameLine();
+    if (ImGui::BeginMenu("Menu")) {
+        ImGui::SetNextItemWidth(100.0f);
+        if (ImGui::InputInt("Recursion depth", &m_symbol_search_depth)) {
+            m_symbol_search_depth = std::max(0, m_symbol_search_depth);
+            search_changed = true;
+        }
+        ImGui::Checkbox("Show hidden", &show_hidden_symbols);
+        ImGui::EndMenu();
+    }
+
+    if (search_changed) {
         if (symbols_to_search.size() > 2) {
-            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
+            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, m_symbol_search_depth);
             auto begin_it = m_symbol_search_results.begin();
             // Don't sort first element if it is an exact match
             if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
@@ -1007,17 +1022,6 @@ void DbgGui::showSymbolsWindow() {
         } else {
             m_symbol_search_results.clear();
         }
-    }
-    // Group box
-    ImGui::SameLine();
-    ImGui::PushItemWidth(name_and_group_boxes_width * 0.35f);
-    ImGui::InputText("Group", &m_group_to_add_symbols);
-    // Recursive checkbox
-    ImGui::SameLine();
-    if (ImGui::BeginMenu("Menu")) {
-        recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
-        ImGui::Checkbox("Show hidden", &show_hidden_symbols);
-        ImGui::EndMenu();
     }
 
     static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
@@ -1049,8 +1053,8 @@ void DbgGui::showSymbolsWindow() {
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                // Full name has to be displayed with recursive search
-                std::string symbol_name = recursive_symbol_search ? sym->getFullName() : sym->getName();
+                // Full name is needed when deeper search can return same-named symbols from multiple scopes.
+                std::string symbol_name = m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
                 if (sym->getType() == VariantSymbol::Type::Pointer) {
                     // Pointer
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;

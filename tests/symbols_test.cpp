@@ -8,6 +8,7 @@
 #include "test_library_loader.h"
 #include "fwd_decl_types.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <random>
 
@@ -53,6 +54,10 @@ struct ResetDerived : ResetBase {
     int derived_value = 0;
 };
 
+struct ResetDoubleDerived : ResetDerived {
+    int double_derived_value = 0;
+};
+
 enum Enumeration {
     EnumValue_1n = -1,
     EnumValue0 = 0,
@@ -82,6 +87,7 @@ void (*g_fn_ptr3)(int);
 BitField g_bitfield;
 Enumeration g_enum;
 ResetDerived g_reset_derived;
+ResetDoubleDerived g_reset_double_derived;
 
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
@@ -176,21 +182,33 @@ TEST_CASE("Basic symbol access") {
     VariantSymbol* derived_sym = symbols.getSymbol("g_reset_derived");
     REQUIRE(derived_sym != nullptr);
 
-    VariantSymbol* base_value_sym = nullptr;
-    VariantSymbol* base_double_sym = nullptr;
-    for (auto& child : derived_sym->getChildren()) {
-        for (auto& grandchild : child->getChildren()) {
-            if (grandchild->getName() == "base_value") {
-                base_value_sym = grandchild.get();
-            } else if (grandchild->getName() == "base_double") {
-                base_double_sym = grandchild.get();
-            }
-        }
-    }
+    VariantSymbol* base_value_sym = symbols.getSymbol("g_reset_derived.base_value");
+    VariantSymbol* base_double_sym = symbols.getSymbol("g_reset_derived.base_double");
     REQUIRE(base_value_sym != nullptr);
     REQUIRE(base_double_sym != nullptr);
+    CHECK(base_value_sym->getFullName() == "g_reset_derived.base_value");
+    CHECK(base_double_sym->getFullName() == "g_reset_derived.base_double");
     CHECK(base_value_sym->read() == g_reset_derived.base_value);
     CHECK(base_double_sym->read() == Approx(g_reset_derived.base_double));
+
+    g_reset_double_derived.base_value = random<int>();
+    g_reset_double_derived.base_double = random<double>();
+    g_reset_double_derived.derived_value = random<int>();
+    VariantSymbol* double_derived_sym = symbols.getSymbol("g_reset_double_derived");
+    REQUIRE(double_derived_sym != nullptr);
+
+    VariantSymbol* double_derived_base_value_sym = symbols.getSymbol("g_reset_double_derived.base_value");
+    VariantSymbol* double_derived_base_double_sym = symbols.getSymbol("g_reset_double_derived.base_double");
+    VariantSymbol* inherited_derived_value_sym = symbols.getSymbol("g_reset_double_derived.derived_value");
+    REQUIRE(double_derived_base_value_sym != nullptr);
+    REQUIRE(double_derived_base_double_sym != nullptr);
+    REQUIRE(inherited_derived_value_sym != nullptr);
+    CHECK(double_derived_base_value_sym->getFullName() == "g_reset_double_derived.base_value");
+    CHECK(double_derived_base_double_sym->getFullName() == "g_reset_double_derived.base_double");
+    CHECK(inherited_derived_value_sym->getFullName() == "g_reset_double_derived.derived_value");
+    CHECK(double_derived_base_value_sym->read() == g_reset_double_derived.base_value);
+    CHECK(double_derived_base_double_sym->read() == Approx(g_reset_double_derived.base_double));
+    CHECK(inherited_derived_value_sym->read() == g_reset_double_derived.derived_value);
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
@@ -440,6 +458,21 @@ TEST_CASE("Read symbols from shared library") {
     DbgSymbols const& symbols = DbgSymbols::getSymbols();
 
     std::string prefix = "test_library|";
+    SECTION("Search recursion depth controls module-prefixed globals") {
+        auto contains_symbol = [](std::vector<VariantSymbol*> const& matches, std::string const& full_name) {
+            return std::ranges::any_of(matches, [&](VariantSymbol* symbol) {
+                return symbol->getFullName() == full_name;
+            });
+        };
+
+        CHECK(contains_symbol(symbols.findMatchingSymbols("g_int", 0), "g_int"));
+        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("base_value", 0), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_double_derived.base_value"));
+        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("lib_int32", 0), prefix + "lib_int32"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("lib_int32", 1), prefix + "lib_int32"));
+    }
+
     // ---- Primitive types ----
     SECTION("Primitive integer types") {
         VariantSymbol* sym_int32 = symbols.getSymbol(prefix + "lib_int32");

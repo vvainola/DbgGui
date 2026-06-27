@@ -137,51 +137,39 @@ VariantSymbol* DbgSymbols::getSymbol(std::string const& name) const {
 }
 
 std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& name,
-                                                            bool recursive,
+                                                            int recursion_depth,
                                                             int max_count) const {
     std::vector<VariantSymbol*> matching_symbols;
-    // Find from all symbols, can be pretty slow
-    if (recursive) {
-        std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
-            // Exact match is shown first
-            if (name == sym->getFullName()) {
-                matching_symbols.insert(matching_symbols.begin(), sym);
-            } else if (matching_symbols.size() < max_count
-                       && str::fuzzy_match(name.c_str(), sym->getFullName().c_str())) {
-                matching_symbols.push_back(sym);
-            }
-            for (std::unique_ptr<VariantSymbol> const& child : sym->getChildren()) {
-                find_matching_recursively(child.get());
-            }
-        };
-        for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
-            find_matching_recursively(sym.get());
-        }
-        return matching_symbols;
-    }
+    recursion_depth = std::max(0, recursion_depth);
+    size_t result_limit = max_count < 0 ? 0 : static_cast<size_t>(max_count);
 
-    std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
-    std::string name_to_search = name;
-
-    // Search only members of a symbol if the name contains "."
-    size_t idx = name.rfind('.');
-    if (idx != std::string::npos) {
-        std::string parent_name = name.substr(0, idx);
-        VariantSymbol* parent = getSymbol(parent_name);
-        if (parent) {
-            symbols_to_search = &parent->getChildren();
-            name_to_search = name.substr(idx + 1, name.size());
-        }
-    }
-
-    for (std::unique_ptr<VariantSymbol> const& sym : *symbols_to_search) {
+    auto add_match = [&](VariantSymbol* sym, std::string const& symbol_name) {
         // Exact match is shown first
-        if (name_to_search == sym->getName()) {
-            matching_symbols.insert(matching_symbols.begin(), sym.get());
-        } else if (matching_symbols.size() < max_count
-                   && str::fuzzy_match(name_to_search.c_str(), sym->getName().c_str())) {
-            matching_symbols.push_back(sym.get());
+        if (name == symbol_name) {
+            matching_symbols.insert(matching_symbols.begin(), sym);
+        } else if (matching_symbols.size() < result_limit
+                   && str::fuzzy_match(name.c_str(), symbol_name.c_str())) {
+            matching_symbols.push_back(sym);
         }
+    };
+
+    std::function<void(VariantSymbol*, int)> find_matching_recursively = [&](VariantSymbol* sym, int depth) {
+        if (depth > recursion_depth) {
+            return;
+        }
+
+        add_match(sym, sym->getFullName());
+        if (depth == recursion_depth) {
+            return;
+        }
+        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
+            find_matching_recursively(child.get(), depth + 1);
+        }
+    };
+
+    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+        int root_depth = static_cast<int>(std::ranges::count(sym->getName(), '|'));
+        find_matching_recursively(sym.get(), root_depth);
     }
     return matching_symbols;
 }

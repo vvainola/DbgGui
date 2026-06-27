@@ -57,15 +57,14 @@ class DbgSymbols {
     /// PDB file but otherwise symbol searching does not work.
     void saveSymbolInfoToJson(std::string const& filename, bool omit_names) const;
 
-    /// @brief Fuzzy search for all matching symbol names in the global namespace. Exact match is
-    /// always the first element. Members of a symbol are searched if the parent name is an exact
-    /// match
+    /// @brief Fuzzy search for matching symbol names up to the requested depth. Exact match is
+    /// always the first element.
     /// @param search_string Full or partial part of symbol name
-    /// @param recursive Search also members of all symbols
+    /// @param recursion_depth Maximum nested symbol depth to search. Module-prefixed globals count as depth 1.
     /// @param max_count Maximum number of results
     /// @return Matching symbols
     std::vector<VariantSymbol*> findMatchingSymbols(std::string const& search_string,
-                                                    bool recursive = false,
+                                                    int recursion_depth = 1,
                                                     int max_count = 1000) const;
 
     /// @brief Search for symbol that has exactly the given name.

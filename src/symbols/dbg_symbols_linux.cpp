@@ -47,6 +47,16 @@
 #include <string>
 #include <vector>
 
+static void appendInheritedMembers(SymbolDescriptor& symbol,
+                                   SymbolDescriptor const& base_symbol,
+                                   uint32_t base_offset) {
+    for (auto const& base_child : base_symbol.children) {
+        auto inherited_child = std::make_shared<SymbolDescriptor>(*base_child);
+        inherited_child->offset_to_parent += base_offset;
+        symbol.children.push_back(std::move(inherited_child));
+    }
+}
+
 // ============================================================================
 // Address computation helpers
 // ============================================================================
@@ -474,13 +484,13 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_global_formref(base_type_attr, &base_type_offset, &err);
                             dwarf_dealloc(dbg, base_type_attr, DW_DLA_ATTR);
 
-                            auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
-                                .name = getTypeName(dbg, base_type_offset)
-                            });
-                            child_sym->offset_to_parent = getDataMemberLocationOffset(dbg, child_die);
+                            SymbolDescriptor base_symbol{
+                              .name = getTypeName(dbg, base_type_offset)
+                            };
+                            uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
 
-                            if (resolveType(dbg, base_type_offset, *child_sym, full_type_defs)) {
-                                symbol.children.push_back(std::move(child_sym));
+                            if (resolveType(dbg, base_type_offset, base_symbol, full_type_defs)) {
+                                appendInheritedMembers(symbol, base_symbol, base_offset);
                             }
                         }
                     }
