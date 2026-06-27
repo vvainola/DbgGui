@@ -43,8 +43,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
 
     if (parent && parent->getType() == Type::Array) {
-        std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
-        m_name = parent->getName() + idx;
+        m_name = std::format("{}[{}]", parent->getName(), parent->getChildren().size());
     } else {
         m_name = symbol->name;
     }
@@ -62,19 +61,20 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             m_arithmetic_symbol.emplace(symbol->scalar_type, m_address, symbol->size);
             m_type = Type::Enum;
             // Children of enum contain the enum values as strings.
+            m_enum_mappings.reserve(symbol->children.size());
             for (auto& child : symbol->children) {
-                m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->enum_value), child->name));
+                m_enum_mappings.emplace_back(static_cast<int32_t>(child->enum_value), child->name);
             }
             break;
         }
         case SymbolKind::Array: {
             m_type = Type::Array;
-            if (symbol->array_element_count > 0) {
-                m_children.reserve(symbol->array_element_count);
+            if (symbol->array_element_count > 0 && !symbol->children.empty()) {
                 SymbolDescriptor const* first_element = symbol->children[0].get();
                 MemoryAddress original_address = m_address;
                 // Skip very large arrays
                 if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
+                    m_children.reserve(symbol->array_element_count);
                     for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
                         m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
                         m_address += first_element->size;

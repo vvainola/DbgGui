@@ -1312,7 +1312,10 @@ void processGlobalSymbols(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol
     // shared symbol record stream. Walking it is much faster than asking
     // DbgHelp to enumerate and materialize every symbol.
     PDB::GlobalSymbolStream global_symbols = dbi_stream.CreateGlobalSymbolStream(raw_pdb);
-    for (PDB::HashRecord const& hash_record : global_symbols.GetRecords()) {
+    PDB::ArrayView<PDB::HashRecord> records = global_symbols.GetRecords();
+    symbol_descriptors.reserve(symbol_descriptors.size() + records.GetLength());
+    root_symbols.reserve(root_symbols.size() + records.GetLength());
+    for (PDB::HashRecord const& hash_record : records) {
         DbiRecord const* record = global_symbols.GetRecord(symbol_records, hash_record);
         switch (record->header.kind) {
             case DbiRecordKind::S_GDATA32:
