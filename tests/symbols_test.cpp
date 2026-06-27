@@ -293,10 +293,7 @@ TEST_CASE("Basic symbol access") {
     CHECK(double_derived_base_double_sym->read() == Approx(g_reset_double_derived.base_double));
     CHECK(inherited_derived_value_sym->read() == g_reset_double_derived.derived_value);
 
-    VariantSymbol* const_int_sym = symbols.getSymbol("g_const_int");
-    REQUIRE(const_int_sym != nullptr);
-    CHECK(const_int_sym->isConst());
-    CHECK(const_int_sym->read() == g_const_int);
+    CHECK(symbols.getSymbol("g_const_int") == nullptr);
 
     VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
     REQUIRE(mutable_member_sym != nullptr);
@@ -314,16 +311,10 @@ TEST_CASE("Basic symbol access") {
             return value.symbol == symbol;
         });
     };
-    CHECK_FALSE(snapshot_contains(const_int_sym));
     CHECK(snapshot_contains(mutable_member_sym));
     CHECK_FALSE(snapshot_contains(const_member_sym));
 
-#if WINDOWS
-    VariantSymbol* magic_enum_name_char_sym = symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]");
-    REQUIRE(magic_enum_name_char_sym != nullptr);
-    CHECK(magic_enum_name_char_sym->isConst());
-    CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
-#endif
+    CHECK(symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]") == nullptr);
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
