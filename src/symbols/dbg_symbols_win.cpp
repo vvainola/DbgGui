@@ -31,12 +31,14 @@
 #include "PDB_DBITypes.h"
 #include "PDB_GlobalSymbolStream.h"
 #include "PDB_ImageSectionStream.h"
+#include "PDB_InfoStream.h"
 #include "PDB_ModuleInfoStream.h"
 #include "PDB_ModuleSymbolStream.h"
 #include "PDB_PublicSymbolStream.h"
 #include "PDB_RawFile.h"
 #include "PDB_TPIStream.h"
 #include "PDB_TPITypes.h"
+#include "PDB_Types.h"
 
 #include <Windows.h>
 #include <Psapi.h>
@@ -158,7 +160,7 @@ class MappedFile {
 // rebuild the full child tree.
 class TypeTable {
   public:
-    explicit TypeTable(PDB::TPIStream const& tpi_stream)
+    explicit TypeTable(PDB::RawFile const& raw_pdb, PDB::TPIStream const& tpi_stream)
         : m_type_index_begin(tpi_stream.GetFirstTypeIndex()),
           m_type_index_end(tpi_stream.GetLastTypeIndex()) {
         // TPI records live in an MSF stream that may be split across PDB
@@ -173,6 +175,8 @@ class TypeTable {
             m_records[type_index] = m_stream.GetDataAtOffset<TpiRecord const>(offset);
             ++type_index;
         });
+
+        loadHashAdjusters(raw_pdb, tpi_stream);
     }
 
     uint32_t firstTypeIndex() const {
@@ -202,9 +206,10 @@ class TypeTable {
         m_resolved_types.try_emplace(type_index, symbol.clone());
     }
 
-    TpiRecord const* findFullDefinition(uint32_t forward_type_index, TpiRecord const* forward_record) const;
+    TpiRecord const* findFullDefinition(TpiRecord const* forward_record) const;
 
   private:
+    void loadHashAdjusters(PDB::RawFile const& raw_pdb, PDB::TPIStream const& tpi_stream);
     void buildFullDefinitions() const;
 
     uint32_t m_type_index_begin = 0;
@@ -212,6 +217,7 @@ class TypeTable {
     PDB::CoalescedMSFStream m_stream;
     std::vector<TpiRecord const*> m_records;
     mutable std::unordered_map<uint32_t, std::unique_ptr<SymbolDescriptor>> m_resolved_types;
+    std::unordered_map<TypeDefinitionKey, uint32_t, TypeDefinitionKeyHash> m_preferred_full_definitions;
     mutable std::unordered_map<TypeDefinitionKey, std::vector<TypeDefinitionRecord>, TypeDefinitionKeyHash> m_full_definitions;
     mutable bool m_full_definitions_built = false;
 };
@@ -356,6 +362,7 @@ size_t codeViewStringSize(char const* data, bool string_table_format) {
 }
 
 constexpr uint32_t TypePropertyForwardReference = 1u << 7;
+constexpr uint32_t TypePropertyScoped = 1u << 8;
 constexpr uint32_t TypePropertyHasUniqueName = 1u << 9;
 
 std::string recordName(TpiRecord const* record) {
@@ -431,15 +438,167 @@ bool isForwardDeclaration(TpiRecord const* record) {
     }
 }
 
-// Key for the full-definition lookup. The decorated unique name (when present)
-// distinguishes unrelated types that share a plain name; otherwise fall back to
-// the record kind plus plain name.
+bool recordIsScoped(TpiRecord const* record) {
+    if (record == nullptr) {
+        return false;
+    }
+
+    switch (record->header.kind) {
+        case TpiRecordKind::LF_CLASS:
+        case TpiRecordKind::LF_STRUCTURE:
+            return record->data.LF_CLASS.property.scoped != 0;
+        case TpiRecordKind::LF_CLASS2:
+        case TpiRecordKind::LF_STRUCTURE2:
+            return (record->data.LF_CLASS2.property & TypePropertyScoped) != 0;
+        case TpiRecordKind::LF_UNION:
+            return record->data.LF_UNION.property.scoped != 0;
+        default:
+            return false;
+    }
+}
+
+// Microsoft's TPI lookup hashes global UDTs by their regular name and scoped
+// UDTs by their decorated unique name. The hash-adjuster stream uses the same
+// name-map strings to force a specific type index to the head of that chain.
 TypeDefinitionKey fullDefinitionKey(TpiRecord const* record) {
     std::string const unique_name = recordUniqueName(record);
-    if (!unique_name.empty()) {
+    if (recordIsScoped(record) && !unique_name.empty()) {
         return TypeDefinitionKey{.name = unique_name};
     }
     return TypeDefinitionKey{.kind = record->header.kind, .name = recordName(record)};
+}
+
+bool canReadStreamRange(size_t offset, size_t size, size_t stream_size) {
+    return offset <= stream_size && size <= stream_size - offset;
+}
+
+uint32_t countSetBits(uint32_t value) {
+    uint32_t count = 0;
+    while (value != 0) {
+        value &= value - 1;
+        ++count;
+    }
+    return count;
+}
+
+std::unordered_map<uint32_t, uint32_t> readSerializedU32HashTable(PDB::CoalescedMSFStream const& stream,
+                                                                  size_t offset,
+                                                                  size_t length) {
+    std::unordered_map<uint32_t, uint32_t> entries;
+    size_t const end = offset + length;
+    if (end < offset || !canReadStreamRange(offset, length, stream.GetSize())
+        || length < sizeof(PDB::SerializedHashTable::Header)) {
+        return entries;
+    }
+
+    PDB::SerializedHashTable::Header const* header = stream.GetDataAtOffset<PDB::SerializedHashTable::Header>(offset);
+    size_t cursor = offset + sizeof(PDB::SerializedHashTable::Header);
+    if (!canReadStreamRange(cursor, sizeof(uint32_t), end)) {
+        return entries;
+    }
+
+    uint32_t const present_word_count = *stream.GetDataAtOffset<uint32_t>(cursor);
+    cursor += sizeof(uint32_t);
+    size_t const present_words_size = static_cast<size_t>(present_word_count) * sizeof(uint32_t);
+    if (!canReadStreamRange(cursor, present_words_size, end)) {
+        return entries;
+    }
+
+    uint32_t const* present_words = stream.GetDataAtOffset<uint32_t>(cursor);
+    cursor += present_words_size;
+    if (!canReadStreamRange(cursor, sizeof(uint32_t), end)) {
+        return entries;
+    }
+
+    uint32_t const deleted_word_count = *stream.GetDataAtOffset<uint32_t>(cursor);
+    cursor += sizeof(uint32_t);
+    size_t const deleted_words_size = static_cast<size_t>(deleted_word_count) * sizeof(uint32_t);
+    if (!canReadStreamRange(cursor, deleted_words_size, end)) {
+        return entries;
+    }
+    cursor += deleted_words_size;
+
+    uint32_t entry_count = 0;
+    for (uint32_t i = 0; i < present_word_count; ++i) {
+        entry_count += countSetBits(present_words[i]);
+    }
+
+    if (entry_count > header->size || !canReadStreamRange(cursor, static_cast<size_t>(entry_count) * sizeof(uint32_t) * 2u, end)) {
+        return entries;
+    }
+
+    entries.reserve(entry_count);
+    for (uint32_t i = 0; i < entry_count; ++i) {
+        uint32_t const key = *stream.GetDataAtOffset<uint32_t>(cursor);
+        cursor += sizeof(uint32_t);
+        uint32_t const value = *stream.GetDataAtOffset<uint32_t>(cursor);
+        cursor += sizeof(uint32_t);
+        entries[key] = value;
+    }
+    return entries;
+}
+
+std::optional<PDB::NamesStream> createPdbNamesStream(PDB::RawFile const& raw_pdb) {
+    PDB::InfoStream info_stream(raw_pdb);
+    if (info_stream.GetHeader() == nullptr) {
+        return std::nullopt;
+    }
+    if (!info_stream.HasNamesStream()) {
+        return std::nullopt;
+    }
+
+    PDB::NamesStream names_stream = info_stream.CreateNamesStream(raw_pdb);
+    if (names_stream.GetHeader() == nullptr) {
+        return std::nullopt;
+    }
+    return names_stream;
+}
+
+std::optional<std::string> readPdbNameMapName(PDB::NamesStream const& names_stream, uint32_t name_index) {
+    PDB::NamesHeader const* header = names_stream.GetHeader();
+    if (header == nullptr || name_index >= header->size) {
+        return std::nullopt;
+    }
+
+    char const* name = names_stream.GetFilename(name_index);
+    char const* string_table_end = names_stream.GetFilename(header->size);
+    char const* name_end = std::find(name, string_table_end, '\0');
+    if (name_end == string_table_end) {
+        return std::nullopt;
+    }
+    return std::string(name, name_end);
+}
+
+void TypeTable::loadHashAdjusters(PDB::RawFile const& raw_pdb, PDB::TPIStream const& tpi_stream) {
+    PDB::TPI::StreamHeader const& header = tpi_stream.GetHeader();
+    if (header.hashStreamIndex == PDB::NilStreamIndex
+        || header.hashStreamIndex >= raw_pdb.GetStreamCount()
+        || header.hashAdjBufferOffset < 0
+        || header.hashAdjBufferLength == 0) {
+        return;
+    }
+
+    PDB::CoalescedMSFStream hash_stream = raw_pdb.CreateMSFStream<PDB::CoalescedMSFStream>(header.hashStreamIndex);
+    std::unordered_map<uint32_t, uint32_t> const hash_adjusters =
+      readSerializedU32HashTable(hash_stream, static_cast<size_t>(header.hashAdjBufferOffset), header.hashAdjBufferLength);
+
+    std::optional<PDB::NamesStream> names_stream = createPdbNamesStream(raw_pdb);
+    if (!names_stream) {
+        return;
+    }
+
+    for (auto const& [name_index, type_index] : hash_adjusters) {
+        TpiRecord const* record = getTypeRecord(type_index);
+        if (record == nullptr || isForwardDeclaration(record) || recordName(record).empty()) {
+            continue;
+        }
+
+        std::optional<std::string> adjusted_name = readPdbNameMapName(*names_stream, name_index);
+        TypeDefinitionKey const key = fullDefinitionKey(record);
+        if (adjusted_name && *adjusted_name == key.name) {
+            m_preferred_full_definitions[key] = type_index;
+        }
+    }
 }
 
 void TypeTable::buildFullDefinitions() const {
@@ -461,33 +620,33 @@ void TypeTable::buildFullDefinitions() const {
     m_full_definitions_built = true;
 }
 
-TpiRecord const* TypeTable::findFullDefinition(uint32_t forward_type_index, TpiRecord const* forward_record) const {
+TpiRecord const* TypeTable::findFullDefinition(TpiRecord const* forward_record) const {
     std::string const name = recordName(forward_record);
     if (name.empty()) {
         return forward_record;
     }
 
+    TypeDefinitionKey const key = fullDefinitionKey(forward_record);
     buildFullDefinitions();
 
-    auto it = m_full_definitions.find(fullDefinitionKey(forward_record));
+    auto it = m_full_definitions.find(key);
     if (it == m_full_definitions.end() || it->second.empty()) {
         return forward_record;
     }
 
     std::vector<TypeDefinitionRecord> const& candidates = it->second;
-    // Incremental PDBs can retain stale full definitions with the same decorated
-    // name. The forward reference and its matching full definition are emitted
-    // into the same TPI neighborhood, while stale definitions can be larger or
-    // smaller, so size is not a reliable tie-breaker.
-    auto after_forward = std::find_if(candidates.begin(),
-                                      candidates.end(),
-                                      [forward_type_index](TypeDefinitionRecord const& candidate) {
-                                          return candidate.type_index > forward_type_index;
-                                      });
-    if (after_forward != candidates.end()) {
-        return after_forward->record;
+    auto preferred = m_preferred_full_definitions.find(key);
+    if (preferred != m_preferred_full_definitions.end()) {
+        for (TypeDefinitionRecord const& candidate : candidates) {
+            if (candidate.type_index == preferred->second) {
+                return candidate.record;
+            }
+        }
     }
 
+    // This matches microsoft-pdb's TPI hash chain behavior: each type index is
+    // prepended while walking TPI records, so the newest matching UDT is the
+    // default chain head. Hash adjusters above override the head when needed.
     return candidates.back().record;
 }
 
@@ -804,17 +963,17 @@ bool resolveType(TypeTable const& type_table,
         return true;
     }
 
+    TpiRecord const* record = type_table.getTypeRecord(type_index);
+    if (record == nullptr) {
+        return false;
+    }
+
     // Type records are shared by every symbol that uses the type. Reuse the
     // already translated descriptor payload, preserving the caller-provided name,
     // address, and member offset.
     if (SymbolDescriptor const* cached = type_table.cachedType(type_index)) {
         copyTypePayload(symbol, *cached);
         return true;
-    }
-
-    TpiRecord const* record = type_table.getTypeRecord(type_index);
-    if (record == nullptr) {
-        return false;
     }
 
     resolving.insert(type_index);
@@ -858,7 +1017,7 @@ bool resolveType(TypeTable const& type_table,
             // Data symbols often reference a forward declaration record. Swap it
             // for the full definition before reading size and member layout.
             bool const forward_declaration = isForwardDeclaration(record);
-            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(type_index, record) : record;
+            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(record) : record;
             symbol.kind = SymbolKind::Object;
 
             uint32_t field_type = 0;
@@ -1322,7 +1481,7 @@ void processModulePdb(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_des
     PDB::ImageSectionStream image_sections = dbi_stream.CreateImageSectionStream(raw_pdb);
     PDB::CoalescedMSFStream symbol_records = dbi_stream.CreateSymbolRecordStream(raw_pdb);
     PDB::TPIStream tpi_stream = PDB::CreateTPIStream(raw_pdb);
-    TypeTable type_table(tpi_stream);
+    TypeTable type_table(raw_pdb, tpi_stream);
     SeenSymbols seen_symbols;
 
     processGlobalSymbols(symbol_descriptors, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols, symbol_records);

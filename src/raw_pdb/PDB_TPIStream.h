@@ -28,6 +28,11 @@ namespace PDB
 			return m_stream;
 		}
 
+		PDB_NO_DISCARD inline const TPI::StreamHeader& GetHeader(void) const PDB_NO_EXCEPT
+		{
+			return m_header;
+		}
+
 		// Returns the index of the first type, which is not necessarily zero.
 		PDB_NO_DISCARD inline uint32_t GetFirstTypeIndex(void) const PDB_NO_EXCEPT
 		{
