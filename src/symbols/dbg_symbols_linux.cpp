@@ -284,10 +284,16 @@ static bool resolveType(Dwarf_Debug dbg,
     Dwarf_Unsigned type_size = 0;
     dwarf_bytesize(type_die, &type_size, &err);
 
-    // If this is a forward-declared class/struct/union, find the full definition
-    // by name in another CU and resolve against that instead.
-    if ((tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type)
-        && type_size == 0) {
+    // If this is a forward-declared class/struct/union/enum, find the full
+    // definition by name in another CU and resolve against that instead.
+    // Note: type_size is not checked here because a forward-declared enum with
+    // an explicit underlying type (e.g. `enum class E : int;`) carries
+    // DW_AT_byte_size from the underlying type even though it has no
+    // enumerator children. DW_AT_declaration is the reliable indicator.
+    if (tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type) {
         Dwarf_Bool is_decl = 0;
         Dwarf_Attribute decl_attr = nullptr;
         if (dwarf_attr(type_die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {
@@ -389,7 +395,7 @@ static bool resolveType(Dwarf_Debug dbg,
                     // Build: array(3, array(3, int32_t))
                     for (int i = (int)dimensions.size() - 1; i >= 1; --i) {
                         auto array_elem = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
-                            .kind = SymbolKind::Array
+                          .kind = SymbolKind::Array,
                         });
                         array_elem->array_element_count = dimensions[i];
                         array_elem->size = innermost->size * dimensions[i];
@@ -432,8 +438,8 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_global_formref(mem_type_attr, &member_type_offset, &err);
                             dwarf_dealloc(dbg, mem_type_attr, DW_DLA_ATTR);
 
-                        auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
-                                .name = member_name ? member_name : ""
+                            auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
+                              .name = member_name ? member_name : "",
                             });
                             child_sym->offset_to_parent = offset;
 
@@ -485,7 +491,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_dealloc(dbg, base_type_attr, DW_DLA_ATTR);
 
                             SymbolDescriptor base_symbol{
-                              .name = getTypeName(dbg, base_type_offset)
+                              .name = getTypeName(dbg, base_type_offset),
                             };
                             uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
 
@@ -546,8 +552,8 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_dealloc(dbg, const_val_attr, DW_DLA_ATTR);
                         }
                         auto enum_child = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
-                            .name = enum_name ? enum_name : "",
-                            .kind = SymbolKind::EnumValue
+                          .name = enum_name ? enum_name : "",
+                          .kind = SymbolKind::EnumValue,
                         });
                         enum_child->enum_value = enum_const_value;
                         symbol.children.push_back(std::move(enum_child));
@@ -719,12 +725,12 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 }
 
                 if (has_type) {
-                    std::string sym_name = effective_name_is_fully_qualified
-                                             ? (module_prefix + effective_name)
-                                             : (module_prefix + namespace_prefix + effective_name);
+                    std::string sym_name = effective_name_is_fully_qualified ?
+                                             (module_prefix + effective_name) :
+                                             (module_prefix + namespace_prefix + effective_name);
                     auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
-                        .name = sym_name,
-                        .address = addr
+                      .name = sym_name,
+                      .address = addr,
                     });
                     if (resolveType(dbg, type_offset, *symbol, full_type_defs)) {
                         m_symbol_descriptors.push_back(std::move(symbol));
@@ -828,10 +834,10 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
     }
 }
 
-// Pre-pass: walk a DIE tree and index every full class/struct/union definition
-// (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified name so
-// resolveType can follow a forward declaration in one CU to the full definition
-// in another.
+// Pre-pass: walk a DIE tree and index every full class/struct/union/enum
+// definition (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified
+// name so resolveType can follow a forward declaration in one CU to the full
+// definition in another.
 static void collectFullTypeDefs(Dwarf_Debug dbg,
                                 Dwarf_Die die,
                                 DbgSymbols::FullTypeDefs& full_type_defs) {
@@ -839,7 +845,10 @@ static void collectFullTypeDefs(Dwarf_Debug dbg,
     Dwarf_Half tag = 0;
     dwarf_tag(die, &tag, &err);
 
-    if (tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type) {
+    if (tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type) {
         Dwarf_Bool is_decl = 0;
         Dwarf_Attribute decl_attr = nullptr;
         if (dwarf_attr(die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {

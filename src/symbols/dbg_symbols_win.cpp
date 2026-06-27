@@ -78,7 +78,6 @@ using TypeIndexKind = PDB::CodeView::TPI::TypeIndexKind;
 // Forward declarations and full definitions are separate TPI records. This key
 // lets TypeTable pair a forward reference with the record that has the layout.
 struct TypeDefinitionKey {
-    TpiRecordKind kind = {};
     std::string name;
 
     bool operator==(TypeDefinitionKey const&) const = default;
@@ -86,10 +85,7 @@ struct TypeDefinitionKey {
 
 struct TypeDefinitionKeyHash {
     size_t operator()(TypeDefinitionKey const& key) const {
-        size_t seed = std::hash<uint16_t>{}(static_cast<uint16_t>(key.kind));
-        size_t const value = std::hash<std::string>{}(key.name);
-        seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-        return seed;
+        return std::hash<std::string>{}(key.name);
     }
 };
 
@@ -410,6 +406,10 @@ std::string recordUniqueName(TpiRecord const* record) {
             name = getLeafName(record->data.LF_UNION.data);
             has_unique = record->data.LF_UNION.property.hasuniquename != 0;
             break;
+        case TpiRecordKind::LF_ENUM:
+            name = record->data.LF_ENUM.name;
+            has_unique = record->data.LF_ENUM.property.hasuniquename != 0;
+            break;
         default:
             return "";
     }
@@ -433,6 +433,8 @@ bool isForwardDeclaration(TpiRecord const* record) {
             return (record->data.LF_CLASS2.property & TypePropertyForwardReference) != 0;
         case TpiRecordKind::LF_UNION:
             return record->data.LF_UNION.property.fwdref != 0;
+        case TpiRecordKind::LF_ENUM:
+            return record->data.LF_ENUM.property.fwdref != 0;
         default:
             return false;
     }
@@ -452,6 +454,8 @@ bool recordIsScoped(TpiRecord const* record) {
             return (record->data.LF_CLASS2.property & TypePropertyScoped) != 0;
         case TpiRecordKind::LF_UNION:
             return record->data.LF_UNION.property.scoped != 0;
+        case TpiRecordKind::LF_ENUM:
+            return record->data.LF_ENUM.property.scoped != 0;
         default:
             return false;
     }
@@ -465,7 +469,7 @@ TypeDefinitionKey fullDefinitionKey(TpiRecord const* record) {
     if (recordIsScoped(record) && !unique_name.empty()) {
         return TypeDefinitionKey{.name = unique_name};
     }
-    return TypeDefinitionKey{.kind = record->header.kind, .name = recordName(record)};
+    return TypeDefinitionKey{.name = recordName(record)};
 }
 
 bool canReadStreamRange(size_t offset, size_t size, size_t stream_size) {
@@ -1036,16 +1040,18 @@ bool resolveType(TypeTable const& type_table,
             break;
         }
         case TpiRecordKind::LF_ENUM: {
+            bool const forward_declaration = isForwardDeclaration(record);
+            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(record) : record;
             symbol.kind = SymbolKind::Enum;
             SymbolDescriptor underlying;
-            if (resolveType(type_table, record->data.LF_ENUM.utype, underlying, resolving)) {
+            if (resolveType(type_table, full_record->data.LF_ENUM.utype, underlying, resolving)) {
                 symbol.size = underlying.size;
                 symbol.scalar_type = underlying.scalar_type == ScalarType::None ? ScalarType::SignedInteger : underlying.scalar_type;
             } else {
                 symbol.size = 4;
                 symbol.scalar_type = ScalarType::SignedInteger;
             }
-            addEnumerators(type_table, type_table.getTypeRecord(record->data.LF_ENUM.field), symbol);
+            addEnumerators(type_table, type_table.getTypeRecord(full_record->data.LF_ENUM.field), symbol);
             break;
         }
         default:

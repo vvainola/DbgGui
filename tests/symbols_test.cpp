@@ -146,6 +146,12 @@ static int s_array[3] = {10, 20, 30};
 // member.
 FwdDeclOuter g_fwd_outer;
 
+// Defined in this TU where CrossTuEnum is only forward-declared (the complete
+// definition is in fwd_decl_types.cpp). Initialized via getCrossTuEnumValue()
+// so the complete enum definition is emitted into the PDB. The PDB will emit
+// an LF_ENUM forward reference for the global's type.
+CrossTuEnum g_cross_tu_enum = getCrossTuEnumValue();
+
 // A function with a function-local static — same pattern Catch2 uses inside
 // CATCH_REGISTER_ENUM. The static must NOT be exposed by DbgSymbols, because
 // its lazy-init guard (a `_ZGV*` symbol) is filtered out by name and so a
@@ -181,6 +187,14 @@ TEST_CASE("Basic symbol access") {
 
     g_enum = EnumValue_1n;
     CHECK(g_enum_sym->valueAsStr() == "EnumValue_1n");
+
+    // g_cross_tu_enum is defined in this TU where CrossTuEnum is only
+    // forward-declared. The PDB type index for the global points to an LF_ENUM
+    // forward reference; resolving the enumerator name requires following it
+    // to the full definition in fwd_decl_types.cpp's TPI records.
+    VariantSymbol* cross_tu_enum_sym = symbols.getSymbol("g_cross_tu_enum");
+    REQUIRE(cross_tu_enum_sym != nullptr);
+    CHECK(cross_tu_enum_sym->valueAsStr() == "CrossTuB");
 
     VariantSymbol* g_fn_ptr_sym = symbols.getSymbol("g_fn_ptr");
     g_fn_ptr = &test_fn1;

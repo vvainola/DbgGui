@@ -18,3 +18,16 @@ struct FwdDeclOuter {
     FwdDeclInner inner;
     int          outer_value;
 };
+
+// Cross-TU forward-declared enum. Only the forward declaration appears in
+// this header; the complete definition lives in fwd_decl_types.cpp. The
+// global below is defined in symbols_test.cpp, the TU that sees only the
+// forward declaration. This forces the PDB to emit an LF_ENUM forward
+// reference for the global's type index, which the symbol walker must
+// resolve to the full definition to read the enumerator field list.
+enum class CrossTuEnum : int;
+
+// Returns a CrossTuEnum value. Implemented in fwd_decl_types.cpp where the
+// enum is complete; the body references an enumerator, forcing MSVC to emit
+// the full definition alongside the forward reference in the merged PDB.
+CrossTuEnum getCrossTuEnumValue();
