@@ -40,6 +40,7 @@ class VariantSymbol {
     };
 
     std::string const& getName() const { return m_name; }
+    VariantSymbol* getParent() const { return m_parent; }
     std::string getFullName() {
         if (!m_full_name.empty()) {
             return m_full_name;

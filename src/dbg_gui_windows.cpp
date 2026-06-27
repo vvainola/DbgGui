@@ -99,7 +99,10 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
     // input ID, but its window ID is generated from the parent/window name.
     ImGuiWindow* input_window = findChildWindowByChildId(input_id);
     ImGuiInputTextState* input_state = ImGui::GetInputTextState(input_id);
-    float const scroll_y = input_window ? input_window->Scroll.y : input_state ? input_state->Scroll.y : 0.0f;
+    float const scroll_y = input_window ?
+                             input_window->Scroll.y :
+                           input_state ? input_state->Scroll.y :
+                                         0.0f;
     drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
     ImGui::PopStyleVar();
 }
@@ -1165,9 +1168,29 @@ void DbgGui::showSymbolsWindow() {
                                        | ImGuiTableFlags_Resizable
                                        | ImGuiTableFlags_NoSavedSettings;
     if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
+        bool const filter_recursive_search_tree = !symbols_to_search.empty() && m_symbol_search_depth > 0;
+        std::set<VariantSymbol*> visible_search_symbols;
+        std::set<VariantSymbol*> auto_open_symbols;
+        std::set<VariantSymbol*> search_root_set;
+        std::vector<VariantSymbol*> search_roots;
         for (VariantSymbol* symbol : m_symbol_search_results) {
+            VariantSymbol* root = symbol;
+            visible_search_symbols.insert(symbol);
+            for (VariantSymbol* parent = symbol->getParent(); parent != nullptr; parent = parent->getParent()) {
+                root = parent;
+                visible_search_symbols.insert(parent);
+                auto_open_symbols.insert(parent);
+            }
+            if (search_root_set.insert(root).second) {
+                search_roots.push_back(root);
+            }
+        }
+
+        for (VariantSymbol* symbol : search_roots) {
             // Recursive lambda for displaying children in the table
-            std::function<void(VariantSymbol*, std::set<VariantSymbol*>&)> show_children = [&](VariantSymbol* sym, std::set<VariantSymbol*>& visiting) {
+            std::function<void(VariantSymbol*, std::set<VariantSymbol*>&, bool)> show_children = [&](VariantSymbol* sym,
+                                                                                                     std::set<VariantSymbol*>& visiting,
+                                                                                                     bool filter_to_search_path) {
                 // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
                 if (sym == nullptr) {
                     assert(false);
@@ -1175,6 +1198,9 @@ void DbgGui::showSymbolsWindow() {
                 }
                 // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
                 if (visiting.contains(sym)) {
+                    return;
+                }
+                if (filter_to_search_path && filter_recursive_search_tree && !visible_search_symbols.contains(sym)) {
                     return;
                 }
 
@@ -1187,14 +1213,15 @@ void DbgGui::showSymbolsWindow() {
                 visiting.insert(sym);
                 bool custom_symbol_scale = getSymbolScale(*sym) != 1;
                 ImGui::PushStyleColor(ImGuiCol_Text,
-                                      hidden ? COLOR_GRAY :
+                                      hidden              ? COLOR_GRAY :
                                       custom_symbol_scale ? COLOR_LIGHT_BLUE :
-                                      ImGui::GetStyle().Colors[ImGuiCol_Text]);
+                                                            ImGui::GetStyle().Colors[ImGuiCol_Text]);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                // Full name is needed when deeper search can return same-named symbols from multiple scopes.
-                std::string symbol_name = m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
+                // Full name is needed for top-level recursive results from multiple scopes.
+                std::string symbol_name = sym->getParent() == nullptr && m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
+                bool const auto_open = auto_open_symbols.contains(sym);
                 if (sym->getType() == VariantSymbol::Type::Pointer) {
                     // Pointer
                     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
@@ -1203,10 +1230,10 @@ void DbgGui::showSymbolsWindow() {
                         flags |= ImGuiTreeNodeFlags_Leaf;
                         sym->opened_manually = false;
                     } else {
-                        ImGui::SetNextItemOpen(sym->opened_manually, ImGuiCond_Always);
+                        ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
                     }
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    if (pointed_symbol) {
+                    if (pointed_symbol && !auto_open) {
                         sym->opened_manually = open;
                     }
                     addSymbolContextMenu(*sym);
@@ -1229,15 +1256,19 @@ void DbgGui::showSymbolsWindow() {
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
                         if (pointed_symbol) {
-                            show_children(pointed_symbol, visiting);
+                            show_children(pointed_symbol,
+                                          visiting,
+                                          filter_to_search_path && auto_open);
                         }
                         ImGui::TreePop();
                     }
                 } else if (sym->getChildren().size() > 0) {
                     // Object/array
-                    ImGui::SetNextItemOpen(sym->opened_manually, ImGuiCond_Always);
+                    ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
                     bool open = ImGui::TreeNodeEx(symbol_name.c_str());
-                    sym->opened_manually = open;
+                    if (!auto_open) {
+                        sym->opened_manually = open;
+                    }
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         static char symbol_name_buffer[MAX_NAME_LENGTH];
                         strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
@@ -1252,7 +1283,9 @@ void DbgGui::showSymbolsWindow() {
                     ImGui::Text(sym->valueAsStr().c_str());
                     if (open) {
                         for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
-                            show_children(child.get(), visiting);
+                            show_children(child.get(),
+                                          visiting,
+                                          filter_to_search_path && auto_open);
                         }
                         ImGui::TreePop();
                     }
@@ -1312,7 +1345,7 @@ void DbgGui::showSymbolsWindow() {
                 visiting.erase(sym);
             };
             std::set<VariantSymbol*> visiting;
-            show_children(symbol, visiting);
+            show_children(symbol, visiting, true);
         }
         ImGui::EndTable();
     }
