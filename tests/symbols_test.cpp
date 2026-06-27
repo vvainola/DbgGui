@@ -507,9 +507,12 @@ TEST_CASE("Read symbols from shared library") {
 
         CHECK(contains_symbol(symbols.findMatchingSymbols("g_int", 0), "g_int"));
         CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("base_value", 0), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("g_reset_derived.base_value", 0), "g_reset_derived.base_value"));
         CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_derived.base_value"));
         CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_double_derived.base_value"));
         CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("lib_int32", 0), prefix + "lib_int32"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols(prefix + "lib_motor.status.flags.enabled", 0),
+                              prefix + "lib_motor.status.flags.enabled"));
         CHECK(contains_symbol(symbols.findMatchingSymbols("lib_int32", 1), prefix + "lib_int32"));
     }
 

@@ -142,8 +142,15 @@ std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& n
     std::vector<VariantSymbol*> matching_symbols;
     recursion_depth = std::max(0, recursion_depth);
     size_t result_limit = max_count < 0 ? 0 : static_cast<size_t>(max_count);
+    VariantSymbol* exact_match = getSymbol(name);
+    if (exact_match != nullptr) {
+        matching_symbols.push_back(exact_match);
+    }
 
     auto add_match = [&](VariantSymbol* sym, std::string const& symbol_name) {
+        if (sym == exact_match) {
+            return;
+        }
         // Exact match is shown first
         if (name == symbol_name) {
             matching_symbols.insert(matching_symbols.begin(), sym);
