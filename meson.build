@@ -54,6 +54,8 @@ deps = [
 
 if not WINDOWS
     deps += [dependency('libdwarf'), dependency('gtk+-3.0')]
+else
+    deps += [cpp.find_library('dbghelp')]
 endif
 
 imgui_src = files([
@@ -127,6 +129,7 @@ if WINDOWS
         'src/raw_pdb/PDB_TPIStream.cpp',
         'src/raw_pdb/PDB_Types.cpp',
         'src/raw_pdb/PDB.cpp',
+        'src/symbols/dbghelp_helpers.cpp',
         'src/symbols/dbg_symbols_win.cpp',
     ]
 else

@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "dbg_symbols.hpp"
+#include "dbghelp_helpers.h"
 #include "symbol_helpers.h"
 #include "variant_symbol.h"
 
@@ -54,6 +55,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+// Uncomment this while changing RawPDB type resolution to compare every final
+// symbol descriptor tree against the tree DbgHelp produces for the same symbol.
+// This is intentionally slow and logs mismatches to stderr for verification.
+// #define DBGGUI_VERIFY_RAWPDB_WITH_DBGHELP 1
 
 namespace {
 
@@ -184,6 +190,9 @@ class TypeTable {
         if (it == m_resolved_types.end()) {
             return nullptr;
         }
+        if (m_ambiguous_resolved_types.contains(type_index)) {
+            m_had_ambiguous_forward_ref = true;
+        }
         return it->second.get();
     }
 
@@ -192,6 +201,19 @@ class TypeTable {
     }
 
     TpiRecord const* findFullDefinition(TpiRecord const* forward_record) const;
+    bool isAmbiguousForwardDefinition(TpiRecord const* forward_record) const;
+    void clearAmbiguityFlag() const {
+        m_had_ambiguous_forward_ref = false;
+    }
+    bool hadAmbiguousForwardReference() const {
+        return m_had_ambiguous_forward_ref;
+    }
+    void markAmbiguousForwardReference() const {
+        m_had_ambiguous_forward_ref = true;
+    }
+    void markCachedTypeAmbiguous(uint32_t type_index) const {
+        m_ambiguous_resolved_types.insert(type_index);
+    }
 
   private:
     void buildFullDefinitions() const;
@@ -201,7 +223,10 @@ class TypeTable {
     PDB::CoalescedMSFStream m_stream;
     std::vector<TpiRecord const*> m_records;
     mutable std::unordered_map<uint32_t, std::unique_ptr<SymbolDescriptor>> m_resolved_types;
+    mutable std::unordered_set<uint32_t> m_ambiguous_resolved_types;
     mutable std::unordered_map<TypeDefinitionKey, TpiRecord const*, TypeDefinitionKeyHash> m_full_definitions;
+    mutable std::unordered_map<TypeDefinitionKey, size_t, TypeDefinitionKeyHash> m_full_definition_counts;
+    mutable bool m_had_ambiguous_forward_ref = false;
     mutable bool m_full_definitions_built = false;
 };
 
@@ -215,6 +240,13 @@ struct ModuleContext {
     std::filesystem::path path;
     std::string symbol_prefix;
 };
+
+DbgHelpModuleContext dbgHelpModuleContext(ModuleContext const& module) {
+    return DbgHelpModuleContext{
+      .base_address = module.base_address,
+      .path = module.path,
+    };
+}
 
 // The same data record can be reachable through the global hash stream and a
 // module symbol stream. Deduplicate after address translation, but keep the
@@ -361,25 +393,6 @@ std::string recordName(TpiRecord const* record) {
     }
 }
 
-uint32_t recordSize(TpiRecord const* record) {
-    if (record == nullptr) {
-        return 0;
-    }
-
-    switch (record->header.kind) {
-        case TpiRecordKind::LF_CLASS:
-        case TpiRecordKind::LF_STRUCTURE:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS.data));
-        case TpiRecordKind::LF_CLASS2:
-        case TpiRecordKind::LF_STRUCTURE2:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS2.data));
-        case TpiRecordKind::LF_UNION:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_UNION.data));
-        default:
-            return 0;
-    }
-}
-
 // Decorated unique name that follows the regular name when property.hasuniquename
 // is set. MSVC emits it to distinguish otherwise identically-named types.
 std::string recordUniqueName(TpiRecord const* record) {
@@ -453,13 +466,8 @@ void TypeTable::buildFullDefinitions() const {
             continue;
         }
         TypeDefinitionKey const key = fullDefinitionKey(record);
-        auto it = m_full_definitions.find(key);
-        // Plain-name keys can collide across unrelated types or stale incremental
-        // records. Prefer the largest layout so forward refs do not resolve to a
-        // truncated definition that produces wrong array strides/member offsets.
-        if (it == m_full_definitions.end() || recordSize(record) >= recordSize(it->second)) {
-            m_full_definitions[key] = record;
-        }
+        m_full_definition_counts[key]++;
+        m_full_definitions[key] = record;
     }
     m_full_definitions_built = true;
 }
@@ -470,16 +478,23 @@ TpiRecord const* TypeTable::findFullDefinition(TpiRecord const* forward_record) 
         return forward_record;
     }
 
-    // The TPI stream can hold more than one full definition for the same type
-    // (stale records left by type merging across translation units or
-    // incremental builds). Picking the first by-name match can return a stale,
-    // smaller definition and silently drop the trailing members. Build a lookup
-    // once that keeps the last matching definition, which corresponds to the
-    // type used by the final linked image.
+    // Ambiguous duplicate or stale definitions are detected before this lookup
+    // and cause the root symbol to be rebuilt through DbgHelp. The map is only
+    // authoritative for keys that resolve to a single full definition.
     buildFullDefinitions();
 
     auto it = m_full_definitions.find(fullDefinitionKey(forward_record));
     return it != m_full_definitions.end() ? it->second : forward_record;
+}
+
+bool TypeTable::isAmbiguousForwardDefinition(TpiRecord const* forward_record) const {
+    if (forward_record == nullptr) {
+        return false;
+    }
+
+    buildFullDefinitions();
+    auto it = m_full_definition_counts.find(fullDefinitionKey(forward_record));
+    return it != m_full_definition_counts.end() && it->second > 1;
 }
 
 bool isSpecialPointerType(uint32_t type_index) {
@@ -808,6 +823,7 @@ bool resolveType(TypeTable const& type_table,
         return false;
     }
 
+    bool const ambiguous_before = type_table.hadAmbiguousForwardReference();
     resolving.insert(type_index);
     bool resolved = true;
 
@@ -848,7 +864,13 @@ bool resolveType(TypeTable const& type_table,
         case TpiRecordKind::LF_UNION: {
             // Data symbols often reference a forward declaration record. Swap it
             // for the full definition before reading size and member layout.
-            TpiRecord const* full_record = isForwardDeclaration(record) ? type_table.findFullDefinition(record) : record;
+            bool const forward_declaration = isForwardDeclaration(record);
+            bool const ambiguous_definition = forward_declaration && type_table.isAmbiguousForwardDefinition(record);
+            if (ambiguous_definition) {
+                type_table.markAmbiguousForwardReference();
+                type_table.markCachedTypeAmbiguous(type_index);
+            }
+            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(record) : record;
             symbol.kind = SymbolKind::Object;
 
             uint32_t field_type = 0;
@@ -887,6 +909,9 @@ bool resolveType(TypeTable const& type_table,
     resolving.erase(type_index);
     if (resolved) {
         type_table.cacheType(type_index, symbol);
+        if (!ambiguous_before && type_table.hadAmbiguousForwardReference()) {
+            type_table.markCachedTypeAmbiguous(type_index);
+        }
     }
     return resolved;
 }
@@ -1067,9 +1092,27 @@ void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_desc
     auto symbol = std::make_unique<SymbolDescriptor>();
     symbol->name = std::move(symbol_name);
     symbol->address = address;
+    type_table.clearAmbiguityFlag();
     if (!resolveType(type_table, type_index, *symbol)) {
         return;
     }
+    if (type_table.hadAmbiguousForwardReference()) {
+        auto dbghelp_symbol = loadDbgHelpSymbolDescriptor(
+          dbgHelpModuleContext(module),
+          name,
+          symbol->name,
+          address);
+        if (!dbghelp_symbol) {
+            std::cerr << "Skipping symbol \"" << symbol->name
+                      << "\": RawPDB type resolution was ambiguous and DbgHelp fallback failed\n";
+            return;
+        }
+        symbol = std::make_unique<SymbolDescriptor>(std::move(*dbghelp_symbol));
+    }
+
+#if defined(DBGGUI_VERIFY_RAWPDB_WITH_DBGHELP)
+    verifyRawPdbSymbolWithDbgHelp(dbgHelpModuleContext(module), name, *symbol, address);
+#endif
 
     symbol_descriptors.push_back(std::move(symbol));
     root_symbols.push_back(std::make_unique<VariantSymbol>(
