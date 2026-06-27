@@ -25,6 +25,8 @@
 #include <thread>
 #include "DbgGui/global_snapshot.h"
 #include <cmath>
+#include <iostream>
+#include <string_view>
 #include "test_library_loader.h"
 
 struct Vector_ABC {
@@ -185,7 +187,20 @@ MovingAverage<2000> movavg;
 double theta;
 
 void t_500us();
-int main(int, char**) {
+int main(int argc, char** argv) {
+    if (argc > 1 && std::string_view(argv[1]) == "--check-symbol") {
+        g::a_struct.m_d[0].a.m_a = 1;
+        g::a_struct.m_d[1].a.m_a = 2;
+        void* symbols = SNP_getSymbolsFromPdb();
+        auto read_symbol = SNP_getSymbolReadFn("g::a_struct.m_d[1].a.m_a", symbols);
+        auto read_m_d0_a = SNP_getSymbolReadFn("g::a_struct.m_d[0].a.m_a", symbols);
+        double symbol_value = read_symbol();
+        std::cout << "actual=" << g::a_struct.m_d[1].a.m_a << "\n";
+        std::cout << "symbol=" << symbol_value << "\n";
+        std::cout << "m_d[0].a.m_a=" << read_m_d0_a() << "\n";
+        return symbol_value == g::a_struct.m_d[1].a.m_a ? 0 : 1;
+    }
+
     static float sfl;
     DbgGui_create(10e-6);
     DbgGui_addScalar(&g::f64, "group 2", "g_f64");

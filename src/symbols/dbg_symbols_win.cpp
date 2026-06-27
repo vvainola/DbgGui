@@ -361,6 +361,25 @@ std::string recordName(TpiRecord const* record) {
     }
 }
 
+uint32_t recordSize(TpiRecord const* record) {
+    if (record == nullptr) {
+        return 0;
+    }
+
+    switch (record->header.kind) {
+        case TpiRecordKind::LF_CLASS:
+        case TpiRecordKind::LF_STRUCTURE:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS.data));
+        case TpiRecordKind::LF_CLASS2:
+        case TpiRecordKind::LF_STRUCTURE2:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS2.data));
+        case TpiRecordKind::LF_UNION:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_UNION.data));
+        default:
+            return 0;
+    }
+}
+
 // Decorated unique name that follows the regular name when property.hasuniquename
 // is set. MSVC emits it to distinguish otherwise identically-named types.
 std::string recordUniqueName(TpiRecord const* record) {
@@ -433,7 +452,14 @@ void TypeTable::buildFullDefinitions() const {
         if (record == nullptr || isForwardDeclaration(record) || recordName(record).empty()) {
             continue;
         }
-        m_full_definitions[fullDefinitionKey(record)] = record;
+        TypeDefinitionKey const key = fullDefinitionKey(record);
+        auto it = m_full_definitions.find(key);
+        // Plain-name keys can collide across unrelated types or stale incremental
+        // records. Prefer the largest layout so forward refs do not resolve to a
+        // truncated definition that produces wrong array strides/member offsets.
+        if (it == m_full_definitions.end() || recordSize(record) >= recordSize(it->second)) {
+            m_full_definitions[key] = record;
+        }
     }
     m_full_definitions_built = true;
 }

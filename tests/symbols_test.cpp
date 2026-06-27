@@ -45,6 +45,8 @@ struct B {
     A a;
 };
 
+void test_fn1();
+
 struct ResetBase {
     int base_value = 0;
     double base_double = 0;
@@ -67,12 +69,38 @@ enum Enumeration {
 
 void test_fn1() {}
 
+namespace pdb_collision {
+struct A {
+    void hello() {};
+    int m_a = 2;
+    void (*m_ap)() = &A::f;
+    static void f() {};
+};
+
+struct B {
+    double m_b = 1;
+    A a;
+    void (*m_ap)() = &A::f;
+};
+
+struct C {
+    A a;
+    B b;
+    float m_c = 0;
+    B m_d[3];
+    B m_e[3][3];
+};
+
+C a_struct;
+} // namespace pdb_collision
+
 // Define global variables of different types
 int g_int;
 namespace g {
 A g_a;
 B g_b1;
 B g_b2;
+B g_b_array[2];
 float g_float;
 void test_fn2() {}
 void test_fn3(int) {}
@@ -176,6 +204,18 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_b1_a_sym->getChildren().size() == 1);
     VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
     CHECK(g_b2_a_sym->getChildren().size() == 1);
+
+    g::g_b_array[0].a.m_a = 1;
+    g::g_b_array[1].a.m_a = 2;
+    VariantSymbol* g_b_array_member_sym = symbols.getSymbol("g::g_b_array[1].a.m_a");
+    REQUIRE(g_b_array_member_sym != nullptr);
+    CHECK(g_b_array_member_sym->read() == g::g_b_array[1].a.m_a);
+
+    pdb_collision::a_struct.m_d[0].a.m_a = 1;
+    pdb_collision::a_struct.m_d[1].a.m_a = 2;
+    VariantSymbol* a_struct_member_sym = symbols.getSymbol("pdb_collision::a_struct.m_d[1].a.m_a");
+    REQUIRE(a_struct_member_sym != nullptr);
+    CHECK(a_struct_member_sym->read() == pdb_collision::a_struct.m_d[1].a.m_a);
 
     g_reset_derived.base_value = random<int>();
     g_reset_derived.base_double = random<double>();
