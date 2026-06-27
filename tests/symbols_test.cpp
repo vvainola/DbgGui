@@ -116,6 +116,14 @@ BitField g_bitfield;
 Enumeration g_enum;
 ResetDerived g_reset_derived;
 ResetDoubleDerived g_reset_double_derived;
+extern const int g_const_int = 123;
+
+struct ConstMemberStruct {
+    int mutable_value = 1;
+    const int const_value = 2;
+};
+
+ConstMemberStruct g_const_member_struct;
 
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
@@ -197,6 +205,8 @@ TEST_CASE("Basic symbol access") {
     CHECK(cross_tu_enum_sym->valueAsStr() == "CrossTuB");
 
     VariantSymbol* g_fn_ptr_sym = symbols.getSymbol("g_fn_ptr");
+    REQUIRE(g_fn_ptr_sym != nullptr);
+    CHECK_FALSE(g_fn_ptr_sym->isConst());
     g_fn_ptr = &test_fn1;
     CHECK(g_fn_ptr_sym->valueAsStr() == "test_fn1");
     g_fn_ptr = &g::test_fn2;
@@ -282,6 +292,38 @@ TEST_CASE("Basic symbol access") {
     CHECK(double_derived_base_value_sym->read() == g_reset_double_derived.base_value);
     CHECK(double_derived_base_double_sym->read() == Approx(g_reset_double_derived.base_double));
     CHECK(inherited_derived_value_sym->read() == g_reset_double_derived.derived_value);
+
+    VariantSymbol* const_int_sym = symbols.getSymbol("g_const_int");
+    REQUIRE(const_int_sym != nullptr);
+    CHECK(const_int_sym->isConst());
+    CHECK(const_int_sym->read() == g_const_int);
+
+    VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
+    REQUIRE(mutable_member_sym != nullptr);
+    CHECK_FALSE(mutable_member_sym->isConst());
+    CHECK(mutable_member_sym->read() == g_const_member_struct.mutable_value);
+
+    VariantSymbol* const_member_sym = symbols.getSymbol("g_const_member_struct.const_value");
+    REQUIRE(const_member_sym != nullptr);
+    CHECK(const_member_sym->isConst());
+    CHECK(const_member_sym->read() == g_const_member_struct.const_value);
+
+    std::vector<SymbolValue> snapshot = symbols.saveSnapshotToMemory();
+    auto snapshot_contains = [&](VariantSymbol* symbol) {
+        return std::any_of(snapshot.begin(), snapshot.end(), [=](SymbolValue const& value) {
+            return value.symbol == symbol;
+        });
+    };
+    CHECK_FALSE(snapshot_contains(const_int_sym));
+    CHECK(snapshot_contains(mutable_member_sym));
+    CHECK_FALSE(snapshot_contains(const_member_sym));
+
+#if WINDOWS
+    VariantSymbol* magic_enum_name_char_sym = symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]");
+    REQUIRE(magic_enum_name_char_sym != nullptr);
+    CHECK(magic_enum_name_char_sym->isConst());
+    CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
+#endif
 }
 
 TEST_CASE("Static namespace-scope symbol access") {

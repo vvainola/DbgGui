@@ -49,6 +49,7 @@ void writeSymbolDescriptor(nlohmann::json& field,
     field["array_element_count"] = symbol.array_element_count;
     field["scalar_type"] = magic_enum::enum_name(ScalarType::None);
     field["bitfield_position"] = NO_VALUE;
+    field["is_const"] = symbol.is_const;
     if (symbol.kind == SymbolKind::Scalar) {
         field["scalar_type"] = magic_enum::enum_name(symbol.scalar_type);
         if (symbol.scalar_type == ScalarType::UnsignedInteger
@@ -84,6 +85,7 @@ SymbolDescriptor SymbolDescriptor::fromJson(nlohmann::json const& field) {
     sym.offset_to_parent = field["offset_to_parent"].get<uint32_t>();
     sym.array_element_count = field["array_element_count"].get<uint32_t>();
     sym.bitfield_position = field["bitfield_position"].get<int>();
+    sym.is_const = field.value("is_const", false);
     sym.kind = magic_enum::enum_cast<SymbolKind>(field["kind"].get<std::string>()).value_or(SymbolKind::Unknown);
     sym.scalar_type = magic_enum::enum_cast<ScalarType>(field["scalar_type"].get<std::string>()).value_or(ScalarType::None);
 
@@ -111,6 +113,7 @@ std::unique_ptr<SymbolDescriptor> SymbolDescriptor::clone() const {
     sym->scalar_type = scalar_type;
     sym->bitfield_position = bitfield_position;
     sym->enum_value = enum_value;
+    sym->is_const = is_const;
     sym->children = children;
     return sym;
 }

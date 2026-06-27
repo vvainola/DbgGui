@@ -57,6 +57,7 @@ class VariantSymbol {
     VariantSymbol::Type getType() const { return m_type; }
     std::vector<std::unique_ptr<VariantSymbol>>& getChildren() { return m_children; }
     MemoryAddress getAddress() const { return m_address; }
+    bool isConst() const { return m_is_const; }
 
     /// <summary>Return the pointed symbol or nullptr if the symbol is not found. Only valid for "Pointer" type symbols.</summary>
     VariantSymbol* getPointedSymbol() const;
@@ -80,4 +81,5 @@ class VariantSymbol {
     std::vector<std::pair<int32_t, std::string>> m_enum_mappings;
     std::vector<std::unique_ptr<VariantSymbol>> m_children;
     Type m_type;
+    bool m_is_const = false;
 };

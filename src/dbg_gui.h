@@ -130,13 +130,14 @@ class DbgGui {
     void updateSymbolSearchResults(std::string const& search_string);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;
+        bool show_constants = false;
         bool filter_recursive_tree = false;
         std::set<VariantSymbol*> visible_symbols;
         std::set<VariantSymbol*> auto_open_symbols;
         std::set<VariantSymbol*> visiting;
     };
     std::vector<VariantSymbol*> buildSymbolSearchRoots(SymbolSearchRenderState& state) const;
-    void showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols);
+    void showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols, bool show_constants);
     void showSymbolTreeNode(VariantSymbol* sym, SymbolSearchRenderState& state, bool filter_to_search_path);
     void showPointerSymbolTreeNode(VariantSymbol* sym,
                                    VariantSymbol* pointed_symbol,

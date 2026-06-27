@@ -214,6 +214,50 @@ static Dwarf_Off followTypeChain(Dwarf_Debug dbg, Dwarf_Off type_offset) {
     return type_offset;
 }
 
+// followTypeChain strips typedef/const/volatile/restrict wrappers before
+// resolving the underlying layout. Walk the same wrapper chain first so the
+// const qualifier can be preserved on the SymbolDescriptor before the type
+// offset is replaced with the unqualified type.
+static bool isConstQualifiedType(Dwarf_Debug dbg, Dwarf_Off type_offset) {
+    Dwarf_Error err = nullptr;
+
+    for (int depth = 0; depth < 50; ++depth) {
+        Dwarf_Die type_die = nullptr;
+        if (dwarf_offdie_b(dbg, type_offset, 1, &type_die, &err) != DW_DLV_OK) {
+            return false;
+        }
+
+        Dwarf_Half tag;
+        dwarf_tag(type_die, &tag, &err);
+        bool const is_const = tag == DW_TAG_const_type;
+        if (tag != DW_TAG_typedef
+            && tag != DW_TAG_const_type
+            && tag != DW_TAG_volatile_type
+            && tag != DW_TAG_restrict_type) {
+            dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+            return false;
+        }
+
+        Dwarf_Attribute attr = nullptr;
+        if (dwarf_attr(type_die, DW_AT_type, &attr, &err) != DW_DLV_OK) {
+            dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+            return is_const;
+        }
+
+        Dwarf_Off next_offset;
+        dwarf_global_formref(attr, &next_offset, &err);
+        dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
+        dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+
+        if (is_const) {
+            return true;
+        }
+        type_offset = next_offset;
+    }
+
+    return false;
+}
+
 static uint32_t getDataMemberLocationOffset(Dwarf_Debug dbg, Dwarf_Die die) {
     Dwarf_Error err = nullptr;
     uint32_t offset = 0;
@@ -271,6 +315,7 @@ static bool resolveType(Dwarf_Debug dbg,
     Dwarf_Error err = nullptr;
 
     // Follow typedef/const/volatile chains
+    symbol.is_const = symbol.is_const || isConstQualifiedType(dbg, type_offset);
     type_offset = followTypeChain(dbg, type_offset);
 
     Dwarf_Die type_die = nullptr;
@@ -1035,6 +1080,10 @@ std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
 std::vector<SymbolValue> DbgSymbols::saveSnapshotToMemory() const {
     std::vector<SymbolValue> snapshot;
     std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
             snapshot.push_back({sym, sym->read()});

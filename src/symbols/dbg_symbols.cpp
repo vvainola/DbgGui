@@ -212,6 +212,10 @@ void DbgSymbols::saveSnapshotToFile(std::string const& json) const {
     snapshot["write_time"] = module_info.write_time;
 
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         std::string key = std::format("{} {}", sym->getFullName(), address_offset);
@@ -256,6 +260,10 @@ void DbgSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto& state = snapshot["state"];
 
     std::function<void(VariantSymbol*)> load_symbol_state = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         std::string key = std::format("{} {}", sym->getFullName(), address_offset);
@@ -293,11 +301,13 @@ void DbgSymbols::loadSnapshotFromFile(std::string const& json) const {
 void DbgSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const {
     for (SymbolValue symbol_snapshot : snapshot) {
         VariantSymbol* sym = symbol_snapshot.symbol;
+        if (sym->isConst()) {
+            continue;
+        }
         std::visit(
           [=](auto&& value) {
               using T = std::decay_t<decltype(value)>;
-              // Change value only if it is different because trying to write const variables causes crash
-              // and there seems to be no easy way to determine if a symbol is const
+              // Change value only if it is different.
               if constexpr (std::is_same_v<T, MemoryAddress>) {
                   MemoryAddress current_pointed_address = sym->getPointedAddress();
                   MemoryAddress new_pointed_address = value;

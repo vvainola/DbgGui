@@ -773,11 +773,13 @@ void copyTypePayload(SymbolDescriptor& dst, SymbolDescriptor const& src) {
     std::string name = dst.name;
     MemoryAddress address = dst.address;
     uint32_t offset_to_parent = dst.offset_to_parent;
+    bool const is_const = dst.is_const;
 
     dst = SymbolDescriptor{};
     dst.name = std::move(name);
     dst.address = address;
     dst.offset_to_parent = offset_to_parent;
+    dst.is_const = is_const || src.is_const;
     dst.size = src.size;
     dst.kind = src.kind;
     dst.array_element_count = src.array_element_count;
@@ -952,10 +954,20 @@ bool resolveType(TypeTable const& type_table,
                  uint32_t type_index,
                  SymbolDescriptor& symbol,
                  std::unordered_set<uint32_t>& resolving) {
+    // Constness can come from the caller's storage location, e.g. a symbol in
+    // .rdata. Keep that out of TypeTable's layout cache; only const qualifiers
+    // from the CodeView type graph itself should be cached with the type index.
+    bool const caller_const = symbol.is_const;
+    symbol.is_const = false;
+    auto apply_caller_const = [&]() {
+        symbol.is_const = caller_const || symbol.is_const;
+    };
+
     // CodeView simple type indices below the TPI range encode built-in scalar
     // and pointer types directly; everything else indexes a TPI record.
     if (type_index < type_table.firstTypeIndex()) {
         setBuiltinType(type_index, symbol);
+        apply_caller_const();
         return true;
     }
 
@@ -964,6 +976,7 @@ bool resolveType(TypeTable const& type_table,
     // instead of recursing forever.
     if (resolving.contains(type_index)) {
         symbol.kind = SymbolKind::Object;
+        apply_caller_const();
         return true;
     }
 
@@ -977,6 +990,7 @@ bool resolveType(TypeTable const& type_table,
     // address, and member offset.
     if (SymbolDescriptor const* cached = type_table.cachedType(type_index)) {
         copyTypePayload(symbol, *cached);
+        apply_caller_const();
         return true;
     }
 
@@ -986,6 +1000,9 @@ bool resolveType(TypeTable const& type_table,
     switch (record->header.kind) {
         case TpiRecordKind::LF_MODIFIER:
             resolved = resolveType(type_table, record->data.LF_MODIFIER.type, symbol, resolving);
+            if (resolved && record->data.LF_MODIFIER.attr.MOD_const) {
+                symbol.is_const = true;
+            }
             break;
         case TpiRecordKind::LF_POINTER:
             symbol.kind = SymbolKind::Pointer;
@@ -1063,6 +1080,7 @@ bool resolveType(TypeTable const& type_table,
     if (resolved) {
         type_table.cacheType(type_index, symbol);
     }
+    apply_caller_const();
     return resolved;
 }
 
@@ -1083,6 +1101,14 @@ MemoryAddress sectionOffsetToAddress(ModuleContext const& module,
         return 0;
     }
     return module.base_address + rva;
+}
+
+bool sectionIsWritable(PDB::ImageSectionStream const& image_sections, uint16_t one_based_section_index) {
+    PDB::ArrayView<PDB::IMAGE_SECTION_HEADER> sections = image_sections.GetImageSections();
+    if (one_based_section_index == 0 || one_based_section_index > sections.GetLength()) {
+        return false;
+    }
+    return (sections[one_based_section_index - 1].Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
 }
 
 std::string moduleStem(std::filesystem::path const& path) {
@@ -1242,6 +1268,7 @@ void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_desc
     auto symbol = std::make_unique<SymbolDescriptor>();
     symbol->name = std::move(symbol_name);
     symbol->address = address;
+    symbol->is_const = !sectionIsWritable(image_sections, section);
     if (!resolveType(type_table, type_index, *symbol)) {
         return;
     }
@@ -1623,6 +1650,10 @@ std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
 std::vector<SymbolValue> DbgSymbols::saveSnapshotToMemory() const {
     std::vector<SymbolValue> snapshot;
     std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         // Add symbol value to snapshot
         VariantSymbol::Type type = sym->getType();
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {

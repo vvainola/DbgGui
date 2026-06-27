@@ -133,6 +133,7 @@ struct Scalar {
     std::string alias_and_group;
     ImVec4 color = {-1, -1, -1, -1};
     ValueSource src;
+    bool read_only = false;
     bool hide_from_scalars_window = false;
     bool deleted = false;
     Scalar* replacement = nullptr;

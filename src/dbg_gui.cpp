@@ -1027,6 +1027,7 @@ void DbgGui::setInitialFocus() {
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
     Scalar* scalar = addScalar(sym->getValueSource(), group, sym->getFullName(), getSymbolScale(*sym));
+    scalar->read_only = sym->isConst();
     m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
     m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
     return scalar;
@@ -1076,6 +1077,7 @@ Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std
     VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
     if (sym) {
         Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
+        ptr->read_only = sym->isConst();
         ptr->alias = alias;
         ptr->alias_and_group = ptr->alias + "(" + ptr->group + ")";
         m_settings["scalar_symbols"][ptr->name_and_group]["name"] = ptr->name;

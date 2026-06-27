@@ -204,7 +204,37 @@ std::optional<ImGuiKey> pressedNumber() {
     return std::nullopt;
 }
 
-void addInputScalar(ValueSource const& value_src, std::string const& label, double scale = 1, double offset = 0) {
+void addReadonlyScalar(ValueSource const& value_src, double scale = 1, double offset = 0) {
+    std::string value_str;
+    if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
+        value_str = getSourceValueStr(value_src);
+    } else {
+        value_str = numberAsStr(getSourceValue(value_src) * scale + offset);
+    }
+
+    ImVec2 available = ImGui::GetContentRegionAvail();
+    ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
+    if (available.x < text_size.x) {
+        float current_font_size = ImGui::GetFontSize();
+        float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
+        ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
+        ImGui::Text(value_str.c_str());
+        ImGui::PopFont();
+    } else {
+        ImGui::Text(value_str.c_str());
+    }
+}
+
+void addInputScalar(ValueSource const& value_src,
+                    std::string const& label,
+                    double scale = 1,
+                    double offset = 0,
+                    bool read_only = false) {
+    if (read_only) {
+        addReadonlyScalar(value_src, scale, offset);
+        return;
+    }
+
     if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
         // Scale text to fit
         ImVec2 available = ImGui::GetContentRegionAvail();
@@ -212,7 +242,7 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
         ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
         if (available.x < text_size.x) {
             float current_font_size = ImGui::GetFontSize();
-            float font_size = max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
+            float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
             ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
             ImGui::Text(value_str.c_str());
             ImGui::PopFont();
@@ -840,7 +870,11 @@ void DbgGui::showScalarWindow() {
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                    addInputScalar(scalar->src,
+                                   "##scalar_" + scalar->name_and_group,
+                                   scalar->getScale(),
+                                   scalar->getOffset(),
+                                   scalar->read_only);
                 }
 
                 ImGui::TreePop();
@@ -1098,7 +1132,11 @@ void DbgGui::showCustomWindow() {
 
                 // Show value
                 ImGui::TableNextColumn();
-                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                addInputScalar(scalar->src,
+                               "##custom_" + scalar->name_and_group,
+                               scalar->getScale(),
+                               scalar->getOffset(),
+                               scalar->read_only);
             }
             ImGui::EndTable();
         }
@@ -1155,7 +1193,7 @@ std::vector<VariantSymbol*> DbgGui::buildSymbolSearchRoots(SymbolSearchRenderSta
     return search_roots;
 }
 
-void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols) {
+void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols, bool show_constants) {
     static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
                                        | ImGuiTableFlags_BordersH
                                        | ImGuiTableFlags_Resizable
@@ -1166,6 +1204,7 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
 
     SymbolSearchRenderState state{
       .show_hidden_symbols = show_hidden_symbols,
+      .show_constants = show_constants,
       .filter_recursive_tree = !search_string.empty() && m_symbol_search_depth > 0,
     };
     for (VariantSymbol* symbol : buildSymbolSearchRoots(state)) {
@@ -1190,7 +1229,11 @@ void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
     }
 
     bool const hidden = m_hidden_symbols.contains(sym->getFullName());
+    bool const constant = sym->isConst();
     if (!state.show_hidden_symbols && hidden) {
+        return;
+    }
+    if (!state.show_constants && constant) {
         return;
     }
 
@@ -1338,7 +1381,11 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     // Add value.
     ImGui::TableNextColumn();
     if (arithmetic_or_enum) {
-        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName(), getSymbolScale(*sym));
+        addInputScalar(sym->getValueSource(),
+                       "##symbol_" + sym->getFullName(),
+                       getSymbolScale(*sym),
+                       0,
+                       sym->isConst());
     } else {
         ImGui::Text(sym->valueAsStr().c_str());
     }
@@ -1352,6 +1399,7 @@ void DbgGui::showSymbolsWindow() {
     }
 
     static bool show_hidden_symbols = false;
+    static bool show_constants = false;
 
     // Just manually tested width that name, group and menu boxes are visible.
     float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 20 * ImGui::CalcTextSize("x").x;
@@ -1371,6 +1419,7 @@ void DbgGui::showSymbolsWindow() {
             search_changed = true;
         }
         ImGui::Checkbox("Show hidden", &show_hidden_symbols);
+        ImGui::Checkbox("Show constants", &show_constants);
         ImGui::EndMenu();
     }
 
@@ -1378,7 +1427,7 @@ void DbgGui::showSymbolsWindow() {
         updateSymbolSearchResults(symbols_to_search);
     }
 
-    showSymbolSearchTable(symbols_to_search, show_hidden_symbols);
+    showSymbolSearchTable(symbols_to_search, show_hidden_symbols, show_constants);
     ImGui::End();
 }
 
@@ -1540,7 +1589,11 @@ void DbgGui::showGridWindow() {
                         if (grid_window.isCellFocused({row, col})) {
                             ImGui::SetKeyboardFocusHere();
                         }
-                        addInputScalar(scalar->src, "##grid_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                        addInputScalar(scalar->src,
+                                       "##grid_" + scalar->name_and_group,
+                                       scalar->getScale(),
+                                       scalar->getOffset(),
+                                       scalar->read_only);
                         if (ImGui::IsItemFocused()) {
                             if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_DownArrow)) {
                                 grid_window.focusCell({std::min(row + 1, grid_window.rows - 1), col});

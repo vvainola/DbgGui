@@ -36,6 +36,8 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
                              VariantSymbol* parent)
     : m_root_symbols(root_symbols),
       m_parent(parent) {
+    m_is_const = symbol->is_const || (parent && parent->isConst());
+
     if (parent) {
         m_address = parent->getAddress() + symbol->offset_to_parent;
     } else {
@@ -130,15 +132,24 @@ VariantSymbol* VariantSymbol::getPointedSymbol() const {
 }
 
 void VariantSymbol::setPointedAddress(MemoryAddress address) {
+    if (m_is_const) {
+        return;
+    }
     std::memcpy(reinterpret_cast<void*>(m_address), &address, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::setPointedSymbol(VariantSymbol* symbol) {
+    if (m_is_const) {
+        return;
+    }
     MemoryAddress addr = symbol->getAddress();
     std::memcpy(reinterpret_cast<void*>(m_address), &addr, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::write(double value) {
+    if (m_is_const) {
+        return;
+    }
     if (m_arithmetic_symbol) {
         m_arithmetic_symbol->write(value);
     } else if (m_type == Type::Pointer) {
@@ -164,21 +175,21 @@ double VariantSymbol::read() const {
 ValueSource VariantSymbol::getValueSource() {
     if (m_type == Type::Arithmetic && m_arithmetic_symbol->isBitfield()) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 m_arithmetic_symbol->write(*value);
             }
             return m_arithmetic_symbol->read();
         };
     } else if (m_type == Type::Enum) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 m_arithmetic_symbol->write(*value);
             }
             return std::make_pair(valueAsStr(), m_arithmetic_symbol->read());
         };
     } else if (m_type == Type::Pointer) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 this->write(*value);
             }
             return std::make_pair(valueAsStr(), this->read());

@@ -63,6 +63,7 @@ struct SymbolDescriptor {
     ScalarType scalar_type = ScalarType::None;
     int bitfield_position = -1;
     int64_t enum_value = 0;
+    bool is_const = false;
     // Child descriptors describe immutable type layout after construction.
     // Sharing them lets type caches reuse large member trees across globals of
     // the same type without deep-cloning the intermediate descriptor graph.
