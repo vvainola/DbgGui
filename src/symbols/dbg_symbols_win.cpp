@@ -190,9 +190,6 @@ class TypeTable {
         if (it == m_resolved_types.end()) {
             return nullptr;
         }
-        if (m_ambiguous_resolved_types.contains(type_index)) {
-            m_had_ambiguous_forward_ref = true;
-        }
         return it->second.get();
     }
 
@@ -201,19 +198,6 @@ class TypeTable {
     }
 
     TpiRecord const* findFullDefinition(TpiRecord const* forward_record) const;
-    bool isAmbiguousForwardDefinition(TpiRecord const* forward_record) const;
-    void clearAmbiguityFlag() const {
-        m_had_ambiguous_forward_ref = false;
-    }
-    bool hadAmbiguousForwardReference() const {
-        return m_had_ambiguous_forward_ref;
-    }
-    void markAmbiguousForwardReference() const {
-        m_had_ambiguous_forward_ref = true;
-    }
-    void markCachedTypeAmbiguous(uint32_t type_index) const {
-        m_ambiguous_resolved_types.insert(type_index);
-    }
 
   private:
     void buildFullDefinitions() const;
@@ -223,10 +207,7 @@ class TypeTable {
     PDB::CoalescedMSFStream m_stream;
     std::vector<TpiRecord const*> m_records;
     mutable std::unordered_map<uint32_t, std::unique_ptr<SymbolDescriptor>> m_resolved_types;
-    mutable std::unordered_set<uint32_t> m_ambiguous_resolved_types;
     mutable std::unordered_map<TypeDefinitionKey, TpiRecord const*, TypeDefinitionKeyHash> m_full_definitions;
-    mutable std::unordered_map<TypeDefinitionKey, size_t, TypeDefinitionKeyHash> m_full_definition_counts;
-    mutable bool m_had_ambiguous_forward_ref = false;
     mutable bool m_full_definitions_built = false;
 };
 
@@ -445,6 +426,25 @@ bool isForwardDeclaration(TpiRecord const* record) {
     }
 }
 
+uint32_t recordSize(TpiRecord const* record) {
+    if (record == nullptr) {
+        return 0;
+    }
+
+    switch (record->header.kind) {
+        case TpiRecordKind::LF_CLASS:
+        case TpiRecordKind::LF_STRUCTURE:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS.data));
+        case TpiRecordKind::LF_CLASS2:
+        case TpiRecordKind::LF_STRUCTURE2:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS2.data));
+        case TpiRecordKind::LF_UNION:
+            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_UNION.data));
+        default:
+            return 0;
+    }
+}
+
 // Key for the full-definition lookup. The decorated unique name (when present)
 // distinguishes unrelated types that share a plain name; otherwise fall back to
 // the record kind plus plain name.
@@ -466,8 +466,16 @@ void TypeTable::buildFullDefinitions() const {
             continue;
         }
         TypeDefinitionKey const key = fullDefinitionKey(record);
-        m_full_definition_counts[key]++;
-        m_full_definitions[key] = record;
+        auto it = m_full_definitions.find(key);
+        // Duplicate full definitions can remain in incrementally linked PDBs.
+        // RawPDB does not expose the linker-resolved full-definition index for a
+        // forward reference, so keep the widest layout to avoid truncated array
+        // strides and member offsets in the normal fast path. Enable
+        // DBGGUI_VERIFY_RAWPDB_WITH_DBGHELP when changing this resolver to
+        // compare the result against DbgHelp.
+        if (it == m_full_definitions.end() || recordSize(record) >= recordSize(it->second)) {
+            m_full_definitions[key] = record;
+        }
     }
     m_full_definitions_built = true;
 }
@@ -478,23 +486,10 @@ TpiRecord const* TypeTable::findFullDefinition(TpiRecord const* forward_record) 
         return forward_record;
     }
 
-    // Ambiguous duplicate or stale definitions are detected before this lookup
-    // and cause the root symbol to be rebuilt through DbgHelp. The map is only
-    // authoritative for keys that resolve to a single full definition.
     buildFullDefinitions();
 
     auto it = m_full_definitions.find(fullDefinitionKey(forward_record));
     return it != m_full_definitions.end() ? it->second : forward_record;
-}
-
-bool TypeTable::isAmbiguousForwardDefinition(TpiRecord const* forward_record) const {
-    if (forward_record == nullptr) {
-        return false;
-    }
-
-    buildFullDefinitions();
-    auto it = m_full_definition_counts.find(fullDefinitionKey(forward_record));
-    return it != m_full_definition_counts.end() && it->second > 1;
 }
 
 bool isSpecialPointerType(uint32_t type_index) {
@@ -823,7 +818,6 @@ bool resolveType(TypeTable const& type_table,
         return false;
     }
 
-    bool const ambiguous_before = type_table.hadAmbiguousForwardReference();
     resolving.insert(type_index);
     bool resolved = true;
 
@@ -865,11 +859,6 @@ bool resolveType(TypeTable const& type_table,
             // Data symbols often reference a forward declaration record. Swap it
             // for the full definition before reading size and member layout.
             bool const forward_declaration = isForwardDeclaration(record);
-            bool const ambiguous_definition = forward_declaration && type_table.isAmbiguousForwardDefinition(record);
-            if (ambiguous_definition) {
-                type_table.markAmbiguousForwardReference();
-                type_table.markCachedTypeAmbiguous(type_index);
-            }
             TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(record) : record;
             symbol.kind = SymbolKind::Object;
 
@@ -909,9 +898,6 @@ bool resolveType(TypeTable const& type_table,
     resolving.erase(type_index);
     if (resolved) {
         type_table.cacheType(type_index, symbol);
-        if (!ambiguous_before && type_table.hadAmbiguousForwardReference()) {
-            type_table.markCachedTypeAmbiguous(type_index);
-        }
     }
     return resolved;
 }
@@ -1092,22 +1078,8 @@ void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_desc
     auto symbol = std::make_unique<SymbolDescriptor>();
     symbol->name = std::move(symbol_name);
     symbol->address = address;
-    type_table.clearAmbiguityFlag();
     if (!resolveType(type_table, type_index, *symbol)) {
         return;
-    }
-    if (type_table.hadAmbiguousForwardReference()) {
-        auto dbghelp_symbol = loadDbgHelpSymbolDescriptor(
-          dbgHelpModuleContext(module),
-          name,
-          symbol->name,
-          address);
-        if (!dbghelp_symbol) {
-            std::cerr << "Skipping symbol \"" << symbol->name
-                      << "\": RawPDB type resolution was ambiguous and DbgHelp fallback failed\n";
-            return;
-        }
-        symbol = std::make_unique<SymbolDescriptor>(std::move(*dbghelp_symbol));
     }
 
 #if defined(DBGGUI_VERIFY_RAWPDB_WITH_DBGHELP)

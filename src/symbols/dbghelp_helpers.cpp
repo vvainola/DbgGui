@@ -446,6 +446,8 @@ bool symbolDescriptorsMatch(SymbolDescriptor const& raw,
 
 } // namespace
 
+namespace {
+
 std::optional<SymbolDescriptor> loadDbgHelpSymbolDescriptor(DbgHelpModuleContext const& module,
                                                             std::string const& raw_name,
                                                             std::string const& display_name,
@@ -487,6 +489,8 @@ std::optional<SymbolDescriptor> loadDbgHelpSymbolDescriptor(DbgHelpModuleContext
     }
     return symbol;
 }
+
+} // namespace
 
 void verifyRawPdbSymbolWithDbgHelp(DbgHelpModuleContext const& module,
                                    std::string const& raw_name,

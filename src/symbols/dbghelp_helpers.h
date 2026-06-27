@@ -34,11 +34,6 @@ struct DbgHelpModuleContext {
     std::filesystem::path path;
 };
 
-std::optional<SymbolDescriptor> loadDbgHelpSymbolDescriptor(DbgHelpModuleContext const& module,
-                                                            std::string const& raw_name,
-                                                            std::string const& display_name,
-                                                            MemoryAddress address);
-
 void verifyRawPdbSymbolWithDbgHelp(DbgHelpModuleContext const& module,
                                    std::string const& raw_name,
                                    SymbolDescriptor const& symbol,
