@@ -91,6 +91,11 @@ struct TypeDefinitionKeyHash {
     }
 };
 
+struct TypeDefinitionRecord {
+    uint32_t type_index = 0;
+    TpiRecord const* record = nullptr;
+};
+
 // RawPDB keeps lightweight views into the bytes passed to CreateRawFile. Keeping
 // the PDB memory mapped avoids copying the whole file and keeps those views
 // valid for as long as the RawPDB streams are being used.
@@ -197,7 +202,7 @@ class TypeTable {
         m_resolved_types.try_emplace(type_index, symbol.clone());
     }
 
-    TpiRecord const* findFullDefinition(TpiRecord const* forward_record) const;
+    TpiRecord const* findFullDefinition(uint32_t forward_type_index, TpiRecord const* forward_record) const;
 
   private:
     void buildFullDefinitions() const;
@@ -207,7 +212,7 @@ class TypeTable {
     PDB::CoalescedMSFStream m_stream;
     std::vector<TpiRecord const*> m_records;
     mutable std::unordered_map<uint32_t, std::unique_ptr<SymbolDescriptor>> m_resolved_types;
-    mutable std::unordered_map<TypeDefinitionKey, TpiRecord const*, TypeDefinitionKeyHash> m_full_definitions;
+    mutable std::unordered_map<TypeDefinitionKey, std::vector<TypeDefinitionRecord>, TypeDefinitionKeyHash> m_full_definitions;
     mutable bool m_full_definitions_built = false;
 };
 
@@ -426,25 +431,6 @@ bool isForwardDeclaration(TpiRecord const* record) {
     }
 }
 
-uint32_t recordSize(TpiRecord const* record) {
-    if (record == nullptr) {
-        return 0;
-    }
-
-    switch (record->header.kind) {
-        case TpiRecordKind::LF_CLASS:
-        case TpiRecordKind::LF_STRUCTURE:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS.data));
-        case TpiRecordKind::LF_CLASS2:
-        case TpiRecordKind::LF_STRUCTURE2:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_CLASS2.data));
-        case TpiRecordKind::LF_UNION:
-            return static_cast<uint32_t>(readUnsignedLeaf(record->data.LF_UNION.data));
-        default:
-            return 0;
-    }
-}
-
 // Key for the full-definition lookup. The decorated unique name (when present)
 // distinguishes unrelated types that share a plain name; otherwise fall back to
 // the record kind plus plain name.
@@ -461,26 +447,21 @@ void TypeTable::buildFullDefinitions() const {
         return;
     }
 
-    for (TpiRecord const* record : m_records) {
+    for (size_t i = 0; i < m_records.size(); ++i) {
+        TpiRecord const* record = m_records[i];
         if (record == nullptr || isForwardDeclaration(record) || recordName(record).empty()) {
             continue;
         }
         TypeDefinitionKey const key = fullDefinitionKey(record);
-        auto it = m_full_definitions.find(key);
-        // Duplicate full definitions can remain in incrementally linked PDBs.
-        // RawPDB does not expose the linker-resolved full-definition index for a
-        // forward reference, so keep the widest layout to avoid truncated array
-        // strides and member offsets in the normal fast path. Enable
-        // DBGGUI_VERIFY_RAWPDB_WITH_DBGHELP when changing this resolver to
-        // compare the result against DbgHelp.
-        if (it == m_full_definitions.end() || recordSize(record) >= recordSize(it->second)) {
-            m_full_definitions[key] = record;
-        }
+        m_full_definitions[key].push_back(TypeDefinitionRecord{
+          .type_index = m_type_index_begin + static_cast<uint32_t>(i),
+          .record = record,
+        });
     }
     m_full_definitions_built = true;
 }
 
-TpiRecord const* TypeTable::findFullDefinition(TpiRecord const* forward_record) const {
+TpiRecord const* TypeTable::findFullDefinition(uint32_t forward_type_index, TpiRecord const* forward_record) const {
     std::string const name = recordName(forward_record);
     if (name.empty()) {
         return forward_record;
@@ -489,7 +470,25 @@ TpiRecord const* TypeTable::findFullDefinition(TpiRecord const* forward_record) 
     buildFullDefinitions();
 
     auto it = m_full_definitions.find(fullDefinitionKey(forward_record));
-    return it != m_full_definitions.end() ? it->second : forward_record;
+    if (it == m_full_definitions.end() || it->second.empty()) {
+        return forward_record;
+    }
+
+    std::vector<TypeDefinitionRecord> const& candidates = it->second;
+    // Incremental PDBs can retain stale full definitions with the same decorated
+    // name. The forward reference and its matching full definition are emitted
+    // into the same TPI neighborhood, while stale definitions can be larger or
+    // smaller, so size is not a reliable tie-breaker.
+    auto after_forward = std::find_if(candidates.begin(),
+                                      candidates.end(),
+                                      [forward_type_index](TypeDefinitionRecord const& candidate) {
+                                          return candidate.type_index > forward_type_index;
+                                      });
+    if (after_forward != candidates.end()) {
+        return after_forward->record;
+    }
+
+    return candidates.back().record;
 }
 
 bool isSpecialPointerType(uint32_t type_index) {
@@ -859,7 +858,7 @@ bool resolveType(TypeTable const& type_table,
             // Data symbols often reference a forward declaration record. Swap it
             // for the full definition before reading size and member layout.
             bool const forward_declaration = isForwardDeclaration(record);
-            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(record) : record;
+            TpiRecord const* full_record = forward_declaration ? type_table.findFullDefinition(type_index, record) : record;
             symbol.kind = SymbolKind::Object;
 
             uint32_t field_type = 0;

@@ -217,6 +217,25 @@ TEST_CASE("Basic symbol access") {
     REQUIRE(a_struct_member_sym != nullptr);
     CHECK(a_struct_member_sym->read() == pdb_collision::a_struct.m_d[1].a.m_a);
 
+    VariantSymbol* c_struct_i64_sym = symbols.getSymbol("g_test_types[1].values.i64");
+    REQUIRE(c_struct_i64_sym != nullptr);
+    CHECK(c_struct_i64_sym->read() == -11);
+    VariantSymbol* c_struct_f32_sym = symbols.getSymbol("g_test_types[1].values.f32");
+    REQUIRE(c_struct_f32_sym != nullptr);
+    CHECK(c_struct_f32_sym->read() == Approx(2.5f));
+    VariantSymbol* c_struct_u32_sym = symbols.getSymbol("g_test_types[1].values.u32");
+    REQUIRE(c_struct_u32_sym != nullptr);
+    CHECK(c_struct_u32_sym->read() == 21);
+    VariantSymbol* c_struct_i32_sym = symbols.getSymbol("g_test_types[1].values.i32");
+    REQUIRE(c_struct_i32_sym != nullptr);
+    CHECK(c_struct_i32_sym->read() == -31);
+    VariantSymbol* c_struct_u16_sym = symbols.getSymbol("g_test_types[1].values.u16");
+    REQUIRE(c_struct_u16_sym != nullptr);
+    CHECK(c_struct_u16_sym->read() == 41);
+    VariantSymbol* c_struct_outer_i32_sym = symbols.getSymbol("g_test_types[1].i32");
+    REQUIRE(c_struct_outer_i32_sym != nullptr);
+    CHECK(c_struct_outer_i32_sym->read() == 51);
+
     g_reset_derived.base_value = random<int>();
     g_reset_derived.base_double = random<double>();
     VariantSymbol* derived_sym = symbols.getSymbol("g_reset_derived");
