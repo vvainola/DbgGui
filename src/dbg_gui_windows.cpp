@@ -1116,6 +1116,234 @@ void DbgGui::showCustomWindow() {
     }
 }
 
+void DbgGui::updateSymbolSearchResults(std::string const& search_string) {
+    if (search_string.size() <= 2) {
+        m_symbol_search_results.clear();
+        return;
+    }
+
+    m_symbol_search_results = m_symbols.findMatchingSymbols(search_string, m_symbol_search_depth);
+    auto begin_it = m_symbol_search_results.begin();
+    // Don't sort first element if it is an exact match.
+    if (!m_symbol_search_results.empty() && m_symbol_search_results[0]->getFullName() == search_string) {
+        ++begin_it;
+    }
+    std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
+        return l->getFullName() < r->getFullName();
+    });
+}
+
+std::vector<VariantSymbol*> DbgGui::buildSymbolSearchRoots(SymbolSearchRenderState& state) const {
+    std::set<VariantSymbol*> search_root_set;
+    std::vector<VariantSymbol*> search_roots;
+    for (VariantSymbol* symbol : m_symbol_search_results) {
+        if (symbol == nullptr) {
+            continue;
+        }
+
+        VariantSymbol* root = symbol;
+        state.visible_symbols.insert(symbol);
+        for (VariantSymbol* parent = symbol->getParent(); parent != nullptr; parent = parent->getParent()) {
+            root = parent;
+            state.visible_symbols.insert(parent);
+            state.auto_open_symbols.insert(parent);
+        }
+        if (search_root_set.insert(root).second) {
+            search_roots.push_back(root);
+        }
+    }
+    return search_roots;
+}
+
+void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols) {
+    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
+                                       | ImGuiTableFlags_BordersH
+                                       | ImGuiTableFlags_Resizable
+                                       | ImGuiTableFlags_NoSavedSettings;
+    if (!ImGui::BeginTable("symbols_table", 2, table_flags)) {
+        return;
+    }
+
+    SymbolSearchRenderState state{
+      .show_hidden_symbols = show_hidden_symbols,
+      .filter_recursive_tree = !search_string.empty() && m_symbol_search_depth > 0,
+    };
+    for (VariantSymbol* symbol : buildSymbolSearchRoots(state)) {
+        showSymbolTreeNode(symbol, state, true);
+    }
+    ImGui::EndTable();
+}
+
+void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
+                                SymbolSearchRenderState& state,
+                                bool filter_to_search_path) {
+    if (sym == nullptr) {
+        assert(false);
+        return;
+    }
+    // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
+    if (state.visiting.contains(sym)) {
+        return;
+    }
+    if (filter_to_search_path && state.filter_recursive_tree && !state.visible_symbols.contains(sym)) {
+        return;
+    }
+
+    bool const hidden = m_hidden_symbols.contains(sym->getFullName());
+    if (!state.show_hidden_symbols && hidden) {
+        return;
+    }
+
+    state.visiting.insert(sym);
+    bool const custom_symbol_scale = getSymbolScale(*sym) != 1;
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          hidden              ? COLOR_GRAY :
+                          custom_symbol_scale ? COLOR_LIGHT_BLUE :
+                                                ImGui::GetStyle().Colors[ImGuiCol_Text]);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    // Full name is needed for top-level recursive results from multiple scopes.
+    std::string const symbol_name = sym->getParent() == nullptr && m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
+    bool const auto_open = state.auto_open_symbols.contains(sym);
+    if (sym->getType() == VariantSymbol::Type::Pointer) {
+        showPointerSymbolTreeNode(sym, sym->getPointedSymbol(), symbol_name, auto_open, state, filter_to_search_path);
+    } else if (!sym->getChildren().empty()) {
+        showObjectSymbolTreeNode(sym, symbol_name, auto_open, state, filter_to_search_path);
+    } else {
+        showLeafSymbolTreeNode(sym, symbol_name);
+    }
+
+    ImGui::PopStyleColor();
+    state.visiting.erase(sym);
+}
+
+void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
+                                       VariantSymbol* pointed_symbol,
+                                       std::string const& symbol_name,
+                                       bool auto_open,
+                                       SymbolSearchRenderState& state,
+                                       bool filter_to_search_path) {
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+    if (!pointed_symbol) {
+        flags |= ImGuiTreeNodeFlags_Leaf;
+        sym->opened_manually = false;
+    } else {
+        ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
+    }
+    bool const open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+    if (pointed_symbol && !auto_open) {
+        sym->opened_manually = open;
+    }
+    addSymbolContextMenu(*sym);
+
+    // Add symbol to scalar window on double click. The pointer can be null or
+    // point to function-scope static storage; then it is not dereferenced and
+    // only shows NAN as value.
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+        addScalarSymbol(sym, m_group_to_add_symbols);
+    }
+
+    if (ImGui::BeginDragDropSource()) {
+        // Drag-and-droppable to scalar plot.
+        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+        ImGui::Text("Drag to plot");
+        ImGui::EndDragDropSource();
+    }
+
+    ImGui::TableNextColumn();
+    ImGui::Text(sym->valueAsStr().c_str());
+    if (open) {
+        if (pointed_symbol) {
+            showSymbolTreeNode(pointed_symbol, state, filter_to_search_path && auto_open);
+        }
+        ImGui::TreePop();
+    }
+}
+
+void DbgGui::showObjectSymbolTreeNode(VariantSymbol* sym,
+                                      std::string const& symbol_name,
+                                      bool auto_open,
+                                      SymbolSearchRenderState& state,
+                                      bool filter_to_search_path) {
+    ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
+    bool const open = ImGui::TreeNodeEx(symbol_name.c_str());
+    if (!auto_open) {
+        sym->opened_manually = open;
+    }
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        // Drag-and-droppable to custom window.
+        static char symbol_name_buffer[MAX_NAME_LENGTH];
+        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
+        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
+        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
+        ImGui::Text("Drag to custom window to add all children");
+        ImGui::EndDragDropSource();
+    }
+    addSymbolContextMenu(*sym);
+
+    ImGui::TableNextColumn();
+    ImGui::Text(sym->valueAsStr().c_str());
+    if (open) {
+        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
+            showSymbolTreeNode(child.get(), state, filter_to_search_path && auto_open);
+        }
+        ImGui::TreePop();
+    }
+}
+
+void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name) {
+    bool const selected = contains(m_selected_symbols, sym);
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
+    if (selected) {
+        flags |= ImGuiTreeNodeFlags_Selected;
+    }
+    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+    ImGui::TreePop();
+    if (ImGui::IsItemClicked()) {
+        if (ImGui::GetIO().KeyCtrl) {
+            m_selected_symbols.push_back(sym);
+            // Show custom signal creator if ctrl+shift is pressed.
+            if (ImGui::GetIO().KeyShift) {
+                m_show_custom_signal_creator = true;
+            }
+        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
+            // Clear if clicking something else than the selected symbol.
+            m_selected_symbols.clear();
+        }
+    }
+
+    bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
+                                 || sym->getType() == VariantSymbol::Type::Enum;
+    if (m_selected_symbols.size() == 2) {
+        // Drag-and-droppable to vector plot.
+        if (ImGui::BeginDragDropSource()) {
+            ImGui::SetDragDropPayload("VECTOR_SYMBOL", m_selected_symbols.data(), sizeof(VariantSymbol*) * 2);
+            ImGui::Text("Drag to vector plot");
+            ImGui::EndDragDropSource();
+        }
+    } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
+        // Drag-and-droppable to scalar plot.
+        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+        ImGui::Text("Drag to plot");
+        ImGui::EndDragDropSource();
+    }
+
+    // Add symbol to scalar window on double click.
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
+        addScalarSymbol(sym, m_group_to_add_symbols);
+    }
+    addSymbolContextMenu(*sym);
+
+    // Add value.
+    ImGui::TableNextColumn();
+    if (arithmetic_or_enum) {
+        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName(), getSymbolScale(*sym));
+    } else {
+        ImGui::Text(sym->valueAsStr().c_str());
+    }
+}
+
 void DbgGui::showSymbolsWindow() {
     m_window_focus.symbols.focused = ImGui::Begin("Symbols", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.symbols.focused) {
@@ -1147,208 +1375,10 @@ void DbgGui::showSymbolsWindow() {
     }
 
     if (search_changed) {
-        if (symbols_to_search.size() > 2) {
-            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, m_symbol_search_depth);
-            auto begin_it = m_symbol_search_results.begin();
-            // Don't sort first element if it is an exact match
-            if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
-                begin_it++;
-            }
-            // Sort search results
-            std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
-                return l->getFullName() < r->getFullName();
-            });
-        } else {
-            m_symbol_search_results.clear();
-        }
+        updateSymbolSearchResults(symbols_to_search);
     }
 
-    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
-                                       | ImGuiTableFlags_BordersH
-                                       | ImGuiTableFlags_Resizable
-                                       | ImGuiTableFlags_NoSavedSettings;
-    if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
-        bool const filter_recursive_search_tree = !symbols_to_search.empty() && m_symbol_search_depth > 0;
-        std::set<VariantSymbol*> visible_search_symbols;
-        std::set<VariantSymbol*> auto_open_symbols;
-        std::set<VariantSymbol*> search_root_set;
-        std::vector<VariantSymbol*> search_roots;
-        for (VariantSymbol* symbol : m_symbol_search_results) {
-            VariantSymbol* root = symbol;
-            visible_search_symbols.insert(symbol);
-            for (VariantSymbol* parent = symbol->getParent(); parent != nullptr; parent = parent->getParent()) {
-                root = parent;
-                visible_search_symbols.insert(parent);
-                auto_open_symbols.insert(parent);
-            }
-            if (search_root_set.insert(root).second) {
-                search_roots.push_back(root);
-            }
-        }
-
-        for (VariantSymbol* symbol : search_roots) {
-            // Recursive lambda for displaying children in the table
-            std::function<void(VariantSymbol*, std::set<VariantSymbol*>&, bool)> show_children = [&](VariantSymbol* sym,
-                                                                                                     std::set<VariantSymbol*>& visiting,
-                                                                                                     bool filter_to_search_path) {
-                // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
-                if (sym == nullptr) {
-                    assert(false);
-                    return;
-                }
-                // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
-                if (visiting.contains(sym)) {
-                    return;
-                }
-                if (filter_to_search_path && filter_recursive_search_tree && !visible_search_symbols.contains(sym)) {
-                    return;
-                }
-
-                // Skip hidden symbols
-                bool hidden = m_hidden_symbols.contains(sym->getFullName());
-                if (!show_hidden_symbols && hidden) {
-                    return;
-                }
-
-                visiting.insert(sym);
-                bool custom_symbol_scale = getSymbolScale(*sym) != 1;
-                ImGui::PushStyleColor(ImGuiCol_Text,
-                                      hidden              ? COLOR_GRAY :
-                                      custom_symbol_scale ? COLOR_LIGHT_BLUE :
-                                                            ImGui::GetStyle().Colors[ImGuiCol_Text]);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                // Full name is needed for top-level recursive results from multiple scopes.
-                std::string symbol_name = sym->getParent() == nullptr && m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
-                bool const auto_open = auto_open_symbols.contains(sym);
-                if (sym->getType() == VariantSymbol::Type::Pointer) {
-                    // Pointer
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-                    VariantSymbol* pointed_symbol = sym->getPointedSymbol();
-                    if (!pointed_symbol) {
-                        flags |= ImGuiTreeNodeFlags_Leaf;
-                        sym->opened_manually = false;
-                    } else {
-                        ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
-                    }
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    if (pointed_symbol && !auto_open) {
-                        sym->opened_manually = open;
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    // Add symbol to scalar window on double click. The pointer can be null pointer or
-                    // point to function scope static or something but in that case it will not be
-                    // dereferenced and will show only NAN as value
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
-
-                    if (ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        if (pointed_symbol) {
-                            show_children(pointed_symbol,
-                                          visiting,
-                                          filter_to_search_path && auto_open);
-                        }
-                        ImGui::TreePop();
-                    }
-                } else if (sym->getChildren().size() > 0) {
-                    // Object/array
-                    ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
-                    if (!auto_open) {
-                        sym->opened_manually = open;
-                    }
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
-                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
-                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
-                        ImGui::Text("Drag to custom window to add all children");
-                        ImGui::EndDragDropSource();
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
-                            show_children(child.get(),
-                                          visiting,
-                                          filter_to_search_path && auto_open);
-                        }
-                        ImGui::TreePop();
-                    }
-                } else {
-                    // Rest
-                    bool selected = contains(m_selected_symbols, sym);
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
-                    if (selected) {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    ImGui::TreePop();
-                    if (ImGui::IsItemClicked()) {
-                        if (ImGui::GetIO().KeyCtrl) {
-                            m_selected_symbols.push_back(sym);
-                            // Show custom signal creator if ctrl+shift is pressed
-                            if (ImGui::GetIO().KeyShift) {
-                                m_show_custom_signal_creator = true;
-                            }
-                        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
-                            // Clear if clicking something else than the selected
-                            m_selected_symbols.clear();
-                        }
-                    }
-
-                    bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
-                                           || sym->getType() == VariantSymbol::Type::Enum;
-                    if (m_selected_symbols.size() == 2) {
-                        // drag-and-droppable to vector plot
-                        if (ImGui::BeginDragDropSource()) {
-                            ImGui::SetDragDropPayload("VECTOR_SYMBOL", m_selected_symbols.data(), sizeof(VariantSymbol*) * 2);
-                            ImGui::Text("Drag to vector plot");
-                            ImGui::EndDragDropSource();
-                        }
-                    } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    // Add symbol to scalar window on double click
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    // Add value
-                    ImGui::TableNextColumn();
-                    if (arithmetic_or_enum) {
-                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName(), getSymbolScale(*sym));
-                    } else {
-                        ImGui::Text(sym->valueAsStr().c_str());
-                    }
-                }
-                ImGui::PopStyleColor();
-                visiting.erase(sym);
-            };
-            std::set<VariantSymbol*> visiting;
-            show_children(symbol, visiting, true);
-        }
-        ImGui::EndTable();
-    }
+    showSymbolSearchTable(symbols_to_search, show_hidden_symbols);
     ImGui::End();
 }
 

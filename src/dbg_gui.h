@@ -35,6 +35,7 @@
 #include <unordered_map>
 #include <set>
 #include <deque>
+#include <vector>
 
 struct GLFWwindow;
 
@@ -126,6 +127,29 @@ class DbgGui {
     double getSymbolScale(VariantSymbol& sym) const;
     std::string getSymbolScaleStr(VariantSymbol& sym) const;
     void setSymbolScaleStr(VariantSymbol& sym, std::string const& scale);
+    void updateSymbolSearchResults(std::string const& search_string);
+    struct SymbolSearchRenderState {
+        bool show_hidden_symbols = false;
+        bool filter_recursive_tree = false;
+        std::set<VariantSymbol*> visible_symbols;
+        std::set<VariantSymbol*> auto_open_symbols;
+        std::set<VariantSymbol*> visiting;
+    };
+    std::vector<VariantSymbol*> buildSymbolSearchRoots(SymbolSearchRenderState& state) const;
+    void showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols);
+    void showSymbolTreeNode(VariantSymbol* sym, SymbolSearchRenderState& state, bool filter_to_search_path);
+    void showPointerSymbolTreeNode(VariantSymbol* sym,
+                                   VariantSymbol* pointed_symbol,
+                                   std::string const& symbol_name,
+                                   bool auto_open,
+                                   SymbolSearchRenderState& state,
+                                   bool filter_to_search_path);
+    void showObjectSymbolTreeNode(VariantSymbol* sym,
+                                  std::string const& symbol_name,
+                                  bool auto_open,
+                                  SymbolSearchRenderState& state,
+                                  bool filter_to_search_path);
+    void showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name);
     void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);
     void addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col);
