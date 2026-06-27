@@ -224,6 +224,29 @@ void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTra
     }
 }
 
+void CsvPlotter::removeFileFromPlots(CsvFileData& file) {
+    for (CsvSignal& signal : file.signals) {
+        for (ScalarPlot& plot : m_scalar_plots) {
+            plot.removeSignal(&signal);
+        }
+        for (VectorPlot& plot : m_vector_plots) {
+            plot.removeSignal(&signal);
+        }
+        for (SpectrumPlot& plot : m_spectrum_plots) {
+            plot.removeSignal(&signal);
+        }
+        remove(m_selected_signals, &signal);
+    }
+}
+
+void CsvPlotter::removeAllFiles() {
+    for (auto& file : m_csv_data) {
+        removeFileFromPlots(*file);
+    }
+    m_selected_signals.clear();
+    m_csv_data.clear();
+}
+
 CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
     auto it = m_signal_plot_style_settings.find(signal.name);
     return it == m_signal_plot_style_settings.end() ? m_options.plot_style : it->second;
@@ -943,6 +966,30 @@ void CsvPlotter::showSignalWindow() {
             plot.clear();
         }
     }
+    ImGui::SameLine();
+    char const* remove_all_files_popup_title = "Remove all files  ";
+    if (ImGui::Button("Remove all files")) {
+        ImGui::OpenPopup(remove_all_files_popup_title);
+    }
+    float const remove_all_files_popup_width = ImGui::CalcTextSize(remove_all_files_popup_title).x;
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(remove_all_files_popup_width, 0));
+    if (ImGui::BeginPopupModal(remove_all_files_popup_title, NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::TextUnformatted("Are you sure?");
+        ImGui::Separator();
+        if (ImGui::Button("Yes")) {
+            removeAllFiles();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 
     // The flag is active for only a single frame
     m_flags.reset_colors = false;
@@ -1270,23 +1317,7 @@ void CsvPlotter::showSignalWindow() {
     ImGui::End();
 
     if (file_to_remove) {
-        // Remove signal from all scalar, vector and spectrum plots
-        for (ScalarPlot& plot : m_scalar_plots) {
-            for (CsvSignal& signal : (*file_to_remove)->signals) {
-                plot.removeSignal(&signal);
-            }
-        }
-        for (VectorPlot& plot : m_vector_plots) {
-            for (CsvSignal& signal : (*file_to_remove)->signals) {
-                plot.removeSignal(&signal);
-            }
-        }
-        for (SpectrumPlot& plot : m_spectrum_plots) {
-            for (CsvSignal& signal : (*file_to_remove)->signals) {
-                plot.removeSignal(&signal);
-            }
-        }
-
+        removeFileFromPlots(**file_to_remove);
         remove(m_csv_data, *file_to_remove);
     }
 }

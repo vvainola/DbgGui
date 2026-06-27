@@ -191,6 +191,8 @@ class CsvPlotter {
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
+    void removeFileFromPlots(CsvFileData& file);
+    void removeAllFiles();
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
