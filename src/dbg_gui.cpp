@@ -428,6 +428,14 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_window_focus.symbols.initial_focus = m_settings["initial_focus"]["symbols"];)
         TRY(m_window_focus.log.initial_focus = m_settings["initial_focus"]["log"];)
 
+        m_symbol_scale_settings.clear();
+        TRY(for (auto const& [symbol_name, scale] : m_settings["symbol_scales"].items()) {
+            std::string scale_str = scale.is_number() ? std::format("{:g}", scale.get<double>()) : scale.get<std::string>();
+            if (str::evaluateExpression(scale_str).has_value()) {
+                m_symbol_scale_settings[symbol_name] = scale_str;
+            }
+        })
+
         for (auto symbol : m_settings["scalar_symbols"]) {
             TRY(
               VariantSymbol* sym = m_symbols.getSymbol(symbol["name"]);
@@ -907,6 +915,10 @@ void DbgGui::updateSavedSettings() {
     m_settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     m_settings["group_to_add_symbols"] = m_group_to_add_symbols;
     m_settings["symbol_search_depth"] = m_symbol_search_depth;
+    m_settings["symbol_scales"] = nlohmann::json::object();
+    for (auto const& [symbol_name, scale] : m_symbol_scale_settings) {
+        m_settings["symbol_scales"][symbol_name] = scale;
+    }
     // Settings are only saved if window is focused so that there is no competition which process is writing
     bool closing = glfwWindowShouldClose(m_window);
     bool focused = (bool)glfwGetWindowAttrib(m_window, GLFW_FOCUSED);
@@ -1014,7 +1026,7 @@ void DbgGui::setInitialFocus() {
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
-    Scalar* scalar = addScalar(sym->getValueSource(), group, sym->getFullName());
+    Scalar* scalar = addScalar(sym->getValueSource(), group, sym->getFullName(), getSymbolScale(*sym));
     m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
     m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
     return scalar;

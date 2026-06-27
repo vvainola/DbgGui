@@ -40,6 +40,7 @@ struct GLFWwindow;
 
 inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.6f, 0.6f, 0.6f, 1);
+inline constexpr ImVec4 COLOR_LIGHT_BLUE = ImVec4(0.4f, 0.6f, 0.9f, 1);
 
 #if WINDOWS
 inline constexpr const char* USER_SETTINGS_LOCATION = "USERPROFILE";
@@ -121,6 +122,10 @@ class DbgGui {
     void addScalarScaleInput(Scalar* scalar);
     void addScalarOffsetInput(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
+    void addSymbolScaleInput(VariantSymbol& sym);
+    double getSymbolScale(VariantSymbol& sym) const;
+    std::string getSymbolScaleStr(VariantSymbol& sym) const;
+    void setSymbolScaleStr(VariantSymbol& sym, std::string const& scale);
     void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);
     void addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col);
@@ -153,6 +158,7 @@ class DbgGui {
     int m_symbol_search_depth = 0;
     std::string m_group_to_add_symbols{"dbg"};
     std::set<std::string> m_hidden_symbols;
+    std::unordered_map<std::string, std::string> m_symbol_scale_settings;
     std::vector<SymbolValue> m_saved_snapshot;
     std::vector<VariantSymbol*> m_selected_symbols;
     bool m_show_custom_signal_creator = false;

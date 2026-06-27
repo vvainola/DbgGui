@@ -308,9 +308,45 @@ void DbgGui::addScalarOffsetInput(Scalar* scalar) {
     }
 }
 
+double DbgGui::getSymbolScale(VariantSymbol& sym) const {
+    auto scale = str::evaluateExpression(getSymbolScaleStr(sym));
+    return scale.has_value() ? scale.value() : 1;
+}
+
+std::string DbgGui::getSymbolScaleStr(VariantSymbol& sym) const {
+    auto it = m_symbol_scale_settings.find(sym.getFullName());
+    return it == m_symbol_scale_settings.end() ? "1" : it->second;
+}
+
+void DbgGui::setSymbolScaleStr(VariantSymbol& sym, std::string const& scale) {
+    auto scale_value = str::evaluateExpression(scale);
+    if (!scale_value.has_value()) {
+        m_error_message = scale_value.error();
+        return;
+    }
+
+    if (scale_value.value() == 1) {
+        m_symbol_scale_settings.erase(sym.getFullName());
+    } else {
+        m_symbol_scale_settings[sym.getFullName()] = scale;
+    }
+}
+
+void DbgGui::addSymbolScaleInput(VariantSymbol& sym) {
+    std::string scale = getSymbolScaleStr(sym);
+    if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        setSymbolScaleStr(sym, scale);
+    }
+}
+
 void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
+        bool arithmetic_or_enum = sym.getType() == VariantSymbol::Type::Arithmetic
+                               || sym.getType() == VariantSymbol::Type::Enum;
+        if (arithmetic_or_enum) {
+            addSymbolScaleInput(sym);
+        }
         bool can_fold_children = !sym.getChildren().empty()
                               || (sym.getType() == VariantSymbol::Type::Pointer && sym.getPointedSymbol() != nullptr);
         std::function<void(VariantSymbol&, bool, std::set<VariantSymbol*>&)> fold_all =
@@ -783,7 +819,7 @@ void DbgGui::showScalarWindow() {
                     // keyboard navigation in the table does not work properly
                     // and up/down changes columns
                     if (scalar->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias.c_str());
                     } else {
                         ImGui::Text(scalar->alias.c_str());
                     }
@@ -940,7 +976,7 @@ void DbgGui::showVectorWindow() {
                     }
                     ImGui::SameLine();
                     if (vector->x->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->x->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->x->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(vector->x->getValue()).c_str());
                     }
@@ -956,7 +992,7 @@ void DbgGui::showVectorWindow() {
                     }
                     ImGui::SameLine();
                     if (vector->y->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->y->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->y->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(vector->y->getValue()).c_str());
                     }
@@ -1040,7 +1076,7 @@ void DbgGui::showCustomWindow() {
                 // keyboard navigation in the table does not work properly
                 // and up/down changes columns
                 if (scalar->customScaleOrOffset()) {
-                    ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
+                    ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
                 } else {
                     ImGui::Text(scalar->alias_and_group.c_str());
                 }
@@ -1149,7 +1185,11 @@ void DbgGui::showSymbolsWindow() {
                 }
 
                 visiting.insert(sym);
-                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
+                bool custom_symbol_scale = getSymbolScale(*sym) != 1;
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                                      hidden ? COLOR_GRAY :
+                                      custom_symbol_scale ? COLOR_LIGHT_BLUE :
+                                      ImGui::GetStyle().Colors[ImGuiCol_Text]);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -1263,7 +1303,7 @@ void DbgGui::showSymbolsWindow() {
                     // Add value
                     ImGui::TableNextColumn();
                     if (arithmetic_or_enum) {
-                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName());
+                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName(), getSymbolScale(*sym));
                     } else {
                         ImGui::Text(sym->valueAsStr().c_str());
                     }
@@ -1414,7 +1454,7 @@ void DbgGui::showGridWindow() {
 
                         // Name
                         if (scalar->customScaleOrOffset()) {
-                            ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
+                            ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
                         } else {
                             ImGui::Text(scalar->alias_and_group.c_str());
                         }
