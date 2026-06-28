@@ -134,6 +134,28 @@ void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines
     }
 }
 
+std::string getSymbolScaleStr(VariantSymbol& sym,
+                              std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
+    auto it = symbol_scale_settings.find(sym.getFullName());
+    return it == symbol_scale_settings.end() ? "1" : it->second;
+}
+
+std::optional<std::string> setSymbolScaleStr(VariantSymbol& sym,
+                                             std::string const& scale,
+                                             std::unordered_map<std::string, std::string>& symbol_scale_settings) {
+    auto scale_value = str::evaluateExpression(scale);
+    if (!scale_value.has_value()) {
+        return scale_value.error();
+    }
+
+    if (scale_value.value() == 1) {
+        symbol_scale_settings.erase(sym.getFullName());
+    } else {
+        symbol_scale_settings[sym.getFullName()] = scale;
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 std::string getSourceValueStr(ValueSource src) {
@@ -369,40 +391,27 @@ void DbgGui::addScalarOffsetInput(Scalar* scalar) {
     }
 }
 
-double DbgGui::getSymbolScale(VariantSymbol& sym) const {
-    auto scale = str::evaluateExpression(getSymbolScaleStr(sym));
+double getSymbolScale(VariantSymbol& sym,
+                      std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
+    auto scale = str::evaluateExpression(getSymbolScaleStr(sym, symbol_scale_settings));
     return scale.has_value() ? scale.value() : 1;
 }
 
-std::string DbgGui::getSymbolScaleStr(VariantSymbol& sym) const {
-    auto it = m_symbol_scale_settings.find(sym.getFullName());
-    return it == m_symbol_scale_settings.end() ? "1" : it->second;
-}
-
-void DbgGui::setSymbolScaleStr(VariantSymbol& sym, std::string const& scale) {
-    auto scale_value = str::evaluateExpression(scale);
-    if (!scale_value.has_value()) {
-        m_error_message = scale_value.error();
-        return;
-    }
-
-    if (scale_value.value() == 1) {
-        m_symbol_scale_settings.erase(sym.getFullName());
-    } else {
-        m_symbol_scale_settings[sym.getFullName()] = scale;
-    }
-}
-
 void DbgGui::addSymbolScaleInput(VariantSymbol& sym) {
-    std::string scale = getSymbolScaleStr(sym);
+    std::string scale = getSymbolScaleStr(sym, m_symbol_scale_settings);
     if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
         // If the symbol is part of the selection, apply the scale to all selected symbols.
         if (contains(m_selected_symbols, &sym)) {
             for (VariantSymbol* selected : m_selected_symbols) {
-                setSymbolScaleStr(*selected, scale);
+                if (std::optional<std::string> error = setSymbolScaleStr(*selected, scale, m_symbol_scale_settings)) {
+                    m_error_message = *error;
+                    break;
+                }
             }
         } else {
-            setSymbolScaleStr(sym, scale);
+            if (std::optional<std::string> error = setSymbolScaleStr(sym, scale, m_symbol_scale_settings)) {
+                m_error_message = *error;
+            }
         }
     }
 }
@@ -1391,7 +1400,7 @@ void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
     }
 
     state.visiting.insert(sym);
-    bool const custom_symbol_scale = getSymbolScale(*sym) != 1;
+    bool const custom_symbol_scale = getSymbolScale(*sym, m_symbol_scale_settings) != 1;
     ImGui::PushStyleColor(ImGuiCol_Text,
                           hidden              ? COLOR_GRAY :
                           custom_symbol_scale ? COLOR_LIGHT_BLUE :
@@ -1544,7 +1553,7 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     if (arithmetic_or_enum) {
         addInputScalar(sym->getValueSource(),
                        "##symbol_" + sym->getFullName(),
-                       getSymbolScale(*sym),
+                       getSymbolScale(*sym, m_symbol_scale_settings),
                        0,
                        sym->isConst());
     } else {

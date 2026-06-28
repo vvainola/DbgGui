@@ -124,9 +124,6 @@ class DbgGui {
     void addScalarOffsetInput(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
     void addSymbolScaleInput(VariantSymbol& sym);
-    double getSymbolScale(VariantSymbol& sym) const;
-    std::string getSymbolScaleStr(VariantSymbol& sym) const;
-    void setSymbolScaleStr(VariantSymbol& sym, std::string const& scale);
     void updateSymbolSearchResults(std::string const& search_string);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;
@@ -296,4 +293,6 @@ inline std::string numberAsStr(T number) {
 }
 
 std::string getSourceValueStr(ValueSource src);
+double getSymbolScale(VariantSymbol& sym,
+                      std::unordered_map<std::string, std::string> const& symbol_scale_settings);
 void HelpMarker(const char* desc);
