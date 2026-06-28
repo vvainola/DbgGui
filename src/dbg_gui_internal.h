@@ -167,7 +167,7 @@ class DbgGui {
     std::vector<SymbolValue> m_saved_snapshot;
     std::vector<VariantSymbol*> m_selected_symbols;
     // Flattened list of selectable (leaf) symbols submitted this frame, in tree display order.
-    // Built during showSymbolTreeNode traversal and used by applySymbolSelectionRequests()
+    // Built during showSymbolTreeNode traversal and used by applyMultiSelectRequests()
     // to map multi-select SetRange/SetAll indices back to VariantSymbol*. Must outlive the
     // BeginMultiSelect/EndMultiSelect scope (i.e. be a member, not a frame-local), because
     // EndMultiSelect's requests are applied after the traversal.
