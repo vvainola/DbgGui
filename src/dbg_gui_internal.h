@@ -119,7 +119,7 @@ class DbgGui {
     void setInitialFocus();
     void synchronizeSpeed();
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
-    void addScalarContextMenu(Scalar* scalar);
+    void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
     void addScalarScaleInput(Scalar* scalar);
     void addScalarOffsetInput(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
@@ -195,6 +195,8 @@ class DbgGui {
     std::vector<VariantSymbol*> m_visible_tree_symbols;
     std::vector<Scalar*> m_selected_scalars;
     std::vector<Scalar*> m_visible_scalars;
+    std::vector<Vector2D*> m_selected_vectors;
+    std::vector<Vector2D*> m_visible_vectors;
     bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};

@@ -681,10 +681,15 @@ void DbgGui::updateSavedSettings() {
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
     m_settings["initial_focus"]["log"] = m_window_focus.log.focused;
 
-    // If vector uses hidden component scalars, mark them as also deleted but
-    // don't delete them for real yet before they are removed from all other structures.
+    // If a component scalar is deleted, delete the vector too so vector groups
+    // cannot keep pointers to scalars that are removed below. If vector uses
+    // hidden component scalars, mark them as also deleted but don't delete them
+    // for real yet before they are removed from all other structures.
     for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
+        if (vector->x->deleted || vector->y->deleted) {
+            vector->deleted = true;
+        }
         if (vector->deleted) {
             if (vector->x->hide_from_scalars_window) {
                 vector->x->deleted = true;
@@ -903,6 +908,7 @@ void DbgGui::updateSavedSettings() {
     for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
+            remove(m_selected_vectors, vector.get());
             m_settings["vector_symbols"].erase(vector->name_and_group);
             remove(m_vectors, vector);
         }
@@ -920,6 +926,7 @@ void DbgGui::updateSavedSettings() {
         if (scalar->deleted) {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_sampler.stopSampling(scalar.get());
+            remove(m_selected_scalars, scalar.get());
             m_settings["scalars"].erase(scalar->name_and_group);
             m_settings["scalar_symbols"].erase(scalar->name_and_group);
             if (m_settings["custom_signals"].contains(scalar->name_and_group)) {

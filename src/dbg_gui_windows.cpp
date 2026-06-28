@@ -282,7 +282,7 @@ void addInputScalar(ValueSource const& value_src,
     }
 }
 
-void DbgGui::addScalarContextMenu(Scalar* scalar) {
+void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = scalar->getScaledValue();
         if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -310,6 +310,20 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
                 scalar->alias = scalar->name;
             }
             scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+        }
+        if (show_delete) {
+            ImGui::Separator();
+            if (ImGui::Button("Delete")) {
+                if (contains(m_selected_scalars, scalar)) {
+                    for (Scalar* selected_scalar : m_selected_scalars) {
+                        selected_scalar->deleted = true;
+                    }
+                    m_selected_scalars.clear();
+                } else {
+                    scalar->deleted = true;
+                }
+                ImGui::CloseCurrentPopup();
+            }
         }
         ImGui::EndPopup();
     }
@@ -780,8 +794,8 @@ void DbgGui::showScalarWindow() {
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
         ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                         | ImGuiMultiSelectFlags_BoxSelect2d
-                                         | ImGuiMultiSelectFlags_ScopeRect;
+                                       | ImGuiMultiSelectFlags_BoxSelect2d
+                                       | ImGuiMultiSelectFlags_ScopeRect;
         ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                             (int)m_selected_scalars.size(),
                                                             -1);
@@ -849,7 +863,7 @@ void DbgGui::showScalarWindow() {
                 };
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                           payload->DataSize / sizeof(uint64_t));
+                                            payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
                         Scalar* scalar = getScalar(id);
                         if (scalar) {
@@ -928,7 +942,7 @@ void DbgGui::showScalarWindow() {
                     if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
-                    addScalarContextMenu(scalar);
+                    addScalarContextMenu(scalar, true);
 
                     // Show value
                     ImGui::TableNextColumn();
@@ -984,6 +998,15 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
+
+        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                       | ImGuiMultiSelectFlags_BoxSelect2d
+                                       | ImGuiMultiSelectFlags_ScopeRect;
+        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                            (int)m_selected_vectors.size(),
+                                                            -1);
+        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+        m_visible_vectors.clear();
 
         std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
             std::vector<Vector2D*> const& vectors = group.signals;
@@ -1055,8 +1078,37 @@ void DbgGui::showVectorWindow() {
 
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
-                    // Show name
-                    ImGui::Text(vector->name.c_str());
+                    bool const selected = contains(m_selected_vectors, vector);
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+                                             | ImGuiTreeNodeFlags_SpanAvailWidth
+                                             | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (selected) {
+                        flags |= ImGuiTreeNodeFlags_Selected;
+                    }
+                    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_vectors.size());
+                    ImGui::TreeNodeEx(std::format("{}##{}", vector->name, vector->name_and_group).c_str(), flags);
+                    m_visible_vectors.push_back(vector);
+
+                    if (ImGui::BeginPopupContextItem((vector->name_and_group + "_vector_context_menu").c_str())) {
+                        if (ImGui::Button("Copy name")) {
+                            ImGui::SetClipboardText(vector->name.c_str());
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::Separator();
+                        if (ImGui::Button("Delete")) {
+                            if (contains(m_selected_vectors, vector)) {
+                                for (Vector2D* selected_vector : m_selected_vectors) {
+                                    selected_vector->deleted = true;
+                                }
+                                m_selected_vectors.clear();
+                            } else {
+                                vector->deleted = true;
+                            }
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
+
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         ImGui::SetDragDropPayload("VECTOR_ID", &vector->id, sizeof(uint64_t));
@@ -1108,6 +1160,9 @@ void DbgGui::showVectorWindow() {
             show_vector_group(it->second, false);
         }
 
+        ms_io = ImGui::EndMultiSelect();
+        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+
         ImGui::EndTable();
     }
     ImGui::End();
@@ -1117,7 +1172,7 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
             std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                   payload->DataSize / sizeof(uint64_t));
+                                    payload->DataSize / sizeof(uint64_t));
             for (uint64_t id : ids) {
                 Scalar* scalar = getScalar(id);
                 if (scalar) {
@@ -1132,7 +1187,7 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
             std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
-                                               payload->DataSize / sizeof(VariantSymbol*));
+                                              payload->DataSize / sizeof(VariantSymbol*));
             for (VariantSymbol* symbol : symbols) {
                 Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                 custom_window.addScalar(scalar);
@@ -1616,7 +1671,7 @@ void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col)
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
             std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                   payload->DataSize / sizeof(uint64_t));
+                                    payload->DataSize / sizeof(uint64_t));
             if (!ids.empty()) {
                 Scalar* dropped_scalar = getScalar(ids[0]);
                 if (dropped_scalar) {
