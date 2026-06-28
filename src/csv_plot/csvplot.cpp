@@ -133,16 +133,6 @@ static void loadImguiLayout(std::string layout) {
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
 }
 
-static bool loadImguiLayoutFromDisk(std::string const& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) {
-        return false;
-    }
-    std::string layout((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    loadImguiLayout(layout);
-    return true;
-}
-
 int32_t binarySearch(std::span<double const> values, double searched_value, int32_t start, int32_t end) {
     int32_t original_start = start;
     int32_t mid = std::midpoint(start, end);
@@ -560,8 +550,6 @@ void CsvPlotter::loadPreviousSessionSettings() {
             if (settings.contains("layout")) {
                 std::string layout = settings["layout"];
                 loadImguiLayout(layout);
-            } else if (!loadImguiLayoutFromDisk(settings_dir + "imgui.ini")) {
-                ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
             }
 
             TRY(m_rows = int(settings["window"]["rows"]);)

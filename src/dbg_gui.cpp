@@ -59,16 +59,6 @@ void loadImguiLayout(std::string layout) {
     imgui_settings::migrateLayoutIniHashes(layout);
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
 }
-
-bool loadImguiLayoutFromDisk(std::string const& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) {
-        return false;
-    }
-    std::string layout((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    loadImguiLayout(layout);
-    return true;
-}
 } // namespace
 
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
@@ -421,8 +411,6 @@ void DbgGui::loadPreviousSessionSettings() {
         if (m_settings.contains("layout")) {
             std::string layout = m_settings["layout"];
             loadImguiLayout(layout);
-        } else if (!loadImguiLayoutFromDisk(settings_dir + "imgui.ini")) {
-            ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
         }
 
         m_options.fromJson(m_settings["options"]);
