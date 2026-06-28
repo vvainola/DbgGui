@@ -118,6 +118,12 @@ ResetDerived g_reset_derived;
 ResetDoubleDerived g_reset_double_derived;
 extern const int g_const_int = 123;
 
+// A const global that a pointer can reference. Snapshot restore must be able
+// to save and restore a pointer to this constant even though the constant
+// itself is read-only and excluded from save/restore.
+extern const int g_const_target = 42;
+int const* g_const_ptr = &g_const_target;
+
 struct ConstMemberStruct {
     int mutable_value = 1;
     const int const_value = 2;
@@ -293,7 +299,10 @@ TEST_CASE("Basic symbol access") {
     CHECK(double_derived_base_double_sym->read() == Approx(g_reset_double_derived.base_double));
     CHECK(inherited_derived_value_sym->read() == g_reset_double_derived.derived_value);
 
-    CHECK(symbols.getSymbol("g_const_int") == nullptr);
+    VariantSymbol* const_int_sym = symbols.getSymbol("g_const_int");
+    REQUIRE(const_int_sym != nullptr);
+    CHECK(const_int_sym->isConst());
+    CHECK(const_int_sym->read() == g_const_int);
 
     VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
     REQUIRE(mutable_member_sym != nullptr);
@@ -313,8 +322,17 @@ TEST_CASE("Basic symbol access") {
     };
     CHECK(snapshot_contains(mutable_member_sym));
     CHECK_FALSE(snapshot_contains(const_member_sym));
+    CHECK_FALSE(snapshot_contains(const_int_sym));
 
-    CHECK(symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]") == nullptr);
+#if WINDOWS
+    // magic_enum constexpr string storage lives in .rdata; it should be visible
+    // as a read-only constant so pointers to it can be snapshotted, but its
+    // value should not be saved/restored.
+    VariantSymbol* magic_enum_name_char_sym = symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]");
+    REQUIRE(magic_enum_name_char_sym != nullptr);
+    CHECK(magic_enum_name_char_sym->isConst());
+    CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
+#endif
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
@@ -549,6 +567,33 @@ TEST_CASE("Snapshot from memory") {
     REQUIRE(g_reset_derived.base_double == temp_reset_base_double);
 
     SNP_deleteSymbolLookup(symbols);
+}
+
+TEST_CASE("Snapshot restores pointer to const global") {
+    // A pointer to a const global must be saved and restored by the in-memory
+    // snapshot. The const global itself is not saved/restored (it is read-only),
+    // but the pointer's value (the address of the const global) must still be
+    // preserved so that restoring the snapshot puts the pointer back where it
+    // was.
+    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+
+    VariantSymbol* ptr_sym = symbols.getSymbol("g_const_ptr");
+    REQUIRE(ptr_sym != nullptr);
+
+    // Point the pointer at the const global.
+    g_const_ptr = &g_const_target;
+    REQUIRE(g_const_ptr == &g_const_target);
+
+    auto snapshot = symbols.saveSnapshotToMemory();
+
+    // Move the pointer somewhere else.
+    int dummy = 0;
+    g_const_ptr = &dummy;
+    REQUIRE(g_const_ptr != &g_const_target);
+
+    // Restore the snapshot — the pointer should go back to the const global.
+    symbols.loadSnapshotFromMemory(snapshot);
+    CHECK(g_const_ptr == &g_const_target);
 }
 
 // ============================================================================

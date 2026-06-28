@@ -1255,14 +1255,6 @@ void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_desc
         return;
     }
 
-    // Symbols in read-only sections are compile-time/static constants from the
-    // snapshot point of view. They cannot be restored safely and add noise to
-    // the symbol tree, so skip the whole root instead of exposing read-only
-    // children.
-    if (!sectionIsWritable(image_sections, section)) {
-        return;
-    }
-
     MemoryAddress const address = sectionOffsetToAddress(module, image_sections, section, offset);
     if (address == 0) {
         return;
@@ -1276,6 +1268,11 @@ void storeDataSymbol(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_desc
     auto symbol = std::make_unique<SymbolDescriptor>();
     symbol->name = std::move(symbol_name);
     symbol->address = address;
+    // Symbols in read-only sections (e.g. .rdata) are compile-time constants.
+    // They must still be present in the symbol tree so that pointers to them
+    // can be saved and restored by the snapshot mechanism, but they are marked
+    // const to prevent writes and to exclude their values from save/restore.
+    symbol->is_const = !sectionIsWritable(image_sections, section);
     if (!resolveType(type_table, type_index, *symbol)) {
         return;
     }

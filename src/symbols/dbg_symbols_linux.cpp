@@ -769,17 +769,14 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                     }
                 }
 
-                // Top-level const globals are constants from the snapshot point
-                // of view and should not be restored or shown in the root tree.
-                // Const members of mutable objects are still resolved when
-                // their parent object is mutable.
-                if (has_type && !isConstQualifiedType(dbg, type_offset)) {
+                if (has_type) {
                     std::string sym_name = effective_name_is_fully_qualified ?
                                              (module_prefix + effective_name) :
                                              (module_prefix + namespace_prefix + effective_name);
                     auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
                       .name = sym_name,
                       .address = addr,
+                      .is_const = isConstQualifiedType(dbg, type_offset),
                     });
                     if (resolveType(dbg, type_offset, *symbol, full_type_defs)) {
                         m_symbol_descriptors.push_back(std::move(symbol));
