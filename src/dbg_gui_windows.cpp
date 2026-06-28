@@ -158,6 +158,48 @@ std::optional<std::string> setSymbolScaleStr(VariantSymbol& sym,
 
 } // namespace
 
+std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getScaleStr().data(), scalar->getScaleStr().size());
+    buffer[scalar->getScaleStr().size()] = '\0';
+    if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        std::expected<double, std::string> scale = str::evaluateExpression(buffer);
+        if (scale.has_value()) {
+            if (contains(selected_scalars, scalar)) {
+                for (Scalar* s : selected_scalars) {
+                    s->setScaleStr(buffer);
+                }
+            } else {
+                scalar->setScaleStr(buffer);
+            }
+        } else {
+            return scale.error();
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getOffsetStr().data(), scalar->getOffsetStr().size());
+    buffer[scalar->getOffsetStr().size()] = '\0';
+    if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        std::expected<double, std::string> offset = str::evaluateExpression(buffer);
+        if (offset.has_value()) {
+            if (contains(selected_scalars, scalar)) {
+                for (Scalar* s : selected_scalars) {
+                    s->setOffsetStr(buffer);
+                }
+            } else {
+                scalar->setOffsetStr(buffer);
+            }
+        } else {
+            return offset.error();
+        }
+    }
+    return std::nullopt;
+}
+
 std::string getSourceValueStr(ValueSource src) {
     return std::visit(
       [=](auto&& src) {
@@ -311,8 +353,12 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
             m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
             ImGui::CloseCurrentPopup();
         }
-        addScalarScaleInput(scalar);
-        addScalarOffsetInput(scalar);
+        if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
+            m_error_message = *error;
+        }
+        if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
+            m_error_message = *error;
+        }
 
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(scalar->name.c_str());
@@ -348,46 +394,6 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
             }
         }
         ImGui::EndPopup();
-    }
-}
-
-void DbgGui::addScalarScaleInput(Scalar* scalar) {
-    char buffer[1024];
-    std::memcpy(buffer, scalar->getScaleStr().data(), scalar->getScaleStr().size());
-    buffer[scalar->getScaleStr().size()] = '\0';
-    if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        auto scale = str::evaluateExpression(buffer);
-        if (scale.has_value()) {
-            if (contains(m_selected_scalars, scalar)) {
-                for (Scalar* s : m_selected_scalars) {
-                    s->setScaleStr(buffer);
-                }
-            } else {
-                scalar->setScaleStr(buffer);
-            }
-        } else {
-            m_error_message = scale.error();
-        }
-    }
-}
-
-void DbgGui::addScalarOffsetInput(Scalar* scalar) {
-    char buffer[1024];
-    std::memcpy(buffer, scalar->getOffsetStr().data(), scalar->getOffsetStr().size());
-    buffer[scalar->getOffsetStr().size()] = '\0';
-    if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        auto offset = str::evaluateExpression(buffer);
-        if (offset.has_value()) {
-            if (contains(m_selected_scalars, scalar)) {
-                for (Scalar* s : m_selected_scalars) {
-                    s->setOffsetStr(buffer);
-                }
-            } else {
-                scalar->setOffsetStr(buffer);
-            }
-        } else {
-            m_error_message = offset.error();
-        }
     }
 }
 

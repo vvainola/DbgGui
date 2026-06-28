@@ -221,8 +221,12 @@ void DbgGui::showScalarPlots() {
                         m_pause_triggers.push_back(PauseTrigger(scalar, current_value));
                         ImGui::CloseCurrentPopup();
                     }
-                    addScalarScaleInput(scalar);
-                    addScalarOffsetInput(scalar);
+                    if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
+                        m_error_message = *error;
+                    }
+                    if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
+                        m_error_message = *error;
+                    }
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(scalar->alias.c_str());
                         ImGui::CloseCurrentPopup();

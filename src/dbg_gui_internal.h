@@ -31,6 +31,7 @@
 #include "str_helpers.h"
 
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <set>
@@ -120,8 +121,6 @@ class DbgGui {
     void synchronizeSpeed();
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
-    void addScalarScaleInput(Scalar* scalar);
-    void addScalarOffsetInput(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
     void addSymbolScaleInput(VariantSymbol& sym);
     void updateSymbolSearchResults(std::string const& search_string);
@@ -293,6 +292,8 @@ inline std::string numberAsStr(T number) {
 }
 
 std::string getSourceValueStr(ValueSource src);
+std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
+std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 double getSymbolScale(VariantSymbol& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
 void HelpMarker(const char* desc);
