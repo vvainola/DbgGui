@@ -61,6 +61,7 @@ struct CsvFileData {
     std::filesystem::file_time_type write_time;
     double x_axis_shift = 0;
     int run_number = 0;
+    bool enabled = true;
 
     bool operator==(CsvFileData const& other) {
         return name == other.name

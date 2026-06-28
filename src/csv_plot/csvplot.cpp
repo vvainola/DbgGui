@@ -86,6 +86,17 @@ inline int MAX_PLOT_SAMPLE_COUNT = 3000;
 constexpr int CUSTOM_SIGNAL_CAPACITY = 10;
 std::vector<double> ASCENDING_NUMBERS;
 
+bool ImRightAlign(const char* str_id) {
+    if (ImGui::BeginTable(str_id, 2, ImGuiTableFlags_SizingFixedFit, ImVec2(-1, 0))) {
+        ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextColumn();
+        ImGui::TableNextColumn();
+        return true;
+    }
+    return false;
+}
+#define ImEndRightAlign ImGui::EndTable()
+
 std::optional<int> pressedNumber();
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
@@ -1239,6 +1250,11 @@ void CsvPlotter::showSignalWindow() {
             }
             ImGui::EndPopup();
         }
+        ImGui::SameLine();
+        if (ImRightAlign(std::format("##right_align_{}_{}", file->name, file->run_number).c_str())) {
+            ImGui::Checkbox(std::format("##enabled_{}_{}", file->name, file->run_number).c_str(), &file->enabled);
+            ImEndRightAlign;
+        }
 
         if (opened) {
             for (CsvSignal& signal : file->signals) {
@@ -1431,6 +1447,9 @@ void CsvPlotter::showScalarPlots() {
 
                 for (int i = 0; i < plot.signals.size(); ++i) {
                     CsvSignal* signal = plot.signals[i];
+                    if (!signal->file->enabled) {
+                        continue;
+                    }
                     std::span<double const> all_x_values = getXSignalSamples(*signal->file);
                     std::vector<double> const& all_y_values = signal->samples;
                     double x_offset = plot_x_origin - signal->file->x_axis_shift;
@@ -1495,6 +1514,9 @@ void CsvPlotter::showScalarPlots() {
 
             CsvSignal* signal_to_remove = nullptr;
             for (CsvSignal* signal : plot.signals) {
+                if (!signal->file->enabled) {
+                    continue;
+                }
                 // Collect only values that are within plot range so that the autofit fits to the plotted values instead
                 // of the entire data
                 ImPlotRect limits = ImPlot::GetPlotLimits();
