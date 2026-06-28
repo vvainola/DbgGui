@@ -280,6 +280,6 @@ std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scala
 std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id);
 Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id);
-double getSymbolScale(VariantSymbol& sym,
+double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
 void HelpMarker(const char* desc);

@@ -41,7 +41,7 @@ class VariantSymbol {
 
     std::string const& getName() const { return m_name; }
     VariantSymbol* getParent() const { return m_parent; }
-    std::string getFullName() {
+    std::string getFullName() const {
         if (!m_full_name.empty()) {
             return m_full_name;
         }
@@ -75,7 +75,7 @@ class VariantSymbol {
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;
     std::string m_name;
-    std::string m_full_name;
+    mutable std::string m_full_name;
     MemoryAddress m_address;
     std::optional<ArithmeticSymbol> m_arithmetic_symbol = std::nullopt;
     std::vector<std::pair<int32_t, std::string>> m_enum_mappings;

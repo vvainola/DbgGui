@@ -134,7 +134,7 @@ void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines
     }
 }
 
-std::string getSymbolScaleStr(VariantSymbol& sym,
+std::string getSymbolScaleStr(VariantSymbol const& sym,
                               std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
     auto it = symbol_scale_settings.find(sym.getFullName());
     return it == symbol_scale_settings.end() ? "1" : it->second;
@@ -435,7 +435,7 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
     }
 }
 
-double getSymbolScale(VariantSymbol& sym,
+double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
     auto scale = str::evaluateExpression(getSymbolScaleStr(sym, symbol_scale_settings));
     return scale.has_value() ? scale.value() : 1;
