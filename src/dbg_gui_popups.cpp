@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 

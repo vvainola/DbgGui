@@ -22,7 +22,7 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "themes.h"
 #include "str_helpers.h"
 #include "custom_signal.hpp"

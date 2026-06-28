@@ -22,7 +22,7 @@
 
 #include "data_structures.h"
 #include "str_helpers.h"
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "variant_symbol.h"
 
 #include <regex>

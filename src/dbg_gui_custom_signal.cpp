@@ -1,4 +1,4 @@
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "custom_signal.hpp"
 #include "imgui_stdlib.h"
 
