@@ -523,8 +523,10 @@ void DbgGui::showVectorPlots() {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = findVector(m_vectors, id);
-                    m_sampler.startSampling(vector);
-                    vector_plot.addVectorToPlot(vector);
+                    if (vector) {
+                        m_sampler.startSampling(vector);
+                        vector_plot.addVectorToPlot(vector);
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
@@ -662,8 +664,10 @@ void DbgGui::showSpectrumPlots() {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
                     Vector2D* vector = findVector(m_vectors, id);
-                    m_sampler.startSampling(vector);
-                    plot.addToPlot(vector->x, vector->y);
+                    if (vector) {
+                        m_sampler.startSampling(vector);
+                        plot.addToPlot(vector->x, vector->y);
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
                     VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;

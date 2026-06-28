@@ -1074,7 +1074,7 @@ void DbgGui::showVectorWindow() {
                     Vector2D* vector = findVector(m_vectors, id);
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
-                    if (vector->group != group.full_name) {
+                    if (vector && vector->group != group.full_name) {
                         VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
                         VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
                         if (x && y) {
