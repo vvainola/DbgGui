@@ -456,7 +456,16 @@ void DbgGui::loadPreviousSessionSettings() {
               VariantSymbol* sym_x = m_symbols.getSymbol(symbol["x"]);
               VariantSymbol* sym_y = m_symbols.getSymbol(symbol["y"]);
               if (sym_x && sym_y) {
-                  addVectorSymbol(sym_x, sym_y, symbol["group"]);
+                  std::string group = symbol.value("group", "debug");
+                  // Prefer referencing existing visible scalars instead of creating hidden
+                  // duplicates via addVectorSymbol, which would hide the user's existing ones.
+                  Scalar* existing_x = getScalar(signalId((std::string)symbol["x"], group));
+                  Scalar* existing_y = getScalar(signalId((std::string)symbol["y"], group));
+                  if (existing_x && existing_y) {
+                      addVectorFromScalars(existing_x, existing_y);
+                  } else {
+                      addVectorSymbol(sym_x, sym_y, group);
+                  }
               };)
         }
 
@@ -672,13 +681,17 @@ void DbgGui::updateSavedSettings() {
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
     m_settings["initial_focus"]["log"] = m_window_focus.log.focused;
 
-    // If vector is deleted, mark the scalars as also deleted but don't delete them for real
-    // yet before they are removed from all other structures
+    // If vector uses hidden component scalars, mark them as also deleted but
+    // don't delete them for real yet before they are removed from all other structures.
     for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
-            vector->x->deleted = true;
-            vector->y->deleted = true;
+            if (vector->x->hide_from_scalars_window) {
+                vector->x->deleted = true;
+            }
+            if (vector->y->hide_from_scalars_window) {
+                vector->y->deleted = true;
+            }
         }
     }
 
@@ -1095,7 +1108,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     if (group.empty()) {
         group = "debug";
     }
-    uint64_t id = hash(name + " (" + group + ")");
+    uint64_t id = signalId(name, group);
     Scalar* existing_scalar = getScalar(id);
     if (existing_scalar != nullptr) {
         return existing_scalar;
@@ -1133,7 +1146,7 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     if (group.empty()) {
         group = "debug";
     }
-    uint64_t id = hash(name_x + " (" + group + ")");
+    uint64_t id = signalId(name_x, group);
     Vector2D* existing_vector = getVector(id);
     if (existing_vector != nullptr) {
         return existing_vector;
@@ -1166,6 +1179,44 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     added_group->signals.push_back(new_vector.get());
     // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
+    return new_vector.get();
+}
+
+Vector2D* DbgGui::addVectorFromScalars(Scalar* x, Scalar* y) {
+    if (x->group != y->group) {
+        return nullptr;
+    }
+    uint64_t id = signalId(x->name + "+" + y->name, x->group);
+    Vector2D* existing_vector = getVector(id);
+    if (existing_vector != nullptr) {
+        return existing_vector;
+    }
+    auto& new_vector = m_vectors.emplace_back(std::make_unique<Vector2D>());
+    new_vector->name = x->name;
+    new_vector->group = x->group;
+    new_vector->name_and_group = new_vector->name + " (" + x->group + ")";
+    new_vector->id = id;
+    new_vector->x = x;
+    new_vector->y = y;
+    std::vector<std::string> groups = str::split(new_vector->group, '|');
+    SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
+    added_group->name = groups[0];
+    added_group->full_name = added_group->name;
+    std::string full_group_name = added_group->name;
+    for (int i = 1; i < groups.size(); ++i) {
+        added_group = &added_group->subgroups[groups[i]];
+        added_group->name = groups[i];
+        full_group_name += "|" + added_group->name;
+        added_group->full_name = full_group_name;
+    }
+    added_group->signals.push_back(new_vector.get());
+    std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
+    // Reuse vector_symbols persistence intentionally. This restores only
+    // symbol-backed scalar pairs; vectors built from custom scalars are session-only.
+    m_settings["vector_symbols"][new_vector->name_and_group]["name"] = new_vector->name;
+    m_settings["vector_symbols"][new_vector->name_and_group]["group"] = new_vector->group;
+    m_settings["vector_symbols"][new_vector->name_and_group]["x"] = x->name;
+    m_settings["vector_symbols"][new_vector->name_and_group]["y"] = y->name;
     return new_vector.get();
 }
 

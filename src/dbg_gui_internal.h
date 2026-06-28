@@ -159,6 +159,7 @@ class DbgGui {
 
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
+    Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
 
     Scalar* getScalar(uint64_t id) {
         for (auto& scalar : m_scalars) {

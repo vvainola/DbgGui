@@ -529,6 +529,21 @@ void DbgGui::showVectorPlots() {
                     m_sampler.startSampling(vector);
                     vector_plot.addVectorToPlot(vector);
                 }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                           payload->DataSize / sizeof(uint64_t));
+                    if (ids.size() == 2) {
+                        Scalar* x = getScalar(ids[0]);
+                        Scalar* y = getScalar(ids[1]);
+                        if (x && y) {
+                            Vector2D* vector = addVectorFromScalars(x, y);
+                            if (vector) {
+                                m_sampler.startSampling(vector);
+                                vector_plot.addVectorToPlot(vector);
+                            }
+                        }
+                    }
+                }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_VECTOR")) {
                     std::pair<VectorPlot*, Vector2D*> plot_and_vector = *(std::pair<VectorPlot*, Vector2D*>*)payload->Data;
                     VectorPlot* original_plot = plot_and_vector.first;
