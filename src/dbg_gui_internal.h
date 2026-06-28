@@ -186,6 +186,12 @@ class DbgGui {
     std::unordered_map<std::string, std::string> m_symbol_scale_settings;
     std::vector<SymbolValue> m_saved_snapshot;
     std::vector<VariantSymbol*> m_selected_symbols;
+    // Flattened list of selectable (leaf) symbols submitted this frame, in tree display order.
+    // Built during showSymbolTreeNode traversal and used by applySymbolSelectionRequests()
+    // to map multi-select SetRange/SetAll indices back to VariantSymbol*. Must outlive the
+    // BeginMultiSelect/EndMultiSelect scope (i.e. be a member, not a frame-local), because
+    // EndMultiSelect's requests are applied after the traversal.
+    std::vector<VariantSymbol*> m_visible_tree_symbols;
     bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};

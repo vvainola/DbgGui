@@ -193,7 +193,6 @@ class CsvPlotter {
     void loadPreviousSessionSettings();
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
-    void applySelectionRequests(ImGuiMultiSelectIO* ms_io);
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
@@ -237,7 +236,7 @@ class CsvPlotter {
     std::vector<CsvSignal*> m_selected_signals;
     // Flattened, filter-matched signal pointers for the current frame. Built at the top of
     // the signal list loop and used to map multi-select SetRange/SetAll indices back to
-    // CsvSignal* in applySelectionRequests(). Must outlive the BeginMultiSelect/EndMultiSelect
+    // CsvSignal* in applyMultiSelectRequests(). Must outlive the BeginMultiSelect/EndMultiSelect
     // scope (i.e. be a member, not a frame-local), because EndMultiSelect's requests are
     // applied after the loop.
     std::vector<CsvSignal*> m_visible_signals;

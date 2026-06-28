@@ -26,12 +26,14 @@
 #include "str_helpers.h"
 #include "imgui_internal.h"
 #include "themes.h"
+#include "multi_select_helpers.h"
 
 #include <algorithm>
 #include <format>
 #include <iostream>
 #include <fstream>
 #include <string_view>
+#include <span>
 
 namespace {
 
@@ -368,7 +370,14 @@ void DbgGui::setSymbolScaleStr(VariantSymbol& sym, std::string const& scale) {
 void DbgGui::addSymbolScaleInput(VariantSymbol& sym) {
     std::string scale = getSymbolScaleStr(sym);
     if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        setSymbolScaleStr(sym, scale);
+        // If the symbol is part of the selection, apply the scale to all selected symbols.
+        if (contains(m_selected_symbols, &sym)) {
+            for (VariantSymbol* selected : m_selected_symbols) {
+                setSymbolScaleStr(*selected, scale);
+            }
+        } else {
+            setSymbolScaleStr(sym, scale);
+        }
     }
 }
 
@@ -1059,6 +1068,14 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
             Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
             custom_window.addScalar(scalar);
         }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+            std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
+                                               payload->DataSize / sizeof(VariantSymbol*));
+            for (VariantSymbol* symbol : symbols) {
+                Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+                custom_window.addScalar(scalar);
+            }
+        }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
             char* symbol_name = (char*)payload->Data;
             VariantSymbol* dragged_symbol = m_symbols.getSymbol(symbol_name);
@@ -1202,6 +1219,20 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
         return;
     }
 
+    // Multi-select scope wraps the whole table. BoxSelect2d because tree nodes have varying
+    // indentation (2D layout); ScopeRect so box-select/clear-on-void is confined to the table
+    // area, not the whole window (the search inputs above would otherwise be in scope).
+    ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                   | ImGuiMultiSelectFlags_BoxSelect2d
+                                   | ImGuiMultiSelectFlags_ScopeRect;
+    ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                        (int)m_selected_symbols.size(),
+                                                        -1); // Not used
+    // Begin-side requests (e.g. Ctrl+A, Escape, auto-clear on plain click) use the previous
+    // frame's m_visible_tree_symbols. The list is rebuilt below during traversal.
+    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+    m_visible_tree_symbols.clear();
+
     SymbolSearchRenderState state{
       .show_hidden_symbols = show_hidden_symbols,
       .show_constants = show_constants,
@@ -1210,6 +1241,11 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
     for (VariantSymbol* symbol : buildSymbolSearchRoots(state)) {
         showSymbolTreeNode(symbol, state, true);
     }
+
+    ms_io = ImGui::EndMultiSelect();
+    // End-side requests (e.g. SetRange from shift-click/box-select) use this frame's list.
+    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+
     ImGui::EndTable();
 }
 
@@ -1341,19 +1377,19 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     if (selected) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
+    // Register this leaf with the multi-select system. The index is its position in
+    // m_visible_tree_symbols (built in tree display order), which applySymbolSelectionRequests
+    // uses to map SetRange/SetAll indices back to VariantSymbol*.
+    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_tree_symbols.size());
     ImGui::TreeNodeEx(symbol_name.c_str(), flags);
     ImGui::TreePop();
-    if (ImGui::IsItemClicked()) {
-        if (ImGui::GetIO().KeyCtrl) {
-            m_selected_symbols.push_back(sym);
-            // Show custom signal creator if ctrl+shift is pressed.
-            if (ImGui::GetIO().KeyShift) {
-                m_show_custom_signal_creator = true;
-            }
-        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
-            // Clear if clicking something else than the selected symbol.
-            m_selected_symbols.clear();
-        }
+    m_visible_tree_symbols.push_back(sym);
+
+    // The multi-select API handles plain-click select, ctrl-toggle (with toggle-off),
+    // shift-range, box-select, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
+    // the Custom Signal Creator, since that is an application-specific action.
+    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift) {
+        m_show_custom_signal_creator = true;
     }
 
     bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
@@ -1366,9 +1402,17 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
             ImGui::EndDragDropSource();
         }
     } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
-        // Drag-and-droppable to scalar plot.
-        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-        ImGui::Text("Drag to plot");
+        // Drag-and-droppable to scalar plot. When the symbol is part of the selection,
+        // carry all selected symbols; otherwise just the dragged one.
+        if (contains(m_selected_symbols, sym)) {
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL_MULTI",
+                                      m_selected_symbols.data(),
+                                      m_selected_symbols.size() * sizeof(VariantSymbol*));
+            ImGui::Text("Drag %d symbols to plot", (int)m_selected_symbols.size());
+        } else {
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+            ImGui::Text("Drag to plot");
+        }
         ImGui::EndDragDropSource();
     }
 

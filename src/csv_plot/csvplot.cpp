@@ -45,6 +45,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
 #include "save_image.h"
+#include "multi_select_helpers.h"
 #include "csv_helpers.h"
 #include "custom_signal.hpp"
 #include "imgui_settings_migration.h"
@@ -251,36 +252,6 @@ void CsvPlotter::removeAllFiles() {
     }
     m_selected_signals.clear();
     m_csv_data.clear();
-}
-
-void CsvPlotter::applySelectionRequests(ImGuiMultiSelectIO* ms_io) {
-    for (const ImGuiSelectionRequest& req : ms_io->Requests) {
-        if (req.Type == ImGuiSelectionRequestType_SetAll) {
-            if (req.Selected) {
-                m_selected_signals = m_visible_signals;
-            } else {
-                m_selected_signals.clear();
-            }
-        } else if (req.Type == ImGuiSelectionRequestType_SetRange) {
-            int first = (int)req.RangeFirstItem;
-            int last = (int)req.RangeLastItem;
-            if (first > last) {
-                std::swap(first, last);
-            }
-            first = std::max(first, 0);
-            last = std::min(last, (int)m_visible_signals.size() - 1);
-            for (int i = first; i <= last; ++i) {
-                CsvSignal* signal = m_visible_signals[i];
-                if (req.Selected) {
-                    if (!contains(m_selected_signals, signal)) {
-                        m_selected_signals.push_back(signal);
-                    }
-                } else {
-                    remove(m_selected_signals, signal);
-                }
-            }
-        }
-    }
 }
 
 CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
@@ -1152,7 +1123,7 @@ void CsvPlotter::showSignalWindow() {
     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                         (int)m_selected_signals.size(),
                                                         (int)m_visible_signals.size());
-    applySelectionRequests(ms_io);
+    applyMultiSelectRequests(ms_io, m_selected_signals, m_visible_signals);
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
     int n = 0; // running index into m_visible_signals, incremented only for submitted signals
@@ -1406,7 +1377,7 @@ void CsvPlotter::showSignalWindow() {
     }
 
     ms_io = ImGui::EndMultiSelect();
-    applySelectionRequests(ms_io);
+    applyMultiSelectRequests(ms_io, m_selected_signals, m_visible_signals);
 
     ImGui::EndChild();
     ImGui::End();
