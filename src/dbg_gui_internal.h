@@ -30,6 +30,7 @@
 #include "themes.h"
 #include "str_helpers.h"
 
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -154,24 +155,6 @@ class DbgGui {
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
     Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
 
-    Scalar* getScalar(uint64_t id) {
-        for (auto& scalar : m_scalars) {
-            if (scalar->id == id) {
-                return scalar.get();
-            }
-        }
-        return nullptr;
-    }
-
-    Vector2D* getVector(uint64_t id) {
-        for (auto& vector : m_vectors) {
-            if (vector->id == id) {
-                return vector.get();
-            }
-        }
-        return nullptr;
-    }
-
     DbgSymbols const& m_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
     int m_symbol_search_depth = 0;
@@ -292,6 +275,8 @@ inline std::string numberAsStr(T number) {
 std::string getSourceValueStr(ValueSource src);
 std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
+Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id);
+Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id);
 double getSymbolScale(VariantSymbol& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
 void HelpMarker(const char* desc);

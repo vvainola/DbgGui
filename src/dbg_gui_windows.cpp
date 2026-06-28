@@ -901,7 +901,7 @@ void DbgGui::showScalarWindow() {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                             payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
-                        Scalar* scalar = getScalar(id);
+                        Scalar* scalar = findScalar(m_scalars, id);
                         if (scalar) {
                             move_scalar_to_group(scalar);
                         }
@@ -1071,7 +1071,7 @@ void DbgGui::showVectorWindow() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = getVector(id);
+                    Vector2D* vector = findVector(m_vectors, id);
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
                     if (vector->group != group.full_name) {
@@ -1210,7 +1210,7 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
             std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                     payload->DataSize / sizeof(uint64_t));
             for (uint64_t id : ids) {
-                Scalar* scalar = getScalar(id);
+                Scalar* scalar = findScalar(m_scalars, id);
                 if (scalar) {
                     custom_window.addScalar(scalar);
                 }
@@ -1692,7 +1692,7 @@ void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col)
             std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                     payload->DataSize / sizeof(uint64_t));
             if (!ids.empty()) {
-                Scalar* dropped_scalar = getScalar(ids[0]);
+                Scalar* dropped_scalar = findScalar(m_scalars, ids[0]);
                 if (dropped_scalar) {
                     grid_window.scalars[row][col] = dropped_scalar->id;
                 }
@@ -1738,7 +1738,7 @@ void DbgGui::showGridWindow() {
                 for (int col = 0; col < grid_window.columns; ++col) {
                     ImGui::TableNextColumn();
 
-                    Scalar* scalar = getScalar(grid_window.scalars[row][col]);
+                    Scalar* scalar = findScalar(m_scalars, grid_window.scalars[row][col]);
                     if (scalar) {
                         // Resize text so that it fits the cell
                         ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);

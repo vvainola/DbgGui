@@ -137,6 +137,24 @@ bool restoreScalarSettings(Scalar* scalar,
 }
 } // namespace
 
+Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id) {
+    for (std::unique_ptr<Scalar> const& scalar : scalars) {
+        if (scalar->id == id) {
+            return scalar.get();
+        }
+    }
+    return nullptr;
+}
+
+Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id) {
+    for (std::unique_ptr<Vector2D> const& vector : vectors) {
+        if (vector->id == id) {
+            return vector.get();
+        }
+    }
+    return nullptr;
+}
+
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
 uint64_t hash(const std::string& str) {
@@ -460,8 +478,8 @@ void DbgGui::loadPreviousSessionSettings() {
                   std::string group = symbol.value("group", "debug");
                   // Prefer referencing existing visible scalars instead of creating hidden
                   // duplicates via addVectorSymbol, which would hide the user's existing ones.
-                  Scalar* existing_x = getScalar(signalId((std::string)symbol["x"], group));
-                  Scalar* existing_y = getScalar(signalId((std::string)symbol["y"], group));
+                  Scalar* existing_x = findScalar(m_scalars, signalId((std::string)symbol["x"], group));
+                  Scalar* existing_y = findScalar(m_scalars, signalId((std::string)symbol["y"], group));
                   if (existing_x && existing_y) {
                       addVectorFromScalars(existing_x, existing_y);
                   } else {
@@ -517,7 +535,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 for (auto const& subplot_data : scalar_plot_data["subplots"]) {
                     if (subplot_data.contains("signals")) {
                         forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
-                            Scalar* scalar = getScalar(id);
+                            Scalar* scalar = findScalar(m_scalars, id);
                             if (scalar) {
                                 m_sampler.startSampling(scalar);
                                 plot.addScalarToPlot(scalar, subplot_idx);
@@ -528,7 +546,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 }
             } else if (scalar_plot_data.contains("signals")) {
                 forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
-                    Scalar* scalar = getScalar(id);
+                    Scalar* scalar = findScalar(m_scalars, id);
                     if (scalar) {
                         m_sampler.startSampling(scalar);
                         plot.addScalarToPlot(scalar);
@@ -541,7 +559,7 @@ void DbgGui::loadPreviousSessionSettings() {
         for (auto vector_plot_data : m_settings["vector_plots"]) {
             VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data);
             for (uint64_t id : vector_plot_data["signals"]) {
-                Vector2D* vec = getVector(id);
+                Vector2D* vec = findVector(m_vectors, id);
                 if (vec) {
                     m_sampler.startSampling(vec);
                     plot.addVectorToPlot(vec);
@@ -555,8 +573,8 @@ void DbgGui::loadPreviousSessionSettings() {
             if (spec_plot_data.contains("signals")) {
                 for (auto xy : spec_plot_data.at("signals")) {
                     if (xy.is_array() && xy.size() == 2) {
-                        Scalar* real = getScalar(xy[0]);
-                        Scalar* imag = getScalar(xy[1]);
+                        Scalar* real = findScalar(m_scalars, xy[0]);
+                        Scalar* imag = findScalar(m_scalars, xy[1]);
                         if (real && imag) {
                             m_sampler.startSampling(real);
                             m_sampler.startSampling(imag);
@@ -572,7 +590,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         for (auto& scalar_data : m_settings["scalars"]) {
             uint64_t id = scalar_data["id"];
-            Scalar* scalar = getScalar(id);
+            Scalar* scalar = findScalar(m_scalars, id);
             if (scalar) {
                 scalar->fromJson(scalar_data);
             };
@@ -582,7 +600,7 @@ void DbgGui::loadPreviousSessionSettings() {
         for (auto custom_window_data : m_settings["custom_windows"]) {
             CustomWindow& custom_window = m_custom_windows.emplace_back(custom_window_data);
             for (uint64_t id : custom_window_data["signals"]) {
-                Scalar* scalar = getScalar(id);
+                Scalar* scalar = findScalar(m_scalars, id);
                 if (scalar) {
                     custom_window.addScalar(scalar);
                 }
@@ -1117,7 +1135,7 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
         group = "debug";
     }
     uint64_t id = signalId(name, group);
-    Scalar* existing_scalar = getScalar(id);
+    Scalar* existing_scalar = findScalar(m_scalars, id);
     if (existing_scalar != nullptr) {
         return existing_scalar;
     }
@@ -1158,7 +1176,7 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
         group = "debug";
     }
     uint64_t id = signalId(name_x, group);
-    Vector2D* existing_vector = getVector(id);
+    Vector2D* existing_vector = findVector(m_vectors, id);
     if (existing_vector != nullptr) {
         return existing_vector;
     }
@@ -1198,7 +1216,7 @@ Vector2D* DbgGui::addVectorFromScalars(Scalar* x, Scalar* y) {
         return nullptr;
     }
     uint64_t id = signalId(x->name + "+" + y->name, x->group);
-    Vector2D* existing_vector = getVector(id);
+    Vector2D* existing_vector = findVector(m_vectors, id);
     if (existing_vector != nullptr) {
         return existing_vector;
     }

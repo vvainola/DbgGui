@@ -256,7 +256,7 @@ void DbgGui::showScalarPlots() {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                            payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
-                        Scalar* scalar = getScalar(id);
+                        Scalar* scalar = findScalar(m_scalars, id);
                         if (scalar) {
                             m_sampler.startSampling(scalar);
                             scalar_plot.addScalarToPlot(scalar, subplot_idx);
@@ -522,7 +522,7 @@ void DbgGui::showVectorPlots() {
             if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = getVector(id);
+                    Vector2D* vector = findVector(m_vectors, id);
                     m_sampler.startSampling(vector);
                     vector_plot.addVectorToPlot(vector);
                 }
@@ -537,8 +537,8 @@ void DbgGui::showVectorPlots() {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                            payload->DataSize / sizeof(uint64_t));
                     if (ids.size() == 2) {
-                        Scalar* x = getScalar(ids[0]);
-                        Scalar* y = getScalar(ids[1]);
+                        Scalar* x = findScalar(m_scalars, ids[0]);
+                        Scalar* y = findScalar(m_scalars, ids[1]);
                         if (x && y) {
                             Vector2D* vector = addVectorFromScalars(x, y);
                             if (vector) {
@@ -637,7 +637,7 @@ void DbgGui::showSpectrumPlots() {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                            payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
-                        Scalar* scalar = getScalar(id);
+                        Scalar* scalar = findScalar(m_scalars, id);
                         if (scalar) {
                             m_sampler.startSampling(scalar);
                             plot.addToPlot(scalar, nullptr);
@@ -661,7 +661,7 @@ void DbgGui::showSpectrumPlots() {
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = getVector(id);
+                    Vector2D* vector = findVector(m_vectors, id);
                     m_sampler.startSampling(vector);
                     plot.addToPlot(vector->x, vector->y);
                 }
