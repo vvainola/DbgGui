@@ -322,7 +322,13 @@ void DbgGui::addScalarScaleInput(Scalar* scalar) {
     if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
         auto scale = str::evaluateExpression(buffer);
         if (scale.has_value()) {
-            scalar->setScaleStr(buffer);
+            if (contains(m_selected_scalars, scalar)) {
+                for (Scalar* s : m_selected_scalars) {
+                    s->setScaleStr(buffer);
+                }
+            } else {
+                scalar->setScaleStr(buffer);
+            }
         } else {
             m_error_message = scale.error();
         }
@@ -336,7 +342,13 @@ void DbgGui::addScalarOffsetInput(Scalar* scalar) {
     if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
         auto offset = str::evaluateExpression(buffer);
         if (offset.has_value()) {
-            scalar->setOffsetStr(buffer);
+            if (contains(m_selected_scalars, scalar)) {
+                for (Scalar* s : m_selected_scalars) {
+                    s->setOffsetStr(buffer);
+                }
+            } else {
+                scalar->setOffsetStr(buffer);
+            }
         } else {
             m_error_message = offset.error();
         }
@@ -767,6 +779,15 @@ void DbgGui::showScalarWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
+        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                         | ImGuiMultiSelectFlags_BoxSelect2d
+                                         | ImGuiMultiSelectFlags_ScopeRect;
+        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                            (int)m_selected_scalars.size(),
+                                                            -1);
+        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+        m_visible_scalars.clear();
+
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
             // Do not show group if there are no visible items in it
@@ -809,11 +830,7 @@ void DbgGui::showScalarWindow() {
             // Symbols can be dragged from one group to another for easier reorganizing if symbol
             // is initially added to wrong group
             if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Scalar* scalar = getScalar(id);
-                    // Do nothing if dragged to same group.
-                    // Old one will be deleted if new one is added.
+                auto move_scalar_to_group = [&](Scalar* scalar) {
                     if (scalar->group != group.full_name) {
                         VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
                         if (scalar_symbol) {
@@ -827,6 +844,16 @@ void DbgGui::showScalarWindow() {
                                 m_sampler.copySamples(*scalar, *new_scalar);
                             }
                             scalar->replacement = new_scalar;
+                        }
+                    }
+                };
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                           payload->DataSize / sizeof(uint64_t));
+                    for (uint64_t id : ids) {
+                        Scalar* scalar = getScalar(id);
+                        if (scalar) {
+                            move_scalar_to_group(scalar);
                         }
                     }
                 }
@@ -857,20 +884,46 @@ void DbgGui::showScalarWindow() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
 
-                    // Show name. Text is used instead of selectable because the
-                    // keyboard navigation in the table does not work properly
-                    // and up/down changes columns
-                    if (scalar->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias.c_str());
-                    } else {
-                        ImGui::Text(scalar->alias.c_str());
+                    // Render as a leaf tree node so the multi-select API can manage selection.
+                    bool const selected = contains(m_selected_scalars, scalar);
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+                                             | ImGuiTreeNodeFlags_SpanAvailWidth
+                                             | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (selected) {
+                        flags |= ImGuiTreeNodeFlags_Selected;
                     }
-                    // Make text drag-and-droppable
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot");
+                    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_scalars.size());
+                    if (scalar->customScaleOrOffset()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, COLOR_LIGHT_BLUE);
+                        ImGui::TreeNodeEx(scalar->alias.c_str(), flags);
+                        ImGui::PopStyleColor();
+                    } else {
+                        ImGui::TreeNodeEx(scalar->alias.c_str(), flags);
+                    }
+                    m_visible_scalars.push_back(scalar);
+
+                    // Drag-and-drop: carry all selected scalars if this one is selected,
+                    // otherwise just the dragged scalar.
+                    if (ImGui::BeginDragDropSource()) {
+                        std::vector<uint64_t> ids;
+                        if (contains(m_selected_scalars, scalar)) {
+                            for (Scalar* s : m_selected_scalars) {
+                                ids.push_back(s->id);
+                            }
+                        } else {
+                            ids.push_back(scalar->id);
+                        }
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI",
+                                                  ids.data(),
+                                                  ids.size() * sizeof(uint64_t));
+                        if (ids.size() == 1) {
+                            ImGui::Text("Drag to plot");
+                        } else {
+                            ImGui::Text("Drag %d scalars", (int)ids.size());
+                        }
                         ImGui::EndDragDropSource();
                     }
+
                     // Mark signal as deleted
                     if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
@@ -905,6 +958,10 @@ void DbgGui::showScalarWindow() {
         for (auto it = m_scalar_groups.begin(); it != m_scalar_groups.end(); it++) {
             show_scalar_group(it->second, false);
         }
+
+        ms_io = ImGui::EndMultiSelect();
+        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+
         ImGui::EndTable();
     }
     ImGui::End();
@@ -1016,7 +1073,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}x", vector->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->x->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->x->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -1032,7 +1089,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}y", vector->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->y->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->y->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
@@ -1058,10 +1115,15 @@ void DbgGui::showVectorWindow() {
 
 void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            uint64_t id = *(uint64_t*)payload->Data;
-            Scalar* scalar = getScalar(id);
-            custom_window.addScalar(scalar);
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+            std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                   payload->DataSize / sizeof(uint64_t));
+            for (uint64_t id : ids) {
+                Scalar* scalar = getScalar(id);
+                if (scalar) {
+                    custom_window.addScalar(scalar);
+                }
+            }
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
             VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
@@ -1137,7 +1199,7 @@ void DbgGui::showCustomWindow() {
                 addCustomWindowDragAndDrop(custom_window);
                 // Make text drag-and-droppable
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
+                    ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
                     ImGui::Text("Drag to plot");
                     ImGui::EndDragDropSource();
                 }
@@ -1552,10 +1614,15 @@ void DbgGui::showScriptWindow() {
 
 void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col) {
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            uint64_t id = *(uint64_t*)payload->Data;
-            Scalar* dropped_scalar = getScalar(id);
-            grid_window.scalars[row][col] = dropped_scalar->id;
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+            std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                   payload->DataSize / sizeof(uint64_t));
+            if (!ids.empty()) {
+                Scalar* dropped_scalar = getScalar(ids[0]);
+                if (dropped_scalar) {
+                    grid_window.scalars[row][col] = dropped_scalar->id;
+                }
+            }
         }
         ImGui::EndDragDropTarget();
     }
@@ -1622,8 +1689,7 @@ void DbgGui::showGridWindow() {
                         ImGui::PopFont();
                         // Make text drag-and-droppable
                         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                            uint64_t id = scalar->id;
-                            ImGui::SetDragDropPayload("SCALAR_ID", &id, sizeof(uint64_t));
+                            ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
                             ImGui::Text("Drag to plot");
                             ImGui::EndDragDropSource();
                         }

@@ -248,11 +248,16 @@ void DbgGui::showScalarPlots() {
             }
 
             if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Scalar* scalar = getScalar(id);
-                    m_sampler.startSampling(scalar);
-                    scalar_plot.addScalarToPlot(scalar, subplot_idx);
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                           payload->DataSize / sizeof(uint64_t));
+                    for (uint64_t id : ids) {
+                        Scalar* scalar = getScalar(id);
+                        if (scalar) {
+                            m_sampler.startSampling(scalar);
+                            scalar_plot.addScalarToPlot(scalar, subplot_idx);
+                        }
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
@@ -609,11 +614,16 @@ void DbgGui::showSpectrumPlots() {
             }
 
             if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Scalar* scalar = getScalar(id);
-                    m_sampler.startSampling(scalar);
-                    plot.addToPlot(scalar, nullptr);
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                           payload->DataSize / sizeof(uint64_t));
+                    for (uint64_t id : ids) {
+                        Scalar* scalar = getScalar(id);
+                        if (scalar) {
+                            m_sampler.startSampling(scalar);
+                            plot.addToPlot(scalar, nullptr);
+                        }
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
                     VariantSymbol* symbol = *(VariantSymbol**)payload->Data;

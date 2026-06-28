@@ -192,6 +192,8 @@ class DbgGui {
     // BeginMultiSelect/EndMultiSelect scope (i.e. be a member, not a frame-local), because
     // EndMultiSelect's requests are applied after the traversal.
     std::vector<VariantSymbol*> m_visible_tree_symbols;
+    std::vector<Scalar*> m_selected_scalars;
+    std::vector<Scalar*> m_visible_scalars;
     bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
