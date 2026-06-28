@@ -59,6 +59,82 @@ void loadImguiLayout(std::string layout) {
     imgui_settings::migrateLayoutIniHashes(layout);
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
 }
+
+bool restoreScalarSettings(Scalar* scalar,
+                           nlohmann::json& settings,
+                           std::vector<ScalarPlot>& scalar_plots,
+                           std::vector<CustomWindow>& custom_windows) {
+    bool restored_to_plot = false;
+    // Restore settings of the scalar signal
+    TRY(for (auto& scalar_data : settings["scalars"]) {
+        uint64_t id = scalar_data["id"];
+        if (id == scalar->id) {
+            std::string scale = scalar_data["scale"];
+            scalar->setScaleStr(scale);
+            std::string offset = scalar_data["offset"];
+            scalar->setOffsetStr(offset);
+            scalar->alias = std::string(scalar_data["alias"]);
+            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+            break;
+        }
+    })
+
+    // Restore scalar to plots
+    TRY(for (auto scalar_plot_data : settings["scalar_plots"]) {
+        ScalarPlot* plot = nullptr;
+        for (auto& scalar_plot : scalar_plots) {
+            if (scalar_plot.id == scalar_plot_data["id"]) {
+                plot = &scalar_plot;
+                break;
+            }
+        }
+        if (plot == nullptr) {
+            continue;
+        }
+        // New settings store signal placement per subplot. Old settings only
+        // have a top-level signals object, which restores into subplot 0.
+        if (scalar_plot_data.contains("subplots")) {
+            int subplot_idx = 0;
+            for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                if (subplot_data.contains("signals")) {
+                    forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
+                        if (id == scalar->id) {
+                            plot->addScalarToPlot(scalar, subplot_idx);
+                            restored_to_plot = true;
+                        }
+                    });
+                }
+                ++subplot_idx;
+            }
+        } else if (scalar_plot_data.contains("signals")) {
+            forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+                if (id == scalar->id) {
+                    plot->addScalarToPlot(scalar);
+                    restored_to_plot = true;
+                }
+            });
+        }
+    })
+
+    // Restore scalar to custom window
+    TRY(for (auto custom_window_data : settings["custom_windows"]) {
+        CustomWindow* custom = nullptr;
+        for (auto& custom_window : custom_windows) {
+            if (custom_window.id == custom_window_data["id"]) {
+                custom = &custom_window;
+                break;
+            }
+        }
+        if (custom != nullptr) {
+            for (uint64_t id : custom_window_data["signals"]) {
+                if (id == scalar->id) {
+                    custom->addScalar(scalar);
+                }
+            }
+        }
+    })
+    return restored_to_plot;
+}
 } // namespace
 
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
@@ -316,81 +392,6 @@ void DbgGui::updateLoop() {
     glfwTerminate();
     m_window = nullptr;
     m_paused = false;
-}
-
-void DbgGui::restoreScalarSettings(Scalar* scalar) {
-    if (!m_initialized) {
-        return;
-    }
-
-    // Restore settings of the scalar signal
-    TRY(for (auto& scalar_data : m_settings["scalars"]) {
-        uint64_t id = scalar_data["id"];
-        if (id == scalar->id) {
-            std::string scale = scalar_data["scale"];
-            scalar->setScaleStr(scale);
-            std::string offset = scalar_data["offset"];
-            scalar->setOffsetStr(offset);
-            scalar->alias = std::string(scalar_data["alias"]);
-            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
-            break;
-        }
-    })
-
-    // Restore scalar to plots
-    TRY(for (auto scalar_plot_data : m_settings["scalar_plots"]) {
-        ScalarPlot* plot = nullptr;
-        for (auto& scalar_plot : m_scalar_plots) {
-            if (scalar_plot.id == scalar_plot_data["id"]) {
-                plot = &scalar_plot;
-                break;
-            }
-        }
-        if (plot == nullptr) {
-            continue;
-        }
-        // New settings store signal placement per subplot. Old settings only
-        // have a top-level signals object, which restores into subplot 0.
-        if (scalar_plot_data.contains("subplots")) {
-            int subplot_idx = 0;
-            for (auto const& subplot_data : scalar_plot_data["subplots"]) {
-                if (subplot_data.contains("signals")) {
-                    forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
-                        if (id == scalar->id) {
-                            m_sampler.startSampling(scalar);
-                            plot->addScalarToPlot(scalar, subplot_idx);
-                        }
-                    });
-                }
-                ++subplot_idx;
-            }
-        } else if (scalar_plot_data.contains("signals")) {
-            forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
-                if (id == scalar->id) {
-                    m_sampler.startSampling(scalar);
-                    plot->addScalarToPlot(scalar);
-                }
-            });
-        }
-    })
-
-    // Restore scalar to custom window
-    TRY(for (auto custom_window_data : m_settings["custom_windows"]) {
-        CustomWindow* custom = nullptr;
-        for (auto& custom_window : m_custom_windows) {
-            if (custom_window.id == custom_window_data["id"]) {
-                custom = &custom_window;
-                break;
-            }
-        }
-        if (custom != nullptr) {
-            for (uint64_t id : custom_window_data["signals"]) {
-                if (id == scalar->id) {
-                    custom->addScalar(scalar);
-                }
-            }
-        }
-    })
 }
 
 void DbgGui::loadPreviousSessionSettings() {
@@ -1130,7 +1131,10 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->id = id;
     new_scalar->setScaleStr(std::format("{:g}", scale));
     new_scalar->setOffsetStr(std::format("{:g}", offset));
-    restoreScalarSettings(new_scalar.get());
+    if (m_initialized.load()
+        && restoreScalarSettings(new_scalar.get(), m_settings, m_scalar_plots, m_custom_windows)) {
+        m_sampler.startSampling(new_scalar.get());
+    }
     std::vector<std::string> groups = str::split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
     added_group->name = groups[0];

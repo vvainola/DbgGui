@@ -151,7 +151,6 @@ class DbgGui {
                                   SymbolSearchRenderState& state,
                                   bool filter_to_search_path);
     void showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name);
-    void restoreScalarSettings(Scalar* scalar);
     void addPopupModal(std::string const& modal_name);
     void addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col);
     void saveSnapshot();
