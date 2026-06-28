@@ -112,9 +112,12 @@ void CsvPlotter::showSpectrumPlots() {
         }
 
         if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
-                CsvSignal* sig = *(CsvSignal**)payload->Data;
-                plot.addSignal(sig, nullptr);
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
+                std::span<CsvSignal*> sigs(reinterpret_cast<CsvSignal**>(payload->Data),
+                                           payload->DataSize / sizeof(CsvSignal*));
+                for (CsvSignal* sig : sigs) {
+                    plot.addSignal(sig, nullptr);
+                }
                 plot.prev_x_range = {0, 0};
             }
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {

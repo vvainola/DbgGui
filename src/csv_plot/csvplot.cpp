@@ -253,6 +253,36 @@ void CsvPlotter::removeAllFiles() {
     m_csv_data.clear();
 }
 
+void CsvPlotter::applySelectionRequests(ImGuiMultiSelectIO* ms_io) {
+    for (const ImGuiSelectionRequest& req : ms_io->Requests) {
+        if (req.Type == ImGuiSelectionRequestType_SetAll) {
+            if (req.Selected) {
+                m_selected_signals = m_visible_signals;
+            } else {
+                m_selected_signals.clear();
+            }
+        } else if (req.Type == ImGuiSelectionRequestType_SetRange) {
+            int first = (int)req.RangeFirstItem;
+            int last = (int)req.RangeLastItem;
+            if (first > last) {
+                std::swap(first, last);
+            }
+            first = std::max(first, 0);
+            last = std::min(last, (int)m_visible_signals.size() - 1);
+            for (int i = first; i <= last; ++i) {
+                CsvSignal* signal = m_visible_signals[i];
+                if (req.Selected) {
+                    if (!contains(m_selected_signals, signal)) {
+                        m_selected_signals.push_back(signal);
+                    }
+                } else {
+                    remove(m_selected_signals, signal);
+                }
+            }
+        }
+    }
+}
+
 CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
     auto it = m_signal_plot_style_settings.find(signal.name);
     return it == m_signal_plot_style_settings.end() ? m_options.plot_style : it->second;
@@ -1101,7 +1131,31 @@ void CsvPlotter::showSignalWindow() {
     ImGui::InputText("Filter", &signal_name_filter);
     ImGui::Separator();
 
+    // Build the flattened, filtered list of visible signals for this frame. The order must
+    // match the submission loop below so that multi-select indices map to the right pointer.
+    m_visible_signals.clear();
+    for (auto& file : m_csv_data) {
+        if (file->signals.size() == 0) {
+            continue;
+        }
+        for (CsvSignal& signal : file->signals) {
+            if (!signal_name_filter.empty()
+                && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
+                continue;
+            }
+            m_visible_signals.push_back(&signal);
+        }
+    }
+
+    ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                     | ImGuiMultiSelectFlags_BoxSelect1d;
+    ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                        (int)m_selected_signals.size(),
+                                                        (int)m_visible_signals.size());
+    applySelectionRequests(ms_io);
+
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
+    int n = 0; // running index into m_visible_signals, incremented only for submitted signals
     for (auto& file : m_csv_data) {
         if (file->signals.size() == 0) {
             continue;
@@ -1127,6 +1181,12 @@ void CsvPlotter::showSignalWindow() {
                                 if (!m_options.keep_old_signals_on_reload) {
                                     plot.removeSignal(&file->signals[i]);
                                 }
+                            }
+                        }
+                        // Remap m_selected_signals pointers to the reloaded data
+                        for (int j = 0; j < (int)m_selected_signals.size(); ++j) {
+                            if (m_selected_signals[j] == &file->signals[i]) {
+                                m_selected_signals[j] = &csv_data->signals[i];
                             }
                         }
                     }
@@ -1230,46 +1290,55 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
 
+                // Plotted marker: prefix with "*" when the signal is on any scalar plot.
+                // This is separate from the multi-select highlight (which tracks
+                // m_selected_signals only).
+                bool is_plotted = false;
+                for (ScalarPlot& plot : m_scalar_plots) {
+                    if (contains(plot.signals, &signal)) {
+                        is_plotted = true;
+                        break;
+                    }
+                }
+
                 ImGui::PushStyleColor(ImGuiCol_Text,
                                       signal.transform.isDefault() ?
                                         ImGui::GetStyle().Colors[ImGuiCol_Text] :
                                         COLOR_LIGHT_BLUE);
-                // Highlight selected/plotted signals
-                bool selected = contains(m_selected_signals, &signal);
-                for (ScalarPlot& plot : m_scalar_plots) {
-                    if (contains(plot.signals, &signal)) {
-                        selected = true;
-                        break;
-                    }
-                }
-                if (ImGui::Selectable(signal.name.c_str(), &selected)) {
-                    // Always drag and dropping is tedious. Add signal to plot if it is selected while
-                    // pressing a number to make it easier to add signals with same name from different
-                    // files to same plot by selecting them while pressing the number of the plot
-                    std::optional<int> pressed_number = pressedNumber();
-                    if (pressed_number) {
-                        m_scalar_plots[*pressed_number].addSignal(&signal);
-                    }
+                std::string label = std::format("{}{}", is_plotted ? "* " : "  ", signal.name);
+                bool item_is_selected = contains(m_selected_signals, &signal);
+                ImGui::SetNextItemSelectionUserData(n);
+                ImGui::Selectable(label.c_str(), item_is_selected);
 
-                    // Select two signals with ctrl-click for dragging to vector plot
-                    if (ImGui::GetIO().KeyCtrl) {
-                        m_selected_signals.push_back(&signal);
-                    } else if (!pressed_number) {
-                        m_selected_signals.clear();
-                        for (ScalarPlot& plot : m_scalar_plots) {
-                            plot.removeSignal(&signal);
-                        }
-                    }
+                // Add signal to plot if a number key is pressed while clicking. This makes it
+                // easier to add signals with same name from different files to same plot.
+                std::optional<int> pressed_number = pressedNumber();
+                if (pressed_number && ImGui::IsItemClicked()) {
+                    m_scalar_plots[*pressed_number].addSignal(&signal);
                 }
+
                 ImGui::PopStyleColor();
 
+                // Drag the whole selection (or just this signal if it is not selected).
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                    CsvSignal* p = &signal;
-                    ImGui::SetDragDropPayload("CSV", &p, sizeof(CsvSignal*));
-                    ImGui::Text("Drag to plot");
+                    std::vector<CsvSignal*> payload_signals;
+                    if (item_is_selected) {
+                        payload_signals = m_selected_signals;
+                    } else {
+                        payload_signals.push_back(&signal);
+                    }
+                    ImGui::SetDragDropPayload("CSV_MULTI",
+                                              payload_signals.data(),
+                                              payload_signals.size() * sizeof(CsvSignal*));
+                    if (payload_signals.size() == 1) {
+                        ImGui::Text("Drag to plot: %s", signal.name.c_str());
+                    } else {
+                        ImGui::Text("Drag %d signals to plot", (int)payload_signals.size());
+                    }
                     ImGui::EndDragDropSource();
                 }
 
+                // Select two signals with ctrl/shift-click for dragging to vector plot
                 if (m_selected_signals.size() == 2
                     && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     // Payload is not used
@@ -1311,12 +1380,34 @@ void CsvPlotter::showSignalWindow() {
                         ImGui::SetClipboardText(signal.name.c_str());
                         ImGui::CloseCurrentPopup();
                     }
+
+                    if (contains(m_selected_signals, &signal)) {
+                        if (ImGui::Button("Remove selected from plots")) {
+                            for (CsvSignal* sel : m_selected_signals) {
+                                for (ScalarPlot& plot : m_scalar_plots) {
+                                    plot.removeSignal(sel);
+                                }
+                                for (VectorPlot& plot : m_vector_plots) {
+                                    plot.removeSignal(sel);
+                                }
+                                for (SpectrumPlot& plot : m_spectrum_plots) {
+                                    plot.removeSignal(sel);
+                                }
+                            }
+                            ImGui::CloseCurrentPopup();
+                        }
+                    }
                     ImGui::EndPopup();
                 }
+                ++n;
             }
             ImGui::TreePop();
         }
     }
+
+    ms_io = ImGui::EndMultiSelect();
+    applySelectionRequests(ms_io);
+
     ImGui::EndChild();
     ImGui::End();
 
@@ -1418,9 +1509,12 @@ void CsvPlotter::showScalarPlots() {
             }
 
             if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV")) {
-                    CsvSignal* sig = *(CsvSignal**)payload->Data;
-                    plot.addSignal(sig);
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
+                    std::span<CsvSignal*> sigs(reinterpret_cast<CsvSignal**>(payload->Data),
+                                               payload->DataSize / sizeof(CsvSignal*));
+                    for (CsvSignal* sig : sigs) {
+                        plot.addSignal(sig);
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LEGEND")) {
                     std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = *(std::pair<ScalarPlot*, CsvSignal*>*)payload->Data;
