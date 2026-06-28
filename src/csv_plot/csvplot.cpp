@@ -47,6 +47,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "save_image.h"
 #include "csv_helpers.h"
 #include "custom_signal.hpp"
+#include "imgui_settings_migration.h"
 #include "stb_image.h"
 #include "version.h"
 #include "magic_enum.hpp"
@@ -124,6 +125,21 @@ static bool setSignalOffset(CsvSignalTransform& transform, std::string const& of
 
     transform.offset_expression = offset_expression;
     transform.offset = offset.value();
+    return true;
+}
+
+static void loadImguiLayout(std::string layout) {
+    imgui_settings::migrateLayoutIniHashes(layout);
+    ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
+}
+
+static bool loadImguiLayoutFromDisk(std::string const& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) {
+        return false;
+    }
+    std::string layout((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    loadImguiLayout(layout);
     return true;
 }
 
@@ -543,8 +559,8 @@ void CsvPlotter::loadPreviousSessionSettings() {
 
             if (settings.contains("layout")) {
                 std::string layout = settings["layout"];
-                ImGui::LoadIniSettingsFromMemory(layout.data());
-            } else {
+                loadImguiLayout(layout);
+            } else if (!loadImguiLayoutFromDisk(settings_dir + "imgui.ini")) {
                 ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
             }
 

@@ -1494,6 +1494,7 @@ enum ImGuiDockNodeFlags_
     ImGuiDockNodeFlags_NoResize                     = 1 << 5,   // Saved // Disable resizing node using the splitter/separators. Useful with programmatically setup dockspaces.
     ImGuiDockNodeFlags_AutoHideTabBar               = 1 << 6,   //       // Tab bar will automatically hide when there is a single window in the dock node.
     ImGuiDockNodeFlags_NoUndocking                  = 1 << 7,   //       // Disable undocking this node.
+    ImGuiDockNodeFlags_EvenSplit                    = 1 << 8,
 
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
     ImGuiDockNodeFlags_NoSplit                      = ImGuiDockNodeFlags_NoDockingSplit, // Renamed in 1.90

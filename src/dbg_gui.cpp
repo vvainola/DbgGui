@@ -26,6 +26,7 @@
 #include "themes.h"
 #include "str_helpers.h"
 #include "custom_signal.hpp"
+#include "imgui_settings_migration.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
@@ -52,6 +53,21 @@ void forEachSignalId(nlohmann::json const& signals, Fn fn) {
             fn(signal.get<uint64_t>());
         }
     }
+}
+
+void loadImguiLayout(std::string layout) {
+    imgui_settings::migrateLayoutIniHashes(layout);
+    ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
+}
+
+bool loadImguiLayoutFromDisk(std::string const& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) {
+        return false;
+    }
+    std::string layout((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    loadImguiLayout(layout);
+    return true;
 }
 } // namespace
 
@@ -404,8 +420,8 @@ void DbgGui::loadPreviousSessionSettings() {
 
         if (m_settings.contains("layout")) {
             std::string layout = m_settings["layout"];
-            ImGui::LoadIniSettingsFromMemory(layout.data());
-        } else {
+            loadImguiLayout(layout);
+        } else if (!loadImguiLayoutFromDisk(settings_dir + "imgui.ini")) {
             ImGui::LoadIniSettingsFromDisk((settings_dir + "imgui.ini").c_str());
         }
 
