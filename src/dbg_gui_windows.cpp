@@ -156,6 +156,25 @@ std::optional<std::string> setSymbolScaleStr(VariantSymbol& sym,
     return std::nullopt;
 }
 
+std::optional<std::string> addSymbolScaleInput(VariantSymbol& sym,
+                                               std::vector<VariantSymbol*> const& selected_symbols,
+                                               std::unordered_map<std::string, std::string>& symbol_scale_settings) {
+    std::string scale = getSymbolScaleStr(sym, symbol_scale_settings);
+    if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        // If the symbol is part of the selection, apply the scale to all selected symbols.
+        if (contains(selected_symbols, &sym)) {
+            for (VariantSymbol* selected : selected_symbols) {
+                if (std::optional<std::string> error = setSymbolScaleStr(*selected, scale, symbol_scale_settings)) {
+                    return error;
+                }
+            }
+        } else if (std::optional<std::string> error = setSymbolScaleStr(sym, scale, symbol_scale_settings)) {
+            return error;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
@@ -403,32 +422,15 @@ double getSymbolScale(VariantSymbol& sym,
     return scale.has_value() ? scale.value() : 1;
 }
 
-void DbgGui::addSymbolScaleInput(VariantSymbol& sym) {
-    std::string scale = getSymbolScaleStr(sym, m_symbol_scale_settings);
-    if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        // If the symbol is part of the selection, apply the scale to all selected symbols.
-        if (contains(m_selected_symbols, &sym)) {
-            for (VariantSymbol* selected : m_selected_symbols) {
-                if (std::optional<std::string> error = setSymbolScaleStr(*selected, scale, m_symbol_scale_settings)) {
-                    m_error_message = *error;
-                    break;
-                }
-            }
-        } else {
-            if (std::optional<std::string> error = setSymbolScaleStr(sym, scale, m_symbol_scale_settings)) {
-                m_error_message = *error;
-            }
-        }
-    }
-}
-
 void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
         bool arithmetic_or_enum = sym.getType() == VariantSymbol::Type::Arithmetic
                                || sym.getType() == VariantSymbol::Type::Enum;
         if (arithmetic_or_enum) {
-            addSymbolScaleInput(sym);
+            if (std::optional<std::string> error = addSymbolScaleInput(sym, m_selected_symbols, m_symbol_scale_settings)) {
+                m_error_message = *error;
+            }
         }
         bool can_fold_children = !sym.getChildren().empty()
                               || (sym.getType() == VariantSymbol::Type::Pointer && sym.getPointedSymbol() != nullptr);

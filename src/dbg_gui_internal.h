@@ -122,7 +122,6 @@ class DbgGui {
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
     void addSymbolContextMenu(VariantSymbol& sym);
-    void addSymbolScaleInput(VariantSymbol& sym);
     void updateSymbolSearchResults(std::string const& search_string);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;
