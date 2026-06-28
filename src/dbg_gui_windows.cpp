@@ -175,6 +175,25 @@ std::optional<std::string> addSymbolScaleInput(VariantSymbol& sym,
     return std::nullopt;
 }
 
+std::vector<VariantSymbol*> buildSymbolSearchResults(DbgSymbols const& symbols,
+                                                     std::string const& search_string,
+                                                     int search_depth) {
+    if (search_string.size() <= 2) {
+        return {};
+    }
+
+    std::vector<VariantSymbol*> results = symbols.findMatchingSymbols(search_string, search_depth);
+    std::vector<VariantSymbol*>::iterator begin_it = results.begin();
+    // Don't sort first element if it is an exact match.
+    if (!results.empty() && results[0]->getFullName() == search_string) {
+        ++begin_it;
+    }
+    std::sort(begin_it, results.end(), [](VariantSymbol* l, VariantSymbol* r) {
+        return l->getFullName() < r->getFullName();
+    });
+    return results;
+}
+
 } // namespace
 
 std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
@@ -1305,23 +1324,6 @@ void DbgGui::showCustomWindow() {
     }
 }
 
-void DbgGui::updateSymbolSearchResults(std::string const& search_string) {
-    if (search_string.size() <= 2) {
-        m_symbol_search_results.clear();
-        return;
-    }
-
-    m_symbol_search_results = m_symbols.findMatchingSymbols(search_string, m_symbol_search_depth);
-    auto begin_it = m_symbol_search_results.begin();
-    // Don't sort first element if it is an exact match.
-    if (!m_symbol_search_results.empty() && m_symbol_search_results[0]->getFullName() == search_string) {
-        ++begin_it;
-    }
-    std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
-        return l->getFullName() < r->getFullName();
-    });
-}
-
 std::vector<VariantSymbol*> DbgGui::buildSymbolSearchRoots(SymbolSearchRenderState& state) const {
     std::set<VariantSymbol*> search_root_set;
     std::vector<VariantSymbol*> search_roots;
@@ -1602,7 +1604,7 @@ void DbgGui::showSymbolsWindow() {
     }
 
     if (search_changed) {
-        updateSymbolSearchResults(symbols_to_search);
+        m_symbol_search_results = buildSymbolSearchResults(m_symbols, symbols_to_search, m_symbol_search_depth);
     }
 
     showSymbolSearchTable(symbols_to_search, show_hidden_symbols, show_constants);
