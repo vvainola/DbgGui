@@ -127,11 +127,11 @@ bool restoreScalarSettings(Scalar* scalar,
             }
         }
         if (custom != nullptr) {
-            for (uint64_t id : custom_window_data["signals"]) {
+            forEachSignalId(custom_window_data["signals"], [&](uint64_t id) {
                 if (id == scalar->id) {
                     custom->addScalar(scalar);
                 }
-            }
+            });
         }
     })
     return restored_to_plot;
@@ -559,13 +559,13 @@ void DbgGui::loadPreviousSessionSettings() {
         m_vector_plots.clear();
         for (auto vector_plot_data : m_settings["vector_plots"]) {
             VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data);
-            for (uint64_t id : vector_plot_data["signals"]) {
+            forEachSignalId(vector_plot_data["signals"], [&](uint64_t id) {
                 Vector2D* vec = findVector(m_vectors, id);
                 if (vec) {
                     m_sampler.startSampling(vec);
                     plot.addVectorToPlot(vec);
                 }
-            };
+            });
         }
 
         m_spectrum_plots.clear();
@@ -600,12 +600,12 @@ void DbgGui::loadPreviousSessionSettings() {
         m_custom_windows.clear();
         for (auto custom_window_data : m_settings["custom_windows"]) {
             CustomWindow& custom_window = m_custom_windows.emplace_back(custom_window_data);
-            for (uint64_t id : custom_window_data["signals"]) {
+            forEachSignalId(custom_window_data["signals"], [&](uint64_t id) {
                 Scalar* scalar = findScalar(m_scalars, id);
                 if (scalar) {
                     custom_window.addScalar(scalar);
                 }
-            };
+            });
         }
 
         m_script_windows.clear();
