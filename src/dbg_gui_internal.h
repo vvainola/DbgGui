@@ -133,7 +133,10 @@ class DbgGui {
     };
     std::vector<VariantSymbol*> buildSymbolSearchRoots(SymbolSearchRenderState& state) const;
     void showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols, bool show_constants);
-    void showSymbolTreeNode(VariantSymbol* sym, SymbolSearchRenderState& state, bool filter_to_search_path);
+    void showSymbolTreeNode(VariantSymbol* sym,
+                            SymbolSearchRenderState& state,
+                            bool filter_to_search_path,
+                            bool force_full_name = false);
     void showPointerSymbolTreeNode(VariantSymbol* sym,
                                    VariantSymbol* pointed_symbol,
                                    std::string const& symbol_name,

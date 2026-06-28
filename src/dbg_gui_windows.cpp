@@ -1387,7 +1387,8 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
 
 void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
                                 SymbolSearchRenderState& state,
-                                bool filter_to_search_path) {
+                                bool filter_to_search_path,
+                                bool force_full_name) {
     if (sym == nullptr) {
         assert(false);
         return;
@@ -1419,7 +1420,9 @@ void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     // Full name is needed for top-level recursive results from multiple scopes.
-    std::string const symbol_name = sym->getParent() == nullptr && m_symbol_search_depth > 0 ? sym->getFullName() : sym->getName();
+    bool const show_full_name = force_full_name
+                              || (sym->getParent() == nullptr && m_symbol_search_depth > 0);
+    std::string const symbol_name = show_full_name ? sym->getFullName() : sym->getName();
     bool const auto_open = state.auto_open_symbols.contains(sym);
     if (sym->getType() == VariantSymbol::Type::Pointer) {
         showPointerSymbolTreeNode(sym, sym->getPointedSymbol(), symbol_name, auto_open, state, filter_to_search_path);
@@ -1470,7 +1473,7 @@ void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
     ImGui::Text(sym->valueAsStr().c_str());
     if (open) {
         if (pointed_symbol) {
-            showSymbolTreeNode(pointed_symbol, state, filter_to_search_path && auto_open);
+            showSymbolTreeNode(pointed_symbol, state, filter_to_search_path && auto_open, true);
         }
         ImGui::TreePop();
     }
