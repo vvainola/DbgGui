@@ -27,6 +27,7 @@
 #include <array>
 #include <cstdint>
 #include <format>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 
@@ -50,9 +51,8 @@ uint32_t crcUpdate(uint32_t crc, unsigned char c) {
     return crc;
 }
 
-uint32_t imguiHash(std::string_view data, bool include_triple_hash_marker) {
-    constexpr uint32_t Seed = 0;
-    const uint32_t reset_crc = ~Seed;
+uint32_t imguiHash(std::string_view data, bool include_triple_hash_marker, uint32_t seed = 0) {
+    const uint32_t reset_crc = ~seed;
     uint32_t crc = reset_crc;
     for (size_t i = 0; i < data.size();) {
         const unsigned char c = static_cast<unsigned char>(data[i]);
@@ -72,23 +72,75 @@ uint32_t imguiHash(std::string_view data, bool include_triple_hash_marker) {
     return ~crc;
 }
 
+bool isDecimalId(std::string_view text) {
+    if (text.empty()) {
+        return false;
+    }
+    for (char c : text) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::string hashHex(uint32_t hash) {
     return std::format("{:08X}", hash);
 }
 
-void replaceAll(std::string& text, std::string_view from, std::string_view to) {
-    if (from.empty()) {
-        return;
+bool replaceIdsAfterPrefix(std::string& text, std::string_view prefix, std::unordered_map<std::string, std::string> const& id_migrations) {
+    bool changed = false;
+    std::string migrated;
+    migrated.reserve(text.size());
+    size_t pos = 0;
+
+    while (true) {
+        size_t prefix_pos = text.find(prefix, pos);
+        if (prefix_pos == std::string::npos) {
+            migrated.append(text, pos, std::string::npos);
+            break;
+        }
+
+        const size_t id_start = prefix_pos + prefix.size();
+        if (id_start + 8 > text.size()) {
+            migrated.append(text, pos, std::string::npos);
+            break;
+        }
+
+        migrated.append(text, pos, id_start - pos);
+        const std::string old_id = text.substr(id_start, 8);
+        if (auto new_id = id_migrations.find(old_id); new_id != id_migrations.end()) {
+            migrated.append(new_id->second);
+            changed = true;
+        } else {
+            migrated.append(old_id);
+        }
+        pos = id_start + 8;
     }
 
-    size_t pos = 0;
-    while ((pos = text.find(from, pos)) != std::string::npos) {
-        text.replace(pos, from.size(), to);
-        pos += to.size();
+    if (changed) {
+        text = std::move(migrated);
     }
+    return changed;
 }
 
-void addWindowIdMigration(std::string_view line, std::unordered_map<std::string, std::string>& id_migrations) {
+template <size_t N>
+bool replaceIdsAfterPrefixes(std::string& text,
+                             std::array<std::string_view, N> prefixes,
+                             std::unordered_map<std::string, std::string> const& id_migrations) {
+    bool changed = false;
+    for (std::string_view prefix : prefixes) {
+        changed |= replaceIdsAfterPrefix(text, prefix, id_migrations);
+    }
+    return changed;
+}
+
+struct LayoutIdMigrations {
+    std::unordered_map<std::string, std::string> window_ids;
+    std::unordered_map<std::string, std::string> dockspace_ids;
+};
+
+void addWindowIdMigration(std::string_view line, LayoutIdMigrations& id_migrations) {
     constexpr std::string_view WindowSectionPrefix = "[Window][";
     if (!line.starts_with(WindowSectionPrefix) || !line.ends_with("]")) {
         return;
@@ -102,12 +154,25 @@ void addWindowIdMigration(std::string_view line, std::unordered_map<std::string,
     const uint32_t old_hash = imguiHash(window_name, true);
     const uint32_t new_hash = imguiHash(window_name, false);
     if (old_hash != new_hash) {
-        id_migrations[hashHex(old_hash)] = hashHex(new_hash);
+        id_migrations.window_ids[hashHex(old_hash)] = hashHex(new_hash);
+    }
+
+    const size_t stable_id_pos = window_name.rfind("###");
+    std::string_view stable_id = window_name.substr(stable_id_pos + 3);
+    if (!isDecimalId(stable_id)) {
+        return;
+    }
+
+    const std::string dockspace_id = std::format("Dockspace_{}", stable_id);
+    const uint32_t old_dockspace_hash = imguiHash(dockspace_id, true, old_hash);
+    const uint32_t new_dockspace_hash = imguiHash(dockspace_id, true, new_hash);
+    if (old_dockspace_hash != new_dockspace_hash) {
+        id_migrations.dockspace_ids[hashHex(old_dockspace_hash)] = hashHex(new_dockspace_hash);
     }
 }
 
-std::unordered_map<std::string, std::string> findWindowIdMigrations(std::string const& layout) {
-    std::unordered_map<std::string, std::string> id_migrations;
+LayoutIdMigrations findIdMigrations(std::string const& layout) {
+    LayoutIdMigrations id_migrations;
     for (size_t line_start = 0; line_start < layout.size();) {
         size_t line_end = layout.find_first_of("\r\n", line_start);
         if (line_end == std::string::npos) {
@@ -124,6 +189,23 @@ std::unordered_map<std::string, std::string> findWindowIdMigrations(std::string 
     }
     return id_migrations;
 }
+
+bool replaceWindowIds(std::string& layout, std::unordered_map<std::string, std::string> const& id_migrations) {
+    const std::array<std::string_view, 2> window_id_prefixes = {
+        "Window=0x",
+        "Selected=0x",
+    };
+    return replaceIdsAfterPrefixes(layout, window_id_prefixes, id_migrations);
+}
+
+bool replaceDockspaceIds(std::string& layout, std::unordered_map<std::string, std::string> const& id_migrations) {
+    const std::array<std::string_view, 3> dockspace_id_prefixes = {
+        "ID=0x",
+        "Parent=0x",
+        "DockId=0x",
+    };
+    return replaceIdsAfterPrefixes(layout, dockspace_id_prefixes, id_migrations);
+}
 } // namespace
 
 namespace imgui_settings {
@@ -133,21 +215,9 @@ bool migrateLayoutIniHashes(std::string& layout) {
     return false;
 #else
     bool changed = false;
-    const std::array<std::string_view, 2> dock_window_id_prefixes = {
-        "Window=0x",
-        "Selected=0x",
-    };
-
-    for (auto const& [old_id, new_id] : findWindowIdMigrations(layout)) {
-        for (std::string_view prefix : dock_window_id_prefixes) {
-            const std::string old_token = std::format("{}{}", prefix, old_id);
-            const std::string new_token = std::format("{}{}", prefix, new_id);
-            if (layout.contains(old_token)) {
-                replaceAll(layout, old_token, new_token);
-                changed = true;
-            }
-        }
-    }
+    const LayoutIdMigrations id_migrations = findIdMigrations(layout);
+    changed |= replaceWindowIds(layout, id_migrations.window_ids);
+    changed |= replaceDockspaceIds(layout, id_migrations.dockspace_ids);
     return changed;
 #endif
 }
