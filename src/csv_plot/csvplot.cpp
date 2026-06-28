@@ -1102,31 +1102,18 @@ void CsvPlotter::showSignalWindow() {
     ImGui::InputText("Filter", &signal_name_filter);
     ImGui::Separator();
 
-    // Build the flattened, filtered list of visible signals for this frame. The order must
-    // match the submission loop below so that multi-select indices map to the right pointer.
-    m_visible_signals.clear();
-    for (auto& file : m_csv_data) {
-        if (file->signals.size() == 0) {
-            continue;
-        }
-        for (CsvSignal& signal : file->signals) {
-            if (!signal_name_filter.empty()
-                && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
-                continue;
-            }
-            m_visible_signals.push_back(&signal);
-        }
-    }
-
+    // m_visible_signals is rebuilt during submission below (only signals that are actually
+    // rendered get pushed). Begin-side requests use the previous frame's list, matching the
+    // pattern used in DbgGui's scalar/vector/symbol trees.
     ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
                                      | ImGuiMultiSelectFlags_BoxSelect1d;
     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                         (int)m_selected_signals.size(),
-                                                        (int)m_visible_signals.size());
+                                                        -1);
     applyMultiSelectRequests(ms_io, m_selected_signals, m_visible_signals);
+    m_visible_signals.clear();
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
-    int n = 0; // running index into m_visible_signals, incremented only for submitted signals
     for (auto& file : m_csv_data) {
         if (file->signals.size() == 0) {
             continue;
@@ -1278,7 +1265,8 @@ void CsvPlotter::showSignalWindow() {
                                         COLOR_LIGHT_BLUE);
                 std::string label = std::format("{}{}", is_plotted ? "* " : "  ", signal.name);
                 bool item_is_selected = contains(m_selected_signals, &signal);
-                ImGui::SetNextItemSelectionUserData(n);
+                m_visible_signals.push_back(&signal);
+                ImGui::SetNextItemSelectionUserData((int)m_visible_signals.size() - 1);
                 ImGui::Selectable(label.c_str(), item_is_selected);
 
                 // Add signal to plot if a number key is pressed while clicking. This makes it
@@ -1370,7 +1358,6 @@ void CsvPlotter::showSignalWindow() {
                     }
                     ImGui::EndPopup();
                 }
-                ++n;
             }
             ImGui::TreePop();
         }

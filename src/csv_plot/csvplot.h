@@ -234,11 +234,11 @@ class CsvPlotter {
     } m_flags;
 
     std::vector<CsvSignal*> m_selected_signals;
-    // Flattened, filter-matched signal pointers for the current frame. Built at the top of
-    // the signal list loop and used to map multi-select SetRange/SetAll indices back to
-    // CsvSignal* in applyMultiSelectRequests(). Must outlive the BeginMultiSelect/EndMultiSelect
-    // scope (i.e. be a member, not a frame-local), because EndMultiSelect's requests are
-    // applied after the loop.
+    // Flattened list of signal pointers actually submitted this frame (i.e. inside expanded
+    // file tree nodes and matching the filter). Built during the submission loop and used to
+    // map multi-select SetRange/SetAll indices back to CsvSignal* in applyMultiSelectRequests().
+    // Must outlive the BeginMultiSelect/EndMultiSelect scope (i.e. be a member, not a
+    // frame-local), because EndMultiSelect's requests are applied after the loop.
     std::vector<CsvSignal*> m_visible_signals;
     std::array<ScalarPlot, MAX_PLOTS * MAX_PLOTS> m_scalar_plots;
     std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
