@@ -260,6 +260,7 @@ if get_option('tests')
             'src/test_library_loader.cpp',
             'tests/csv_helpers_test.cpp',
             'tests/imgui_settings_migration_test.cpp',
+            'tests/signal_cleanup_test.cpp',
             'tests/fwd_decl_types.cpp',
             'tests/symbols_test.cpp',
             'tests/test_types.c',
@@ -270,6 +271,6 @@ if get_option('tests')
             deps
         ],
         link_depends : test_library,
-        include_directories: ['src', 'tests'],
+        include_directories: inc + ['src', 'tests'],
     )
 endif

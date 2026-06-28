@@ -27,6 +27,7 @@
 #include "str_helpers.h"
 #include "custom_signal.hpp"
 #include "imgui_settings_migration.h"
+#include "signal_cleanup.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
@@ -139,7 +140,7 @@ bool restoreScalarSettings(Scalar* scalar,
 
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id) {
     for (std::unique_ptr<Scalar> const& scalar : scalars) {
-        if (scalar->id == id) {
+        if (scalar->id == id && !scalar->deleted) {
             return scalar.get();
         }
     }
@@ -148,7 +149,7 @@ Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t
 
 Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id) {
     for (std::unique_ptr<Vector2D> const& vector : vectors) {
-        if (vector->id == id) {
+        if (vector->id == id && !vector->deleted) {
             return vector.get();
         }
     }
@@ -704,20 +705,7 @@ void DbgGui::updateSavedSettings() {
     // cannot keep pointers to scalars that are removed below. If vector uses
     // hidden component scalars, mark them as also deleted but don't delete them
     // for real yet before they are removed from all other structures.
-    for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
-        auto& vector = m_vectors[i];
-        if (vector->x->deleted || vector->y->deleted) {
-            vector->deleted = true;
-        }
-        if (vector->deleted) {
-            if (vector->x->hide_from_scalars_window) {
-                vector->x->deleted = true;
-            }
-            if (vector->y->hide_from_scalars_window) {
-                vector->y->deleted = true;
-            }
-        }
-    }
+    markVectorsDeletedByDeletedComponents(m_vectors);
 
     // Remove first deleted dockspaces because are saved by index and index changes if any is removed
     for (int i = int(m_dockspaces.size() - 1); i >= 0; --i) {
@@ -753,7 +741,7 @@ void DbgGui::updateSavedSettings() {
             for (int i = int(scalars.size() - 1); i >= 0; --i) {
                 Scalar* scalar = scalars[i];
                 if (scalar->deleted) {
-                    if (scalar->replacement != nullptr) {
+                    if (isLiveScalar(scalar->replacement)) {
                         scalars[i] = scalar->replacement;
                     } else {
                         remove(scalars, scalar);
@@ -777,12 +765,9 @@ void DbgGui::updateSavedSettings() {
         vector_plot.updateJson(j);
         for (int i = int(vector_plot.vectors.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.vectors[i];
-            if (vector->deleted || vector->x->deleted || vector->y->deleted) {
-                if (vector->deleted && vector->replacement != nullptr) {
-                    vector_plot.addVectorToPlot(vector->replacement);
-                }
+            if (!isLiveVector(vector)) {
                 j["signals"].erase(vector->name_and_group);
-                remove(vector_plot.vectors, vector);
+                replaceDeletedVectorInPlot(vector_plot, vector);
             } else {
                 j["signals"][vector->name_and_group] = vector->id;
             }
@@ -805,7 +790,7 @@ void DbgGui::updateSavedSettings() {
                 if (spec.real->deleted) {
                     spec_plot.removeFromPlot(spec.real);
                     j["signals"].erase(spec.real->name_and_group);
-                    if (spec.real->replacement != nullptr) {
+                    if (isLiveScalar(spec.real->replacement)) {
                         spec_plot.addToPlot(spec.real->replacement, nullptr);
                     }
                 } else {
@@ -816,7 +801,7 @@ void DbgGui::updateSavedSettings() {
                     spec_plot.removeFromPlot(spec.real);
                     spec_plot.removeFromPlot(spec.imag);
                     j["signals"].erase(spec.real->name_and_group);
-                    if (spec.real->replacement != nullptr && spec.imag->replacement != nullptr) {
+                    if (isLiveScalar(spec.real->replacement) && isLiveScalar(spec.imag->replacement)) {
                         spec_plot.addToPlot(spec.real->replacement, spec.imag->replacement);
                     }
                 } else {
@@ -848,7 +833,7 @@ void DbgGui::updateSavedSettings() {
         for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
             Scalar* scalar = custom_window.scalars[i];
             if (scalar->deleted) {
-                if (scalar->replacement != nullptr) {
+                if (isLiveScalar(scalar->replacement)) {
                     custom_window.addScalar(scalar->replacement);
                 }
                 remove(custom_window.scalars, scalar);
@@ -892,43 +877,26 @@ void DbgGui::updateSavedSettings() {
 
     // Remove deleted scalars from scalar groups
     for (auto& scalar_group : m_scalar_groups) {
-        std::function<void(SignalGroup<Scalar>&)> remove_scalar_group_deleted_signals = [&](SignalGroup<Scalar>& group) {
-            std::vector<Scalar*>& scalars = group.signals;
-            for (int i = int(scalars.size() - 1); i >= 0; --i) {
-                auto scalar = scalars[i];
-                if (scalar->deleted) {
-                    remove(scalars, scalar);
-                }
-            }
-            for (auto& subgroup : group.subgroups) {
-                remove_scalar_group_deleted_signals(subgroup.second);
-            }
-        };
-        remove_scalar_group_deleted_signals(scalar_group.second);
+        removeDeletedSignalsFromGroup(scalar_group.second);
     }
 
     // Remove deleted vectors from vector groups
     for (auto& vector_group : m_vector_groups) {
-        std::function<void(SignalGroup<Vector2D>&)> remove_vector_group_deleted_signals = [&](SignalGroup<Vector2D>& group) {
-            std::vector<Vector2D*>& vectors = group.signals;
-            for (int i = int(vectors.size() - 1); i >= 0; --i) {
-                auto vector = vectors[i];
-                if (vector->deleted) {
-                    remove(vectors, vector);
-                }
-            }
-            for (auto& subgroup : group.subgroups) {
-                remove_vector_group_deleted_signals(subgroup.second);
-            }
-        };
-        remove_vector_group_deleted_signals(vector_group.second);
+        removeDeletedSignalsFromGroup(vector_group.second);
     }
 
     for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
         auto& vector = m_vectors[i];
         if (vector->deleted) {
             remove(m_selected_vectors, vector.get());
-            m_settings["vector_symbols"].erase(vector->name_and_group);
+            bool const has_live_duplicate = std::any_of(m_vectors.begin(), m_vectors.end(), [&](auto const& candidate) {
+                return candidate.get() != vector.get()
+                    && !candidate->deleted
+                    && candidate->name_and_group == vector->name_and_group;
+            });
+            if (!has_live_duplicate) {
+                m_settings["vector_symbols"].erase(vector->name_and_group);
+            }
             remove(m_vectors, vector);
         }
     }
@@ -946,9 +914,16 @@ void DbgGui::updateSavedSettings() {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_sampler.stopSampling(scalar.get());
             remove(m_selected_scalars, scalar.get());
-            m_settings["scalars"].erase(scalar->name_and_group);
-            m_settings["scalar_symbols"].erase(scalar->name_and_group);
-            if (m_settings["custom_signals"].contains(scalar->name_and_group)) {
+            bool const has_live_duplicate = std::any_of(m_scalars.begin(), m_scalars.end(), [&](auto const& candidate) {
+                return candidate.get() != scalar.get()
+                    && !candidate->deleted
+                    && candidate->name_and_group == scalar->name_and_group;
+            });
+            if (!has_live_duplicate) {
+                m_settings["scalars"].erase(scalar->name_and_group);
+                m_settings["scalar_symbols"].erase(scalar->name_and_group);
+            }
+            if (!has_live_duplicate && m_settings["custom_signals"].contains(scalar->name_and_group)) {
                 m_settings["custom_signals"].erase(scalar->name_and_group);
             }
             remove(m_scalars, scalar);
