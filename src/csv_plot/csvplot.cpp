@@ -1385,6 +1385,13 @@ void CsvPlotter::showScalarPlots() {
         ScalarPlot& plot = m_scalar_plots[plot_idx];
         double plot_x_origin = getScalarPlotXOrigin(plot);
         ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
+        if (ImGui::BeginPopupContextItem(std::format("Plot {}_context_menu", plot_idx).c_str())) {
+            if (ImGui::Button("Remove all signals")) {
+                plot.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
         bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
         bool fit_data = plot.autofit_next_frame;
         if (plot.autofit_next_frame || autofit_x_axis) {
