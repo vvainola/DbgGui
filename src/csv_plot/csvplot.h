@@ -226,6 +226,8 @@ class CsvPlotter {
         int font_size = 13;
     } m_options;
     MinMax m_x_axis = AUTOFIT_AXIS;
+    MinMax m_x_shift_slider_range = AUTOFIT_AXIS;
+    bool m_x_shift_slider_active = false;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
     std::string m_error_message;

@@ -54,6 +54,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "magic_enum.hpp"
 
 #include <format>
+#include <cmath>
 #include <nfd.h>
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -1125,6 +1126,7 @@ void CsvPlotter::showSignalWindow() {
     m_visible_signals.clear();
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
+
     for (auto& file : m_csv_data) {
         if (file->signals.size() == 0) {
             continue;
@@ -1181,7 +1183,28 @@ void CsvPlotter::showSignalWindow() {
                     file->displayed_name = file->name;
                 }
             }
-            ImGui::InputDouble("X-axis shift", &file->x_axis_shift, 0, 0, "%g");
+            // Center the slider range on the current shift, but keep the
+            // captured range stable while the slider is actively being dragged.
+            double visible_range = std::abs(m_x_axis.max - m_x_axis.min);
+            if (!std::isfinite(visible_range) || visible_range <= 0) {
+                visible_range = 1;
+            }
+            double shift_margin = 0.1 * visible_range;
+            MinMax shift_slider_range = {file->x_axis_shift - shift_margin, file->x_axis_shift + shift_margin};
+            if (m_x_shift_slider_active) {
+                shift_slider_range = m_x_shift_slider_range;
+            }
+            std::string shift_label = std::format("X-axis shift##x_shift_{}", file->name);
+            ImGui::SliderScalar(shift_label.c_str(),
+                                ImGuiDataType_Double,
+                                &file->x_axis_shift,
+                                &shift_slider_range.min,
+                                &shift_slider_range.max,
+                                "%g");
+            m_x_shift_slider_active = ImGui::IsItemActive();
+            if (!m_x_shift_slider_active) {
+                m_x_shift_slider_range = shift_slider_range;
+            }
             if (ImGui::Button("Add same signals to plots")) {
                 for (auto& signal : file->signals) {
                     for (ScalarPlot& plot : m_scalar_plots) {
