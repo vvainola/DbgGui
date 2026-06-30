@@ -28,6 +28,8 @@
 #include <iomanip>
 #include <cmath>
 #include <limits>
+#include <format>
+#include <map>
 
 template <typename T>
 T inline min(T a, T b) {
@@ -140,6 +142,52 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     }
     csv_file.close();
     return true;
+}
+
+std::string formatCsvColumns(std::vector<std::string> const& header,
+                             std::vector<std::vector<double>> const& data) {
+    std::stringstream csv;
+
+    for (std::string const& signal_name : header) {
+        csv << signal_name << ",";
+    }
+    csv << "\n";
+
+    size_t row_count = 0;
+    for (std::vector<double> const& column : data) {
+        row_count = std::max(row_count, column.size());
+    }
+    for (size_t row = 0; row < row_count; ++row) {
+        for (std::vector<double> const& column : data) {
+            if (row < column.size()) {
+                csv << std::format("{:g}", column[row]);
+            }
+            csv << ",";
+        }
+        csv << "\n";
+    }
+
+    return csv.str();
+}
+
+std::vector<std::string> makeUniqueCsvSignalNames(std::vector<std::string> const& signal_names) {
+    std::map<std::string, int> signal_name_count;
+    for (std::string const& signal_name : signal_names) {
+        ++signal_name_count[signal_name];
+    }
+
+    std::vector<std::string> unique_names;
+    unique_names.reserve(signal_names.size());
+    std::map<std::string, int> signal_name_counter;
+    for (std::string const& signal_name : signal_names) {
+        if (signal_name_count[signal_name] > 1) {
+            unique_names.push_back(std::format("{}#{}", signal_name, signal_name_counter[signal_name]));
+            ++signal_name_counter[signal_name];
+        } else {
+            unique_names.push_back(signal_name);
+        }
+    }
+    return unique_names;
 }
 
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
@@ -258,25 +306,7 @@ void saveAsCsv(std::string const& filename,
         return;
     }
 
-    // Write header row
-    for (int i = 0; i < header.size(); i++) {
-        csv_file << header[i];
-        if (i < header.size() - 1) {
-            csv_file << ",";
-        }
-    }
-    csv_file << ",\n";
-
-    // Write data
-    for (int i = 0; i < data[0].size(); i++) {
-        for (int j = 0; j < data.size(); j++) {
-            csv_file << data[j][i];
-            if (j < data.size() - 1) {
-                csv_file << ",";
-            }
-        }
-        csv_file << "\n";
-    }
+    csv_file << formatCsvColumns(header, data);
 
     csv_file.close();
 }

@@ -677,6 +677,11 @@ void DbgGui::showMainMenuBar() {
                 ImGui::EndPopup();
             }
 
+            if (ImGui::Button("Copy all samples to clipboard")) {
+                copyAllScalarSamplesToClipboard();
+            }
+            ImGui::SameLine();
+            HelpMarker("Copy visible samples of all scalar signals to clipboard. Hotkey is ctrl+T");
             if (ImGui::Button("Save all plots as csv")) {
                 std::vector<Scalar*> scalars;
                 for (auto const& scalar : m_scalars) {

@@ -175,6 +175,32 @@ class ScrollingBuffer {
         return getValuesInRange(scalar, times.first, times.second, n_points, scale, offset);
     }
 
+    // Sample export needs raw values, not plotting min/max decimation.
+    std::vector<double> getTimeInRange(std::pair<int32_t, int32_t> times) {
+        std::vector<double> time;
+        if (times.first < 0 || times.second < 0 || times.second < times.first) {
+            return time;
+        }
+
+        time.reserve(size_t(times.second - times.first + 1));
+        time.insert(time.end(), m_time.begin() + times.first, m_time.begin() + times.second + 1);
+        return time;
+    }
+
+    std::vector<double> getSamplesInRange(Scalar* scalar, std::pair<int32_t, int32_t> times, double scale = 1, double offset = 0) {
+        std::vector<double> samples;
+        if (times.first < 0 || times.second < 0 || times.second < times.first || !m_scalar_buffers.contains(scalar)) {
+            return samples;
+        }
+
+        auto const& data = m_scalar_buffers.at(scalar);
+        samples.reserve(size_t(times.second - times.first + 1));
+        for (int32_t i = times.first; i <= times.second; ++i) {
+            samples.push_back(scale * data[i] + offset);
+        }
+        return samples;
+    }
+
     void startSampling(Scalar* scalar) {
         if (m_scalar_buffers.contains(scalar)) {
             return;

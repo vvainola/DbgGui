@@ -349,6 +349,8 @@ void DbgGui::updateLoop() {
             ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
         } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_6)) {
             ImGui::OpenPopup(str::ADD_DOCKSPACE);
+        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_T)) {
+            copyAllScalarSamplesToClipboard();
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
             saveSnapshot();
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {

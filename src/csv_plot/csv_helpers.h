@@ -24,6 +24,7 @@
 #include <string>
 #include <algorithm>
 #include <span>
+#include <string_view>
 
 #include "str_helpers.h"
 
@@ -34,6 +35,10 @@ enum class CsvPlotStyle {
     LeadingStairs,
     LaggingStairs,
 };
+
+std::string formatCsvColumns(std::vector<std::string> const& header,
+                             std::vector<std::vector<double>> const& data);
+std::vector<std::string> makeUniqueCsvSignalNames(std::vector<std::string> const& signal_names);
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.

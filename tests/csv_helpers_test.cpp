@@ -58,3 +58,18 @@ TEST_CASE("Plot value lookup returns NaN for empty inputs") {
 
     CHECK(std::isnan(getPlotValueAtX(CsvPlotStyle::Linear, x, y, 0, true)));
 }
+
+TEST_CASE("CSV column formatter writes columns") {
+    std::vector<std::string> header = {"time0", "sig"};
+    std::vector<std::vector<double>> data = {{0, 1}, {1.25, 2.5}};
+
+    std::string csv = formatCsvColumns(header, data);
+
+    CHECK(csv == "time0,sig,\n0,1.25,\n1,2.5,\n");
+}
+
+TEST_CASE("CSV signal names can be made unique") {
+    std::vector<std::string> names = {"time", "sig", "sig", "other", "sig"};
+
+    CHECK(makeUniqueCsvSignalNames(names) == std::vector<std::string>{"time", "sig#0", "sig#1", "other", "sig#2"});
+}

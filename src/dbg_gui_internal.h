@@ -25,6 +25,7 @@
 #include "symbols/dbg_symbols.hpp"
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
+#include "sample_clipboard.h"
 #include "imgui.h"
 #include "nlohmann/json.hpp"
 #include "themes.h"
@@ -120,6 +121,8 @@ class DbgGui {
     void updateSavedSettings();
     void setInitialFocus();
     void synchronizeSpeed();
+    void copyAllScalarSamplesToClipboard();
+    SampleClipboardData collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits);
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
     void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
     void addSymbolContextMenu(VariantSymbol& sym);

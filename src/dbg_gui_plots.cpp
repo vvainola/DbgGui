@@ -32,6 +32,9 @@
 #include <future>
 #include <span>
 
+std::string formatCsvColumns(std::vector<std::string> const& header,
+                             std::vector<std::vector<double>> const& data);
+
 constexpr double LOG_AXIS_Y_MIN = 1e-12;
 constexpr double PI = 3.1415926535897;
 constexpr int SCALAR_PLOT_POINT_COUNT = 2000;
@@ -752,12 +755,10 @@ void DbgGui::showSpectrumPlots() {
     }
 }
 
-void DbgGui::saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits) {
-    if (filename.empty()) {
-        return;
-    }
+SampleClipboardData DbgGui::collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits) {
+    SampleClipboardData samples;
 
-    // Pause while saving CSV because the CSV saving can take a long time and the sampling
+    // Pause while collecting samples because export can take a long time and the sampling
     // buffers would get filled and start hogging a lot of memory
     bool paused = m_paused;
     m_paused = true;
@@ -765,40 +766,84 @@ void DbgGui::saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& 
     while (m_next_sync_timestamp > 0) {
     }
 
-    if (!filename.ends_with(".csv")) {
-        filename.append(".csv");
-    }
-    std::ofstream csv(filename);
-
-    csv << "time0,";
-    csv << "time,";
-    std::vector<ScrollingBuffer::DecimatedValues> values;
     auto time_idx = m_sampler.getTimeIndices(time_limits.min, time_limits.max);
+    if (time_idx.first < 0 || time_idx.second < 0) {
+        m_paused = paused;
+        return samples;
+    }
+
+    std::vector<double> time = m_sampler.getTimeInRange(time_idx);
+    if (time.empty()) {
+        m_paused = paused;
+        return samples;
+    }
+
+    std::vector<double> time_from_zero;
+    time_from_zero.reserve(time.size());
+    for (double t : time) {
+        time_from_zero.push_back(t - time.front());
+    }
+
+    samples.header = {"time0", "time"};
+    samples.data.reserve(scalars.size() + 2);
+    samples.data.push_back(std::move(time_from_zero));
+    samples.data.push_back(std::move(time));
+
     for (auto const& scalar : scalars) {
         if (!m_sampler.isScalarSampled(scalar)) {
             continue;
         }
-        csv << scalar->name_and_group << ",";
-        values.push_back(m_sampler.getValuesInRange(scalar,
-                                                    time_idx,
-                                                    ALL_SAMPLES,
-                                                    scalar->getScale(),
-                                                    scalar->getOffset()));
-    }
-    csv << "\n";
-    if (values.size() == 0) {
-        csv.close();
-        m_paused = paused;
-        return;
-    }
-    for (size_t i = 0; i < values[0].time.size(); ++i) {
-        csv << std::format("{:g},{:g},", values[0].time[i] - values[0].time[0], values[0].time[i]);
-        for (auto& value : values) {
-            csv << std::format("{:g},", value.y_min[i]);
+        std::vector<double> scalar_samples = m_sampler.getSamplesInRange(scalar,
+                                                                         time_idx,
+                                                                         scalar->getScale(),
+                                                                         scalar->getOffset());
+        if (scalar_samples.empty()) {
+            continue;
         }
-        csv << "\n";
+        samples.header.push_back(scalar->name_and_group);
+        samples.data.push_back(std::move(scalar_samples));
     }
-    csv.close();
+
+    if (samples.data.size() <= 2) {
+        samples = {};
+        m_paused = paused;
+        return samples;
+    }
 
     m_paused = paused;
+    return samples;
+}
+
+void DbgGui::copyAllScalarSamplesToClipboard() {
+    std::vector<Scalar*> scalars;
+    scalars.reserve(m_scalars.size());
+    for (auto const& scalar : m_scalars) {
+        scalars.push_back(scalar.get());
+    }
+
+    SampleClipboardData samples = collectScalarSamples(scalars, m_linked_scalar_x_axis_limits);
+    if (!copySamplesToClipboard(samples)) {
+        m_error_message = "No sampled scalar data in the visible range";
+    }
+}
+
+void DbgGui::saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits) {
+    if (filename.empty()) {
+        return;
+    }
+
+    SampleClipboardData samples = collectScalarSamples(scalars, time_limits);
+    if (samples.data.empty()) {
+        m_error_message = "No sampled scalar data in the visible range";
+        return;
+    }
+    std::string csv_text = formatCsvColumns(samples.header, samples.data);
+
+    if (!filename.ends_with(".csv")) {
+        filename.append(".csv");
+    }
+    std::ofstream csv(filename);
+    csv << csv_text;
+    csv.close();
+
 }

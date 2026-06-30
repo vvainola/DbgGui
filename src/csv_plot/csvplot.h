@@ -62,6 +62,7 @@ struct CsvFileData {
     double x_axis_shift = 0;
     int run_number = 0;
     bool enabled = true;
+    bool in_memory = false;
 
     bool operator==(CsvFileData const& other) {
         return name == other.name
@@ -194,6 +195,7 @@ class CsvPlotter {
     void loadPreviousSessionSettings();
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
+    void addClipboardFileFromClipboard();
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
@@ -231,6 +233,7 @@ class CsvPlotter {
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
     std::string m_error_message;
+    int m_clipboard_file_count = 0;
 
     struct {
         bool reset_colors;

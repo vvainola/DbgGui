@@ -49,6 +49,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "csv_helpers.h"
 #include "custom_signal.hpp"
 #include "imgui_settings_migration.h"
+#include "sample_clipboard.h"
 #include "stb_image.h"
 #include "version.h"
 #include "magic_enum.hpp"
@@ -64,6 +65,8 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include <filesystem>
 #include <span>
 #include <set>
+#include <charconv>
+#include <optional>
 
 #define TRY(expression)                              \
     try {                                            \
@@ -264,6 +267,53 @@ void CsvPlotter::removeAllFiles() {
     }
     m_selected_signals.clear();
     m_csv_data.clear();
+}
+
+void CsvPlotter::addClipboardFileFromClipboard() {
+    std::expected<SampleClipboardData, std::string> parsed_columns = readSamplesFromClipboard();
+    if (!parsed_columns.has_value()) {
+        m_error_message = parsed_columns.error();
+        return;
+    }
+    SampleClipboardData columns = std::move(parsed_columns.value());
+    if (columns.data.empty() || columns.data[0].empty()) {
+        m_error_message = "Clipboard samples contain no data";
+        return;
+    }
+
+    size_t row_count = columns.data[0].size();
+    for (std::vector<double> const& column : columns.data) {
+        if (column.size() != row_count) {
+            m_error_message = "Clipboard sample columns have different sample counts";
+            return;
+        }
+    }
+
+    std::vector<std::string> signal_names = makeUniqueCsvSignalNames(columns.header);
+    for (size_t i = ASCENDING_NUMBERS.size(); i < row_count; ++i) {
+        ASCENDING_NUMBERS.push_back(double(i));
+    }
+
+    ++m_clipboard_file_count;
+    auto file = std::make_unique<CsvFileData>();
+    CsvFileData* file_ptr = file.get();
+    file->name = std::format("<clipboard {}>", m_clipboard_file_count);
+    file->displayed_name = std::format("Clipboard {}", m_clipboard_file_count);
+    file->write_time = std::filesystem::file_time_type();
+    file->in_memory = true;
+    file->signals.reserve(signal_names.size() + CUSTOM_SIGNAL_CAPACITY);
+
+    for (size_t i = 0; i < signal_names.size(); ++i) {
+        file->signals.push_back(CsvSignal{
+          .name = signal_names[i],
+          .samples = std::move(columns.data[i]),
+          .file = file_ptr});
+    }
+    applySignalTransforms(*file);
+    if (m_use_saved_plotted_signals) {
+        applyPlottedSignals(*file);
+    }
+    m_csv_data.push_back(std::move(file));
 }
 
 CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
@@ -819,29 +869,10 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename) {
         return nullptr;
     }
 
-    // Count number of instances with same name
-    std::map<std::string, int> signal_name_count;
-    for (std::string const& signal_name : signal_names) {
-        if (signal_name_count.contains(signal_name)) {
-            ++signal_name_count[signal_name];
-        } else {
-            signal_name_count[signal_name] = 1;
-        }
-    }
-
     std::vector<CsvSignal> csv_signals;
     csv_signals.reserve(signal_names.size());
-    std::map<std::string, int> signal_name_counter;
-    for (std::string const& signal_name : signal_names) {
-        // Add counter to name if same name is included multiple times
-        bool has_duplicate_names = signal_name_count[signal_name] > 1;
-        if (has_duplicate_names) {
-            csv_signals.push_back(CsvSignal{
-              .name = std::format("{}#{}", signal_name, signal_name_counter[signal_name])});
-            ++signal_name_counter[signal_name];
-        } else {
-            csv_signals.push_back(CsvSignal{.name = signal_name});
-        }
+    for (std::string const& signal_name : makeUniqueCsvSignalNames(signal_names)) {
+        csv_signals.push_back(CsvSignal{.name = signal_name});
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
         std::string line = str::removeWhitespace(csv_lines[i]);
@@ -906,8 +937,15 @@ void CsvPlotter::showXSignalCombo() {
     // Collect combo items
     std::vector<std::string> x_signal_combo_items;
     x_signal_combo_items.push_back("Index");
-    if (!m_csv_data.empty() && !m_csv_data[0]->signals.empty()) {
-        for (auto const& signal : m_csv_data[0]->signals) {
+    CsvFileData const* x_signal_file = nullptr;
+    for (auto const& file : m_csv_data) {
+        if (!file->signals.empty()) {
+            x_signal_file = file.get();
+            break;
+        }
+    }
+    if (x_signal_file) {
+        for (auto const& signal : x_signal_file->signals) {
             x_signal_combo_items.push_back(signal.name);
         }
     }
@@ -1012,6 +1050,10 @@ void CsvPlotter::showSignalWindow() {
     m_flags.reset_colors = false;
     if (ImGui::Button("Reset colors")) {
         m_flags.reset_colors = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("New file from clipboard")) {
+        addClipboardFileFromClipboard();
     }
 
     if (ImGui::Button("Copy signals to clipboard")) {
@@ -1118,7 +1160,7 @@ void CsvPlotter::showSignalWindow() {
     // rendered get pushed). Begin-side requests use the previous frame's list, matching the
     // pattern used in DbgGui's scalar/vector/symbol trees.
     ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                     | ImGuiMultiSelectFlags_BoxSelect1d;
+                                   | ImGuiMultiSelectFlags_BoxSelect1d;
     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                         (int)m_selected_signals.size(),
                                                         -1);
@@ -1128,13 +1170,9 @@ void CsvPlotter::showSignalWindow() {
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
 
     for (auto& file : m_csv_data) {
-        if (file->signals.size() == 0) {
-            continue;
-        }
-
         // Reload file if it has been rewritten. Wait that file has not been modified in the last 2 seconds
         // in case it is still being written
-        if (std::filesystem::exists(file->name)) {
+        if (!file->in_memory && std::filesystem::exists(file->name)) {
             auto last_write_time = std::filesystem::last_write_time(file->name);
             auto now = std::chrono::file_clock::now();
             auto write_time_plus_2s = last_write_time + std::chrono::seconds(2);
@@ -1236,25 +1274,7 @@ void CsvPlotter::showSignalWindow() {
                     }
                 }
             }
-            if (ImGui::Button("Save as CSV")) {
-                nfdchar_t* out_path = NULL;
-                auto cwd = std::filesystem::current_path();
-                nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
-                if (result == NFD_OKAY) {
-                    std::string out(out_path);
-                    if (!out.ends_with(".csv")) {
-                        out += ".csv";
-                    }
-                    free(out_path);
-                    std::vector<std::string> header;
-                    std::vector<std::vector<double>> samples;
-                    for (CsvSignal& signal : file->signals) {
-                        header.push_back(signal.name);
-                        samples.push_back(signal.samples);
-                    }
-                    saveAsCsv(out, header, samples);
-                }
-            }
+
             if (ImGui::Button("Remove signals from plots")) {
                 for (auto& signal : file->signals) {
                     for (ScalarPlot& plot : m_scalar_plots) {
@@ -1270,6 +1290,31 @@ void CsvPlotter::showSignalWindow() {
             }
             if (ImGui::Button("Remove file")) {
                 file_to_remove = &file;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save as CSV")) {
+                if (file->signals.empty()) {
+                    m_error_message = "Cannot save an empty CSV file";
+                    ImGui::CloseCurrentPopup();
+                } else {
+                    nfdchar_t* out_path = NULL;
+                    auto cwd = std::filesystem::current_path();
+                    nfdresult_t result = NFD_SaveDialog("csv", cwd.string().c_str(), &out_path);
+                    if (result == NFD_OKAY) {
+                        std::string out(out_path);
+                        if (!out.ends_with(".csv")) {
+                            out += ".csv";
+                        }
+                        free(out_path);
+                        std::vector<std::string> header;
+                        std::vector<std::vector<double>> samples;
+                        for (CsvSignal& signal : file->signals) {
+                            header.push_back(signal.name);
+                            samples.push_back(signal.samples);
+                        }
+                        saveAsCsv(out, header, samples);
+                    }
+                }
             }
             ImGui::EndPopup();
         }

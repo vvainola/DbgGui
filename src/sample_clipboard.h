@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2024 vvainola
+// Copyright (c) 2026 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -19,34 +19,17 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-
 #pragma once
 
-#include <string>
-#include <string_view>
 #include <expected>
+#include <string>
 #include <vector>
 
-namespace str {
+struct SampleClipboardData {
+    std::vector<std::string> header;
+    std::vector<std::vector<double>> data;
+};
 
-std::expected<std::string, std::string> readFile(const std::string& filename);
-
-std::vector<std::string_view> splitSv(std::string_view s, char delim, int expected_column_count = 1);
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count);
-std::vector<std::string> split(const std::string& s, char delim);
-std::string replaceAll(const std::string& str,
-                       const std::string& find,
-                       const std::string& replace);
-std::string removeWhitespace(std::string_view str);
-
-std::string& ltrim(std::string& str);
-std::string& rtrim(std::string& str);
-std::string& trim(std::string& str);
-
-bool fuzzy_match(char const* pattern, char const* str);
-bool fuzzy_match(std::string_view pattern, std::string_view str);
-bool fuzzy_match(char const* pattern, std::string_view str);
-
-std::expected<double, std::string> evaluateExpression(std::string expression);
-
-} // namespace str
+bool copySamplesToClipboard(SampleClipboardData const& samples);
+bool hasSampleClipboardData();
+std::expected<SampleClipboardData, std::string> readSamplesFromClipboard();
