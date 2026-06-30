@@ -25,6 +25,8 @@
 
 #include <cstdint>
 
+#include "test_retention.h"
+
 // ---- Enums ----
 
 enum Color {
@@ -143,6 +145,38 @@ Point2D lib_points[3] = {
 // Pointers
 double* lib_double_ptr = &lib_double;
 double* lib_null_ptr = nullptr;
+
+template <typename T>
+void keepLibrarySymbolAddress(std::uintptr_t& value, T const& symbol) {
+    value ^= reinterpret_cast<std::uintptr_t>(&symbol);
+}
+
+extern "C" DBGGUI_TEST_EXPORT DBGGUI_TEST_NOINLINE std::uintptr_t keepTestLibrarySymbolsAlive() {
+    std::uintptr_t value = 0;
+    keepLibrarySymbolAddress(value, lib_int32);
+    keepLibrarySymbolAddress(value, lib_uint32);
+    keepLibrarySymbolAddress(value, lib_int64);
+    keepLibrarySymbolAddress(value, lib_uint64);
+    keepLibrarySymbolAddress(value, lib_float);
+    keepLibrarySymbolAddress(value, lib_double);
+    keepLibrarySymbolAddress(value, lib_int16);
+    keepLibrarySymbolAddress(value, lib_uint16);
+    keepLibrarySymbolAddress(value, lib_int8);
+    keepLibrarySymbolAddress(value, lib_uint8);
+    keepLibrarySymbolAddress(value, lib_color);
+    keepLibrarySymbolAddress(value, lib_direction);
+    keepLibrarySymbolAddress(value, lib_point2d);
+    keepLibrarySymbolAddress(value, lib_point3d);
+    keepLibrarySymbolAddress(value, lib_status);
+    keepLibrarySymbolAddress(value, lib_motor);
+    keepLibrarySymbolAddress(value, lib_pid);
+    keepLibrarySymbolAddress(value, lib_array);
+    keepLibrarySymbolAddress(value, lib_matrix);
+    keepLibrarySymbolAddress(value, lib_points);
+    keepLibrarySymbolAddress(value, lib_double_ptr);
+    keepLibrarySymbolAddress(value, lib_null_ptr);
+    return value;
+}
 
 // Init function to set up bitfield values and class members
 // that are easier to set in code

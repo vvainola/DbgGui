@@ -176,6 +176,7 @@ lib_gui = static_library('dbg_gui',
 
 test_library = shared_library('test_library',
     sources : ['src/test_library.cpp'],
+    include_directories : 'tests',
     override_options : override_options,
 )
 

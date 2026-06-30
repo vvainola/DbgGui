@@ -7,8 +7,10 @@
 
 #include "test_library_loader.h"
 #include "fwd_decl_types.h"
+#include "test_retention.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <random>
 
@@ -67,20 +69,24 @@ enum Enumeration {
     EnumValue2 = 2
 };
 
-void test_fn1() {}
+volatile int g_function_address_anchor = 0;
+
+void test_fn1() {
+    g_function_address_anchor = 1;
+}
 
 namespace pdb_collision {
 struct A {
     void hello() {};
     int m_a = 2;
-    void (*m_ap)() = &A::f;
-    static void f() {};
+    int (*m_ap)(double) = &A::f;
+    static int f(double) { return 0; };
 };
 
 struct B {
     double m_b = 1;
     A a;
-    void (*m_ap)() = &A::f;
+    int (*m_ap)(double) = &A::f;
 };
 
 struct C {
@@ -102,8 +108,12 @@ B g_b1;
 B g_b2;
 B g_b_array[2];
 float g_float;
-void test_fn2() {}
-void test_fn3(int) {}
+void test_fn2() {
+    g_function_address_anchor = 2;
+}
+void test_fn3(int value) {
+    g_function_address_anchor = value + 3;
+}
 } // namespace g
 double g_double1;
 double g_double2;
@@ -177,8 +187,58 @@ int* getLocalStaticPtr() {
     return s_local_static_ptr;
 }
 
+volatile std::uintptr_t g_symbol_fixture_keep_alive_sink = 0;
+
+extern "C" std::uintptr_t keep_test_types_alive();
+
+template <typename T>
+void keepSymbolAddress(std::uintptr_t& value, T const& symbol) {
+    value ^= reinterpret_cast<std::uintptr_t>(&symbol);
+}
+
+DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
+    std::uintptr_t value = 0;
+    keepSymbolAddress(value, g_int);
+    keepSymbolAddress(value, g::g_a);
+    keepSymbolAddress(value, g::g_b1);
+    keepSymbolAddress(value, g::g_b2);
+    keepSymbolAddress(value, g::g_b_array);
+    keepSymbolAddress(value, g::g_float);
+    keepSymbolAddress(value, g_double1);
+    keepSymbolAddress(value, g_double2);
+    keepSymbolAddress(value, g_multidim_double);
+    keepSymbolAddress(value, g_double_ptr);
+    keepSymbolAddress(value, g_fn_ptr);
+    keepSymbolAddress(value, g_fn_ptr2);
+    keepSymbolAddress(value, g_fn_ptr3);
+    keepSymbolAddress(value, g_bitfield);
+    keepSymbolAddress(value, g_enum);
+    keepSymbolAddress(value, g_reset_derived);
+    keepSymbolAddress(value, g_reset_double_derived);
+    keepSymbolAddress(value, g_const_int);
+    keepSymbolAddress(value, g_const_target);
+    keepSymbolAddress(value, g_const_ptr);
+    keepSymbolAddress(value, g_const_member_struct);
+    keepSymbolAddress(value, pdb_collision::a_struct);
+    keepSymbolAddress(value, static_ns::s_int);
+    keepSymbolAddress(value, static_ns::s_double);
+    keepSymbolAddress(value, static_ns::s_a);
+    keepSymbolAddress(value, static_ns::s_b);
+    keepSymbolAddress(value, static_ns::s_ctor);
+    keepSymbolAddress(value, static_ns::s_array);
+    keepSymbolAddress(value, g_fwd_outer);
+    keepSymbolAddress(value, g_cross_tu_enum);
+    value ^= keep_test_types_alive();
+    g_symbol_fixture_keep_alive_sink = value;
+}
+
+DbgSymbols const& getTestSymbols() {
+    keepSymbolTestFixturesAlive();
+    return DbgSymbols::getSymbols();
+}
+
 TEST_CASE("Basic symbol access") {
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
     g_int = random<int>();
     VariantSymbol* g_int_sym = symbols.getSymbol("g_int");
     CHECK(g_int_sym->read() == g_int);
@@ -223,16 +283,21 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_fn_ptr3_sym->valueAsStr() == "g::test_fn3");
 
     VariantSymbol* g_a_sym = symbols.getSymbol("g::g_a");
+    REQUIRE(g_a_sym != nullptr);
     CHECK(g_a_sym->getChildren().size() == 1);
 
     VariantSymbol* g_b1_sym = symbols.getSymbol("g::g_b1");
+    REQUIRE(g_b1_sym != nullptr);
     CHECK(g_b1_sym->getChildren().size() == 2);
     VariantSymbol* g_b2_sym = symbols.getSymbol("g::g_b2");
+    REQUIRE(g_b2_sym != nullptr);
     CHECK(g_b2_sym->getChildren().size() == 2);
 
     VariantSymbol* g_b1_a_sym = symbols.getSymbol("g::g_b1.a");
+    REQUIRE(g_b1_a_sym != nullptr);
     CHECK(g_b1_a_sym->getChildren().size() == 1);
     VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
+    REQUIRE(g_b2_a_sym != nullptr);
     CHECK(g_b2_a_sym->getChildren().size() == 1);
 
     g::g_b_array[0].a.m_a = 1;
@@ -336,7 +401,7 @@ TEST_CASE("Basic symbol access") {
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     // Statics have internal linkage, so their definition DIE in DWARF lacks
     // both DW_AT_name and DW_AT_linkage_name. The walker must recover the
@@ -390,7 +455,7 @@ TEST_CASE("Function-local statics are not exposed") {
     // passes for the wrong reason.
     REQUIRE(getLocalStaticPtr() != nullptr);
 
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     // The statics are inside a DW_TAG_subprogram, so the walker must skip them.
     // If exposed, snapshot save/restore could zero the storage while leaving the
@@ -408,7 +473,7 @@ TEST_CASE("Forward-declared type definition lookup") {
     // in fwd_decl_types.cpp. The walker must resolve the forward declaration
     // to the full definition to be able to size up FwdDeclOuter and expose
     // FwdDeclInner's members.
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     g_fwd_outer.inner.a = 17;
     g_fwd_outer.inner.b = 2.75;
@@ -575,7 +640,7 @@ TEST_CASE("Snapshot restores pointer to const global") {
     // but the pointer's value (the address of the const global) must still be
     // preserved so that restoring the snapshot puts the pointer back where it
     // was.
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     VariantSymbol* ptr_sym = symbols.getSymbol("g_const_ptr");
     REQUIRE(ptr_sym != nullptr);
@@ -606,7 +671,7 @@ TEST_CASE("Snapshot restores pointer to const global") {
 TEST_CASE("Read symbols from shared library") {
     REQUIRE(test_library_loader.handle != nullptr);
 
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     std::string prefix = "test_library|";
     SECTION("Search recursion depth controls module-prefixed globals") {

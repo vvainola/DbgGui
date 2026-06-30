@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "test_library_loader.h"
+#include <cstdint>
 #include <iostream>
 
 #if WINDOWS
@@ -34,11 +35,25 @@ TestLibraryLoader::TestLibraryLoader() {
     handle = (void*)LoadLibraryA("test_library.dll");
     if (!handle) {
         std::cerr << "Failed to load test_library.dll, error: " << GetLastError() << std::endl;
+    } else {
+        using KeepAliveFn = std::uintptr_t (*)();
+        auto keep_alive = reinterpret_cast<KeepAliveFn>(GetProcAddress((HMODULE)handle, "keepTestLibrarySymbolsAlive"));
+        if (keep_alive != nullptr) {
+            volatile std::uintptr_t ignored = keep_alive();
+            (void)ignored;
+        }
     }
 #elif LINUX
     handle = dlopen("./libtest_library.so", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
         std::cerr << "Failed to load libtest_library.so: " << dlerror() << std::endl;
+    } else {
+        using KeepAliveFn = std::uintptr_t (*)();
+        auto keep_alive = reinterpret_cast<KeepAliveFn>(dlsym(handle, "keepTestLibrarySymbolsAlive"));
+        if (keep_alive != nullptr) {
+            volatile std::uintptr_t ignored = keep_alive();
+            (void)ignored;
+        }
     }
 #endif
 }

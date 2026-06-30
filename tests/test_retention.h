@@ -19,60 +19,12 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+#pragma once
 
-#include <stdint.h>
-#include "test_retention.h"
-
-typedef struct {
-    int64_t i64;
-    float f32;
-    uint32_t u32;
-    int32_t i32;
-    uint16_t u16;
-} test_type_values_t;
-
-typedef struct {
-    test_type_values_t values;
-    int32_t i32;
-} test_type_container_t;
-
-test_type_container_t g_test_types[3] = {
-  {
-    .values = {
-      .i64 = -10,
-      .f32 = 1.25f,
-      .u32 = 20u,
-      .i32 = -30,
-      .u16 = 40u,
-    },
-    .i32 = 50,
-  },
-  {
-    .values = {
-      .i64 = -11,
-      .f32 = 2.50f,
-      .u32 = 21u,
-      .i32 = -31,
-      .u16 = 41u,
-    },
-    .i32 = 51,
-  },
-  {
-    .values = {
-      .i64 = -12,
-      .f32 = 3.75f,
-      .u32 = 22u,
-      .i32 = -32,
-      .u16 = 42u,
-    },
-    .i32 = 52,
-  },
-};
-
-static volatile uintptr_t g_test_types_keep_alive_sink = 0;
-
-DBGGUI_TEST_NOINLINE uintptr_t keep_test_types_alive(void) {
-    uintptr_t value = (uintptr_t)&g_test_types;
-    g_test_types_keep_alive_sink = value;
-    return value;
-}
+#if WINDOWS
+#define DBGGUI_TEST_EXPORT __declspec(dllexport)
+#define DBGGUI_TEST_NOINLINE __declspec(noinline)
+#else
+#define DBGGUI_TEST_EXPORT __attribute__((visibility("default")))
+#define DBGGUI_TEST_NOINLINE __attribute__((noinline))
+#endif
