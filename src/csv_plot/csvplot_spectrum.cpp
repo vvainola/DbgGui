@@ -120,14 +120,6 @@ void CsvPlotter::showSpectrumPlots() {
                 }
                 plot.prev_x_range = {0, 0};
             }
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {
-                assert(m_selected_signals.size() == 2);
-                CsvSignal* signal_x = m_selected_signals[0];
-                CsvSignal* signal_y = m_selected_signals[1];
-                plot.addSignal(signal_x, signal_y);
-                m_selected_signals.clear();
-                plot.prev_x_range = {0, 0};
-            }
             ImGui::EndDragDropTarget();
         }
 

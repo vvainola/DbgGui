@@ -1381,15 +1381,6 @@ void CsvPlotter::showSignalWindow() {
                     ImGui::EndDragDropSource();
                 }
 
-                // Select two signals with ctrl/shift-click for dragging to vector plot
-                if (m_selected_signals.size() == 2
-                    && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                    // Payload is not used
-                    ImGui::SetDragDropPayload("CSV_Vector", NULL, 0);
-                    ImGui::Text("Drag to vector plot");
-                    ImGui::EndDragDropSource();
-                }
-
                 if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
                     CsvSignalTransform signal_transform = signal.transform;
 

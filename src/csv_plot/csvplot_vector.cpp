@@ -123,12 +123,17 @@ void CsvPlotter::showVectorPlots() {
         }
 
         if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_Vector")) {
-                assert(m_selected_signals.size() == 2);
-                CsvSignal* signal_x = m_selected_signals[0];
-                CsvSignal* signal_y = m_selected_signals[1];
-                plot.addSignal({signal_x, signal_y});
-                m_selected_signals.clear();
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
+                std::span<CsvSignal*> sigs(reinterpret_cast<CsvSignal**>(payload->Data),
+                                           payload->DataSize / sizeof(CsvSignal*));
+                if (sigs.size() != 2) {
+                    m_error_message = "Vector plot requires exactly two signals";
+                } else {
+                    CsvSignal* signal_x = sigs[0];
+                    CsvSignal* signal_y = sigs[1];
+                    plot.addSignal({signal_x, signal_y});
+                    m_selected_signals.clear();
+                }
             }
             ImGui::EndDragDropTarget();
         }
