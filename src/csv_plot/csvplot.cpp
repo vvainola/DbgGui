@@ -380,6 +380,19 @@ bool CsvPlotter::isSignalPlotted(CsvSignal* signal) const {
     return false;
 }
 
+std::vector<CsvSignal*> CsvPlotter::sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals) {
+    std::vector<CsvSignal*> same_named_signals;
+    for (CsvSignal* signal : signals) {
+        for (auto& file : m_csv_data) {
+            CsvSignal* same_named_signal = findSignalByName(*file, signal->name);
+            if (same_named_signal != nullptr && !contains(same_named_signals, same_named_signal)) {
+                same_named_signals.push_back(same_named_signal);
+            }
+        }
+    }
+    return same_named_signals;
+}
+
 void CsvPlotter::removeSignalFromAllPlots(CsvSignal* signal) {
     for (PlotBase& plot : m_docked_plots) {
         plot.removeSignal(signal);
@@ -1768,13 +1781,18 @@ void CsvPlotter::showSignalWindow() {
                     } else {
                         payload_signals.push_back(&signal);
                     }
+                    std::vector<CsvSignal*> dragged_signals = payload_signals;
+                    bool const add_same_named_signals = ImGui::GetIO().KeyShift;
+                    if (add_same_named_signals) {
+                        payload_signals = sameNamedSignalsFromOpenFiles(payload_signals);
+                    }
                     ImGui::SetDragDropPayload("CSV_MULTI",
                                               payload_signals.data(),
                                               payload_signals.size() * sizeof(CsvSignal*));
-                    if (payload_signals.size() == 1) {
-                        ImGui::Text("Drag to plot: %s", signal.name.c_str());
-                    } else {
-                        ImGui::Text("Drag %d signals to plot", (int)payload_signals.size());
+                    std::string base_text = add_same_named_signals ? "Drag to plot from all files" : "Drag to plot";
+                    ImGui::TextUnformatted(base_text.c_str());
+                    for (CsvSignal* dragged_signal : dragged_signals) {
+                        ImGui::Text("  %s", dragged_signal->name.c_str());
                     }
                     ImGui::EndDragDropSource();
                 }

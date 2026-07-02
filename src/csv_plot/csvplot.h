@@ -122,6 +122,7 @@ class CsvPlotter {
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
     CsvPlotStyle getSignalPlotStyle(CsvSignal const& signal) const;
     void showSignalPlotStyleCombo(std::string const& signal_name);
+    std::vector<CsvSignal*> sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals);
 
     void updateSavedSettings();
     void loadPreviousSessionSettings();
