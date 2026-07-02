@@ -53,10 +53,9 @@ constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
 const std::array<XY<double>, 1000> UNIT_CIRCLE = unitCirclePoints(1.0);
 const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 
-void CsvPlotter::showVectorPlot(PlotBase& plot_base, int plot_idx) {
+void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
     VectorPlot& plot = std::get<VectorPlot>(plot_base.variant);
-    int docked = dockedPlotCount();
-    std::string name = plot_idx < docked ? std::format("Plot {}", plot_idx) : std::format("Undocked Plot {}", plot_idx - docked);
+    std::string name = plotWindowName(visible_plot_idx);
     ImGui::Begin(name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
     if (showPlotContextMenu(plot_base)) {
         ImGui::End();

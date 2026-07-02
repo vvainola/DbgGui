@@ -99,9 +99,9 @@ class CsvPlotter {
     void showCustomSignalCreator();
     void showSignalWindow();
     void showPlots();
-    void showScalarPlot(PlotBase& plot_base, int plot_idx, double& vertical_line_time, double& vertical_line_time_next);
-    void showVectorPlot(PlotBase& plot_base, int plot_idx);
-    void showSpectrumPlot(PlotBase& plot_base, int plot_idx);
+    void showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next);
+    void showVectorPlot(PlotBase& plot_base, int visible_plot_idx);
+    void showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx);
     void showXSignalCombo();
     bool showPlotContextMenu(PlotBase& plot);
 
@@ -113,8 +113,9 @@ class CsvPlotter {
     void updatePlottedSignalSettings();
     int dockedPlotCount() const;
     int activePlotCount() const;
-    PlotBase& plotAt(int idx);
-    PlotBase const& plotAt(int idx) const;
+    PlotBase& plotAt(int visible_plot_idx);
+    PlotBase const& plotAt(int visible_plot_idx) const;
+    std::string plotWindowName(int visible_plot_idx) const;
     template <typename Fn>
     void forEachPlot(Fn&& fn);
     bool isSignalPlotted(CsvSignal* signal) const;
@@ -142,11 +143,9 @@ class CsvPlotter {
     bool m_save_settings = true;
     int m_rows = 1;
     int m_cols = 1;
-    // Docked and undocked plots are stored in separate arrays so that changing visible
-    // rows/cols or the undocked count never needs to move or reindex hidden plot state.
-    // plotAt() addresses only visible plots using a global index:
-    // [0, dockedPlotCount()) is docked,
-    // [dockedPlotCount(), dockedPlotCount() + m_undocked_plot_count) is undocked.
+    // Docked plots are stored in stable row/column slots: row * MAX_PLOTS + col.
+    // plotAt() still receives a visible row-major index from render loops, but maps
+    // it through the current grid dimensions so adding columns does not move lower rows.
     int m_undocked_plot_count = 0;
     float m_signals_window_width = 0.15f;
     struct {

@@ -96,6 +96,24 @@ std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
+std::optional<int> parseInt(std::string_view text) {
+    int value = 0;
+    auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (ec != std::errc() || ptr != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+int stablePlotIndex(int row, int col) {
+    return row * MAX_PLOTS + col;
+}
+
+int visibleToStablePlotIndex(int plot_idx, int cols) {
+    cols = std::clamp(cols, 1, MAX_PLOTS);
+    return stablePlotIndex(plot_idx / cols, plot_idx % cols);
+}
+
 bool plotCsvSamples(std::string const& label_id,
                     double const* x,
                     double const* y,
@@ -319,20 +337,28 @@ int CsvPlotter::activePlotCount() const {
     return dockedPlotCount() + m_undocked_plot_count;
 }
 
-PlotBase& CsvPlotter::plotAt(int idx) {
+PlotBase& CsvPlotter::plotAt(int visible_plot_idx) {
     int d = dockedPlotCount();
-    if (idx < d) {
-        return m_docked_plots[idx];
+    if (visible_plot_idx < d) {
+        return m_docked_plots[visibleToStablePlotIndex(visible_plot_idx, m_cols)];
     }
-    return m_undocked_plots[idx - d];
+    return m_undocked_plots[visible_plot_idx - d];
 }
 
-PlotBase const& CsvPlotter::plotAt(int idx) const {
+PlotBase const& CsvPlotter::plotAt(int visible_plot_idx) const {
     int d = dockedPlotCount();
-    if (idx < d) {
-        return m_docked_plots[idx];
+    if (visible_plot_idx < d) {
+        return m_docked_plots[visibleToStablePlotIndex(visible_plot_idx, m_cols)];
     }
-    return m_undocked_plots[idx - d];
+    return m_undocked_plots[visible_plot_idx - d];
+}
+
+std::string CsvPlotter::plotWindowName(int visible_plot_idx) const {
+    int docked = dockedPlotCount();
+    if (visible_plot_idx < docked) {
+        return std::format("Plot {}", visible_plot_idx);
+    }
+    return std::format("Undocked Plot {}", visible_plot_idx - docked);
 }
 
 template <typename Fn>
@@ -694,8 +720,8 @@ double CsvPlotter::getScalarPlotXOrigin(ScalarPlot const& plot) {
         // Linked scalar plots share x-axis limits, so they also need one shared
         // zero origin. Otherwise the same file can appear at different x values
         // depending on which other files happen to be present in each plot.
-        for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
-            if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plotAt(plot_idx).variant)) {
+        for (int visible_plot_idx = 0; visible_plot_idx < activePlotCount(); ++visible_plot_idx) {
+            if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plotAt(visible_plot_idx).variant)) {
                 update_origin(*scalar_plot);
             }
         }
@@ -777,6 +803,14 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     loadPreviousSessionSettings();
+    if (rows > 0) {
+        m_rows = rows;
+    }
+    if (cols > 0) {
+        m_cols = cols;
+    }
+    m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
+    m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
 
     extern unsigned int cousine_regular_compressed_size;
     extern unsigned int cousine_regular_compressed_data[];
@@ -788,14 +822,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     if (!image_filepath.empty()) {
         int xpos = 0;
         int ypos = 0;
-        if (rows > 0) {
-            m_rows = rows;
-        }
-        if (cols > 0) {
-            m_cols = cols;
-        }
-        m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
-        m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
         m_undocked_plot_count = 0;
         glfwGetWindowSize(m_window, &xpos, &ypos);
         glfwSetWindowPos(m_window, 0, -ypos + 1);
@@ -817,10 +843,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
                     continue;
                 }
                 int plot_idx = it->second;
-                if (plot_idx < 0) {
-                    continue;
-                }
-                if (plot_idx < MAX_PLOT_WINDOWS) {
+                if (plot_idx >= 0 && plot_idx < MAX_PLOT_WINDOWS) {
                     std::get<ScalarPlot>(m_docked_plots[plot_idx].variant).addSignal(&signal);
                 }
             }
@@ -1001,9 +1024,9 @@ void CsvPlotter::loadPreviousSessionSettings() {
                         }
                     } else if (settings["plots"].is_object()) {
                         for (auto const& item : settings["plots"].items()) {
-                            TRY(int plot_idx = std::stoi(item.key());
-                                if (plot_idx >= 0 && plot_idx < MAX_PLOT_WINDOWS) {
-                                    load_plot_settings(m_docked_plots[plot_idx], item.value());
+                            TRY(std::optional<int> plot_idx = parseInt(item.key());
+                                if (plot_idx.has_value() && plot_idx.value() >= 0 && plot_idx.value() < MAX_PLOT_WINDOWS) {
+                                    load_plot_settings(m_docked_plots[plot_idx.value()], item.value());
                                 })
                         }
                     }
@@ -1087,9 +1110,7 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["ypos"] = ypos;
     settings["window"]["rows"] = m_rows;
     settings["window"]["cols"] = m_cols;
-    int docked = dockedPlotCount();
     settings["window"]["undocked_plot_count"] = m_undocked_plot_count;
-    settings["window"]["plot_count"] = docked + m_undocked_plot_count;
     settings["window"]["x_signal_name"] = m_options.x_signal_name;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
@@ -1134,9 +1155,13 @@ void CsvPlotter::updateSavedSettings() {
             }
         }
     };
-    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
-        if (i < docked || has_saved_plot_state(m_docked_plots[i])) {
-            save_plot(m_docked_plots[i], settings["plots"], std::to_string(i));
+    for (int row = 0; row < MAX_PLOTS; ++row) {
+        for (int col = 0; col < MAX_PLOTS; ++col) {
+            int plot_idx = stablePlotIndex(row, col);
+            bool visible = row < m_rows && col < m_cols;
+            if (visible || has_saved_plot_state(m_docked_plots[plot_idx])) {
+                save_plot(m_docked_plots[plot_idx], settings["plots"], std::to_string(plot_idx));
+            }
         }
     }
     for (int u = 0; u < MAX_UNDOCKED_PLOTS; ++u) {
@@ -1442,11 +1467,14 @@ void CsvPlotter::showSignalWindow() {
         std::stringstream ss_plots;
         ss_signals << "\"";
         ss_plots << "\"";
-        for (int plot_idx = 0; plot_idx < MAX_PLOT_WINDOWS; ++plot_idx) {
-            if (auto* plot = std::get_if<ScalarPlot>(&m_docked_plots[plot_idx].variant)) {
-                for (CsvSignal* signal : plot->signals) {
-                    ss_signals << signal->name << ",";
-                    ss_plots << plot_idx << ",";
+        for (int row = 0; row < m_rows; ++row) {
+            for (int col = 0; col < m_cols; ++col) {
+                int plot_idx = stablePlotIndex(row, col);
+                if (auto* plot = std::get_if<ScalarPlot>(&m_docked_plots[plot_idx].variant)) {
+                    for (CsvSignal* signal : plot->signals) {
+                        ss_signals << signal->name << ",";
+                        ss_plots << plot_idx << ",";
+                    }
                 }
             }
         }
@@ -1760,12 +1788,13 @@ void CsvPlotter::showSignalWindow() {
                 ImGui::SetNextItemSelectionUserData((int)m_visible_signals.size() - 1);
                 ImGui::Selectable(label.c_str(), item_is_selected);
 
-                // Add signal to plot if a number key is pressed while clicking. This makes it
-                // easier to add signals with same name from different files to same plot.
+                // Add signal to the visible plot number while clicking. This makes it easier to
+                // add signals with same name from different files to same plot.
                 std::optional<int> pressed_number = pressedNumber();
                 if (pressed_number && ImGui::IsItemClicked()) {
-                    if (*pressed_number < activePlotCount()) {
-                        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plotAt(*pressed_number).variant)) {
+                    int visible_plot_idx = *pressed_number;
+                    if (visible_plot_idx < activePlotCount()) {
+                        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plotAt(visible_plot_idx).variant)) {
                             scalar_plot->addSignal(&signal);
                         }
                     }
@@ -1868,31 +1897,30 @@ void CsvPlotter::showPlots() {
     vertical_line_time_next = NAN;
 
     bool aligned = ImPlot::BeginAlignedPlots("AlignedGroup");
-    for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
-        PlotBase& plot = plotAt(plot_idx);
+    for (int visible_plot_idx = 0; visible_plot_idx < activePlotCount(); ++visible_plot_idx) {
+        PlotBase& plot = plotAt(visible_plot_idx);
         if (plot.plotType() == CsvPlotType::Scalar) {
-            showScalarPlot(plot, plot_idx, vertical_line_time, vertical_line_time_next);
+            showScalarPlot(plot, visible_plot_idx, vertical_line_time, vertical_line_time_next);
         }
     }
     if (aligned) {
         ImPlot::EndAlignedPlots();
     }
 
-    for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
-        PlotBase& plot = plotAt(plot_idx);
+    for (int visible_plot_idx = 0; visible_plot_idx < activePlotCount(); ++visible_plot_idx) {
+        PlotBase& plot = plotAt(visible_plot_idx);
         CsvPlotType type = plot.plotType();
         if (type == CsvPlotType::Vector) {
-            showVectorPlot(plot, plot_idx);
+            showVectorPlot(plot, visible_plot_idx);
         } else if (type == CsvPlotType::Spectrum) {
-            showSpectrumPlot(plot, plot_idx);
+            showSpectrumPlot(plot, visible_plot_idx);
         }
     }
 }
 
-void CsvPlotter::showScalarPlot(PlotBase& plot_base, int plot_idx, double& vertical_line_time, double& vertical_line_time_next) {
+void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next) {
     ScalarPlot& plot = std::get<ScalarPlot>(plot_base.variant);
-    int docked = dockedPlotCount();
-    std::string name = plot_idx < docked ? std::format("Plot {}", plot_idx) : std::format("Undocked Plot {}", plot_idx - docked);
+    std::string name = plotWindowName(visible_plot_idx);
     ImGui::Begin(name.c_str());
     if (showPlotContextMenu(plot_base)) {
         ImGui::End();
@@ -2205,7 +2233,8 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
     }
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
-            ImGui::DockBuilderDockWindow(std::format("Plot {}", row * cols + col).c_str(), docks[row][col]);
+            int visible_plot_idx = row * cols + col;
+            ImGui::DockBuilderDockWindow(std::format("Plot {}", visible_plot_idx).c_str(), docks[row][col]);
         }
     }
     ImGui::DockBuilderFinish(main_dock);

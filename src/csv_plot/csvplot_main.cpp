@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     options.add_options()
         ("f,files" , "Files to open for plotting"                                                            , cxxopts::value<std::vector<std::string>>()->default_value("-"))
         ("n,names" , "Names of signals to add to plots e.g. \"foo,bar\""                                     , cxxopts::value<std::vector<std::string>>()->default_value("-"))
-        ("p,plots" , "Indices of plots to add signals matching order of arguments in \"names\" e.g. \"0,1\"" , cxxopts::value<std::vector<int>>()->default_value("-1"))
+        ("p,plots" , "Stable plot indices to add signals matching order of arguments in \"names\" e.g. \"00,11\" means row 1 col 1, row 2 col 2" , cxxopts::value<std::vector<int>>()->default_value("-1"))
         ("xlim"    , "X-axis limits e.g. \"1.0,1.5\""                                                        , cxxopts::value<std::vector<double>>()->default_value("-1,1"))
         ("rows"    , "Number of plot rows."                                                                  , cxxopts::value<int>()->default_value("0"))
         ("cols"    , "Number of plot columns."                                                               , cxxopts::value<int>()->default_value("0"))
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
         std::cerr << std::format("Wrong amount of x-axis limits: {}, expected 2", xlimits.size());
     }
 
-    // Signal name <-> plot idx mapping given from cmd line
+    // Signal name <-> stable plot idx mapping given from cmd line
     std::map<std::string, int> name_and_plot_idx;
     for (int i = 0; i < names.size(); ++i) {
         name_and_plot_idx[names[i]] = plots[i];
