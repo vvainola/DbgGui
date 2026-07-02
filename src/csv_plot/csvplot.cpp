@@ -109,6 +109,28 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
 std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
+CsvSignal* findSignalByName(CsvFileData& file, std::string const& name) {
+    for (CsvSignal& signal : file.signals) {
+        if (signal.name == name) {
+            return &signal;
+        }
+    }
+    return nullptr;
+}
+
+void addUniquePair(std::vector<std::pair<std::string, std::string>>& pairs,
+                   std::pair<std::string, std::string> const& pair) {
+    if (std::find(pairs.begin(), pairs.end(), pair) == pairs.end()) {
+        pairs.push_back(pair);
+    }
+}
+
+bool pairTouchesLoadedSignal(std::pair<std::string, std::string> const& pair,
+                             std::set<std::string> const& loaded_names) {
+    return loaded_names.contains(pair.first)
+        || (!pair.second.empty() && loaded_names.contains(pair.second));
+}
+
 static std::string jsonValueToExpressionString(nlohmann::json const& value) {
     if (value.is_number()) {
         return std::format("{:g}", value.get<double>());
@@ -187,16 +209,40 @@ void CsvPlotter::applySignalTransforms(CsvFileData& file) {
 }
 
 void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
-    for (CsvSignal& signal : file.signals) {
-        auto it = m_plotted_signal_settings.find(signal.name);
-        if (it == m_plotted_signal_settings.end()) {
-            continue;
-        }
-        for (int plot_idx : it->second) {
-            if (plot_idx >= 0 && plot_idx < (int)m_scalar_plots.size()) {
-                m_scalar_plots[plot_idx].addSignal(&signal);
+    auto apply_plot_settings = [&](PlotBase& plot) {
+        CsvPlotSignalSettings const& settings = plot.settings;
+        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            for (std::string const& signal_name : settings.scalar_signals) {
+                if (CsvSignal* signal = findSignalByName(file, signal_name)) {
+                    scalar_plot->addSignal(signal);
+                }
+            }
+        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            for (auto const& signal_names : settings.signal_pairs) {
+                CsvSignal* x = findSignalByName(file, signal_names.first);
+                CsvSignal* y = findSignalByName(file, signal_names.second);
+                if (x && y) {
+                    vector_plot->addSignal({x, y});
+                }
+            }
+        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            for (auto const& signal_names : settings.signal_pairs) {
+                CsvSignal* real = findSignalByName(file, signal_names.first);
+                CsvSignal* imag = signal_names.second.empty() ? nullptr : findSignalByName(file, signal_names.second);
+                if (real && (signal_names.second.empty() || imag)) {
+                    spectrum_plot->addSignal(real, imag);
+                }
             }
         }
+    };
+
+    // Apply settings to every stored slot, including hidden docked/undocked plots,
+    // so increasing rows/columns or undocked count later reveals already-restored state.
+    for (PlotBase& plot : m_docked_plots) {
+        apply_plot_settings(plot);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        apply_plot_settings(plot);
     }
 }
 
@@ -210,23 +256,246 @@ void CsvPlotter::updatePlottedSignalSettings() {
         }
     }
 
-    std::map<std::string, std::vector<int>> current; // name -> plot indices
-    for (int i = 0; i < (int)m_scalar_plots.size(); ++i) {
-        for (CsvSignal* signal : m_scalar_plots[i].signals) {
-            if (!contains(current[signal->name], i)) {
-                current[signal->name].push_back(i);
+    auto update_plot_settings = [&](PlotBase& plot) {
+        CsvPlotSignalSettings current_settings;
+        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            for (CsvSignal* signal : scalar_plot->signals) {
+                if (!contains(current_settings.scalar_signals, signal->name)) {
+                    current_settings.scalar_signals.push_back(signal->name);
+                }
+            }
+        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            for (auto const& signals : vector_plot->signals) {
+                addUniquePair(current_settings.signal_pairs, {signals.first->name, signals.second->name});
+            }
+        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            for (auto const& spec : spectrum_plot->spectrum) {
+                addUniquePair(current_settings.signal_pairs,
+                              {spec.real->name, spec.imag == nullptr ? "" : spec.imag->name});
+            }
+        }
+
+        CsvPlotSignalSettings updated;
+        for (std::string const& signal_name : plot.settings.scalar_signals) {
+            bool const signal_is_current = contains(current_settings.scalar_signals, signal_name);
+            if (signal_is_current || !loaded_names.contains(signal_name)) {
+                updated.scalar_signals.push_back(signal_name);
+            }
+        }
+        for (std::string const& signal_name : current_settings.scalar_signals) {
+            if (!contains(updated.scalar_signals, signal_name)) {
+                updated.scalar_signals.push_back(signal_name);
+            }
+        }
+
+        for (auto const& pair : plot.settings.signal_pairs) {
+            bool const pair_is_current = std::find(current_settings.signal_pairs.begin(),
+                                                   current_settings.signal_pairs.end(),
+                                                   pair)
+                                      != current_settings.signal_pairs.end();
+            if (pair_is_current || !pairTouchesLoadedSignal(pair, loaded_names)) {
+                addUniquePair(updated.signal_pairs, pair);
+            }
+        }
+        for (auto const& pair : current_settings.signal_pairs) {
+            addUniquePair(updated.signal_pairs, pair);
+        }
+        plot.settings = std::move(updated);
+    };
+
+    for (PlotBase& plot : m_docked_plots) {
+        update_plot_settings(plot);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        update_plot_settings(plot);
+    }
+}
+
+int CsvPlotter::dockedPlotCount() const {
+    return std::clamp(m_rows * m_cols, 1, MAX_PLOT_WINDOWS);
+}
+
+int CsvPlotter::activePlotCount() const {
+    return dockedPlotCount() + m_undocked_plot_count;
+}
+
+PlotBase& CsvPlotter::plotAt(int idx) {
+    int d = dockedPlotCount();
+    if (idx < d) {
+        return m_docked_plots[idx];
+    }
+    return m_undocked_plots[idx - d];
+}
+
+PlotBase const& CsvPlotter::plotAt(int idx) const {
+    int d = dockedPlotCount();
+    if (idx < d) {
+        return m_docked_plots[idx];
+    }
+    return m_undocked_plots[idx - d];
+}
+
+template <typename Fn>
+void CsvPlotter::forEachPlot(Fn&& fn) {
+    for (PlotBase& plot : m_docked_plots) {
+        fn(plot);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        fn(plot);
+    }
+}
+
+bool CsvPlotter::isSignalPlotted(CsvSignal* signal) const {
+    auto is_signal_plotted_in = [&](PlotBase const& plot) {
+        if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            if (contains(scalar_plot->signals, signal)) {
+                return true;
+            }
+        } else if (auto const* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            for (auto const& signals : vector_plot->signals) {
+                if (signals.first == signal || signals.second == signal) {
+                    return true;
+                }
+            }
+        } else if (auto const* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            for (auto const& spec : spectrum_plot->spectrum) {
+                if (spec.real == signal || spec.imag == signal) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    for (PlotBase const& plot : m_docked_plots) {
+        if (is_signal_plotted_in(plot)) {
+            return true;
+        }
+    }
+    for (PlotBase const& plot : m_undocked_plots) {
+        if (is_signal_plotted_in(plot)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CsvPlotter::removeSignalFromAllPlots(CsvSignal* signal) {
+    for (PlotBase& plot : m_docked_plots) {
+        plot.removeSignal(signal);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        plot.removeSignal(signal);
+    }
+}
+
+void CsvPlotter::replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& new_file) {
+    auto replacement_for = [&](CsvSignal* signal) -> CsvSignal* {
+        if (signal == nullptr || signal->file != &old_file) {
+            return signal;
+        }
+        for (int i = 0; i < (int)old_file.signals.size(); ++i) {
+            if (&old_file.signals[i] == signal) {
+                return &new_file.signals[i];
+            }
+        }
+        return signal;
+    };
+
+    auto replace_plot_signals = [&](PlotBase& plot) {
+        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            for (int i = 0; i < (int)old_file.signals.size(); ++i) {
+                CsvSignal* old_signal = &old_file.signals[i];
+                if (contains(scalar_plot->signals, old_signal)) {
+                    scalar_plot->addSignal(&new_file.signals[i]);
+                    if (!m_options.keep_old_signals_on_reload) {
+                        scalar_plot->removeSignal(old_signal);
+                    }
+                }
+            }
+        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            std::vector<std::pair<CsvSignal*, CsvSignal*>> reloaded_signals;
+            for (auto& signals : vector_plot->signals) {
+                std::pair<CsvSignal*, CsvSignal*> replacement = {replacement_for(signals.first),
+                                                                 replacement_for(signals.second)};
+                if (replacement != signals) {
+                    if (m_options.keep_old_signals_on_reload) {
+                        reloaded_signals.push_back(replacement);
+                    } else {
+                        signals = replacement;
+                    }
+                }
+            }
+            for (auto const& signals : reloaded_signals) {
+                vector_plot->addSignal(signals);
+            }
+        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            std::vector<std::pair<CsvSignal*, CsvSignal*>> reloaded_signals;
+            for (auto& spec : spectrum_plot->spectrum) {
+                CsvSignal* real = replacement_for(spec.real);
+                CsvSignal* imag = replacement_for(spec.imag);
+                if (real != spec.real || imag != spec.imag) {
+                    if (m_options.keep_old_signals_on_reload) {
+                        reloaded_signals.push_back({real, imag});
+                    } else {
+                        spec.real = real;
+                        spec.imag = imag;
+                        spec.data = {};
+                        spec.calculation = std::future<SpectrumData>();
+                        spectrum_plot->prev_x_range = {0, 0};
+                    }
+                }
+            }
+            for (auto const& signals : reloaded_signals) {
+                spectrum_plot->addSignal(signals.first, signals.second);
+                spectrum_plot->prev_x_range = {0, 0};
+            }
+        }
+    };
+
+    for (PlotBase& plot : m_docked_plots) {
+        replace_plot_signals(plot);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        replace_plot_signals(plot);
+    }
+
+    for (int i = 0; i < (int)old_file.signals.size(); ++i) {
+        for (int j = 0; j < (int)m_selected_signals.size(); ++j) {
+            if (m_selected_signals[j] == &old_file.signals[i]) {
+                m_selected_signals[j] = &new_file.signals[i];
             }
         }
     }
+}
 
-    for (std::string const& name : loaded_names) {
-        auto it = current.find(name);
-        if (it != current.end()) {
-            m_plotted_signal_settings[name] = it->second;
-        } else {
-            m_plotted_signal_settings.erase(name);
+bool CsvPlotter::showPlotContextMenu(PlotBase& plot) {
+    bool plot_type_changed = false;
+    if (ImGui::BeginPopupContextItem("Plot_context_menu")) {
+        CsvPlotType current_type = plot.plotType();
+        std::string preview(magic_enum::enum_name(current_type));
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::BeginCombo("Type", preview.c_str())) {
+            for (CsvPlotType type : magic_enum::enum_values<CsvPlotType>()) {
+                std::string type_name(magic_enum::enum_name(type));
+                bool is_selected = type == current_type;
+                if (ImGui::Selectable(type_name.c_str(), is_selected)) {
+                    plot.setPlotType(type);
+                    plot_type_changed = type != current_type;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
         }
+        if (ImGui::Button("Remove all signals")) {
+            plot.clearPlot();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
+    return plot_type_changed;
 }
 
 void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform) {
@@ -248,15 +517,7 @@ void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTra
 
 void CsvPlotter::removeFileFromPlots(CsvFileData& file) {
     for (CsvSignal& signal : file.signals) {
-        for (ScalarPlot& plot : m_scalar_plots) {
-            plot.removeSignal(&signal);
-        }
-        for (VectorPlot& plot : m_vector_plots) {
-            plot.removeSignal(&signal);
-        }
-        for (SpectrumPlot& plot : m_spectrum_plots) {
-            plot.removeSignal(&signal);
-        }
+        removeSignalFromAllPlots(&signal);
         remove(m_selected_signals, &signal);
     }
 }
@@ -420,8 +681,10 @@ double CsvPlotter::getScalarPlotXOrigin(ScalarPlot const& plot) {
         // Linked scalar plots share x-axis limits, so they also need one shared
         // zero origin. Otherwise the same file can appear at different x values
         // depending on which other files happen to be present in each plot.
-        for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
-            update_origin(m_scalar_plots[plot_idx]);
+        for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
+            if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plotAt(plot_idx).variant)) {
+                update_origin(*scalar_plot);
+            }
         }
     } else {
         // Unlinked plots keep their origin local to the signals in this plot.
@@ -446,19 +709,14 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         m_x_axis.max = std::max(xlimits.min, xlimits.max);
     }
 
-    // Command line signal selection overrides the persisted plotted signals
+    // Command line signal selection overrides saved plotted signals and must not update settings.
     m_use_saved_plotted_signals = name_and_plot_idx.empty();
+    m_save_settings = name_and_plot_idx.empty();
 
     for (std::string file : files) {
         std::unique_ptr<CsvFileData> data = parseCsvData(file);
         if (data) {
             m_csv_data.push_back(std::move(data));
-            for (CsvSignal& signal : m_csv_data.back()->signals) {
-                if (name_and_plot_idx.contains(signal.name)) {
-                    int plot_idx = name_and_plot_idx[signal.name];
-                    m_scalar_plots[plot_idx].addSignal(&signal);
-                }
-            }
         } else {
             std::abort();
         }
@@ -523,6 +781,9 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         if (cols > 0) {
             m_cols = cols;
         }
+        m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
+        m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
+        m_undocked_plot_count = 0;
         glfwGetWindowSize(m_window, &xpos, &ypos);
         glfwSetWindowPos(m_window, 0, -ypos + 1);
         // Set window minimum size to 1 to hide the signals window which is docked
@@ -531,6 +792,26 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         auto& style = ImGui::GetStyle();
         style.WindowMinSize.x = 1;
         m_signals_window_width = 0;
+    }
+
+    // Apply command-line signal assignments to scalar docked grid plots only.
+    if (!name_and_plot_idx.empty()) {
+        m_undocked_plot_count = 0;
+        for (auto& file : m_csv_data) {
+            for (CsvSignal& signal : file->signals) {
+                auto it = name_and_plot_idx.find(signal.name);
+                if (it == name_and_plot_idx.end()) {
+                    continue;
+                }
+                int plot_idx = it->second;
+                if (plot_idx < 0) {
+                    continue;
+                }
+                if (plot_idx < MAX_PLOT_WINDOWS) {
+                    std::get<ScalarPlot>(m_docked_plots[plot_idx].variant).addSignal(&signal);
+                }
+            }
+        }
     }
 
     //---------- Actual update loop ----------
@@ -544,17 +825,13 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         // ImPlot::ShowDemoWindow();
 
         //---------- Main windows ----------
-        if (image_filepath.empty()) {
-            showVectorPlots();
-            showSpectrumPlots();
-        }
         showErrorModal();
         showSignalWindow();
-        showScalarPlots();
+        showPlots();
 
         // Settings are not saved when creating image because the window
         // is moved out of sight and should not be restored there
-        if (image_filepath.empty()) {
+        if (image_filepath.empty() && m_save_settings) {
             updateSavedSettings();
         }
 
@@ -617,8 +894,14 @@ void CsvPlotter::loadPreviousSessionSettings() {
 
             TRY(m_rows = int(settings["window"]["rows"]);)
             TRY(m_cols = int(settings["window"]["cols"]);)
-            TRY(m_vector_plot_cnt = int(settings["window"]["vector_plot_cnt"]);)
-            TRY(m_spectrum_plot_cnt = int(settings["window"]["spectrum_plot_cnt"]);)
+            m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
+            m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
+            int saved_undocked_count = settings["window"].value("undocked_plot_count", 0);
+            if (m_use_saved_plotted_signals) {
+                m_undocked_plot_count = std::clamp(saved_undocked_count, 0, MAX_UNDOCKED_PLOTS);
+            } else {
+                m_undocked_plot_count = 0;
+            }
             TRY(m_options.x_signal_name = std::string(settings["window"]["x_signal_name"]);)
             TRY(m_options.link_axis = settings["window"]["link_axis"];)
             TRY(m_options.autofit_y_axis = settings["window"]["autofit_y_axis"];)
@@ -665,9 +948,68 @@ void CsvPlotter::loadPreviousSessionSettings() {
                         })
                 }
             }
-            if (settings.contains("plotted_signals") && settings["plotted_signals"].is_object()) {
+            if (m_use_saved_plotted_signals && (settings.contains("plots") || settings.contains("undocked_plots"))) {
+                auto load_plot_settings = [&](PlotBase& plot, nlohmann::json const& plot_settings) {
+                    if (!plot_settings.is_object()) {
+                        return;
+                    }
+                    CsvPlotType type = magic_enum::enum_cast<CsvPlotType>(
+                                         plot_settings.value("type", std::string(magic_enum::enum_name(CsvPlotType::Scalar))))
+                                         .value_or(CsvPlotType::Scalar);
+                    plot.settings = {};
+                    plot.setPlotType(type);
+                    if (plot_settings.contains("signals") && plot_settings["signals"].is_array()) {
+                        for (auto const& signal : plot_settings["signals"]) {
+                            if (type == CsvPlotType::Scalar) {
+                                if (signal.is_string()) {
+                                    plot.settings.scalar_signals.push_back(signal.get<std::string>());
+                                }
+                            } else if (signal.is_array() && signal.size() >= 1 && signal[0].is_string()) {
+                                std::string first = signal[0].get<std::string>();
+                                std::string second;
+                                if (signal.size() >= 2 && signal[1].is_string()) {
+                                    second = signal[1].get<std::string>();
+                                }
+                                addUniquePair(plot.settings.signal_pairs, {first, second});
+                            }
+                        }
+                    }
+                };
+
+                if (settings.contains("plots")) {
+                    if (settings["plots"].is_array()) {
+                        int plot_idx = 0;
+                        for (auto const& plot_settings : settings["plots"]) {
+                            if (plot_idx >= MAX_PLOT_WINDOWS) {
+                                break;
+                            }
+                            load_plot_settings(m_docked_plots[plot_idx], plot_settings);
+                            ++plot_idx;
+                        }
+                    } else if (settings["plots"].is_object()) {
+                        for (auto const& item : settings["plots"].items()) {
+                            TRY(int plot_idx = std::stoi(item.key());
+                                if (plot_idx >= 0 && plot_idx < MAX_PLOT_WINDOWS) {
+                                    load_plot_settings(m_docked_plots[plot_idx], item.value());
+                                })
+                        }
+                    }
+                }
+                if (settings.contains("undocked_plots") && settings["undocked_plots"].is_object()) {
+                    for (auto const& item : settings["undocked_plots"].items()) {
+                        TRY(int u = std::stoi(item.key());
+                            if (u >= 0 && u < MAX_UNDOCKED_PLOTS) {
+                                load_plot_settings(m_undocked_plots[u], item.value());
+                            })
+                    }
+                }
+            } else if (m_use_saved_plotted_signals && settings.contains("plotted_signals") && settings["plotted_signals"].is_object()) {
                 for (auto const& item : settings["plotted_signals"].items()) {
-                    TRY(m_plotted_signal_settings[item.key()] = item.value().get<std::vector<int>>();)
+                    TRY(for (int plot_idx : item.value().get<std::vector<int>>()) {
+                        if (plot_idx < 0 || plot_idx >= MAX_PLOT_WINDOWS)
+                            continue;
+                        m_docked_plots[plot_idx].settings.scalar_signals.push_back(item.key());
+                    })
                 }
             }
             if (settings.contains("recent_custom_equations") && settings["recent_custom_equations"].is_array()) {
@@ -732,8 +1074,9 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["ypos"] = ypos;
     settings["window"]["rows"] = m_rows;
     settings["window"]["cols"] = m_cols;
-    settings["window"]["vector_plot_cnt"] = m_vector_plot_cnt;
-    settings["window"]["spectrum_plot_cnt"] = m_spectrum_plot_cnt;
+    int docked = dockedPlotCount();
+    settings["window"]["undocked_plot_count"] = m_undocked_plot_count;
+    settings["window"]["plot_count"] = docked + m_undocked_plot_count;
     settings["window"]["x_signal_name"] = m_options.x_signal_name;
     settings["window"]["link_axis"] = m_options.link_axis;
     settings["window"]["autofit_y_axis"] = m_options.autofit_y_axis;
@@ -757,13 +1100,36 @@ void CsvPlotter::updateSavedSettings() {
     for (auto const& [name, plot_style] : m_signal_plot_style_settings) {
         settings["plot_styles"][name] = magic_enum::enum_name(plot_style);
     }
-    // In command line mode leave the persisted plotted signals untouched so they are not
-    // overwritten or lost for the next normal launch.
-    if (m_use_saved_plotted_signals) {
-        updatePlottedSignalSettings();
+    updatePlottedSignalSettings();
+    auto has_saved_plot_state = [](PlotBase const& plot) {
+        return plot.plotType() != CsvPlotType::Scalar
+            || !plot.settings.scalar_signals.empty()
+            || !plot.settings.signal_pairs.empty();
+    };
+    auto save_plot = [&](PlotBase& plot, nlohmann::json& plot_obj, std::string const& key) {
+        CsvPlotType type = plot.plotType();
+        nlohmann::json& plot_settings = plot_obj[key];
+        plot_settings["type"] = magic_enum::enum_name(type);
+        plot_settings["signals"] = nlohmann::json::array();
+        if (type == CsvPlotType::Scalar) {
+            for (std::string const& signal_name : plot.settings.scalar_signals) {
+                plot_settings["signals"].push_back(signal_name);
+            }
+        } else {
+            for (auto const& signal_pair : plot.settings.signal_pairs) {
+                plot_settings["signals"].push_back(nlohmann::json::array({signal_pair.first, signal_pair.second}));
+            }
+        }
+    };
+    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
+        if (i < docked || has_saved_plot_state(m_docked_plots[i])) {
+            save_plot(m_docked_plots[i], settings["plots"], std::to_string(i));
+        }
     }
-    for (auto const& [name, plots] : m_plotted_signal_settings) {
-        settings["plotted_signals"][name] = plots;
+    for (int u = 0; u < MAX_UNDOCKED_PLOTS; ++u) {
+        if (u < m_undocked_plot_count || has_saved_plot_state(m_undocked_plots[u])) {
+            save_plot(m_undocked_plots[u], settings["undocked_plots"], std::to_string(u));
+        }
     }
     for (auto const& recent : m_recent_custom_equations) {
         settings["recent_custom_equations"].push_back({{"name", recent.name}, {"equation", recent.equation}});
@@ -1002,9 +1368,8 @@ void CsvPlotter::showSignalWindow() {
     ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
         std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
-        if (!csv_datas.empty()) {
-            // Opening files interactively resumes normal behavior: the saved plotted signals
-            // are restored and persisted again even if signals were given on the command line.
+        if (!csv_datas.empty() && m_save_settings) {
+            // Opening files interactively resumes saved plotted signal restore in normal GUI sessions.
             m_use_saved_plotted_signals = true;
         }
         for (auto& csv_data : csv_datas) {
@@ -1017,8 +1382,11 @@ void CsvPlotter::showSignalWindow() {
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
-        for (ScalarPlot& plot : m_scalar_plots) {
-            plot.clear();
+        for (PlotBase& plot : m_docked_plots) {
+            plot.clearPlot();
+        }
+        for (PlotBase& plot : m_undocked_plots) {
+            plot.clearPlot();
         }
     }
     ImGui::SameLine();
@@ -1061,11 +1429,12 @@ void CsvPlotter::showSignalWindow() {
         std::stringstream ss_plots;
         ss_signals << "\"";
         ss_plots << "\"";
-        for (int i = 0; i < m_scalar_plots.size(); ++i) {
-            ScalarPlot& plot = m_scalar_plots[i];
-            for (CsvSignal* signal : plot.signals) {
-                ss_signals << signal->name << ",";
-                ss_plots << i << ",";
+        for (int plot_idx = 0; plot_idx < MAX_PLOT_WINDOWS; ++plot_idx) {
+            if (auto* plot = std::get_if<ScalarPlot>(&m_docked_plots[plot_idx].variant)) {
+                for (CsvSignal* signal : plot->signals) {
+                    ss_signals << signal->name << ",";
+                    ss_plots << plot_idx << ",";
+                }
             }
         }
         ss_signals << "\"";
@@ -1079,19 +1448,22 @@ void CsvPlotter::showSignalWindow() {
     }
 
     if (ImGui::CollapsingHeader("Options")) {
+        int new_rows = m_rows;
+        int new_cols = m_cols;
         ImGui::SetNextItemWidth(75);
-        ImGui::InputInt("Rows", &m_rows, 1);
+        ImGui::InputInt("Rows", &new_rows, 1);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(75);
-        ImGui::InputInt("Columns", &m_cols, 1);
-        ImGui::SetNextItemWidth(185);
-        ImGui::InputInt("Vector plots", &m_vector_plot_cnt, 1);
-        ImGui::SetNextItemWidth(185);
-        ImGui::InputInt("Spectrum plots", &m_spectrum_plot_cnt, 1);
-        m_vector_plot_cnt = std::clamp(m_vector_plot_cnt, 0, MAX_PLOTS);
-        m_spectrum_plot_cnt = std::clamp(m_spectrum_plot_cnt, 0, MAX_PLOTS);
-        m_rows = std::clamp(m_rows, 1, MAX_PLOTS);
-        m_cols = std::clamp(m_cols, 1, MAX_PLOTS);
+        ImGui::InputInt("Columns", &new_cols, 1);
+        new_rows = std::clamp(new_rows, 1, MAX_PLOTS);
+        new_cols = std::clamp(new_cols, 1, MAX_PLOTS);
+        m_rows = new_rows;
+        m_cols = new_cols;
+        ImGui::SetNextItemWidth(75);
+        int undocked_count = m_undocked_plot_count;
+        if (ImGui::InputInt("Undocked plots", &undocked_count, 1)) {
+            m_undocked_plot_count = std::clamp(undocked_count, 0, MAX_UNDOCKED_PLOTS);
+        }
         showXSignalCombo();
         ImGui::SetNextItemWidth(185);
         themeCombo(m_options.theme, m_window);
@@ -1183,22 +1555,7 @@ void CsvPlotter::showSignalWindow() {
                 std::unique_ptr<CsvFileData> csv_data = parseCsvData(file->name);
                 if (csv_data && csv_data->signals.size() == file->signals.size()) {
                     applySignalTransforms(*csv_data);
-                    for (int i = 0; i < file->signals.size(); ++i) {
-                        for (ScalarPlot& plot : m_scalar_plots) {
-                            if (contains(plot.signals, &file->signals[i])) {
-                                plot.addSignal(&csv_data->signals[i]);
-                                if (!m_options.keep_old_signals_on_reload) {
-                                    plot.removeSignal(&file->signals[i]);
-                                }
-                            }
-                        }
-                        // Remap m_selected_signals pointers to the reloaded data
-                        for (int j = 0; j < (int)m_selected_signals.size(); ++j) {
-                            if (m_selected_signals[j] == &file->signals[i]) {
-                                m_selected_signals[j] = &csv_data->signals[i];
-                            }
-                        }
-                    }
+                    replaceReloadedFileSignals(*file, *csv_data);
                     // Set write time to default so that the file gets reloaded again for the latest dataset
                     file->write_time = std::filesystem::file_time_type();
                     file->run_number++;
@@ -1244,48 +1601,91 @@ void CsvPlotter::showSignalWindow() {
                 m_x_shift_slider_range = shift_slider_range;
             }
             if (ImGui::Button("Add same signals to plots")) {
-                for (auto& signal : file->signals) {
-                    for (ScalarPlot& plot : m_scalar_plots) {
-                        for (CsvSignal* plot_signal : plot.signals) {
-                            if (plot_signal->name == signal.name) {
-                                plot.addSignal(&signal);
-                                break;
+                forEachPlot([&](PlotBase& plot) {
+                    if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+                        std::vector<CsvSignal*> signals_to_add;
+                        for (auto& signal : file->signals) {
+                            for (CsvSignal* plot_signal : scalar_plot->signals) {
+                                if (plot_signal->name == signal.name) {
+                                    signals_to_add.push_back(&signal);
+                                    break;
+                                }
                             }
                         }
+                        for (CsvSignal* signal : signals_to_add) {
+                            scalar_plot->addSignal(signal);
+                        }
+                    } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+                        std::vector<std::pair<CsvSignal*, CsvSignal*>> signals_to_add;
+                        for (auto const& signals : vector_plot->signals) {
+                            CsvSignal* x = findSignalByName(*file, signals.first->name);
+                            CsvSignal* y = findSignalByName(*file, signals.second->name);
+                            if (x && y) {
+                                signals_to_add.push_back({x, y});
+                            }
+                        }
+                        for (auto const& signals : signals_to_add) {
+                            vector_plot->addSignal(signals);
+                        }
+                    } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+                        std::vector<std::pair<CsvSignal*, CsvSignal*>> signals_to_add;
+                        for (auto const& spec : spectrum_plot->spectrum) {
+                            CsvSignal* real = findSignalByName(*file, spec.real->name);
+                            CsvSignal* imag = spec.imag == nullptr ? nullptr : findSignalByName(*file, spec.imag->name);
+                            if (real && (spec.imag == nullptr || imag)) {
+                                signals_to_add.push_back({real, imag});
+                            }
+                        }
+                        for (auto const& signals : signals_to_add) {
+                            spectrum_plot->addSignal(signals.first, signals.second);
+                        }
                     }
-                }
+                });
             }
             if (ImGui::Button("Replace plotted signals with this file's")) {
-                for (auto& signal : file->signals) {
-                    for (ScalarPlot& plot : m_scalar_plots) {
-                        // Collect same-named signals from other files that are currently plotted
-                        std::vector<CsvSignal*> same_named;
-                        for (CsvSignal* plot_signal : plot.signals) {
-                            if (plot_signal->name == signal.name && plot_signal != &signal) {
-                                same_named.push_back(plot_signal);
+                auto replacement_in_file = [&](CsvSignal* signal) -> CsvSignal* {
+                    if (signal == nullptr) {
+                        return nullptr;
+                    }
+                    CsvSignal* replacement = findSignalByName(*file, signal->name);
+                    return replacement == nullptr ? signal : replacement;
+                };
+                forEachPlot([&](PlotBase& plot) {
+                    if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+                        std::vector<CsvSignal*> replacements;
+                        for (CsvSignal* plot_signal : scalar_plot->signals) {
+                            CsvSignal* replacement = replacement_in_file(plot_signal);
+                            if (replacement != plot_signal) {
+                                replacements.push_back(plot_signal);
+                                scalar_plot->addSignal(replacement);
                             }
                         }
-                        if (!same_named.empty()) {
-                            for (CsvSignal* plot_signal : same_named) {
-                                plot.removeSignal(plot_signal);
+                        for (CsvSignal* plot_signal : replacements) {
+                            scalar_plot->removeSignal(plot_signal);
+                        }
+                    } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+                        for (auto& signals : vector_plot->signals) {
+                            signals = {replacement_in_file(signals.first), replacement_in_file(signals.second)};
+                        }
+                    } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+                        for (auto& spec : spectrum_plot->spectrum) {
+                            CsvSignal* real = replacement_in_file(spec.real);
+                            CsvSignal* imag = replacement_in_file(spec.imag);
+                            if (real != spec.real || imag != spec.imag) {
+                                spec.real = real;
+                                spec.imag = imag;
+                                spec.data = {};
+                                spec.calculation = std::future<SpectrumData>();
+                                spectrum_plot->prev_x_range = {0, 0};
                             }
-                            plot.addSignal(&signal);
                         }
                     }
-                }
+                });
             }
 
             if (ImGui::Button("Remove signals from plots")) {
                 for (auto& signal : file->signals) {
-                    for (ScalarPlot& plot : m_scalar_plots) {
-                        plot.removeSignal(&signal);
-                    }
-                    for (VectorPlot& plot : m_vector_plots) {
-                        plot.removeSignal(&signal);
-                    }
-                    for (SpectrumPlot& plot : m_spectrum_plots) {
-                        plot.removeSignal(&signal);
-                    }
+                    removeSignalFromAllPlots(&signal);
                 }
             }
             if (ImGui::Button("Remove file")) {
@@ -1332,16 +1732,10 @@ void CsvPlotter::showSignalWindow() {
                     continue;
                 }
 
-                // Plotted marker: prefix with "*" when the signal is on any scalar plot.
+                // Plotted marker: prefix with "*" when the signal is on any plot.
                 // This is separate from the multi-select highlight (which tracks
                 // m_selected_signals only).
-                bool is_plotted = false;
-                for (ScalarPlot& plot : m_scalar_plots) {
-                    if (contains(plot.signals, &signal)) {
-                        is_plotted = true;
-                        break;
-                    }
-                }
+                bool is_plotted = isSignalPlotted(&signal);
 
                 ImGui::PushStyleColor(ImGuiCol_Text,
                                       signal.transform.isDefault() ?
@@ -1357,7 +1751,11 @@ void CsvPlotter::showSignalWindow() {
                 // easier to add signals with same name from different files to same plot.
                 std::optional<int> pressed_number = pressedNumber();
                 if (pressed_number && ImGui::IsItemClicked()) {
-                    m_scalar_plots[*pressed_number].addSignal(&signal);
+                    if (*pressed_number < activePlotCount()) {
+                        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plotAt(*pressed_number).variant)) {
+                            scalar_plot->addSignal(&signal);
+                        }
+                    }
                 }
 
                 ImGui::PopStyleColor();
@@ -1418,15 +1816,7 @@ void CsvPlotter::showSignalWindow() {
                     if (contains(m_selected_signals, &signal)) {
                         if (ImGui::Button("Remove selected from plots")) {
                             for (CsvSignal* sel : m_selected_signals) {
-                                for (ScalarPlot& plot : m_scalar_plots) {
-                                    plot.removeSignal(sel);
-                                }
-                                for (VectorPlot& plot : m_vector_plots) {
-                                    plot.removeSignal(sel);
-                                }
-                                for (SpectrumPlot& plot : m_spectrum_plots) {
-                                    plot.removeSignal(sel);
-                                }
+                                removeSignalFromAllPlots(sel);
                             }
                             ImGui::CloseCurrentPopup();
                         }
@@ -1450,278 +1840,298 @@ void CsvPlotter::showSignalWindow() {
     }
 }
 
-void CsvPlotter::showScalarPlots() {
-    // Show vertical line at same time in all plots if mouse is hovered in any plot
+void CsvPlotter::showPlots() {
+    // Scalar plots share an aligned-plot group so their axis padding lines up. Vector
+    // and spectrum plots would be forced into that scalar alignment if rendered
+    // inside the group. To keep their axes independent (e.g. vector plots'
+    // equal-aspect mode) we defer non-scalar plots to a second pass.
     static double vertical_line_time_next = 0;
     double vertical_line_time = vertical_line_time_next;
     vertical_line_time_next = NAN;
+
     bool aligned = ImPlot::BeginAlignedPlots("AlignedGroup");
-    for (int plot_idx = 0; plot_idx < m_rows * m_cols; ++plot_idx) {
-        ScalarPlot& plot = m_scalar_plots[plot_idx];
-        double plot_x_origin = getScalarPlotXOrigin(plot);
-        ImGui::Begin(std::format("Plot {}", plot_idx).c_str());
-        if (ImGui::BeginPopupContextItem(std::format("Plot {}_context_menu", plot_idx).c_str())) {
-            if (ImGui::Button("Remove all signals")) {
-                plot.clear();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
+    for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
+        PlotBase& plot = plotAt(plot_idx);
+        if (plot.plotType() == CsvPlotType::Scalar) {
+            showScalarPlot(plot, plot_idx, vertical_line_time, vertical_line_time_next);
         }
-        bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
-        bool fit_data = plot.autofit_next_frame;
-        if (plot.autofit_next_frame || autofit_x_axis) {
-            ImPlot::SetNextAxesToFit();
-            plot.autofit_next_frame = false;
-        }
-        if (m_options.autofit_y_axis) {
-            ImPlot::SetNextAxisToFit(ImAxis_Y1);
-        }
-
-        // Calculate the longest name for table column width
-        size_t longest_name_length = 1;
-        size_t longest_file_length = 1;
-        for (CsvSignal* signal : plot.signals) {
-            longest_name_length = std::max(longest_name_length, signal->name.size());
-            longest_file_length = std::max(longest_file_length, signal->file->displayed_name.size());
-        }
-
-        if (m_options.cursor_measurements) {
-            if (ImGui::BeginTable("Delta", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
-                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("X").x * (longest_name_length + longest_file_length + 5));
-                const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
-                ImGui::TableSetupColumn("y1", ImGuiTableColumnFlags_WidthFixed, num_width);
-                ImGui::TableSetupColumn("y2", ImGuiTableColumnFlags_WidthFixed, num_width);
-                ImGui::TableSetupColumn("delta (y2 - y1)", ImGuiTableColumnFlags_WidthFixed, num_width);
-                ImGui::TableHeadersRow();
-
-                // Time row
-                ImGui::TableNextColumn();
-                ImGui::Text("Time");
-                ImGui::TableNextColumn();
-                ImGui::Text(std::format("{:g}", m_drag_x1).c_str());
-                ImGui::TableNextColumn();
-                ImGui::Text(std::format("{:g}", m_drag_x2).c_str());
-                ImGui::TableNextColumn();
-                ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
-
-                for (int i = 0; i < plot.signals.size(); ++i) {
-                    CsvSignal* signal = plot.signals[i];
-                    if (!signal->file->enabled) {
-                        continue;
-                    }
-                    std::span<double const> all_x_values = getXSignalSamples(*signal->file);
-                    std::vector<double> const& all_y_values = signal->samples;
-                    double x_offset = plot_x_origin - signal->file->x_axis_shift;
-                    CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
-                    double y1 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x1 + x_offset, true);
-                    double y2 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x2 + x_offset, true);
-                    y1 = y1 * signal->transform.scale + signal->transform.offset;
-                    y2 = y2 * signal->transform.scale + signal->transform.offset;
-
-                    std::stringstream ss;
-                    ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
-                    std::string displayed_signal_name = ss.str();
-
-                    ImVec4 color = ImPlot::GetColormapColor(i);
-                    ImGui::TableNextColumn();
-                    ImGui::TextColored(color, displayed_signal_name.c_str());
-                    ImGui::TableNextColumn();
-                    ImGui::TextColored(color, std::format("{:g}", y1).c_str());
-                    ImGui::TableNextColumn();
-                    ImGui::TextColored(color, std::format("{:g}", y2).c_str());
-                    ImGui::TableNextColumn();
-                    ImGui::TextColored(color, std::format("{:g}", y2 - y1).c_str());
-                }
-                ImGui::EndTable();
-            }
-        }
-
-        // Reset plot colors if there are no signals in it
-        if (plot.signals.size() == 0 || m_flags.reset_colors) {
-            ImPlot::BustColorCache("##DND");
-        }
-
-        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
-        if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
-            ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
-            if (m_options.link_axis) {
-                ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis.min, &m_x_axis.max);
-                if (!autofit_x_axis) {
-                    ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis.min, m_x_axis.max);
-                }
-            }
-
-            if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
-                    std::span<CsvSignal*> sigs(reinterpret_cast<CsvSignal**>(payload->Data),
-                                               payload->DataSize / sizeof(CsvSignal*));
-                    for (CsvSignal* sig : sigs) {
-                        plot.addSignal(sig);
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LEGEND")) {
-                    std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = *(std::pair<ScalarPlot*, CsvSignal*>*)payload->Data;
-                    ScalarPlot* original_plot = plot_and_signal.first;
-                    CsvSignal* signal = plot_and_signal.second;
-                    if (&plot != original_plot) {
-                        plot.addSignal(signal);
-                        original_plot->removeSignal(signal);
-                    }
-                }
-                ImPlot::EndDragDropTarget();
-            }
-
-            CsvSignal* signal_to_remove = nullptr;
-            for (CsvSignal* signal : plot.signals) {
-                if (!signal->file->enabled) {
-                    continue;
-                }
-                // Collect only values that are within plot range so that the autofit fits to the plotted values instead
-                // of the entire data
-                ImPlotRect limits = ImPlot::GetPlotLimits();
-                if (autofit_x_axis) {
-                    limits.X.Min = -INFINITY;
-                    limits.X.Max = INFINITY;
-                }
-                std::span<double const> all_x_values = getXSignalSamples(*signal->file);
-                std::vector<double> const& all_y_values = signal->samples;
-                double x_offset = plot_x_origin - signal->file->x_axis_shift;
-                std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
-                indices.second = std::min((int32_t)all_y_values.size() - 1, indices.second);
-                std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
-                std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
-                if (fit_data) {
-                    x_samples_in_range.assign(all_x_values.begin(), all_x_values.end());
-                    y_samples_in_range = all_y_values;
-                    if (y_samples_in_range.size() < x_samples_in_range.size()) {
-                        x_samples_in_range.resize(y_samples_in_range.size());
-                    }
-                }
-
-                // Shift x-axis and transform y-axis
-                for (int i = 0; i < y_samples_in_range.size(); ++i) {
-                    x_samples_in_range[i] -= x_offset;
-                    y_samples_in_range[i] = y_samples_in_range[i] * signal->transform.scale + signal->transform.offset;
-                }
-
-                // Decimate values because plotting very large amount of samples is slow and the GUI becomes unresponsive
-                DecimatedValues plotted_values = decimateValues(x_samples_in_range, y_samples_in_range, MAX_PLOT_SAMPLE_COUNT);
-
-                std::stringstream ss;
-                ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
-                std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
-                std::unordered_map<CsvSignal*, bool> signal_visible;
-                CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
-                StairValues plotted_min = makeStairValues(plotted_values.x, plotted_values.y_min, signal_plot_style);
-                StairValues plotted_max = makeStairValues(plotted_values.x, plotted_values.y_max, signal_plot_style);
-                bool visible = ImPlot::PlotLine(label_id.c_str(),
-                                                plotted_min.x.data(),
-                                                plotted_min.y.data(),
-                                                int(plotted_min.x.size()),
-                                                ImPlotLineFlags_None);
-                signal_visible[signal] = visible;
-                ImVec4 line_color = ImPlot::GetLastItemColor();
-                ImPlot::PlotLine(label_id.c_str(),
-                                 plotted_max.x.data(),
-                                 plotted_max.y.data(),
-                                 int(plotted_max.x.size()),
-                                 ImPlotLineFlags_None);
-                ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
-                ImPlot::PlotShaded(label_id.c_str(),
-                                   plotted_min.x.data(),
-                                   plotted_min.y.data(),
-                                   plotted_max.y.data(),
-                                   int(plotted_min.x.size()),
-                                   ImPlotLineFlags_None);
-
-                // Tooltip
-                if (ImPlot::IsPlotHovered() && y_samples_in_range.size() > 0) {
-                    ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                    ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
-                    ImPlot::PlotInfLines("##", &mouse.x, 1);
-                    ImPlot::PopStyleColor();
-
-                    int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
-                    double tooltip_value = getPlotValueAtX(signal_plot_style,
-                                                           x_samples_in_range,
-                                                           y_samples_in_range,
-                                                           mouse.x,
-                                                           m_options.interpolate_tooltip);
-                    double tooltip_x = mouse.x;
-                    if (signal_plot_style == CsvPlotStyle::Linear && !m_options.interpolate_tooltip) {
-                        tooltip_x = x_samples_in_range[idx];
-                    }
-                    if (signal_visible[signal]) {
-                        ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
-                        ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &tooltip_x, &tooltip_value, 1);
-                        ImPlot::PopStyleColor();
-                    }
-
-                    vertical_line_time_next = mouse.x;
-                    ImGui::BeginTooltip();
-                    ss.str("");
-                    ss << signal->name << " : " << tooltip_value;
-                    ImGui::PushStyleColor(ImGuiCol_Text, line_color);
-                    ImGui::Text(ss.str().c_str());
-                    ImGui::PopStyleColor();
-                    ImGui::EndTooltip();
-                } else if (m_options.show_vertical_line_in_all_plots && !std::isnan(vertical_line_time)) {
-                    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
-                    ImPlot::PlotInfLines("##", &vertical_line_time, 1);
-                    ImPlot::PopStyleColor(1);
-                }
-
-                // Legend right click
-                if (ImPlot::BeginLegendPopup(label_id.c_str())) {
-                    if (ImGui::Button("Remove")) {
-                        signal_to_remove = signal;
-                    }
-                    ImPlot::EndLegendPopup();
-                }
-
-                // Fit to the entire data with mouse middle button
-                if (ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
-                    plot.autofit_next_frame = true;
-                }
-
-                // Legend items can be dragged to other plots to move the signal.
-                if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
-                    std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = {&plot, signal};
-                    ImGui::SetDragDropPayload("LEGEND", &plot_and_signal, sizeof(plot_and_signal));
-                    ImGui::Text("Drag to plot");
-                    ImPlot::EndDragDropSource();
-                }
-            }
-            if (signal_to_remove) {
-                plot.removeSignal(signal_to_remove);
-            }
-
-            // Vertical lines for cursor measurements
-            if (m_options.cursor_measurements) {
-                ImPlotRect plot_limits = ImPlot::GetPlotLimits();
-                ImPlotRange x_range = plot_limits.X;
-                if (m_drag_x1 == 0 && m_drag_x2 == 0) {
-                    m_drag_x1 = x_range.Min + 0.1 * x_range.Size();
-                    m_drag_x2 = x_range.Max - 0.1 * x_range.Size();
-                }
-                ImPlot::DragLineX(0, &m_drag_x1, COLOR_TOOLTIP_LINE);
-                ImPlot::DragLineX(1, &m_drag_x2, COLOR_TOOLTIP_LINE);
-                ImPlot::PlotText(std::format("x1 : {:g}", m_drag_x1).c_str(), m_drag_x1, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
-                ImPlot::PlotText(std::format("x2 : {:g}", m_drag_x2).c_str(), m_drag_x2, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
-            } else {
-                m_drag_x1 = 0;
-                m_drag_x2 = 0;
-            }
-
-            ImPlot::EndPlot();
-        }
-        ImPlot::PopStyleVar();
-        ImGui::End();
     }
     if (aligned) {
         ImPlot::EndAlignedPlots();
     }
+
+    for (int plot_idx = 0; plot_idx < activePlotCount(); ++plot_idx) {
+        PlotBase& plot = plotAt(plot_idx);
+        CsvPlotType type = plot.plotType();
+        if (type == CsvPlotType::Vector) {
+            showVectorPlot(plot, plot_idx);
+        } else if (type == CsvPlotType::Spectrum) {
+            showSpectrumPlot(plot, plot_idx);
+        }
+    }
+}
+
+void CsvPlotter::showScalarPlot(PlotBase& plot_base, int plot_idx, double& vertical_line_time, double& vertical_line_time_next) {
+    ScalarPlot& plot = std::get<ScalarPlot>(plot_base.variant);
+    int docked = dockedPlotCount();
+    std::string name = plot_idx < docked ? std::format("Plot {}", plot_idx) : std::format("Undocked Plot {}", plot_idx - docked);
+    ImGui::Begin(name.c_str());
+    if (showPlotContextMenu(plot_base)) {
+        ImGui::End();
+        return;
+    }
+    double plot_x_origin = getScalarPlotXOrigin(plot);
+    bool autofit_x_axis = (m_x_axis == AUTOFIT_AXIS);
+    bool fit_data = plot.autofit_next_frame;
+    if (plot.autofit_next_frame || autofit_x_axis) {
+        ImPlot::SetNextAxesToFit();
+        plot.autofit_next_frame = false;
+    }
+    if (m_options.autofit_y_axis) {
+        ImPlot::SetNextAxisToFit(ImAxis_Y1);
+    }
+
+    // Calculate the longest name for table column width
+    size_t longest_name_length = 1;
+    size_t longest_file_length = 1;
+    for (CsvSignal* signal : plot.signals) {
+        longest_name_length = std::max(longest_name_length, signal->name.size());
+        longest_file_length = std::max(longest_file_length, signal->file->displayed_name.size());
+    }
+
+    if (m_options.cursor_measurements) {
+        if (ImGui::BeginTable("Delta", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("X").x * (longest_name_length + longest_file_length + 5));
+            const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
+            ImGui::TableSetupColumn("y1", ImGuiTableColumnFlags_WidthFixed, num_width);
+            ImGui::TableSetupColumn("y2", ImGuiTableColumnFlags_WidthFixed, num_width);
+            ImGui::TableSetupColumn("delta (y2 - y1)", ImGuiTableColumnFlags_WidthFixed, num_width);
+            ImGui::TableHeadersRow();
+
+            // Time row
+            ImGui::TableNextColumn();
+            ImGui::Text("Time");
+            ImGui::TableNextColumn();
+            ImGui::Text(std::format("{:g}", m_drag_x1).c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text(std::format("{:g}", m_drag_x2).c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
+
+            for (int i = 0; i < plot.signals.size(); ++i) {
+                CsvSignal* signal = plot.signals[i];
+                if (!signal->file->enabled) {
+                    continue;
+                }
+                std::span<double const> all_x_values = getXSignalSamples(*signal->file);
+                std::vector<double> const& all_y_values = signal->samples;
+                double x_offset = plot_x_origin - signal->file->x_axis_shift;
+                CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
+                double y1 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x1 + x_offset, true);
+                double y2 = getPlotValueAtX(signal_plot_style, all_x_values, all_y_values, m_drag_x2 + x_offset, true);
+                y1 = y1 * signal->transform.scale + signal->transform.offset;
+                y2 = y2 * signal->transform.scale + signal->transform.offset;
+
+                std::stringstream ss;
+                ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
+                std::string displayed_signal_name = ss.str();
+
+                ImVec4 color = ImPlot::GetColormapColor(i);
+                ImGui::TableNextColumn();
+                ImGui::TextColored(color, displayed_signal_name.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextColored(color, std::format("{:g}", y1).c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextColored(color, std::format("{:g}", y2).c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextColored(color, std::format("{:g}", y2 - y1).c_str());
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    // Reset plot colors if there are no signals in it
+    if (plot.signals.size() == 0 || m_flags.reset_colors) {
+        ImPlot::BustColorCache("##DND");
+    }
+
+    ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
+    if (ImPlot::BeginPlot("##DND", ImVec2(-1, -1))) {
+        ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_None);
+        if (m_options.link_axis) {
+            ImPlot::SetupAxisLinks(ImAxis_X1, &m_x_axis.min, &m_x_axis.max);
+            if (!autofit_x_axis) {
+                ImPlot::SetupAxisLimits(ImAxis_X1, m_x_axis.min, m_x_axis.max);
+            }
+        }
+
+        if (ImPlot::BeginDragDropTargetPlot()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
+                std::span<CsvSignal*> sigs(reinterpret_cast<CsvSignal**>(payload->Data),
+                                           payload->DataSize / sizeof(CsvSignal*));
+                for (CsvSignal* sig : sigs) {
+                    plot.addSignal(sig);
+                }
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LEGEND")) {
+                std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = *(std::pair<ScalarPlot*, CsvSignal*>*)payload->Data;
+                ScalarPlot* original_plot = plot_and_signal.first;
+                CsvSignal* signal = plot_and_signal.second;
+                if (&plot != original_plot) {
+                    plot.addSignal(signal);
+                    original_plot->removeSignal(signal);
+                }
+            }
+            ImPlot::EndDragDropTarget();
+        }
+
+        CsvSignal* signal_to_remove = nullptr;
+        for (CsvSignal* signal : plot.signals) {
+            if (!signal->file->enabled) {
+                continue;
+            }
+            // Collect only values that are within plot range so that the autofit fits to the plotted values instead
+            // of the entire data
+            ImPlotRect limits = ImPlot::GetPlotLimits();
+            if (autofit_x_axis) {
+                limits.X.Min = -INFINITY;
+                limits.X.Max = INFINITY;
+            }
+            std::span<double const> all_x_values = getXSignalSamples(*signal->file);
+            std::vector<double> const& all_y_values = signal->samples;
+            double x_offset = plot_x_origin - signal->file->x_axis_shift;
+            std::pair<int32_t, int32_t> indices = getTimeIndices(all_x_values, limits.X.Min + x_offset, limits.X.Max + x_offset);
+            indices.second = std::min((int32_t)all_y_values.size() - 1, indices.second);
+            std::vector<double> x_samples_in_range(all_x_values.begin() + indices.first, all_x_values.begin() + indices.second);
+            std::vector<double> y_samples_in_range(all_y_values.begin() + indices.first, all_y_values.begin() + indices.second);
+            if (fit_data) {
+                x_samples_in_range.assign(all_x_values.begin(), all_x_values.end());
+                y_samples_in_range = all_y_values;
+                if (y_samples_in_range.size() < x_samples_in_range.size()) {
+                    x_samples_in_range.resize(y_samples_in_range.size());
+                }
+            }
+
+            // Shift x-axis and transform y-axis
+            for (int i = 0; i < y_samples_in_range.size(); ++i) {
+                x_samples_in_range[i] -= x_offset;
+                y_samples_in_range[i] = y_samples_in_range[i] * signal->transform.scale + signal->transform.offset;
+            }
+
+            // Decimate values because plotting very large amount of samples is slow and the GUI becomes unresponsive
+            DecimatedValues plotted_values = decimateValues(x_samples_in_range, y_samples_in_range, MAX_PLOT_SAMPLE_COUNT);
+
+            std::stringstream ss;
+            ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
+            std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
+            std::unordered_map<CsvSignal*, bool> signal_visible;
+            CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
+            StairValues plotted_min = makeStairValues(plotted_values.x, plotted_values.y_min, signal_plot_style);
+            StairValues plotted_max = makeStairValues(plotted_values.x, plotted_values.y_max, signal_plot_style);
+            bool visible = ImPlot::PlotLine(label_id.c_str(),
+                                            plotted_min.x.data(),
+                                            plotted_min.y.data(),
+                                            int(plotted_min.x.size()),
+                                            ImPlotLineFlags_None);
+            signal_visible[signal] = visible;
+            ImVec4 line_color = ImPlot::GetLastItemColor();
+            ImPlot::PlotLine(label_id.c_str(),
+                             plotted_max.x.data(),
+                             plotted_max.y.data(),
+                             int(plotted_max.x.size()),
+                             ImPlotLineFlags_None);
+            ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
+            ImPlot::PlotShaded(label_id.c_str(),
+                               plotted_min.x.data(),
+                               plotted_min.y.data(),
+                               plotted_max.y.data(),
+                               int(plotted_min.x.size()),
+                               ImPlotLineFlags_None);
+
+            // Tooltip
+            if (ImPlot::IsPlotHovered() && y_samples_in_range.size() > 0) {
+                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                ImPlot::PushStyleColor(ImPlotCol_Line, COLOR_TOOLTIP_LINE);
+                ImPlot::PlotInfLines("##", &mouse.x, 1);
+                ImPlot::PopStyleColor();
+
+                int idx = binarySearch(x_samples_in_range, mouse.x, 0, int(y_samples_in_range.size() - 1));
+                double tooltip_value = getPlotValueAtX(signal_plot_style,
+                                                       x_samples_in_range,
+                                                       y_samples_in_range,
+                                                       mouse.x,
+                                                       m_options.interpolate_tooltip);
+                double tooltip_x = mouse.x;
+                if (signal_plot_style == CsvPlotStyle::Linear && !m_options.interpolate_tooltip) {
+                    tooltip_x = x_samples_in_range[idx];
+                }
+                if (signal_visible[signal]) {
+                    ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
+                    ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &tooltip_x, &tooltip_value, 1);
+                    ImPlot::PopStyleColor();
+                }
+
+                vertical_line_time_next = mouse.x;
+                ImGui::BeginTooltip();
+                ss.str("");
+                ss << signal->name << " : " << tooltip_value;
+                ImGui::PushStyleColor(ImGuiCol_Text, line_color);
+                ImGui::Text(ss.str().c_str());
+                ImGui::PopStyleColor();
+                ImGui::EndTooltip();
+            } else if (m_options.show_vertical_line_in_all_plots && !std::isnan(vertical_line_time)) {
+                ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
+                ImPlot::PlotInfLines("##", &vertical_line_time, 1);
+                ImPlot::PopStyleColor(1);
+            }
+
+            // Legend right click
+            if (ImPlot::BeginLegendPopup(label_id.c_str())) {
+                if (ImGui::Button("Remove")) {
+                    signal_to_remove = signal;
+                }
+                ImPlot::EndLegendPopup();
+            }
+
+            // Fit to the entire data with mouse middle button
+            if (ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
+                plot.autofit_next_frame = true;
+            }
+
+            // Legend items can be dragged to other plots to move the signal.
+            if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
+                std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = {&plot, signal};
+                ImGui::SetDragDropPayload("LEGEND", &plot_and_signal, sizeof(plot_and_signal));
+                ImGui::Text("Drag to plot");
+                ImPlot::EndDragDropSource();
+            }
+        }
+        if (signal_to_remove) {
+            plot.removeSignal(signal_to_remove);
+        }
+
+        // Vertical lines for cursor measurements
+        if (m_options.cursor_measurements) {
+            ImPlotRect plot_limits = ImPlot::GetPlotLimits();
+            ImPlotRange x_range = plot_limits.X;
+            if (m_drag_x1 == 0 && m_drag_x2 == 0) {
+                m_drag_x1 = x_range.Min + 0.1 * x_range.Size();
+                m_drag_x2 = x_range.Max - 0.1 * x_range.Size();
+            }
+            ImPlot::DragLineX(0, &m_drag_x1, COLOR_TOOLTIP_LINE);
+            ImPlot::DragLineX(1, &m_drag_x2, COLOR_TOOLTIP_LINE);
+            ImPlot::PlotText(std::format("x1 : {:g}", m_drag_x1).c_str(), m_drag_x1, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
+            ImPlot::PlotText(std::format("x2 : {:g}", m_drag_x2).c_str(), m_drag_x2, plot_limits.Y.Min + 0.2 * plot_limits.Y.Size());
+        } else {
+            m_drag_x1 = 0;
+            m_drag_x2 = 0;
+        }
+
+        ImPlot::EndPlot();
+    }
+    ImPlot::PopStyleVar();
+    ImGui::End();
 }
 
 std::vector<std::string> openDialogMultiple() {
