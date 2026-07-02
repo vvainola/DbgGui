@@ -106,7 +106,6 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
-std::tuple<int, int> getAutoLayout(int signal_count);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
 CsvSignal* findSignalByName(CsvFileData& file, std::string const& name) {
@@ -2226,47 +2225,4 @@ std::optional<int> pressedNumber() {
         }
     }
     return std::nullopt;
-}
-
-std::tuple<int, int> getAutoLayout(int signal_count) {
-    switch (signal_count) {
-        case 1: return {1, 1};
-        case 2: return {2, 1};
-        case 3: return {3, 1};
-        case 4: return {2, 2};
-        case 5: return {5, 1};
-        case 6: return {3, 2};
-        case 7: return {4, 2};
-        case 8: return {4, 2};
-        case 9: return {3, 3};
-        case 10: return {5, 2};
-        case 11: return {6, 2};
-        case 12: return {6, 2};
-        case 13: return {5, 3};
-        case 14: return {5, 3};
-        case 15: return {5, 3};
-        case 16: return {4, 4};
-        case 17: return {6, 3};
-        case 18: return {6, 3};
-        case 19: return {5, 4};
-        case 20: return {5, 4};
-        case 21: return {7, 3};
-        case 22: return {6, 4};
-        case 23: return {6, 4};
-        case 24: return {6, 4};
-        case 25: return {5, 5};
-        case 26: return {7, 4};
-        case 27: return {7, 4};
-        case 28: return {7, 4};
-        case 29: return {6, 5};
-        case 30: return {6, 5};
-        case 32: return {8, 4};
-        case 35: return {7, 5};
-        case 36: return {9, 4};
-        case 40: return {8, 5};
-        case 42: return {7, 4};
-        case 45: return {9, 5};
-        default:
-            return {(int)std::ceil(signal_count / 6.0), 6};
-    }
 }
