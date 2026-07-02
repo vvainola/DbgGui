@@ -27,6 +27,7 @@
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
 #include "imgui.h"
+#include "imgui_helpers.h"
 #include "nlohmann/json.hpp"
 #include "themes.h"
 #include "str_helpers.h"
@@ -285,4 +286,3 @@ Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t
 Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id);
 double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
-void HelpMarker(const char* desc);

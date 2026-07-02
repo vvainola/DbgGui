@@ -90,18 +90,6 @@ inline int MAX_PLOT_SAMPLE_COUNT = 3000;
 constexpr int CUSTOM_SIGNAL_CAPACITY = 10;
 std::vector<double> ASCENDING_NUMBERS;
 
-bool ImRightAlign(const char* str_id) {
-    if (ImGui::BeginTable(str_id, 2, ImGuiTableFlags_SizingFixedFit, ImVec2(-1, 0))) {
-        ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableNextColumn();
-        ImGui::TableNextColumn();
-        return true;
-    }
-    return false;
-}
-#define ImEndRightAlign ImGui::EndTable()
-
-std::optional<int> pressedNumber();
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
 std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
 std::vector<std::string> openDialogMultiple();
@@ -1733,7 +1721,7 @@ void CsvPlotter::showSignalWindow() {
         ImGui::SameLine();
         if (ImRightAlign(std::format("##right_align_{}_{}", file->name, file->run_number).c_str())) {
             ImGui::Checkbox(std::format("##enabled_{}_{}", file->name, file->run_number).c_str(), &file->enabled);
-            ImEndRightAlign;
+            ImEndRightAlign();
         }
 
         if (opened) {
@@ -2211,18 +2199,4 @@ void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width
         }
     }
     ImGui::DockBuilderFinish(main_dock);
-}
-
-std::optional<int> pressedNumber() {
-    for (int key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
-        if (ImGui::IsKeyDown(ImGuiKey(key))) {
-            return key - ImGuiKey_0;
-        }
-    }
-    for (int key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
-        if (ImGui::IsKeyDown(ImGuiKey(key))) {
-            return key - ImGuiKey_Keypad0;
-        }
-    }
-    return std::nullopt;
 }

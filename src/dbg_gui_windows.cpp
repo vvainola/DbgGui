@@ -253,61 +253,6 @@ std::string getSourceValueStr(ValueSource src) {
       src);
 }
 
-void HelpMarker(const char* desc) {
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip();
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
-
-int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
-    ImGuiKey* pressed_key = (ImGuiKey*)data->UserData;
-    if (*pressed_key == ImGuiKey_None) {
-        return 0;
-    }
-    // Minus is handled separately because its name is "Minus" instead of "-"
-    std::string key_name;
-    if (*pressed_key == ImGuiKey_Minus) {
-        key_name = "-";
-    } else {
-        key_name = ImGui::GetKeyName(*pressed_key);
-    }
-    if (key_name.starts_with("Keypad")) {
-        key_name = key_name[6];
-    }
-    // Clear text edit and set cursor after first character
-    strncpy(data->Buf, key_name.c_str(), 20);
-    data->Buf[19] = '\0';
-    data->BufTextLen = 1;
-    data->BufDirty = 1;
-    data->CursorPos = 1;
-    data->SelectionStart = 1;
-    data->SelectionEnd = 1;
-    *pressed_key = ImGuiKey_None;
-    return 0;
-}
-
-std::optional<ImGuiKey> pressedNumber() {
-    for (int key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
-        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
-            return ImGuiKey(key);
-        }
-    }
-    for (int key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
-        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
-            return ImGuiKey(key);
-        }
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-        return ImGuiKey_Minus;
-    }
-    return std::nullopt;
-}
-
 void addReadonlyScalar(ValueSource const& value_src, double scale = 1, double offset = 0) {
     std::string value_str;
     if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
@@ -375,7 +320,7 @@ void addInputScalar(ValueSource const& value_src,
     };
     // When number is pressed and item is not already edited, move keyboard focus, write the pressed number and set cursor
     // after the number. This way input can be immediately edited by just typing numbers
-    std::optional<ImGuiKey> number_pressed = pressedNumber();
+    std::optional<ImGuiKey> number_pressed = pressedNumberKey();
     if (ImGui::IsItemFocused() && !ImGui::IsItemActive() && number_pressed) {
         ImGui::SetKeyboardFocusHere(-1);
         // The pressed number is global between all input fields so the value is set here for next frame and the cursor
