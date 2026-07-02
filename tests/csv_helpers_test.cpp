@@ -7,26 +7,6 @@
 
 using Approx = Catch::Approx;
 
-TEST_CASE("Stair values expand lagging stairs") {
-    std::vector<double> x = {0, 1, 2};
-    std::vector<double> y = {10, 20, 30};
-
-    StairValues stairs = makeStairValues(x, y, CsvPlotStyle::LaggingStairs);
-
-    CHECK(stairs.x == std::vector<double>{0, 1, 1, 2, 2});
-    CHECK(stairs.y == std::vector<double>{10, 10, 20, 20, 30});
-}
-
-TEST_CASE("Stair values expand leading stairs") {
-    std::vector<double> x = {0, 1, 2};
-    std::vector<double> y = {10, 20, 30};
-
-    StairValues stairs = makeStairValues(x, y, CsvPlotStyle::LeadingStairs);
-
-    CHECK(stairs.x == std::vector<double>{0, 0, 1, 1, 2});
-    CHECK(stairs.y == std::vector<double>{10, 20, 20, 30, 30});
-}
-
 TEST_CASE("Plot value lookup follows selected plot style") {
     std::vector<double> x = {0, 1, 2};
     std::vector<double> y = {10, 20, 30};

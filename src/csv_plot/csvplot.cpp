@@ -96,6 +96,19 @@ std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
+bool plotCsvSamples(std::string const& label_id,
+                    double const* x,
+                    double const* y,
+                    int count,
+                    CsvPlotStyle plot_style) {
+    if (plot_style == CsvPlotStyle::Linear) {
+        return ImPlot::PlotLine(label_id.c_str(), x, y, count, ImPlotLineFlags_None);
+    }
+
+    ImPlotStairsFlags stairs_flags = plot_style == CsvPlotStyle::LeadingStairs ? ImPlotStairsFlags_PreStep : ImPlotStairsFlags_None;
+    return ImPlot::PlotStairs(label_id.c_str(), x, y, count, stairs_flags);
+}
+
 CsvSignal* findSignalByName(CsvFileData& file, std::string const& name) {
     for (CsvSignal& signal : file.signals) {
         if (signal.name == name) {
@@ -2029,28 +2042,25 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int plot_idx, double& verti
             std::stringstream ss;
             ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
             std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
-            std::unordered_map<CsvSignal*, bool> signal_visible;
             CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
-            StairValues plotted_min = makeStairValues(plotted_values.x, plotted_values.y_min, signal_plot_style);
-            StairValues plotted_max = makeStairValues(plotted_values.x, plotted_values.y_max, signal_plot_style);
-            bool visible = ImPlot::PlotLine(label_id.c_str(),
-                                            plotted_min.x.data(),
-                                            plotted_min.y.data(),
-                                            int(plotted_min.x.size()),
-                                            ImPlotLineFlags_None);
-            signal_visible[signal] = visible;
+            int plotted_count = int(std::min({plotted_values.x.size(), plotted_values.y_min.size(), plotted_values.y_max.size()}));
+            bool signal_visible = plotCsvSamples(label_id,
+                                                 plotted_values.x.data(),
+                                                 plotted_values.y_min.data(),
+                                                 plotted_count,
+                                                 signal_plot_style);
             ImVec4 line_color = ImPlot::GetLastItemColor();
-            ImPlot::PlotLine(label_id.c_str(),
-                             plotted_max.x.data(),
-                             plotted_max.y.data(),
-                             int(plotted_max.x.size()),
-                             ImPlotLineFlags_None);
+            plotCsvSamples(label_id,
+                           plotted_values.x.data(),
+                           plotted_values.y_max.data(),
+                           plotted_count,
+                           signal_plot_style);
             ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.4f);
             ImPlot::PlotShaded(label_id.c_str(),
-                               plotted_min.x.data(),
-                               plotted_min.y.data(),
-                               plotted_max.y.data(),
-                               int(plotted_min.x.size()),
+                               plotted_values.x.data(),
+                               plotted_values.y_min.data(),
+                               plotted_values.y_max.data(),
+                               plotted_count,
                                ImPlotLineFlags_None);
 
             // Tooltip
@@ -2070,7 +2080,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int plot_idx, double& verti
                 if (signal_plot_style == CsvPlotStyle::Linear && !m_options.interpolate_tooltip) {
                     tooltip_x = x_samples_in_range[idx];
                 }
-                if (signal_visible[signal]) {
+                if (signal_visible) {
                     ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
                     ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
                     ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &tooltip_x, &tooltip_value, 1);

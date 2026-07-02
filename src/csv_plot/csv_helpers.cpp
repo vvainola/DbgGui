@@ -227,37 +227,6 @@ DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double>
     return decimated_values;
 }
 
-StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style) {
-    StairValues stair_values;
-    size_t sample_count = std::min(x.size(), y.size());
-    if (sample_count == 0) {
-        return stair_values;
-    }
-    if (plot_style == CsvPlotStyle::Linear || sample_count == 1) {
-        stair_values.x.assign(x.begin(), x.begin() + sample_count);
-        stair_values.y.assign(y.begin(), y.begin() + sample_count);
-        return stair_values;
-    }
-
-    stair_values.x.reserve(2 * sample_count - 1);
-    stair_values.y.reserve(2 * sample_count - 1);
-    stair_values.x.push_back(x[0]);
-    stair_values.y.push_back(y[0]);
-
-    for (size_t i = 1; i < sample_count; ++i) {
-        if (plot_style == CsvPlotStyle::LeadingStairs) {
-            stair_values.x.push_back(x[i - 1]);
-            stair_values.y.push_back(y[i]);
-        } else {
-            stair_values.x.push_back(x[i]);
-            stair_values.y.push_back(y[i - 1]);
-        }
-        stair_values.x.push_back(x[i]);
-        stair_values.y.push_back(y[i]);
-    }
-    return stair_values;
-}
-
 double getPlotValueAtX(CsvPlotStyle plot_style,
                        std::span<double const> x,
                        std::span<double const> y,

@@ -66,12 +66,6 @@ struct DecimatedValues {
 };
 DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
 
-struct StairValues {
-    std::vector<double> x;
-    std::vector<double> y;
-};
-
-StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style);
 double getPlotValueAtX(CsvPlotStyle plot_style,
                        std::span<double const> x,
                        std::span<double const> y,
