@@ -2211,7 +2211,8 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
             if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
                 std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = {&plot, signal};
                 ImGui::SetDragDropPayload("LEGEND", &plot_and_signal, sizeof(plot_and_signal));
-                ImGui::Text("Drag to plot");
+                ImGui::TextUnformatted("Drag to plot");
+                ImGui::Text("  %s", signal->name.c_str());
                 ImPlot::EndDragDropSource();
             }
         }
