@@ -598,6 +598,19 @@ std::expected<void, std::string> CsvPlotter::setSignalOffset(std::vector<CsvSign
     return {};
 }
 
+void CsvPlotter::setSignalPlotStyle(std::vector<CsvSignal*> const& signals, std::optional<CsvPlotStyle> plot_style) {
+    for (CsvSignal* signal : signals) {
+        if (signal == nullptr) {
+            continue;
+        }
+        if (plot_style.has_value()) {
+            m_signal_plot_style_settings[signal->name] = plot_style.value();
+        } else {
+            m_signal_plot_style_settings.erase(signal->name);
+        }
+    }
+}
+
 void CsvPlotter::removeFileFromPlots(CsvFileData& file) {
     for (CsvSignal& signal : file.signals) {
         removeSignalFromAllPlots(&signal);
@@ -677,11 +690,7 @@ void CsvPlotter::showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<C
     ImGui::SetNextItemWidth(185);
     if (ImGui::BeginCombo("Plot style", preview.c_str())) {
         if (ImGui::Selectable(global_label.c_str(), !has_signal_style)) {
-            for (CsvSignal* target : signals_to_update) {
-                if (target != nullptr) {
-                    m_signal_plot_style_settings.erase(target->name);
-                }
-            }
+            setSignalPlotStyle(signals_to_update, std::nullopt);
             has_signal_style = false;
         }
         if (!has_signal_style) {
@@ -692,11 +701,7 @@ void CsvPlotter::showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<C
             std::string plot_style_name(magic_enum::enum_name(plot_style));
             bool is_selected = has_signal_style && signal_style == plot_style;
             if (ImGui::Selectable(plot_style_name.c_str(), is_selected)) {
-                for (CsvSignal* target : signals_to_update) {
-                    if (target != nullptr) {
-                        m_signal_plot_style_settings[target->name] = plot_style;
-                    }
-                }
+                setSignalPlotStyle(signals_to_update, plot_style);
                 has_signal_style = true;
                 signal_style = plot_style;
             }

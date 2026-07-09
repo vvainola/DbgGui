@@ -32,6 +32,7 @@
 #include <array>
 #include <span>
 #include <vector>
+#include <optional>
 #include "csv_helpers.h"
 
 inline constexpr int NOT_VISIBLE = -1;
@@ -125,6 +126,7 @@ class CsvPlotter {
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
     std::expected<void, std::string> setSignalScale(std::vector<CsvSignal*> const& signals, std::string const& scale_expression);
     std::expected<void, std::string> setSignalOffset(std::vector<CsvSignal*> const& signals, std::string const& offset_expression);
+    void setSignalPlotStyle(std::vector<CsvSignal*> const& signals, std::optional<CsvPlotStyle> plot_style);
     CsvPlotStyle getSignalPlotStyle(CsvSignal const& signal) const;
     void showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<CsvSignal*> const& signals_to_update);
     std::vector<CsvSignal*> sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals);
