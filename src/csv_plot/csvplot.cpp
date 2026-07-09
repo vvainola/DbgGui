@@ -270,8 +270,11 @@ void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
 }
 
 void CsvPlotter::updatePlottedSignalSettings() {
-    // Update the saved map only for currently loaded signal names so that signals belonging to
-    // files that are not currently open are preserved and restored when their file is reopened.
+    // Reconcile plot.settings with the signals currently plotted. Kept names:
+    //   1. Currently plotted  - user still sees them.
+    //   2. Loaded but cleared - dropped (user removed them).
+    //   3. "Ghost"            - signal not in any open file; kept so its file
+    //                           can restore it when (re)opened later.
     std::set<std::string> loaded_names;
     for (auto& file : m_csv_data) {
         for (CsvSignal& signal : file->signals) {
@@ -280,6 +283,7 @@ void CsvPlotter::updatePlottedSignalSettings() {
     }
 
     auto update_plot_settings = [&](PlotBase& plot) {
+        // Snapshot names of signals currently in the active variant.
         CsvPlotSignalSettings current_settings;
         if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
             for (CsvSignal* signal : scalar_plot->signals) {
@@ -298,6 +302,8 @@ void CsvPlotter::updatePlottedSignalSettings() {
             }
         }
 
+        // Merge: keep a saved name if still plotted or a ghost; drop cleared
+        // loaded ones. Then append any newly plotted names.
         CsvPlotSignalSettings updated;
         for (std::string const& signal_name : plot.settings.scalar_signals) {
             bool const signal_is_current = contains(current_settings.scalar_signals, signal_name);
@@ -311,6 +317,8 @@ void CsvPlotter::updatePlottedSignalSettings() {
             }
         }
 
+        // Same merge for signal pairs (vector/spectrum); a pair is a ghost if
+        // neither of its signals is in any open file.
         for (auto const& pair : plot.settings.signal_pairs) {
             bool const pair_is_current = std::find(current_settings.signal_pairs.begin(),
                                                    current_settings.signal_pairs.end(),

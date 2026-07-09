@@ -54,8 +54,11 @@ void PlotBase::setPlotType(CsvPlotType type) {
 }
 
 void PlotBase::clearPlot() {
-    // Clear both the live plot data and the persisted signal names so the plot
-    // remains empty after settings are saved and restored.
+    // Clear only the live plot data, leaving `settings` intact. The persisted
+    // signal names are pruned by CsvPlotter::updatePlottedSignalSettings(), which
+    // drops names of signals that are loaded but no longer plotted while keeping
+    // "ghost" entries for signals not present in any open file. This way, newly
+    // opened files containing those ghost signals still have them restored.
     if (auto* scalar_plot = std::get_if<ScalarPlot>(&variant)) {
         scalar_plot->clear();
     } else if (auto* vector_plot = std::get_if<VectorPlot>(&variant)) {
@@ -64,7 +67,6 @@ void PlotBase::clearPlot() {
         spectrum_plot->spectrum.clear();
         spectrum_plot->prev_x_range = {0, 0};
     }
-    settings = {};
 }
 
 void PlotBase::removeSignal(CsvSignal* signal) {
