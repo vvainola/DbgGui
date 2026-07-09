@@ -26,6 +26,7 @@
 #include <span>
 #include <string_view>
 
+#include "plot_decimation.h"
 #include "str_helpers.h"
 
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count = 1);
@@ -58,13 +59,6 @@ inline bool contains(std::vector<T> const& v, const T& item_to_search) {
     }
     return false;
 }
-
-struct DecimatedValues {
-    std::vector<double> x;
-    std::vector<double> y_min;
-    std::vector<double> y_max;
-};
-DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
 
 double getPlotValueAtX(CsvPlotStyle plot_style,
                        std::span<double const> x,

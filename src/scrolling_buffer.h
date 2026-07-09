@@ -23,6 +23,7 @@
 #pragma once
 
 #include "data_structures.h"
+#include "plot_decimation.h"
 
 // utility structure for realtime plot
 class ScrollingBuffer {
@@ -123,52 +124,23 @@ class ScrollingBuffer {
         }
     }
 
-    struct DecimatedValues {
-        std::vector<double> time;
-        std::vector<double> y_min;
-        std::vector<double> y_max;
-    };
     DecimatedValues getValuesInRange(Scalar* scalar, int32_t start_idx, int32_t end_idx, int32_t n_points, double scale = 1, double offset = 0) {
         DecimatedValues decimated_values;
         if (start_idx < 0 || end_idx < 0) {
             // Nothing sampled yet
-            decimated_values.time.push_back(0);
+            decimated_values.x.push_back(0);
             decimated_values.y_min.push_back(0);
             decimated_values.y_max.push_back(0);
             return decimated_values;
         }
 
-        int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(end_idx - start_idx) / n_points) - 1, 0.0));
-
-        // Add bit extra capacity for blanks at the end.
-        decimated_values.time.reserve(std::min(end_idx - start_idx, n_points + 5));
-        decimated_values.y_min.reserve(std::min(end_idx - start_idx, n_points + 5));
-        decimated_values.y_max.reserve(std::min(end_idx - start_idx, n_points + 5));
-
         auto const& data = m_scalar_buffers.at(scalar);
-
-        double current_min = INFINITY;
-        double current_max = -INFINITY;
-        int64_t counter = 0;
-        for (int32_t i = start_idx; i <= end_idx; i++) {
-            if (counter < 0) {
-                decimated_values.time.push_back(m_time[i - 1]);
-                decimated_values.y_min.push_back(scale * current_min + offset);
-                decimated_values.y_max.push_back(scale * current_max + offset);
-
-                current_min = INFINITY;
-                current_max = -INFINITY;
-                counter = decimation;
-            }
-            current_min = min(data[i], current_min);
-            current_max = max(data[i], current_max);
-            counter--;
-        }
-        // Update leftover so that blanks are not left at the end
-        decimated_values.time.push_back(m_time[end_idx]);
-        decimated_values.y_min.push_back(scale * current_min + offset);
-        decimated_values.y_max.push_back(scale * current_max + offset);
-        return decimated_values;
+        return decimateValues(m_time,
+                              data,
+                              size_t(start_idx),
+                              size_t(end_idx) + 1,
+                              n_points,
+                              {.y_scale = scale, .y_offset = offset});
     }
 
     DecimatedValues getValuesInRange(Scalar* scalar, std::pair<int32_t, int32_t> times, int32_t n_points, double scale = 1, double offset = 0) {

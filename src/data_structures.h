@@ -26,6 +26,7 @@
 #include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "minmax.h"
 #include "spectrum.h"
 #include "str_helpers.h"
 #include "nlohmann/json.hpp"
@@ -59,16 +60,6 @@ inline uint64_t signalId(std::string const& name, std::string const& group) {
 }
 std::string getFilenameToSave(std::string const& filter = "csv", std::string default_path = "");
 std::string getFilenameToOpen(std::string const& filter, std::string default_path = "");
-
-template <typename T>
-T inline min(T a, T b) {
-    return a < b ? a : b;
-}
-
-template <typename T>
-T inline max(T a, T b) {
-    return a > b ? a : b;
-}
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {

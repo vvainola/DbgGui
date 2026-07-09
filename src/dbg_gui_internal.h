@@ -43,7 +43,6 @@
 
 struct GLFWwindow;
 
-inline constexpr int32_t ALL_SAMPLES = 1000'000'000;
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.6f, 0.6f, 0.6f, 1);
 inline constexpr ImVec4 COLOR_LIGHT_BLUE = ImVec4(0.4f, 0.6f, 0.9f, 1);
 

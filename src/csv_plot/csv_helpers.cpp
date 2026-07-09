@@ -31,16 +31,6 @@
 #include <format>
 #include <map>
 
-template <typename T>
-T inline min(T a, T b) {
-    return a < b ? a : b;
-}
-
-template <typename T>
-T inline max(T a, T b) {
-    return a > b ? a : b;
-}
-
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count) {
     std::vector<std::string_view> elems;
     elems.reserve(expected_column_count);
@@ -188,43 +178,6 @@ std::vector<std::string> makeUniqueCsvSignalNames(std::vector<std::string> const
         }
     }
     return unique_names;
-}
-
-DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
-    DecimatedValues decimated_values;
-    if (x.empty() || y.empty() || count <= 0) {
-        return decimated_values;
-    }
-
-    size_t sample_count = std::min(x.size(), y.size());
-    decimated_values.x.reserve(count + 2);
-    decimated_values.y_min.reserve(count + 2);
-    decimated_values.y_max.reserve(count + 2);
-
-    int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(sample_count) / count) - 1, 0.0));
-
-    double current_min = INFINITY;
-    double current_max = -INFINITY;
-    int64_t counter = 0;
-    for (int32_t i = 0; i < sample_count; i++) {
-        if (counter < 0) {
-            decimated_values.x.push_back(x[i - 1]);
-            decimated_values.y_min.push_back(current_min);
-            decimated_values.y_max.push_back(current_max);
-
-            current_min = INFINITY;
-            current_max = -INFINITY;
-            counter = decimation;
-        }
-        current_min = min(y[i], current_min);
-        current_max = max(y[i], current_max);
-        counter--;
-    }
-    // Add last value
-    decimated_values.x.push_back(x[sample_count - 1]);
-    decimated_values.y_min.push_back(y[sample_count - 1]);
-    decimated_values.y_max.push_back(y[sample_count - 1]);
-    return decimated_values;
 }
 
 double getPlotValueAtX(CsvPlotStyle plot_style,
