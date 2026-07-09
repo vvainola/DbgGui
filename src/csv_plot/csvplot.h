@@ -25,6 +25,7 @@
 #include "themes.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
+#include <expected>
 #include <string>
 #include <filesystem>
 #include <map>
@@ -122,8 +123,10 @@ class CsvPlotter {
     void removeSignalFromAllPlots(CsvSignal* signal);
     void replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& new_file);
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
+    std::expected<void, std::string> setSignalScale(std::vector<CsvSignal*> const& signals, std::string const& scale_expression);
+    std::expected<void, std::string> setSignalOffset(std::vector<CsvSignal*> const& signals, std::string const& offset_expression);
     CsvPlotStyle getSignalPlotStyle(CsvSignal const& signal) const;
-    void showSignalPlotStyleCombo(std::string const& signal_name);
+    void showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<CsvSignal*> const& signals_to_update);
     std::vector<CsvSignal*> sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals);
 
     void updateSavedSettings();

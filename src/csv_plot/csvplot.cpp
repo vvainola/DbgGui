@@ -136,6 +136,14 @@ CsvSignal* findSignalByName(CsvFileData& file, std::string const& name) {
     return nullptr;
 }
 
+std::vector<CsvSignal*> selectedOrClickedSignals(CsvSignal* signal,
+                                                 std::vector<CsvSignal*> const& selected_signals) {
+    if (contains(selected_signals, signal)) {
+        return selected_signals;
+    }
+    return {signal};
+}
+
 void addUniquePair(std::vector<std::pair<std::string, std::string>>& pairs,
                    std::pair<std::string, std::string> const& pair) {
     if (std::find(pairs.begin(), pairs.end(), pair) == pairs.end()) {
@@ -156,32 +164,28 @@ static std::string jsonValueToExpressionString(nlohmann::json const& value) {
     return value.get<std::string>();
 }
 
-static bool setSignalScale(CsvSignalTransform& transform, std::string const& scale_expression, std::string* error = nullptr) {
+static std::expected<void, std::string> setSignalTransformScale(CsvSignalTransform& transform,
+                                                                std::string const& scale_expression) {
     auto scale = str::evaluateExpression(scale_expression);
     if (!scale.has_value()) {
-        if (error != nullptr) {
-            *error = scale.error();
-        }
-        return false;
+        return std::unexpected(scale.error());
     }
 
     transform.scale_expression = scale_expression;
     transform.scale = scale.value();
-    return true;
+    return {};
 }
 
-static bool setSignalOffset(CsvSignalTransform& transform, std::string const& offset_expression, std::string* error = nullptr) {
+static std::expected<void, std::string> setSignalTransformOffset(CsvSignalTransform& transform,
+                                                                 std::string const& offset_expression) {
     auto offset = str::evaluateExpression(offset_expression);
     if (!offset.has_value()) {
-        if (error != nullptr) {
-            *error = offset.error();
-        }
-        return false;
+        return std::unexpected(offset.error());
     }
 
     transform.offset_expression = offset_expression;
     transform.offset = offset.value();
-    return true;
+    return {};
 }
 
 static void loadImguiLayout(std::string layout) {
@@ -554,6 +558,46 @@ void CsvPlotter::setSignalTransform(std::string const& signal_name, CsvSignalTra
     }
 }
 
+std::expected<void, std::string> CsvPlotter::setSignalScale(std::vector<CsvSignal*> const& signals,
+                                                            std::string const& scale_expression) {
+    CsvSignalTransform changed_transform;
+    std::expected<void, std::string> scale_result = setSignalTransformScale(changed_transform, scale_expression);
+    if (!scale_result.has_value()) {
+        return std::unexpected(scale_result.error());
+    }
+
+    for (CsvSignal* target : signals) {
+        if (target == nullptr) {
+            continue;
+        }
+        CsvSignalTransform target_transform = target->transform;
+        target_transform.scale_expression = changed_transform.scale_expression;
+        target_transform.scale = changed_transform.scale;
+        setSignalTransform(target->name, target_transform);
+    }
+    return {};
+}
+
+std::expected<void, std::string> CsvPlotter::setSignalOffset(std::vector<CsvSignal*> const& signals,
+                                                             std::string const& offset_expression) {
+    CsvSignalTransform changed_transform;
+    std::expected<void, std::string> offset_result = setSignalTransformOffset(changed_transform, offset_expression);
+    if (!offset_result.has_value()) {
+        return std::unexpected(offset_result.error());
+    }
+
+    for (CsvSignal* target : signals) {
+        if (target == nullptr) {
+            continue;
+        }
+        CsvSignalTransform target_transform = target->transform;
+        target_transform.offset_expression = changed_transform.offset_expression;
+        target_transform.offset = changed_transform.offset;
+        setSignalTransform(target->name, target_transform);
+    }
+    return {};
+}
+
 void CsvPlotter::removeFileFromPlots(CsvFileData& file) {
     for (CsvSignal& signal : file.signals) {
         removeSignalFromAllPlots(&signal);
@@ -621,9 +665,10 @@ CsvPlotStyle CsvPlotter::getSignalPlotStyle(CsvSignal const& signal) const {
     return it == m_signal_plot_style_settings.end() ? m_options.plot_style : it->second;
 }
 
-void CsvPlotter::showSignalPlotStyleCombo(std::string const& signal_name) {
+void CsvPlotter::showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<CsvSignal*> const& signals_to_update) {
     std::string global_name(magic_enum::enum_name(m_options.plot_style));
     std::string global_label = std::format("Global ({})", global_name);
+    std::string const& signal_name = signal.name;
     auto signal_style_it = m_signal_plot_style_settings.find(signal_name);
     bool has_signal_style = signal_style_it != m_signal_plot_style_settings.end();
     CsvPlotStyle signal_style = has_signal_style ? signal_style_it->second : m_options.plot_style;
@@ -632,7 +677,11 @@ void CsvPlotter::showSignalPlotStyleCombo(std::string const& signal_name) {
     ImGui::SetNextItemWidth(185);
     if (ImGui::BeginCombo("Plot style", preview.c_str())) {
         if (ImGui::Selectable(global_label.c_str(), !has_signal_style)) {
-            m_signal_plot_style_settings.erase(signal_name);
+            for (CsvSignal* target : signals_to_update) {
+                if (target != nullptr) {
+                    m_signal_plot_style_settings.erase(target->name);
+                }
+            }
             has_signal_style = false;
         }
         if (!has_signal_style) {
@@ -643,7 +692,11 @@ void CsvPlotter::showSignalPlotStyleCombo(std::string const& signal_name) {
             std::string plot_style_name(magic_enum::enum_name(plot_style));
             bool is_selected = has_signal_style && signal_style == plot_style;
             if (ImGui::Selectable(plot_style_name.c_str(), is_selected)) {
-                m_signal_plot_style_settings[signal_name] = plot_style;
+                for (CsvSignal* target : signals_to_update) {
+                    if (target != nullptr) {
+                        m_signal_plot_style_settings[target->name] = plot_style;
+                    }
+                }
                 has_signal_style = true;
                 signal_style = plot_style;
             }
@@ -954,18 +1007,18 @@ void CsvPlotter::loadPreviousSessionSettings() {
             if (settings.contains("scales") && settings["scales"].is_object()) {
                 for (auto const& scale : settings["scales"].items()) {
                     std::string scale_expression = jsonValueToExpressionString(scale.value());
-                    std::string error;
-                    if (!setSignalScale(m_signal_transform_settings[scale.key()], scale_expression, &error)) {
-                        addSettingsLoadError(error);
+                    std::expected<void, std::string> scale_result = setSignalTransformScale(m_signal_transform_settings[scale.key()], scale_expression);
+                    if (!scale_result.has_value()) {
+                        addSettingsLoadError(scale_result.error());
                     }
                 }
             }
             if (settings.contains("offsets") && settings["offsets"].is_object()) {
                 for (auto const& offset : settings["offsets"].items()) {
                     std::string offset_expression = jsonValueToExpressionString(offset.value());
-                    std::string error;
-                    if (!setSignalOffset(m_signal_transform_settings[offset.key()], offset_expression, &error)) {
-                        addSettingsLoadError(error);
+                    std::expected<void, std::string> offset_result = setSignalTransformOffset(m_signal_transform_settings[offset.key()], offset_expression);
+                    if (!offset_result.has_value()) {
+                        addSettingsLoadError(offset_result.error());
                     }
                 }
             }
@@ -1828,16 +1881,15 @@ void CsvPlotter::showSignalWindow() {
 
                 if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
                     CsvSignalTransform signal_transform = signal.transform;
+                    std::vector<CsvSignal*> signals_to_update = selectedOrClickedSignals(&signal, m_selected_signals);
 
                     std::array<char, 1024> scale_buffer = {};
                     signal_transform.scale_expression.copy(scale_buffer.data(),
                                                            std::min(signal_transform.scale_expression.size(), scale_buffer.size() - 1));
                     if (ImGui::InputText("Scale", scale_buffer.data(), scale_buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        std::string error;
-                        if (setSignalScale(signal_transform, scale_buffer.data(), &error)) {
-                            setSignalTransform(signal.name, signal_transform);
-                        } else if (!error.empty()) {
-                            m_error_message = error;
+                        std::expected<void, std::string> scale_result = setSignalScale(signals_to_update, scale_buffer.data());
+                        if (!scale_result.has_value()) {
+                            m_error_message = scale_result.error();
                         }
                     }
 
@@ -1845,15 +1897,13 @@ void CsvPlotter::showSignalWindow() {
                     signal_transform.offset_expression.copy(offset_buffer.data(),
                                                             std::min(signal_transform.offset_expression.size(), offset_buffer.size() - 1));
                     if (ImGui::InputText("Offset", offset_buffer.data(), offset_buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        std::string error;
-                        if (setSignalOffset(signal_transform, offset_buffer.data(), &error)) {
-                            setSignalTransform(signal.name, signal_transform);
-                        } else if (!error.empty()) {
-                            m_error_message = error;
+                        std::expected<void, std::string> offset_result = setSignalOffset(signals_to_update, offset_buffer.data());
+                        if (!offset_result.has_value()) {
+                            m_error_message = offset_result.error();
                         }
                     }
 
-                    showSignalPlotStyleCombo(signal.name);
+                    showSignalPlotStyleCombo(signal, signals_to_update);
 
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
