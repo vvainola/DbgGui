@@ -1461,7 +1461,6 @@ void CsvPlotter::showSignalWindow() {
         }
     }
 
-    ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
     if (ImGui::Button("Open")) {
         std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
         if (!csv_datas.empty() && m_save_settings) {
@@ -1626,6 +1625,8 @@ void CsvPlotter::showSignalWindow() {
     static std::string signal_name_filter;
     ImGui::InputText("Filter", &signal_name_filter);
     ImGui::Separator();
+
+    ImGui::BeginChild("Signal selection", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
 
     // m_visible_signals is rebuilt during submission below (only signals that are actually
     // rendered get pushed). Begin-side requests use the previous frame's list, matching the
