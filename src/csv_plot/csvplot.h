@@ -24,7 +24,6 @@
 #include "plot_base.h"
 #include "themes.h"
 #include "imgui.h"
-#include "imgui_helpers.h"
 #include <expected>
 #include <string>
 #include <filesystem>
@@ -135,6 +134,9 @@ class CsvPlotter {
     void loadPreviousSessionSettings();
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
+    void openFilesFromDialog();
+    void clearPlots();
+    void copyPlottedSignalArgumentsToClipboard();
     void addClipboardFileFromClipboard();
     GLFWwindow* m_window;
 

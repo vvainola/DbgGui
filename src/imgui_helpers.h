@@ -24,7 +24,10 @@
 
 #include "imgui.h"
 
+#include <functional>
 #include <optional>
+#include <span>
+#include <string_view>
 
 void HelpMarker(const char* desc);
 bool ImRightAlign(const char* str_id);
@@ -32,3 +35,12 @@ void ImEndRightAlign();
 std::optional<int> pressedNumber();
 std::optional<ImGuiKey> pressedNumberKey(bool include_minus = true);
 int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data);
+
+struct CommandPaletteCommand {
+    std::string_view name;
+    std::string_view shortcut;
+    std::string_view description;
+    std::function<void()> action;
+};
+
+void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand const> commands);

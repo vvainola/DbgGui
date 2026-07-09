@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "csvplot.h"
+#include "imgui_helpers.h"
 #include "str_helpers.h"
 #include "custom_signal.hpp"
 #include "imgui_stdlib.h"

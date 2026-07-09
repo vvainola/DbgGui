@@ -112,6 +112,7 @@ class DbgGui {
     void showCustomWindow();
     void showScriptWindow();
     void showGridWindow();
+    void showCommandPalette();
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showScalarPlots();
     void showVectorPlots();

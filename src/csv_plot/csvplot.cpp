@@ -39,6 +39,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "csvplot.h"
 #include "themes.h"
 #include "imgui.h"
+#include "imgui_helpers.h"
 #include "imgui_stdlib.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
@@ -624,6 +625,56 @@ void CsvPlotter::removeAllFiles() {
     }
     m_selected_signals.clear();
     m_csv_data.clear();
+}
+
+void CsvPlotter::openFilesFromDialog() {
+    std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
+    if (!csv_datas.empty() && m_save_settings) {
+        // Opening files interactively resumes saved plotted signal restore in normal GUI sessions.
+        m_use_saved_plotted_signals = true;
+    }
+    for (auto& csv_data : csv_datas) {
+        applySignalTransforms(*csv_data);
+        if (m_use_saved_plotted_signals) {
+            applyPlottedSignals(*csv_data);
+        }
+        m_csv_data.push_back(std::move(csv_data));
+    }
+}
+
+void CsvPlotter::clearPlots() {
+    for (PlotBase& plot : m_docked_plots) {
+        plot.clearPlot();
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        plot.clearPlot();
+    }
+}
+
+void CsvPlotter::copyPlottedSignalArgumentsToClipboard() {
+    std::stringstream ss_signals;
+    std::stringstream ss_plots;
+    ss_signals << "\"";
+    ss_plots << "\"";
+    for (int row = 0; row < m_rows; ++row) {
+        for (int col = 0; col < m_cols; ++col) {
+            int plot_idx = stablePlotIndex(row, col);
+            if (auto* plot = std::get_if<ScalarPlot>(&m_docked_plots[plot_idx].variant)) {
+                for (CsvSignal* signal : plot->signals) {
+                    ss_signals << signal->name << ",";
+                    ss_plots << plot_idx << ",";
+                }
+            }
+        }
+    }
+    ss_signals << "\"";
+    ss_plots << "\"";
+    ImGui::SetClipboardText(std::format("--names {} --plots {} --rows {} --cols {}",
+                                        ss_signals.str(),
+                                        ss_plots.str(),
+                                        std::to_string(m_rows),
+                                        std::to_string(m_cols))
+                              .c_str());
 }
 
 void CsvPlotter::addClipboardFileFromClipboard() {
@@ -1462,27 +1513,11 @@ void CsvPlotter::showSignalWindow() {
     }
 
     if (ImGui::Button("Open")) {
-        std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
-        if (!csv_datas.empty() && m_save_settings) {
-            // Opening files interactively resumes saved plotted signal restore in normal GUI sessions.
-            m_use_saved_plotted_signals = true;
-        }
-        for (auto& csv_data : csv_datas) {
-            applySignalTransforms(*csv_data);
-            if (m_use_saved_plotted_signals) {
-                applyPlottedSignals(*csv_data);
-            }
-            m_csv_data.push_back(std::move(csv_data));
-        }
+        openFilesFromDialog();
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
-        for (PlotBase& plot : m_docked_plots) {
-            plot.clearPlot();
-        }
-        for (PlotBase& plot : m_undocked_plots) {
-            plot.clearPlot();
-        }
+        clearPlots();
     }
     ImGui::SameLine();
     char const* remove_all_files_popup_title = "Remove all files  ";
@@ -1520,29 +1555,7 @@ void CsvPlotter::showSignalWindow() {
     }
 
     if (ImGui::Button("Copy signals to clipboard")) {
-        std::stringstream ss_signals;
-        std::stringstream ss_plots;
-        ss_signals << "\"";
-        ss_plots << "\"";
-        for (int row = 0; row < m_rows; ++row) {
-            for (int col = 0; col < m_cols; ++col) {
-                int plot_idx = stablePlotIndex(row, col);
-                if (auto* plot = std::get_if<ScalarPlot>(&m_docked_plots[plot_idx].variant)) {
-                    for (CsvSignal* signal : plot->signals) {
-                        ss_signals << signal->name << ",";
-                        ss_plots << plot_idx << ",";
-                    }
-                }
-            }
-        }
-        ss_signals << "\"";
-        ss_plots << "\"";
-        ImGui::SetClipboardText(std::format("--names {} --plots {} --rows {} --cols {}",
-                                            ss_signals.str(),
-                                            ss_plots.str(),
-                                            std::to_string(m_rows),
-                                            std::to_string(m_cols))
-                                  .c_str());
+        copyPlottedSignalArgumentsToClipboard();
     }
 
     if (ImGui::CollapsingHeader("Options")) {

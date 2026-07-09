@@ -34,6 +34,7 @@
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -272,6 +273,50 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     synchronizeSpeed();
 }
 
+void DbgGui::showCommandPalette() {
+    char const* popup_to_open = nullptr;
+    auto open_popup = [&](char const* popup_name) {
+        popup_to_open = popup_name;
+    };
+    auto save_all_plots_as_csv = [&] {
+        std::vector<Scalar*> scalars;
+        scalars.reserve(m_scalars.size());
+        for (auto const& scalar : m_scalars) {
+            scalars.push_back(scalar.get());
+        }
+        saveScalarsAsCsv(getFilenameToSave(), scalars, m_linked_scalar_x_axis_limits);
+    };
+
+    std::vector<CommandPaletteCommand> commands = {{
+      {"Start / pause sampling", "Space", "Toggle DbgGui between running and paused.", [&] { m_paused = !m_paused; }},
+      {"Step one sample", "Shift+Space", "Resume briefly to advance the target one sample.", [&] {
+           m_pause_at_time = std::numeric_limits<double>::epsilon();
+           m_paused = false;
+       }},
+      {"Double simulation speed", "Numpad +", "Increase simulated speed relative to real time.", [&] { m_simulation_speed *= 2.; }},
+      {"Halve simulation speed", "Numpad -", "Decrease simulated speed relative to real time.", [&] { m_simulation_speed /= 2.; }},
+      {"Pause after", "Numpad /", "Open the pause-after-time dialog.", [&] { open_popup(str::PAUSE_AFTER); }},
+      {"Pause at", "Numpad *", "Open the pause-at-time dialog.", [&] { open_popup(str::PAUSE_AT); }},
+      {"Add scalar plot", "Ctrl+Shift+1", "Open the add-scalar-plot dialog.", [&] { open_popup(str::ADD_SCALAR_PLOT); }},
+      {"Add vector plot", "Ctrl+Shift+2", "Open the add-vector-plot dialog.", [&] { open_popup(str::ADD_VECTOR_PLOT); }},
+      {"Add spectrum plot", "Ctrl+Shift+3", "Open the add-spectrum-plot dialog.", [&] { open_popup(str::ADD_SPECTRUM_PLOT); }},
+      {"Add custom window", "Ctrl+Shift+4", "Open the add-custom-window dialog.", [&] { open_popup(str::ADD_CUSTOM_WINDOW); }},
+      {"Add script window", "Ctrl+Shift+5", "Open the add-script-window dialog.", [&] { open_popup(str::ADD_SCRIPT_WINDOW); }},
+      {"Add dockspace", "Ctrl+Shift+6", "Open the add-dockspace dialog.", [&] { open_popup(str::ADD_DOCKSPACE); }},
+      {"Add grid window", "", "Open the add-grid-window dialog.", [&] { open_popup(str::ADD_GRID_WINDOW); }},
+      {"Copy visible samples to clipboard", "Ctrl+T", "Copy visible scalar samples for import into CsvPlotter.", [&] { copyAllScalarSamplesToClipboard(); }},
+      {"Save all plots as CSV", "", "Export visible scalar samples from all plots to a CSV file.", save_all_plots_as_csv},
+      {"Save snapshot", "Ctrl+S", "Save current global variable values.", [&] { saveSnapshot(); }},
+      {"Load snapshot", "Ctrl+R", "Restore global variable values from a snapshot.", [&] { loadSnapshot(); }},
+      {"Create custom signal", "Ctrl+Shift+click symbol", "Select symbols, then Ctrl+Shift-click a symbol in the Symbols tree to open the Custom Signal Creator.", {}},
+    }};
+
+    showCommandPaletteTable("Command Palette", commands);
+    if (popup_to_open != nullptr) {
+        ImGui::OpenPopup(popup_to_open);
+    }
+}
+
 void DbgGui::updateLoop() {
     //---------- Initializations ----------
     glfwSetErrorCallback(glfw_error_callback);
@@ -322,7 +367,9 @@ void DbgGui::updateLoop() {
         // ImPlot::ShowDemoWindow();
 
         //---------- Hotkeys ----------
-        if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
+        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P)) {
+            ImGui::OpenPopup("Command Palette");
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
             m_paused = !m_paused;
         } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
             m_pause_at_time = std::numeric_limits<double>::epsilon();
@@ -356,6 +403,7 @@ void DbgGui::updateLoop() {
         } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
             loadSnapshot();
         }
+        showCommandPalette();
         addPopupModal(str::ADD_SCALAR_PLOT);
         addPopupModal(str::ADD_VECTOR_PLOT);
         addPopupModal(str::ADD_SPECTRUM_PLOT);

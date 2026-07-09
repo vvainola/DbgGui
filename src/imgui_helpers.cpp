@@ -22,6 +22,12 @@
 
 #include "imgui_helpers.h"
 
+#include "imgui_stdlib.h"
+#include "str_helpers.h"
+
+#include <map>
+#include <string>
+
 namespace {
 
 std::optional<char> numberKeyCharacter(ImGuiKey key) {
@@ -36,6 +42,18 @@ std::optional<char> numberKeyCharacter(ImGuiKey key) {
     }
     return std::nullopt;
 }
+
+bool matchesCommand(CommandPaletteCommand const& command, std::string const& filter) {
+    return filter.empty()
+        || str::fuzzy_match(filter, command.name)
+        || str::fuzzy_match(filter, command.shortcut)
+        || str::fuzzy_match(filter, command.description);
+}
+
+struct CommandPaletteState {
+    std::string filter;
+    std::string selected_command_name;
+};
 
 } // namespace
 
@@ -115,4 +133,108 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
     data->SelectionStart = 1;
     data->SelectionEnd = 1;
     return 0;
+}
+
+void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand const> commands) {
+    static std::map<std::string, CommandPaletteState> states;
+    CommandPaletteState& state = states[title];
+
+    ImGui::SetNextWindowSize(ImVec2(620, 420), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+        return;
+    }
+
+    if (ImGui::IsWindowAppearing()) {
+        ImGui::SetKeyboardFocusHere();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        state.filter.clear();
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##CommandFilter", &state.filter);
+    ImGui::Separator();
+
+    bool const enter_pressed = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+    CommandPaletteCommand const* first_matching_action = nullptr;
+    CommandPaletteCommand const* selected_action = nullptr;
+    CommandPaletteCommand const* command_to_execute = nullptr;
+
+    for (CommandPaletteCommand const& command : commands) {
+        if (!command.action || !matchesCommand(command, state.filter)) {
+            continue;
+        }
+        if (first_matching_action == nullptr) {
+            first_matching_action = &command;
+        }
+        if (!state.selected_command_name.empty()
+            && command.name == std::string_view(state.selected_command_name)) {
+            selected_action = &command;
+            break;
+        }
+    }
+    if (selected_action == nullptr && !state.filter.empty()) {
+        selected_action = first_matching_action;
+    }
+
+    if (ImGui::BeginTable("##CommandPaletteTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("Command", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Ctrl+Shift+1").x);
+
+        int visible_count = 0;
+        for (size_t i = 0; i < commands.size(); ++i) {
+            CommandPaletteCommand const& command = commands[i];
+            if (!matchesCommand(command, state.filter)) {
+                continue;
+            }
+            ++visible_count;
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            bool const has_action = bool(command.action);
+            if (has_action) {
+                bool const is_selected = &command == selected_action;
+                std::string label = std::string(command.name) + "##command_" + std::to_string(i);
+                if (ImGui::Selectable(label.c_str(), is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                    command_to_execute = &command;
+                }
+                if (is_selected && ImGui::IsWindowAppearing()) {
+                    ImGui::SetScrollHereY();
+                }
+            } else {
+                ImGui::TextDisabled("Tip: %.*s", int(command.name.size()), command.name.data());
+            }
+            if (!command.description.empty() && ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+                ImGui::TextUnformatted(command.description.data(), command.description.data() + command.description.size());
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextDisabled("%.*s", int(command.shortcut.size()), command.shortcut.data());
+        }
+
+        if (visible_count == 0) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextDisabled("No matching commands");
+        }
+
+        ImGui::EndTable();
+    }
+
+    if (command_to_execute == nullptr && enter_pressed) {
+        command_to_execute = selected_action;
+    }
+    if (command_to_execute != nullptr) {
+        state.selected_command_name = command_to_execute->name;
+        state.filter.clear();
+        command_to_execute->action();
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }
