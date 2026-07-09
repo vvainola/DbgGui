@@ -67,6 +67,7 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
         plot.autofit_next_frame = false;
     }
 
+    ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
         // Plot unit circle
         ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
@@ -128,6 +129,7 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
 
         ImPlot::EndPlot();
     }
+    ImPlot::PopStyleVar();
 
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CSV_MULTI")) {
