@@ -112,6 +112,9 @@ class CsvPlotter {
     void applySignalTransforms(CsvFileData& file);
     void applyPlottedSignals(CsvFileData& file);
     void updatePlottedSignalSettings();
+    void updateComparisonMode();
+    void snapshotComparisonPlotSettings();
+    void showComparisonFile(CsvFileData& file);
     int dockedPlotCount() const;
     int activePlotCount() const;
     PlotBase& plotAt(int visible_plot_idx);
@@ -179,6 +182,18 @@ class CsvPlotter {
     struct {
         bool reset_colors;
     } m_flags;
+
+    // Comparison selection persists between Alt holds, while the per-plot name
+    // snapshots are refreshed for each new hold and never store signal pointers.
+    struct {
+        bool active = false;
+        bool reset_colors = false;
+        float alt_hold_duration = 0;
+        // Retained after Alt is released so the next comparison starts here.
+        int selected_file_index = 0;
+        std::array<CsvPlotSignalSettings, MAX_PLOT_WINDOWS> docked_plot_settings;
+        std::array<CsvPlotSignalSettings, MAX_UNDOCKED_PLOTS> undocked_plot_settings;
+    } m_comparison;
 
     std::vector<CsvSignal*> m_selected_signals;
     // Flattened list of signal pointers actually submitted this frame (i.e. inside expanded

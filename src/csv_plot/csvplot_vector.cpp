@@ -69,6 +69,12 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
 
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
+        // Vector plots use a different cache key from scalar plots, so reset it
+        // explicitly when comparison mode switches to another file.
+        if (m_flags.reset_colors) {
+            ImPlot::BustColorCache("##Scrolling");
+        }
+
         // Plot unit circle
         ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
         ImPlot::PlotLine("##Unit circle",

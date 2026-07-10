@@ -85,10 +85,12 @@ inline constexpr ImVec4 COLOR_TOOLTIP_LINE = ImVec4(0.7f, 0.7f, 0.7f, 0.6f);
 inline constexpr ImVec4 COLOR_GRAY = ImVec4(0.7f, 0.7f, 0.7f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 inline constexpr ImVec4 COLOR_LIGHT_BLUE = ImVec4(0.4f, 0.6f, 0.9f, 1);
+inline constexpr ImVec4 COLOR_GREEN = ImVec4(0.3f, 0.9f, 0.3f, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 constexpr int CUSTOM_SIGNAL_CAPACITY = 10;
+inline float COMPARISON_MODE_ACTIVATION_TIME = 0.5f;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
@@ -266,6 +268,122 @@ void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
     }
     for (PlotBase& plot : m_undocked_plots) {
         apply_plot_settings(plot);
+    }
+}
+
+void CsvPlotter::snapshotComparisonPlotSettings() {
+    // Store names instead of CsvSignal pointers: a later file has different signal
+    // instances, and a signal missing from one file must be eligible to return later.
+    auto snapshot_plot = [](PlotBase const& plot) {
+        CsvPlotSignalSettings settings;
+        if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            for (CsvSignal const* signal : scalar_plot->signals) {
+                if (!contains(settings.scalar_signals, signal->name)) {
+                    settings.scalar_signals.push_back(signal->name);
+                }
+            }
+        } else if (auto const* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            for (auto const& signals : vector_plot->signals) {
+                addUniquePair(settings.signal_pairs, {signals.first->name, signals.second->name});
+            }
+        } else if (auto const* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            for (auto const& spectrum : spectrum_plot->spectrum) {
+                addUniquePair(settings.signal_pairs,
+                              {spectrum.real->name, spectrum.imag == nullptr ? "" : spectrum.imag->name});
+            }
+        }
+        return settings;
+    };
+
+    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
+        m_comparison.docked_plot_settings[i] = snapshot_plot(m_docked_plots[i]);
+    }
+    for (int i = 0; i < MAX_UNDOCKED_PLOTS; ++i) {
+        m_comparison.undocked_plot_settings[i] = snapshot_plot(m_undocked_plots[i]);
+    }
+}
+
+void CsvPlotter::showComparisonFile(CsvFileData& file) {
+    // Series IDs contain the file name, so reset ImPlot's cache to assign the
+    // colormap in the same snapshot order for every comparison file.
+    m_comparison.reset_colors = true;
+    auto populate_plot = [&](PlotBase& plot, CsvPlotSignalSettings const& settings) {
+        // Discard manual additions from the previous comparison file before
+        // rebuilding this plot from the session's original name-based layout.
+        plot.clearPlot();
+        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+            for (std::string const& signal_name : settings.scalar_signals) {
+                if (CsvSignal* signal = findSignalByName(file, signal_name)) {
+                    scalar_plot->addSignal(signal);
+                }
+            }
+        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+            for (auto const& signal_names : settings.signal_pairs) {
+                CsvSignal* x = findSignalByName(file, signal_names.first);
+                CsvSignal* y = findSignalByName(file, signal_names.second);
+                if (x && y) {
+                    vector_plot->addSignal({x, y});
+                }
+            }
+        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+            for (auto const& signal_names : settings.signal_pairs) {
+                CsvSignal* real = findSignalByName(file, signal_names.first);
+                CsvSignal* imag = signal_names.second.empty() ? nullptr : findSignalByName(file, signal_names.second);
+                if (real && (signal_names.second.empty() || imag)) {
+                    spectrum_plot->addSignal(real, imag);
+                }
+            }
+        }
+    };
+
+    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
+        populate_plot(m_docked_plots[i], m_comparison.docked_plot_settings[i]);
+    }
+    for (int i = 0; i < MAX_UNDOCKED_PLOTS; ++i) {
+        populate_plot(m_undocked_plots[i], m_comparison.undocked_plot_settings[i]);
+    }
+}
+
+void CsvPlotter::updateComparisonMode() {
+    if (!ImGui::GetIO().KeyAlt || m_csv_data.empty()) {
+        // Releasing Alt leaves the last file plotted, but keeps its index for
+        // the next comparison session.
+        m_comparison.active = false;
+        m_comparison.alt_hold_duration = 0;
+        if (m_csv_data.empty()) {
+            m_comparison.selected_file_index = 0;
+        }
+        return;
+    }
+
+    // Files may have been removed since the prior comparison session.
+    m_comparison.selected_file_index = std::clamp(m_comparison.selected_file_index,
+                                                  0,
+                                                  (int)m_csv_data.size() - 1);
+    if (!m_comparison.active) {
+        m_comparison.alt_hold_duration += ImGui::GetIO().DeltaTime;
+        if (m_comparison.alt_hold_duration < COMPARISON_MODE_ACTIVATION_TIME) {
+            return;
+        }
+
+        m_comparison.active = true;
+        // The snapshot remains unchanged while Alt is held, so missing signals
+        // can reappear after cycling past a file that does not contain them.
+        snapshotComparisonPlotSettings();
+        showComparisonFile(*m_csv_data[m_comparison.selected_file_index]);
+        return;
+    }
+
+    int file_index = m_comparison.selected_file_index;
+    // Repeated key presses make it practical to scan a long list of files.
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat)) {
+        file_index = (file_index + (int)m_csv_data.size() - 1) % (int)m_csv_data.size();
+    } else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, ImGuiInputFlags_Repeat)) {
+        file_index = (file_index + 1) % (int)m_csv_data.size();
+    }
+    if (file_index != m_comparison.selected_file_index) {
+        m_comparison.selected_file_index = file_index;
+        showComparisonFile(*m_csv_data[file_index]);
     }
 }
 
@@ -988,6 +1106,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
             updateSavedSettings();
         }
 
+        updateComparisonMode();
         setLayout(main_dock, m_rows, m_cols, m_signals_window_width);
 
         //---------- Rendering ----------
@@ -1552,8 +1671,10 @@ void CsvPlotter::showSignalWindow() {
         ImGui::EndPopup();
     }
 
-    // The flag is active for only a single frame
-    m_flags.reset_colors = false;
+    // The flag is active for only a single frame. A comparison-file switch is
+    // handled before this window is rendered, so carry its pending reset here.
+    m_flags.reset_colors = m_comparison.reset_colors;
+    m_comparison.reset_colors = false;
     if (ImGui::Button("Reset colors")) {
         m_flags.reset_colors = true;
     }
@@ -1661,8 +1782,10 @@ void CsvPlotter::showSignalWindow() {
     m_visible_signals.clear();
 
     std::unique_ptr<CsvFileData>* file_to_remove = nullptr;
+    int file_to_remove_index = -1;
 
-    for (auto& file : m_csv_data) {
+    for (int file_index = 0; file_index < (int)m_csv_data.size(); ++file_index) {
+        auto& file = m_csv_data[file_index];
         // Reload file if it has been rewritten. Wait that file has not been modified in the last 2 seconds
         // in case it is still being written
         if (!file->in_memory && std::filesystem::exists(file->name)) {
@@ -1688,7 +1811,17 @@ void CsvPlotter::showSignalWindow() {
             }
         }
 
+        // Only the file label is highlighted; signal selection and editing stay
+        // available so normal interactions still work during comparison mode.
+        bool const comparison_file_selected = m_comparison.active
+                                           && m_comparison.selected_file_index == file_index;
+        if (comparison_file_selected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, COLOR_GREEN);
+        }
         bool opened = ImGui::TreeNode(file->displayed_name.c_str());
+        if (comparison_file_selected) {
+            ImGui::PopStyleColor();
+        }
         // Make displayed name editable
         if (ImGui::BeginPopupContextItem((file->displayed_name + "context_menu").c_str())) {
             static std::string displayed_name_edit = file->displayed_name;
@@ -1811,6 +1944,7 @@ void CsvPlotter::showSignalWindow() {
             }
             if (ImGui::Button("Remove file")) {
                 file_to_remove = &file;
+                file_to_remove_index = file_index;
             }
             ImGui::SameLine();
             if (ImGui::Button("Save as CSV")) {
@@ -1961,6 +2095,20 @@ void CsvPlotter::showSignalWindow() {
     if (file_to_remove) {
         removeFileFromPlots(**file_to_remove);
         remove(m_csv_data, *file_to_remove);
+        if (m_csv_data.empty()) {
+            m_comparison.active = false;
+            m_comparison.alt_hold_duration = 0;
+            m_comparison.selected_file_index = 0;
+        } else if (file_to_remove_index < m_comparison.selected_file_index) {
+            // Preserve the same selected file after an earlier list entry moves.
+            --m_comparison.selected_file_index;
+        } else if (file_to_remove_index == m_comparison.selected_file_index) {
+            // Do not retain a snapshot whose selected file has been destroyed.
+            m_comparison.active = false;
+            m_comparison.alt_hold_duration = 0;
+            m_comparison.selected_file_index = std::min(m_comparison.selected_file_index,
+                                                        (int)m_csv_data.size() - 1);
+        }
     }
 }
 
