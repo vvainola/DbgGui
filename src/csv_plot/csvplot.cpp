@@ -2097,12 +2097,15 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                 }
             }
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LEGEND")) {
-                std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = *(std::pair<ScalarPlot*, CsvSignal*>*)payload->Data;
-                ScalarPlot* original_plot = plot_and_signal.first;
-                CsvSignal* signal = plot_and_signal.second;
-                if (&plot != original_plot) {
-                    plot.addSignal(signal);
-                    original_plot->removeSignal(signal);
+                std::span<void* const> legend_payload(static_cast<void* const*>(payload->Data),
+                                                      payload->DataSize / sizeof(void*));
+                ScalarPlot* source_plot = static_cast<ScalarPlot*>(legend_payload.front());
+                if (&plot != source_plot) {
+                    for (void* payload_signal : legend_payload.subspan(1)) {
+                        CsvSignal* signal = static_cast<CsvSignal*>(payload_signal);
+                        plot.addSignal(signal);
+                        source_plot->removeSignal(signal);
+                    }
                 }
             }
             ImPlot::EndDragDropTarget();
@@ -2230,10 +2233,18 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
 
             // Legend items can be dragged to other plots to move the signal.
             if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
-                std::pair<ScalarPlot*, CsvSignal*> plot_and_signal = {&plot, signal};
-                ImGui::SetDragDropPayload("LEGEND", &plot_and_signal, sizeof(plot_and_signal));
+                bool const move_all_signals = ImGui::GetIO().KeyShift;
+                std::vector<void*> legend_payload = {&plot};
+                std::span<CsvSignal*> signals_to_drag = move_all_signals ? plot.signals : std::span<CsvSignal*>{&signal, 1};
+                for (CsvSignal* source_signal : signals_to_drag) {
+                    legend_payload.push_back(source_signal);
+                }
+                ImGui::SetDragDropPayload("LEGEND", legend_payload.data(), legend_payload.size() * sizeof(void*));
                 ImGui::TextUnformatted("Drag to plot");
-                ImGui::Text("  %s", signal->name.c_str());
+                for (void* payload_signal : std::span(legend_payload).subspan(1)) {
+                    CsvSignal* source_signal = static_cast<CsvSignal*>(payload_signal);
+                    ImGui::Text("  %s", source_signal->name.c_str());
+                }
                 ImPlot::EndDragDropSource();
             }
         }
