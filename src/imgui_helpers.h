@@ -25,8 +25,10 @@
 #include "imgui.h"
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 void HelpMarker(const char* desc);
@@ -37,10 +39,24 @@ std::optional<ImGuiKey> pressedNumberKey(bool include_minus = true);
 int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data);
 
 struct CommandPaletteCommand {
+    std::string_view id;
     std::string_view name;
-    std::string_view shortcut;
     std::string_view description;
+    ImGuiKeyChord default_hotkey = ImGuiKey_None;
     std::function<void()> action;
+    bool repeatHotkey = false;
 };
 
-void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand const> commands);
+using CommandHotkeyOverrides = std::map<std::string, ImGuiKeyChord>;
+
+bool isValidCommandHotkey(ImGuiKeyChord hotkey);
+ImGuiKeyChord effectiveCommandHotkey(CommandPaletteCommand const& command,
+                                    CommandHotkeyOverrides const& overrides);
+std::string commandHotkeyName(CommandPaletteCommand const& command,
+                              CommandHotkeyOverrides const& overrides);
+void triggerCommandHotkeys(char const* title,
+                           std::span<CommandPaletteCommand const> commands,
+                           CommandHotkeyOverrides const& overrides);
+std::optional<size_t> showCommandPaletteTable(char const* title,
+                                               std::span<CommandPaletteCommand const> commands,
+                                               CommandHotkeyOverrides& overrides);

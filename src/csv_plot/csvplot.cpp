@@ -777,6 +777,28 @@ void CsvPlotter::clearPlots() {
     }
 }
 
+std::vector<CommandPaletteCommand> CsvPlotter::commandPaletteCommands(bool enable_hotkeys) {
+    auto action_if_hotkeys_enabled = [&](auto action) -> std::function<void()> {
+        return enable_hotkeys ? std::function<void()>(action) : std::function<void()>();
+    };
+    return {
+      {"command-palette", "Command palette", "Search CSV Plotter commands and configure their hotkeys.", ImGuiMod_Ctrl | ImGuiKey_P, action_if_hotkeys_enabled([&] { ImGui::OpenPopup("CSV Plotter Command Palette"); })},
+      {"open-files", "Open CSV files", "Open one or more CSV files.", ImGuiKey_None, action_if_hotkeys_enabled([&] { openFilesFromDialog(); })},
+      {"clear-plots", "Clear plots", "Remove every signal from every plot.", ImGuiKey_None, action_if_hotkeys_enabled([&] { clearPlots(); })},
+      {"remove-all-files", "Remove all files", "Remove all loaded files immediately.", ImGuiKey_None, action_if_hotkeys_enabled([&] { removeAllFiles(); })},
+      {"reset-colors", "Reset plot colors", "Reset the plot color assignment.", ImGuiKey_None, action_if_hotkeys_enabled([&] { m_comparison.reset_colors = true; })},
+      {"new-clipboard-file", "New file from clipboard", "Create a file from sample data in the clipboard.", ImGuiMod_Ctrl | ImGuiKey_T, action_if_hotkeys_enabled([&] { addClipboardFileFromClipboard(); })},
+      {"copy-signal-arguments", "Copy signals to clipboard", "Copy command-line arguments for the plotted signals.", ImGuiKey_None, action_if_hotkeys_enabled([&] { copyPlottedSignalArgumentsToClipboard(); })},
+    };
+}
+
+void CsvPlotter::showCommandPalette() {
+    std::vector<CommandPaletteCommand> commands = commandPaletteCommands();
+    if (std::optional<size_t> command_index = showCommandPaletteTable("CSV Plotter Command Palette", commands, m_hotkey_overrides)) {
+        commands[*command_index].action();
+    }
+}
+
 void CsvPlotter::copyPlottedSignalArgumentsToClipboard() {
     std::stringstream ss_signals;
     std::stringstream ss_plots;
@@ -1095,9 +1117,13 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         // ImGui::ShowDemoWindow();
         // ImPlot::ShowDemoWindow();
 
+        std::vector<CommandPaletteCommand> commands = commandPaletteCommands(!ImGui::IsAnyItemActive());
+        triggerCommandHotkeys("CSV Plotter Command Palette", commands, m_hotkey_overrides);
+
         //---------- Main windows ----------
         showErrorModal();
         showSignalWindow();
+        showCommandPalette();
         showPlots();
 
         // Settings are not saved when creating image because the window
@@ -1187,6 +1213,18 @@ void CsvPlotter::loadPreviousSessionSettings() {
             TRY(m_options.theme = settings["window"]["theme"];)
             TRY(m_options.font_size = settings["window"]["font_size"];)
             setTheme(m_options.theme, m_window);
+            m_hotkey_overrides.clear();
+            if (settings.contains("hotkeys") && settings["hotkeys"].is_object()) {
+                for (auto const& [command_id, hotkey] : settings["hotkeys"].items()) {
+                    if (!hotkey.is_number_unsigned() && !hotkey.is_number_integer()) {
+                        continue;
+                    }
+                    ImGuiKeyChord chord = hotkey.get<ImGuiKeyChord>();
+                    if (isValidCommandHotkey(chord)) {
+                        m_hotkey_overrides[command_id] = chord;
+                    }
+                }
+            }
             if (settings.contains("scales") && settings["scales"].is_object()) {
                 for (auto const& scale : settings["scales"].items()) {
                     std::string scale_expression = jsonValueToExpressionString(scale.value());
@@ -1359,6 +1397,9 @@ void CsvPlotter::updateSavedSettings() {
     settings["window"]["font_size"] = m_options.font_size;
     settings["layout"] = ImGui::SaveIniSettingsToMemory(nullptr);
     settings["window"]["signals_window_width"] = m_signals_window_width;
+    for (auto const& [command_id, hotkey] : m_hotkey_overrides) {
+        settings["hotkeys"][command_id] = hotkey;
+    }
     for (auto const& [name, transform] : m_signal_transform_settings) {
         if (transform.scale != 1) {
             settings["scales"][name] = transform.scale_expression;
@@ -1647,14 +1688,14 @@ void CsvPlotter::showSignalWindow() {
         clearPlots();
     }
     ImGui::SameLine();
-    char const* remove_all_files_popup_title = "Remove all files  ";
+    char const* remove_all_files_popup_title = "Remove all files";
     if (ImGui::Button("Remove all files")) {
         ImGui::OpenPopup(remove_all_files_popup_title);
     }
     float const remove_all_files_popup_width = ImGui::CalcTextSize(remove_all_files_popup_title).x;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(remove_all_files_popup_width, 0));
-    if (ImGui::BeginPopupModal(remove_all_files_popup_title, NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(remove_all_files_popup_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             ImGui::CloseCurrentPopup();
         }

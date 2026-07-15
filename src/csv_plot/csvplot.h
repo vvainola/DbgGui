@@ -24,6 +24,7 @@
 #include "plot_base.h"
 #include "themes.h"
 #include "imgui.h"
+#include "imgui_helpers.h"
 #include <expected>
 #include <string>
 #include <filesystem>
@@ -97,6 +98,8 @@ class CsvPlotter {
 
   private:
     void showErrorModal();
+    void showCommandPalette();
+    std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_hotkeys = true);
     void showCustomSignalCreator();
     void showSignalWindow();
     void showPlots();
@@ -146,6 +149,7 @@ class CsvPlotter {
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
+    CommandHotkeyOverrides m_hotkey_overrides;
     std::vector<RecentCustomEquation> m_recent_custom_equations;
     // When signals are given on the command line they override the persisted selection at
     // startup. Only normal GUI sessions restore saved plotted signal assignments.
@@ -178,7 +182,6 @@ class CsvPlotter {
     double m_drag_x2 = 0;
     std::string m_error_message;
     int m_clipboard_file_count = 0;
-
     struct {
         bool reset_colors;
     } m_flags;

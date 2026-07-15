@@ -43,17 +43,58 @@ std::optional<char> numberKeyCharacter(ImGuiKey key) {
     return std::nullopt;
 }
 
-bool matchesCommand(CommandPaletteCommand const& command, std::string const& filter) {
+bool matchesCommand(CommandPaletteCommand const& command,
+                    std::string const& filter,
+                    CommandHotkeyOverrides const& overrides) {
     return filter.empty()
         || str::fuzzy_match(filter, command.name)
-        || str::fuzzy_match(filter, command.shortcut)
+        || str::fuzzy_match(filter, commandHotkeyName(command, overrides))
         || str::fuzzy_match(filter, command.description);
 }
 
 struct CommandPaletteState {
     std::string filter;
     std::string selected_command_name;
+    std::string edited_command_id;
+    ImGuiKeyChord captured_hotkey = ImGuiKey_None;
 };
+
+bool isModifierKey(ImGuiKey key) {
+    return key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl
+        || key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift
+        || key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt
+        || key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper;
+}
+
+std::optional<ImGuiKeyChord> pressedHotkey() {
+    for (int key_value = ImGuiKey_NamedKey_BEGIN; key_value < ImGuiKey_GamepadStart; ++key_value) {
+        ImGuiKey key = ImGuiKey(key_value);
+        if (isModifierKey(key) || !ImGui::IsKeyPressed(key, false)) {
+            continue;
+        }
+        return ImGuiKeyChord(key | ImGui::GetIO().KeyMods);
+    }
+    return std::nullopt;
+}
+
+void setCommandHotkey(CommandPaletteCommand const& command,
+                      ImGuiKeyChord hotkey,
+                      std::span<CommandPaletteCommand const> commands,
+                      CommandHotkeyOverrides& overrides) {
+    if (hotkey != ImGuiKey_None) {
+        for (CommandPaletteCommand const& other : commands) {
+            if (other.id == command.id || effectiveCommandHotkey(other, overrides) != hotkey) {
+                continue;
+            }
+            overrides[std::string(other.id)] = ImGuiKey_None;
+        }
+    }
+    if (hotkey == command.default_hotkey) {
+        overrides.erase(std::string(command.id));
+    } else {
+        overrides[std::string(command.id)] = hotkey;
+    }
+}
 
 } // namespace
 
@@ -135,13 +176,73 @@ int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
     return 0;
 }
 
-void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand const> commands) {
+bool isValidCommandHotkey(ImGuiKeyChord hotkey) {
+    if (hotkey == ImGuiKey_None) {
+        return true;
+    }
+    ImGuiKey key = ImGuiKey(hotkey & ~ImGuiMod_Mask_);
+    return key >= ImGuiKey_NamedKey_BEGIN && key < ImGuiKey_GamepadStart && !isModifierKey(key);
+}
+
+ImGuiKeyChord effectiveCommandHotkey(CommandPaletteCommand const& command,
+                                     CommandHotkeyOverrides const& overrides) {
+    auto it = overrides.find(std::string(command.id));
+    return it == overrides.end() ? command.default_hotkey : it->second;
+}
+
+std::string commandHotkeyName(CommandPaletteCommand const& command,
+                              CommandHotkeyOverrides const& overrides) {
+    ImGuiKeyChord hotkey = effectiveCommandHotkey(command, overrides);
+    if (hotkey == ImGuiKey_None) {
+        return "";
+    }
+
+    std::string result;
+    if (hotkey & ImGuiMod_Ctrl) {
+        result += "Ctrl+";
+    }
+    if (hotkey & ImGuiMod_Shift) {
+        result += "Shift+";
+    }
+    if (hotkey & ImGuiMod_Alt) {
+        result += "Alt+";
+    }
+    if (hotkey & ImGuiMod_Super) {
+        result += "Super+";
+    }
+    result += ImGui::GetKeyName(ImGuiKey(hotkey & ~ImGuiMod_Mask_));
+    return result;
+}
+
+void triggerCommandHotkeys(char const* title,
+                           std::span<CommandPaletteCommand const> commands,
+                           CommandHotkeyOverrides const& overrides) {
+    if (ImGui::IsPopupOpen(title)) {
+        return;
+    }
+    for (CommandPaletteCommand const& command : commands) {
+        ImGuiKeyChord hotkey = effectiveCommandHotkey(command, overrides);
+        if (!command.action || hotkey == ImGuiKey_None) {
+            continue;
+        }
+        ImGuiKey key = ImGuiKey(hotkey & ~ImGuiMod_Mask_);
+        ImGuiKey modifiers = ImGuiKey(hotkey & ImGuiMod_Mask_);
+        if (ImGui::GetIO().KeyMods == modifiers && ImGui::IsKeyPressed(key, command.repeatHotkey)) {
+            command.action();
+            return;
+        }
+    }
+}
+
+std::optional<size_t> showCommandPaletteTable(char const* title,
+                                               std::span<CommandPaletteCommand const> commands,
+                                               CommandHotkeyOverrides& overrides) {
     static std::map<std::string, CommandPaletteState> states;
     CommandPaletteState& state = states[title];
 
     ImGui::SetNextWindowSize(ImVec2(620, 420), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_NoSavedSettings)) {
-        return;
+        return std::nullopt;
     }
 
     if (ImGui::IsWindowAppearing()) {
@@ -160,9 +261,11 @@ void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand 
     CommandPaletteCommand const* first_matching_action = nullptr;
     CommandPaletteCommand const* selected_action = nullptr;
     CommandPaletteCommand const* command_to_execute = nullptr;
+    std::optional<size_t> command_to_execute_index;
+    bool open_hotkey_editor = false;
 
     for (CommandPaletteCommand const& command : commands) {
-        if (!command.action || !matchesCommand(command, state.filter)) {
+        if (!command.action || !matchesCommand(command, state.filter, overrides)) {
             continue;
         }
         if (first_matching_action == nullptr) {
@@ -185,7 +288,7 @@ void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand 
         int visible_count = 0;
         for (size_t i = 0; i < commands.size(); ++i) {
             CommandPaletteCommand const& command = commands[i];
-            if (!matchesCommand(command, state.filter)) {
+            if (!matchesCommand(command, state.filter, overrides)) {
                 continue;
             }
             ++visible_count;
@@ -198,6 +301,15 @@ void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand 
                 std::string label = std::string(command.name) + "##command_" + std::to_string(i);
                 if (ImGui::Selectable(label.c_str(), is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
                     command_to_execute = &command;
+                    command_to_execute_index = i;
+                }
+                if (ImGui::BeginPopupContextItem()) {
+                    if (ImGui::MenuItem("Change hotkey")) {
+                        state.edited_command_id = command.id;
+                        state.captured_hotkey = effectiveCommandHotkey(command, overrides);
+                        open_hotkey_editor = true;
+                    }
+                    ImGui::EndPopup();
                 }
                 if (is_selected && ImGui::IsWindowAppearing()) {
                     ImGui::SetScrollHereY();
@@ -214,7 +326,8 @@ void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand 
             }
 
             ImGui::TableSetColumnIndex(1);
-            ImGui::TextDisabled("%.*s", int(command.shortcut.size()), command.shortcut.data());
+            std::string hotkey_name = commandHotkeyName(command, overrides);
+            ImGui::TextDisabled("%s", hotkey_name.c_str());
         }
 
         if (visible_count == 0) {
@@ -228,13 +341,62 @@ void showCommandPaletteTable(char const* title, std::span<CommandPaletteCommand 
 
     if (command_to_execute == nullptr && enter_pressed) {
         command_to_execute = selected_action;
+        if (command_to_execute != nullptr) {
+            command_to_execute_index = size_t(command_to_execute - commands.data());
+        }
     }
     if (command_to_execute != nullptr) {
         state.selected_command_name = command_to_execute->name;
         state.filter.clear();
-        command_to_execute->action();
         ImGui::CloseCurrentPopup();
     }
 
+    if (open_hotkey_editor) {
+        ImGui::OpenPopup("Edit hotkey");
+    }
+
+    CommandPaletteCommand const* edited_command = nullptr;
+    for (CommandPaletteCommand const& command : commands) {
+        if (command.id == state.edited_command_id) {
+            edited_command = &command;
+            break;
+        }
+    }
+    if (edited_command != nullptr && ImGui::BeginPopupModal("Edit hotkey", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            state.edited_command_id.clear();
+            ImGui::CloseCurrentPopup();
+        } else if (std::optional<ImGuiKeyChord> hotkey = pressedHotkey()) {
+            state.captured_hotkey = *hotkey;
+        }
+
+        ImGui::Text("%.*s", int(edited_command->name.size()), edited_command->name.data());
+        ImGui::TextDisabled("Press a key combination to change the active hotkey.");
+        std::string captured_name = commandHotkeyName(
+          CommandPaletteCommand{.id = edited_command->id, .default_hotkey = state.captured_hotkey}, {});
+        ImGui::Text("Hotkey: %s", captured_name.empty() ? "None" : captured_name.c_str());
+        ImGui::Separator();
+        if (ImGui::Button("Save")) {
+            setCommandHotkey(*edited_command, state.captured_hotkey, commands, overrides);
+            state.edited_command_id.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) {
+            state.captured_hotkey = ImGuiKey_None;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            state.captured_hotkey = edited_command->default_hotkey;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            state.edited_command_id.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     ImGui::EndPopup();
+    return command_to_execute_index;
 }

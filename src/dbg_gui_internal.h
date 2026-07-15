@@ -113,6 +113,8 @@ class DbgGui {
     void showScriptWindow();
     void showGridWindow();
     void showCommandPalette();
+    std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_sampling_hotkeys = true);
+    std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showScalarPlots();
     void showVectorPlots();
@@ -268,6 +270,7 @@ class DbgGui {
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
+    CommandHotkeyOverrides m_hotkey_overrides;
     std::filesystem::file_time_type m_last_settings_write_time;
     bool m_clear_saved_settings = false;
 

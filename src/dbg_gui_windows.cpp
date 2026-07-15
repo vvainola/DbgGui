@@ -532,33 +532,34 @@ void DbgGui::showDockSpaces() {
 }
 
 void DbgGui::showMainMenuBar() {
+    bool open_command_palette = false;
     if (ImGui::BeginMainMenuBar()) {
         ImGui::Text("Time %.3f s", m_plot_timestamp);
         ImGui::SameLine();
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Menu")) {
+            if (ImGui::Button("Command palette")) {
+                open_command_palette = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", commandHotkeyName("command-palette", ImGuiMod_Ctrl | ImGuiKey_P).c_str());
+            ImGui::Separator();
 
             // Pause after
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
             double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
-                ImGui::SetKeyboardFocusHere();
-            }
             if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
                 m_pause_at_time = m_sample_timestamp + pause_after;
             }
             ImGui::SameLine();
-            HelpMarker("Pause after x seconds. Hotkey is \"numpad /\"");
+            HelpMarker(std::format("Pause after x seconds. Hotkey is \"{}\".", commandHotkeyName("pause-after", ImGuiKey_KeypadDivide)).c_str());
 
             // Pause at
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
-                ImGui::SetKeyboardFocusHere();
-            }
             ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
             ImGui::SameLine();
-            HelpMarker("Pause at given time. Hotkey is \"numpad *\"");
+            HelpMarker(std::format("Pause at given time. Hotkey is \"{}\".", commandHotkeyName("pause-at", ImGuiKey_KeypadMultiply)).c_str());
 
             if (ImGui::Button("Add..")) {
                 ImGui::OpenPopup("##Add");
@@ -569,7 +570,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new scalar plot is ctrl+shift+1");
+                HelpMarker(std::format("Hotkey to add new scalar plot is {}.", commandHotkeyName("add-scalar-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1)).c_str());
                 addPopupModal(str::ADD_SCALAR_PLOT);
 
                 // Vector plot
@@ -577,7 +578,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new vector plot is ctrl+shift+2");
+                HelpMarker(std::format("Hotkey to add new vector plot is {}.", commandHotkeyName("add-vector-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2)).c_str());
                 addPopupModal(str::ADD_VECTOR_PLOT);
 
                 // Spectrum plot
@@ -585,7 +586,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new spectrum plot is ctrl+shift+3");
+                HelpMarker(std::format("Hotkey to add new spectrum plot is {}.", commandHotkeyName("add-spectrum-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3)).c_str());
                 addPopupModal(str::ADD_SPECTRUM_PLOT);
 
                 // Custom window
@@ -593,7 +594,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new custom window is ctrl+shift+4");
+                HelpMarker(std::format("Hotkey to add new custom window is {}.", commandHotkeyName("add-custom-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4)).c_str());
                 addPopupModal(str::ADD_CUSTOM_WINDOW);
 
                 // Script window
@@ -601,7 +602,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new script window is ctrl+shift+5");
+                HelpMarker(std::format("Hotkey to add new script window is {}.", commandHotkeyName("add-script-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_5)).c_str());
                 addPopupModal(str::ADD_SCRIPT_WINDOW);
 
                 // Grid window
@@ -626,7 +627,7 @@ void DbgGui::showMainMenuBar() {
                 copyAllScalarSamplesToClipboard();
             }
             ImGui::SameLine();
-            HelpMarker("Copy visible samples of all scalar signals to clipboard. Hotkey is ctrl+T");
+            HelpMarker(std::format("Copy visible samples of all scalar signals to clipboard. Hotkey is {}.", commandHotkeyName("copy-visible-samples", ImGuiMod_Ctrl | ImGuiKey_T)).c_str());
             if (ImGui::Button("Save all plots as csv")) {
                 std::vector<Scalar*> scalars;
                 for (auto const& scalar : m_scalars) {
@@ -639,13 +640,13 @@ void DbgGui::showMainMenuBar() {
                 saveSnapshot();
             }
             ImGui::SameLine();
-            HelpMarker("Save snapshot of global variables to restore the same values later. Hotkey is ctrl+S");
+            HelpMarker(std::format("Save snapshot of global variables to restore the same values later. Hotkey is {}.", commandHotkeyName("save-snapshot", ImGuiMod_Ctrl | ImGuiKey_S)).c_str());
             ImGui::SameLine();
             if (ImGui::Button("Load snapshot")) {
                 loadSnapshot();
             }
             ImGui::SameLine();
-            HelpMarker("Load values of global variables from previously saved snapshot. Hotkey is ctrl+R");
+            HelpMarker(std::format("Load values of global variables from previously saved snapshot. Hotkey is {}.", commandHotkeyName("load-snapshot", ImGuiMod_Ctrl | ImGuiKey_R)).c_str());
             ImGui::Separator();
 
             // Options
@@ -745,6 +746,9 @@ void DbgGui::showMainMenuBar() {
         }
 
         ImGui::EndMainMenuBar();
+    }
+    if (open_command_palette) {
+        ImGui::OpenPopup("Command Palette");
     }
 }
 

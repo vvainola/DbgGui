@@ -273,11 +273,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     synchronizeSpeed();
 }
 
-void DbgGui::showCommandPalette() {
-    char const* popup_to_open = nullptr;
-    auto open_popup = [&](char const* popup_name) {
-        popup_to_open = popup_name;
-    };
+std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sampling_hotkeys) {
     auto save_all_plots_as_csv = [&] {
         std::vector<Scalar*> scalars;
         scalars.reserve(m_scalars.size());
@@ -287,33 +283,48 @@ void DbgGui::showCommandPalette() {
         saveScalarsAsCsv(getFilenameToSave(), scalars, m_linked_scalar_x_axis_limits);
     };
 
-    std::vector<CommandPaletteCommand> commands = {{
-      {"Start / pause sampling", "Space", "Toggle DbgGui between running and paused.", [&] { m_paused = !m_paused; }},
-      {"Step one sample", "Shift+Space", "Resume briefly to advance the target one sample.", [&] {
-           m_pause_at_time = std::numeric_limits<double>::epsilon();
-           m_paused = false;
-       }},
-      {"Double simulation speed", "Numpad +", "Increase simulated speed relative to real time.", [&] { m_simulation_speed *= 2.; }},
-      {"Halve simulation speed", "Numpad -", "Decrease simulated speed relative to real time.", [&] { m_simulation_speed /= 2.; }},
-      {"Pause after", "Numpad /", "Open the pause-after-time dialog.", [&] { open_popup(str::PAUSE_AFTER); }},
-      {"Pause at", "Numpad *", "Open the pause-at-time dialog.", [&] { open_popup(str::PAUSE_AT); }},
-      {"Add scalar plot", "Ctrl+Shift+1", "Open the add-scalar-plot dialog.", [&] { open_popup(str::ADD_SCALAR_PLOT); }},
-      {"Add vector plot", "Ctrl+Shift+2", "Open the add-vector-plot dialog.", [&] { open_popup(str::ADD_VECTOR_PLOT); }},
-      {"Add spectrum plot", "Ctrl+Shift+3", "Open the add-spectrum-plot dialog.", [&] { open_popup(str::ADD_SPECTRUM_PLOT); }},
-      {"Add custom window", "Ctrl+Shift+4", "Open the add-custom-window dialog.", [&] { open_popup(str::ADD_CUSTOM_WINDOW); }},
-      {"Add script window", "Ctrl+Shift+5", "Open the add-script-window dialog.", [&] { open_popup(str::ADD_SCRIPT_WINDOW); }},
-      {"Add dockspace", "Ctrl+Shift+6", "Open the add-dockspace dialog.", [&] { open_popup(str::ADD_DOCKSPACE); }},
-      {"Add grid window", "", "Open the add-grid-window dialog.", [&] { open_popup(str::ADD_GRID_WINDOW); }},
-      {"Copy visible samples to clipboard", "Ctrl+T", "Copy visible scalar samples for import into CsvPlotter.", [&] { copyAllScalarSamplesToClipboard(); }},
-      {"Save all plots as CSV", "", "Export visible scalar samples from all plots to a CSV file.", save_all_plots_as_csv},
-      {"Save snapshot", "Ctrl+S", "Save current global variable values.", [&] { saveSnapshot(); }},
-      {"Load snapshot", "Ctrl+R", "Restore global variable values from a snapshot.", [&] { loadSnapshot(); }},
-      {"Create custom signal", "Ctrl+Shift+click symbol", "Select symbols, then Ctrl+Shift-click a symbol in the Symbols tree to open the Custom Signal Creator.", {}},
-    }};
+    std::function<void()> start_pause_action;
+    std::function<void()> step_action;
+    if (enable_sampling_hotkeys) {
+        start_pause_action = [&] { m_paused = !m_paused; };
+        step_action = [&] {
+            m_pause_at_time = std::numeric_limits<double>::epsilon();
+            m_paused = false;
+        };
+    }
 
-    showCommandPaletteTable("Command Palette", commands);
-    if (popup_to_open != nullptr) {
-        ImGui::OpenPopup(popup_to_open);
+    return {
+      {"command-palette", "Command palette", "Search available commands and configure their hotkeys.", ImGuiMod_Ctrl | ImGuiKey_P, [&] { ImGui::OpenPopup("Command Palette"); }},
+      {"start-pause", "Start / pause sampling", "Toggle DbgGui between running and paused.", ImGuiKey_Space, start_pause_action},
+      {"step", "Step one sample", "Resume briefly to advance the target one sample.", ImGuiMod_Shift | ImGuiKey_Space, step_action, true},
+      {"double-speed", "Double simulation speed", "Increase simulated speed relative to real time.", ImGuiKey_KeypadAdd, [&] { m_simulation_speed *= 2.; }},
+      {"halve-speed", "Halve simulation speed", "Decrease simulated speed relative to real time.", ImGuiKey_KeypadSubtract, [&] { m_simulation_speed /= 2.; }},
+      {"pause-after", "Pause after", "Open the pause-after-time dialog.", ImGuiKey_KeypadDivide, [&] { ImGui::OpenPopup(str::PAUSE_AFTER); }},
+      {"pause-at", "Pause at", "Open the pause-at-time dialog.", ImGuiKey_KeypadMultiply, [&] { ImGui::OpenPopup(str::PAUSE_AT); }},
+      {"add-scalar-plot", "Add scalar plot", "Open the add-scalar-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1, [&] { ImGui::OpenPopup(str::ADD_SCALAR_PLOT); }},
+      {"add-vector-plot", "Add vector plot", "Open the add-vector-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2, [&] { ImGui::OpenPopup(str::ADD_VECTOR_PLOT); }},
+      {"add-spectrum-plot", "Add spectrum plot", "Open the add-spectrum-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3, [&] { ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT); }},
+      {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
+      {"add-script-window", "Add script window", "Open the add-script-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_5, [&] { ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW); }},
+      {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
+      {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
+      {"copy-visible-samples", "Copy visible samples to clipboard", "Copy visible scalar samples for import into CsvPlotter.", ImGuiMod_Ctrl | ImGuiKey_T, [&] { copyAllScalarSamplesToClipboard(); }},
+      {"save-plots-csv", "Save all plots as CSV", "Export visible scalar samples from all plots to a CSV file.", ImGuiKey_None, save_all_plots_as_csv},
+      {"save-snapshot", "Save snapshot", "Save current global variable values.", ImGuiMod_Ctrl | ImGuiKey_S, [&] { saveSnapshot(); }},
+      {"load-snapshot", "Load snapshot", "Restore global variable values from a snapshot.", ImGuiMod_Ctrl | ImGuiKey_R, [&] { loadSnapshot(); }},
+      {"custom-signal-tip", "Create custom signal", "Select symbols, then Ctrl+Shift-click a symbol in the Symbols tree to open the Custom Signal Creator.", ImGuiKey_None, {}},
+    };
+}
+
+std::string DbgGui::commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const {
+    CommandPaletteCommand command{.id = command_id, .default_hotkey = default_hotkey};
+    return ::commandHotkeyName(command, m_hotkey_overrides);
+}
+
+void DbgGui::showCommandPalette() {
+    std::vector<CommandPaletteCommand> commands = commandPaletteCommands();
+    if (std::optional<size_t> command_index = showCommandPaletteTable("Command Palette", commands, m_hotkey_overrides)) {
+        commands[*command_index].action();
     }
 }
 
@@ -367,42 +378,8 @@ void DbgGui::updateLoop() {
         // ImPlot::ShowDemoWindow();
 
         //---------- Hotkeys ----------
-        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P)) {
-            ImGui::OpenPopup("Command Palette");
-        } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
-            m_paused = !m_paused;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_Space) && ImGui::IsKeyDown(ImGuiKey_LeftShift) && !ImGui::IsAnyItemActive()) {
-            m_pause_at_time = std::numeric_limits<double>::epsilon();
-            m_paused = false;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) && !ImGui::IsAnyItemActive()) {
-            m_paused = !m_paused;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) {
-            m_simulation_speed *= 2.;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) {
-            m_simulation_speed /= 2.;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
-            ImGui::OpenPopup(str::PAUSE_AFTER);
-        } else if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
-            ImGui::OpenPopup(str::PAUSE_AT);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_1)) {
-            ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_2)) {
-            ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_3)) {
-            ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_4)) {
-            ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_5)) {
-            ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_6)) {
-            ImGui::OpenPopup(str::ADD_DOCKSPACE);
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_T)) {
-            copyAllScalarSamplesToClipboard();
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
-            saveSnapshot();
-        } else if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
-            loadSnapshot();
-        }
+        std::vector<CommandPaletteCommand> commands = commandPaletteCommands(!ImGui::IsAnyItemActive());
+        triggerCommandHotkeys("Command Palette", commands, m_hotkey_overrides);
         showCommandPalette();
         addPopupModal(str::ADD_SCALAR_PLOT);
         addPopupModal(str::ADD_VECTOR_PLOT);
@@ -485,6 +462,19 @@ void DbgGui::loadPreviousSessionSettings() {
 
         m_options.fromJson(m_settings["options"]);
         setTheme(m_options.theme, m_window);
+
+        m_hotkey_overrides.clear();
+        if (m_settings.contains("hotkeys") && m_settings["hotkeys"].is_object()) {
+            for (auto const& [command_id, hotkey] : m_settings["hotkeys"].items()) {
+                if (!hotkey.is_number_unsigned() && !hotkey.is_number_integer()) {
+                    continue;
+                }
+                ImGuiKeyChord chord = hotkey.get<ImGuiKeyChord>();
+                if (isValidCommandHotkey(chord)) {
+                    m_hotkey_overrides[command_id] = chord;
+                }
+            }
+        }
 
         // Buffer size and window position are set only once and not synchronized with multiple processes
         static bool once = false;
@@ -746,6 +736,10 @@ void DbgGui::updateSavedSettings() {
     m_settings["window"]["xpos"] = xpos;
     m_settings["window"]["ypos"] = ypos;
     m_settings["options"] = m_options.toJson();
+    m_settings["hotkeys"] = nlohmann::json::object();
+    for (auto const& [command_id, hotkey] : m_hotkey_overrides) {
+        m_settings["hotkeys"][command_id] = hotkey;
+    }
     m_settings["initial_focus"]["scalars"] = m_window_focus.scalars.focused;
     m_settings["initial_focus"]["vectors"] = m_window_focus.vectors.focused;
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
