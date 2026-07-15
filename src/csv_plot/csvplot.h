@@ -136,8 +136,10 @@ class CsvPlotter {
     void showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<CsvSignal*> const& signals_to_update);
     std::vector<CsvSignal*> sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals);
 
-    void updateSavedSettings();
+    void updateSavedSettings(bool force = false);
     void loadPreviousSessionSettings();
+    void saveSettings();
+    void loadSettings();
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
     void openFilesFromDialog();

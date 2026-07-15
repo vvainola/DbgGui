@@ -789,11 +789,14 @@ std::vector<CommandPaletteCommand> CsvPlotter::commandPaletteCommands(bool enabl
       {"reset-colors", "Reset plot colors", "Reset the plot color assignment.", ImGuiKey_None, action_if_hotkeys_enabled([&] { m_comparison.reset_colors = true; })},
       {"new-clipboard-file", "New file from clipboard", "Create a file from sample data in the clipboard.", ImGuiMod_Ctrl | ImGuiKey_T, action_if_hotkeys_enabled([&] { addClipboardFileFromClipboard(); })},
       {"copy-signal-arguments", "Copy signals to clipboard", "Copy command-line arguments for the plotted signals.", ImGuiKey_None, action_if_hotkeys_enabled([&] { copyPlottedSignalArgumentsToClipboard(); })},
+      {"save-settings", "Save settings", "Save the current plot configuration to a JSON file.", ImGuiKey_None, action_if_hotkeys_enabled([&] { saveSettings(); })},
+      {"load-settings", "Load settings", "Load a plot configuration from a JSON file.", ImGuiKey_None, action_if_hotkeys_enabled([&] { loadSettings(); })},
     };
 }
 
 void CsvPlotter::showCommandPalette() {
     std::vector<CommandPaletteCommand> commands = commandPaletteCommands();
+    std::erase_if(commands, [](CommandPaletteCommand const& command) { return command.id == "command-palette"; });
     if (std::optional<size_t> command_index = showCommandPaletteTable("CSV Plotter Command Palette", commands, m_hotkey_overrides)) {
         commands[*command_index].action();
     }
@@ -1367,7 +1370,69 @@ void CsvPlotter::loadPreviousSessionSettings() {
     }
 }
 
-void CsvPlotter::updateSavedSettings() {
+void CsvPlotter::saveSettings() {
+    std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
+#if WINDOWS
+    settings_dir = str::replaceAll(settings_dir, "/", "\\");
+#endif
+    std::filesystem::create_directories(settings_dir);
+    nfdchar_t* out_path = nullptr;
+    nfdresult_t result = NFD_SaveDialog("json", settings_dir.c_str(), &out_path);
+    if (result != NFD_OKAY) {
+        if (result == NFD_ERROR) {
+            m_error_message = std::format("Failed to open the save-settings dialog: {}", NFD_GetError());
+        }
+        return;
+    }
+    std::string out(out_path);
+    free(out_path);
+    if (!out.ends_with(".json")) {
+        out += ".json";
+    }
+
+    // First write the current in-memory plot configuration to the session file.
+    updateSavedSettings(true);
+    std::filesystem::copy_file(settings_dir + "settings.json", out, std::filesystem::copy_options::overwrite_existing);
+}
+
+void CsvPlotter::loadSettings() {
+    std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
+#if WINDOWS
+    settings_dir = str::replaceAll(settings_dir, "/", "\\");
+#endif
+    std::filesystem::create_directories(settings_dir);
+    nfdchar_t* in_path = nullptr;
+    nfdresult_t result = NFD_OpenDialog("json", settings_dir.c_str(), &in_path);
+    if (result != NFD_OKAY) {
+        if (result == NFD_ERROR) {
+            m_error_message = std::format("Failed to open the load-settings dialog: {}", NFD_GetError());
+        }
+        return;
+    }
+    std::string in(in_path);
+    free(in_path);
+
+    // Keep the imported configuration as the next session's starting point too.
+    std::filesystem::copy_file(in, settings_dir + "settings.json", std::filesystem::copy_options::overwrite_existing);
+
+    // Reset state that is restored from settings before applying the imported configuration.
+    clearPlots();
+    for (PlotBase& plot : m_docked_plots) {
+        plot.settings = {};
+        plot.setPlotType(CsvPlotType::Scalar);
+    }
+    for (PlotBase& plot : m_undocked_plots) {
+        plot.settings = {};
+        plot.setPlotType(CsvPlotType::Scalar);
+    }
+    m_signal_transform_settings.clear();
+    m_signal_plot_style_settings.clear();
+    m_recent_custom_equations.clear();
+    m_use_saved_plotted_signals = true;
+    loadPreviousSessionSettings();
+}
+
+void CsvPlotter::updateSavedSettings(bool force) {
     int width, height;
     glfwGetWindowSize(m_window, &width, &height);
     int xpos, ypos;
@@ -1450,7 +1515,7 @@ void CsvPlotter::updateSavedSettings() {
         settings["recent_custom_equations"].push_back({{"name", recent.name}, {"equation", recent.equation}});
     }
     static nlohmann::json settings_saved = settings;
-    if (settings != settings_saved) {
+    if (force || settings != settings_saved) {
         settings_saved = settings;
 
         std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));

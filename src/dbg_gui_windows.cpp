@@ -681,23 +681,13 @@ void DbgGui::showMainMenuBar() {
 
             ImGui::Separator();
 
-            const char* env = std::getenv(USER_SETTINGS_LOCATION);
-            if (env) {
-                std::string settings_dir = std::format("{}/.dbg_gui/", env);
+            if (std::getenv(USER_SETTINGS_LOCATION)) {
                 if (ImGui::Button("Save settings")) {
-                    std::string out_path = getFilenameToSave("json", settings_dir);
-                    if (!out_path.empty()) {
-                        std::ofstream(out_path) << std::setw(4) << m_settings;
-                    }
+                    saveSettings();
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Load settings")) {
-                    std::string out_path = getFilenameToOpen("json", settings_dir);
-                    if (!out_path.empty()) {
-                        // Overwrite existing settings. The file will be reloaded in updateSavedSettings
-                        std::string settings_path = std::format("{}/settings.json", settings_dir);
-                        std::filesystem::copy_file(out_path, settings_path, std::filesystem::copy_options::overwrite_existing);
-                    }
+                    loadSettings();
                 }
             }
 

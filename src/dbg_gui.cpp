@@ -312,6 +312,8 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"save-plots-csv", "Save all plots as CSV", "Export visible scalar samples from all plots to a CSV file.", ImGuiKey_None, save_all_plots_as_csv},
       {"save-snapshot", "Save snapshot", "Save current global variable values.", ImGuiMod_Ctrl | ImGuiKey_S, [&] { saveSnapshot(); }},
       {"load-snapshot", "Load snapshot", "Restore global variable values from a snapshot.", ImGuiMod_Ctrl | ImGuiKey_R, [&] { loadSnapshot(); }},
+      {"save-settings", "Save settings", "Save the current DbgGui configuration to a JSON file.", ImGuiKey_None, [&] { saveSettings(); }},
+      {"load-settings", "Load settings", "Load a DbgGui configuration from a JSON file.", ImGuiKey_None, [&] { loadSettings(); }},
       {"custom-signal-tip", "Create custom signal", "Select symbols, then Ctrl+Shift-click a symbol in the Symbols tree to open the Custom Signal Creator.", ImGuiKey_None, {}},
     };
 }
@@ -323,8 +325,35 @@ std::string DbgGui::commandHotkeyName(std::string_view command_id, ImGuiKeyChord
 
 void DbgGui::showCommandPalette() {
     std::vector<CommandPaletteCommand> commands = commandPaletteCommands();
+    std::erase_if(commands, [](CommandPaletteCommand const& command) { return command.id == "command-palette"; });
     if (std::optional<size_t> command_index = showCommandPaletteTable("Command Palette", commands, m_hotkey_overrides)) {
         commands[*command_index].action();
+    }
+}
+
+void DbgGui::saveSettings() {
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    if (env == nullptr) {
+        return;
+    }
+
+    std::string out_path = getFilenameToSave("json", std::format("{}/.dbg_gui/", env));
+    if (!out_path.empty()) {
+        std::ofstream(out_path) << std::setw(4) << m_settings;
+    }
+}
+
+void DbgGui::loadSettings() {
+    const char* env = std::getenv(USER_SETTINGS_LOCATION);
+    if (env == nullptr) {
+        return;
+    }
+
+    std::string settings_dir = std::format("{}/.dbg_gui/", env);
+    std::string in_path = getFilenameToOpen("json", settings_dir);
+    if (!in_path.empty()) {
+        // Overwrite existing settings. The file will be reloaded in updateSavedSettings.
+        std::filesystem::copy_file(in_path, settings_dir + "settings.json", std::filesystem::copy_options::overwrite_existing);
     }
 }
 

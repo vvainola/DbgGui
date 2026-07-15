@@ -122,6 +122,8 @@ class DbgGui {
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
+    void saveSettings();
+    void loadSettings();
     void setInitialFocus();
     void synchronizeSpeed();
     void copyAllScalarSamplesToClipboard();
