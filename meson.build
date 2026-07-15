@@ -214,7 +214,7 @@ else
     csv_plotter_icon = []
 endif
 
-csv_plotter = executable('csv_plotter',
+csv_plotter = executable('csvplotter',
     sources : [
         'src/csv_plot/csv_helpers.cpp',
         'src/csv_plot/csvplot_custom_signal.cpp',
