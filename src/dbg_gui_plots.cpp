@@ -554,12 +554,16 @@ void DbgGui::showVectorPlots() {
                         vector_plot.addVectorToPlot(vector);
                     }
                 }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
-                    VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
-                    VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
-                    Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
-                    m_sampler.startSampling(vector);
-                    vector_plot.addVectorToPlot(vector);
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+                    std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
+                                                      payload->DataSize / sizeof(VariantSymbol*));
+                    if (symbols.size() != 2) {
+                        logMessage("Vector plots require exactly two symbols.");
+                    } else {
+                        Vector2D* vector = addVectorSymbol(symbols[0], symbols[1], m_group_to_add_symbols);
+                        m_sampler.startSampling(vector);
+                        vector_plot.addVectorToPlot(vector);
+                    }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
@@ -694,13 +698,6 @@ void DbgGui::showSpectrumPlots() {
                         m_sampler.startSampling(vector);
                         plot.addToPlot(vector->x, vector->y);
                     }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_SYMBOL")) {
-                    VariantSymbol* symbol_x = *(VariantSymbol**)payload->Data;
-                    VariantSymbol* symbol_y = *((VariantSymbol**)payload->Data + 1);
-                    Vector2D* vector = addVectorSymbol(symbol_x, symbol_y, m_group_to_add_symbols);
-                    m_sampler.startSampling(vector);
-                    plot.addToPlot(vector->x, vector->y);
                 }
                 ImPlot::EndDragDropTarget();
             }

@@ -1525,14 +1525,7 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
 
     bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
                                  || sym->getType() == VariantSymbol::Type::Enum;
-    if (m_selected_symbols.size() == 2) {
-        // Drag-and-droppable to vector plot.
-        if (ImGui::BeginDragDropSource()) {
-            ImGui::SetDragDropPayload("VECTOR_SYMBOL", m_selected_symbols.data(), sizeof(VariantSymbol*) * 2);
-            ImGui::Text("Drag to vector plot");
-            ImGui::EndDragDropSource();
-        }
-    } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
+    if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
         // Drag-and-droppable to scalar plot. When the symbol is part of the selection,
         // carry all selected symbols; otherwise just the dragged one.
         if (contains(m_selected_symbols, sym)) {
