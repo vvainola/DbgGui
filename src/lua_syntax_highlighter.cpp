@@ -75,8 +75,8 @@ void drawToken(ImDrawList* draw_list, ImVec2 position, std::string_view token, I
     draw_list->AddText(position, ImGui::ColorConvertFloat4ToU32(color), token.data(), token.data() + token.size());
 }
 
-void drawLuaLine(ImDrawList* draw_list, std::string_view line, ImVec2 position) {
-    float x = position.x;
+template <typename Function>
+void forEachLuaToken(std::string_view line, Function&& function) {
     size_t index = 0;
     while (index < line.size()) {
         size_t const token_start = index;
@@ -118,12 +118,33 @@ void drawLuaLine(ImDrawList* draw_list, std::string_view line, ImVec2 position) 
         }
 
         std::string_view const token = line.substr(token_start, index - token_start);
-        drawToken(draw_list, ImVec2(x, position.y), token, color);
-        x += textWidth(token);
+        function(token, color);
     }
 }
 
+void drawLuaLine(ImDrawList* draw_list, std::string_view line, ImVec2 position) {
+    float x = position.x;
+    forEachLuaToken(line, [&](std::string_view token, ImVec4 color) {
+        drawToken(draw_list, ImVec2(x, position.y), token, color);
+        x += textWidth(token);
+    });
+}
+
 } // namespace
+
+void showLuaHighlightedText(std::string_view text) {
+    bool first_token = true;
+    forEachLuaToken(text, [&](std::string_view token, ImVec4 color) {
+        if (!first_token) {
+            ImGui::SameLine(0, 0);
+        }
+        ImGui::TextColored(color, "%.*s", static_cast<int>(token.size()), token.data());
+        first_token = false;
+    });
+    if (first_token) {
+        ImGui::TextUnformatted("");
+    }
+}
 
 void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
                                    std::string_view text,

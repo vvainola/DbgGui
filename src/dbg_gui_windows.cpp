@@ -134,7 +134,7 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlig
     ImGui::PopStyleVar();
 }
 
-void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line) {
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua) {
     int const line_count = static_cast<int>(lines.size());
     float const gutter_width = scriptLineNumberGutterWidth(line_count);
     if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
@@ -153,7 +153,11 @@ void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - ImGui::GetStyle().FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x);
             ImGui::TextDisabled("%s", line_number.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
+            if (highlight_lua) {
+                showLuaHighlightedText(lines[i]);
+            } else {
+                ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
+            }
         }
         ImGui::EndTable();
     }
@@ -1405,7 +1409,7 @@ void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
     ImGui::TableNextColumn();
     // Full name is needed for top-level recursive results from multiple scopes.
     bool const show_full_name = force_full_name
-                              || (sym->getParent() == nullptr && m_symbol_search_depth > 0);
+                             || (sym->getParent() == nullptr && m_symbol_search_depth > 0);
     std::string const symbol_name = show_full_name ? sym->getFullName() : sym->getName();
     bool const auto_open = state.auto_open_symbols.contains(sym);
     if (sym->getType() == VariantSymbol::Type::Pointer) {
@@ -1737,7 +1741,9 @@ void DbgGui::showScriptWindow() {
 
                 // Show progress of the script by adding a separator where it is currently waiting
                 std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
-                showRunningScriptWithLineNumbers(lines, script_line);
+                showRunningScriptWithLineNumbers(lines,
+                                                 script_line,
+                                                 script_language == ScriptLanguage::Lua);
             } else {
                 inputScriptTextWithLineNumbers(script_window.text,
                                                ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y),
