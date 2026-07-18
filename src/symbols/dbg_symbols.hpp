@@ -49,6 +49,11 @@ class DbgSymbols {
     /// @return Symbols succesfully loaded from json file
     bool symbolsLoadedFromJson() const { return m_symbols_loaded_from_json; }
 
+    /// @brief Diagnostics produced while loading debug symbols.
+    /// These are intended for the GUI log; one unreadable module must not
+    /// prevent symbols from the remaining modules from loading.
+    std::vector<std::string> const& symbolLoadErrors() const { return m_symbol_load_errors; }
+
     /// @brief Save symbol info collected from PDB file into a json file that can be used for
     /// loading symbol information without PDB file later on.
     /// @param filename Filename to save
@@ -128,5 +133,6 @@ class DbgSymbols {
 
     std::vector<std::unique_ptr<SymbolDescriptor>> m_symbol_descriptors;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
+    std::vector<std::string> m_symbol_load_errors;
     bool m_symbols_loaded_from_json = false;
 };

@@ -180,6 +180,9 @@ DbgGui::DbgGui(double sampling_time)
     : m_sampling_time(sampling_time),
       m_symbols(DbgSymbols::getSymbols()) {
     assert(sampling_time >= 0);
+    for (std::string const& error : m_symbols.symbolLoadErrors()) {
+        logMessage(error);
+    }
 }
 
 DbgGui::~DbgGui() {

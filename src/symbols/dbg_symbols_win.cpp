@@ -229,6 +229,17 @@ struct ModuleContext {
     std::string symbol_prefix;
 };
 
+struct CodeViewPdbInfo {
+    std::filesystem::path path;
+    PDB::GUID guid{};
+    uint32_t age = 0;
+};
+
+struct PdbCandidate {
+    std::filesystem::path path;
+    std::optional<CodeViewPdbInfo> code_view;
+};
+
 DbgHelpModuleContext dbgHelpModuleContext(ModuleContext const& module) {
     return DbgHelpModuleContext{
       .base_address = module.base_address,
@@ -1115,7 +1126,7 @@ std::string moduleStem(std::filesystem::path const& path) {
     return path.stem().string();
 }
 
-std::optional<std::filesystem::path> codeViewPdbPath(HMODULE module) {
+std::optional<CodeViewPdbInfo> codeViewPdbInfo(HMODULE module) {
     auto const* base = reinterpret_cast<uint8_t const*>(module);
     auto const* dos_header = reinterpret_cast<IMAGE_DOS_HEADER const*>(base);
     if (dos_header->e_magic != IMAGE_DOS_SIGNATURE) {
@@ -1147,38 +1158,87 @@ std::optional<std::filesystem::path> codeViewPdbPath(HMODULE module) {
         }
 
         // RSDS records are signature, GUID, age, then a null-terminated PDB
-        // path written by the linker.
+        // path written by the linker. Keep the identity as well as the path:
+        // a PDB with the same filename may belong to an older build.
         char const* pdb_path = code_view + 24;
         if (pdb_path[0] != '\0') {
-            return std::filesystem::path(pdb_path);
+            CodeViewPdbInfo info;
+            info.path = std::filesystem::path(pdb_path);
+            std::memcpy(&info.guid, code_view + 4, sizeof(info.guid));
+            std::memcpy(&info.age, code_view + 20, sizeof(info.age));
+            return info;
         }
     }
 
     return std::nullopt;
 }
 
-std::optional<std::filesystem::path> findPdbPath(ModuleContext const& module) {
+std::optional<PdbCandidate> findPdbPath(ModuleContext const& module) {
     // Prefer the exact linker path embedded in the module. If the binary moved,
     // try the common deployment layouts next: same basename beside the image or
     // the embedded PDB filename beside the image.
-    if (auto path = codeViewPdbPath(module.handle); path && std::filesystem::exists(*path)) {
-        return path;
+    std::optional<CodeViewPdbInfo> code_view = codeViewPdbInfo(module.handle);
+    if (code_view && std::filesystem::exists(code_view->path)) {
+        return PdbCandidate{.path = code_view->path, .code_view = std::move(code_view)};
     }
 
     std::filesystem::path fallback = module.path;
     fallback.replace_extension(".pdb");
     if (std::filesystem::exists(fallback)) {
-        return fallback;
+        return PdbCandidate{.path = fallback, .code_view = std::move(code_view)};
     }
 
-    if (auto path = codeViewPdbPath(module.handle); path) {
-        std::filesystem::path sibling = module.path.parent_path() / path->filename();
+    if (code_view) {
+        std::filesystem::path sibling = module.path.parent_path() / code_view->path.filename();
         if (std::filesystem::exists(sibling)) {
-            return sibling;
+            return PdbCandidate{.path = sibling, .code_view = std::move(code_view)};
         }
     }
 
     return std::nullopt;
+}
+
+bool matchesCodeViewPdb(PDB::RawFile const& raw_pdb, CodeViewPdbInfo const& code_view) {
+    PDB::InfoStream info_stream(raw_pdb);
+    PDB::Header const* header = info_stream.GetHeader();
+    return header != nullptr
+        && header->age == code_view.age
+        && std::memcmp(&header->guid, &code_view.guid, sizeof(header->guid)) == 0;
+}
+
+std::string formatGuid(PDB::GUID const& guid) {
+    return std::format("{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                       guid.Data1,
+                       guid.Data2,
+                       guid.Data3,
+                       guid.Data4[0],
+                       guid.Data4[1],
+                       guid.Data4[2],
+                       guid.Data4[3],
+                       guid.Data4[4],
+                       guid.Data4[5],
+                       guid.Data4[6],
+                       guid.Data4[7]);
+}
+
+std::string pdbMismatchError(ModuleContext const& module,
+                             PdbCandidate const& pdb,
+                             PDB::Header const* actual_header) {
+    std::string const expected = std::format("{} (age {})", formatGuid(pdb.code_view->guid), pdb.code_view->age);
+    std::string const actual = actual_header == nullptr ?
+                                 "missing PDB Info stream" :
+                                 std::format("{} (age {})", formatGuid(actual_header->guid), actual_header->age);
+    return std::format("PDB '{}' does not match module '{}': expected {}, found {}. Symbols from this module were skipped.",
+                       pdb.path.string(),
+                       module.path.string(),
+                       expected,
+                       actual);
+}
+
+std::string invalidPdbError(ModuleContext const& module, PdbCandidate const& pdb) {
+    return std::format("PDB '{}' for module '{}' could not be opened or is invalid. Symbols from this module were skipped.",
+                       pdb.path.string(),
+                       module.path.string());
 }
 
 std::vector<ModuleContext> loadedModules() {
@@ -1488,34 +1548,38 @@ void processPublicFunctions(std::unordered_map<MemoryAddress, std::string>& func
     }
 }
 
-void processModulePdb(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
-                      std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
-                      ModuleContext const& module) {
+std::optional<std::string> processModulePdb(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_descriptors,
+                                            std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
+                                            ModuleContext const& module) {
     // Load the PDB streams needed for globals:
     // - DBI gives module lists, symbol streams, image sections, and hash streams.
     // - TPI gives the type records referenced by data symbols.
     // - The symbol record stream is the storage that global/public hash records
     //   point back into.
-    std::optional<std::filesystem::path> pdb_path = findPdbPath(module);
-    if (!pdb_path) {
-        return;
+    std::optional<PdbCandidate> pdb = findPdbPath(module);
+    if (!pdb) {
+        return std::nullopt;
     }
 
-    MappedFile mapped_pdb(*pdb_path);
+    MappedFile mapped_pdb(pdb->path);
     if (!mapped_pdb.valid() || PDB::ValidateFile(mapped_pdb.data(), mapped_pdb.size()) != PDB::ErrorCode::Success) {
-        return;
+        return invalidPdbError(module, *pdb);
     }
 
     PDB::RawFile raw_pdb = PDB::CreateRawFile(mapped_pdb.data());
+    if (pdb->code_view && !matchesCodeViewPdb(raw_pdb, *pdb->code_view)) {
+        PDB::InfoStream info_stream(raw_pdb);
+        return pdbMismatchError(module, *pdb, info_stream.GetHeader());
+    }
     if (PDB::HasValidDBIStream(raw_pdb) != PDB::ErrorCode::Success
         || PDB::HasValidTPIStream(raw_pdb) != PDB::ErrorCode::Success) {
-        return;
+        return std::nullopt;
     }
 
     PDB::DBIStream dbi_stream = PDB::CreateDBIStream(raw_pdb);
     if (dbi_stream.HasValidImageSectionStream(raw_pdb) != PDB::ErrorCode::Success
         || dbi_stream.HasValidSymbolRecordStream(raw_pdb) != PDB::ErrorCode::Success) {
-        return;
+        return std::nullopt;
     }
 
     PDB::ImageSectionStream image_sections = dbi_stream.CreateImageSectionStream(raw_pdb);
@@ -1526,23 +1590,27 @@ void processModulePdb(std::vector<std::unique_ptr<SymbolDescriptor>>& symbol_des
 
     processGlobalSymbols(symbol_descriptors, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols, symbol_records);
     processModuleDataSymbols(symbol_descriptors, root_symbols, raw_pdb, dbi_stream, type_table, module, image_sections, seen_symbols);
+    return std::nullopt;
 }
 
 void processModuleFunctionAddresses(std::unordered_map<MemoryAddress, std::string>& function_addresses,
                                     ModuleContext const& module) {
     // This is a lighter pass than processModulePdb: it only needs DBI and image
     // sections because function lookup does not expand variable types.
-    std::optional<std::filesystem::path> pdb_path = findPdbPath(module);
-    if (!pdb_path) {
+    std::optional<PdbCandidate> pdb = findPdbPath(module);
+    if (!pdb) {
         return;
     }
 
-    MappedFile mapped_pdb(*pdb_path);
+    MappedFile mapped_pdb(pdb->path);
     if (!mapped_pdb.valid() || PDB::ValidateFile(mapped_pdb.data(), mapped_pdb.size()) != PDB::ErrorCode::Success) {
         return;
     }
 
     PDB::RawFile raw_pdb = PDB::CreateRawFile(mapped_pdb.data());
+    if (pdb->code_view && !matchesCodeViewPdb(raw_pdb, *pdb->code_view)) {
+        return;
+    }
     if (PDB::HasValidDBIStream(raw_pdb) != PDB::ErrorCode::Success) {
         return;
     }
@@ -1630,7 +1698,9 @@ void DbgSymbols::initSymbolsFromPdb() {
     // PDB. Missing or invalid PDBs are skipped so one dependency without symbols
     // does not prevent the rest of the process from being inspected.
     for (ModuleContext const& module : loadedModules()) {
-        processModulePdb(m_symbol_descriptors, m_root_symbols, module);
+        if (std::optional<std::string> error = processModulePdb(m_symbol_descriptors, m_root_symbols, module)) {
+            m_symbol_load_errors.push_back(std::move(*error));
+        }
     }
 }
 
