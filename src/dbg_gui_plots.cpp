@@ -248,9 +248,23 @@ void DbgGui::showScalarPlots() {
 
                 // Legend items can be dragged to other plots to move the scalar.
                 if (ImPlot::BeginDragDropSourceItem(label_id.c_str(), ImGuiDragDropFlags_None)) {
-                    PlotScalarDragDropPayload plot_and_scalar = {&scalar_plot, subplot_idx, scalar};
-                    ImGui::SetDragDropPayload("PLOT_AND_SCALAR", &plot_and_scalar, sizeof(plot_and_scalar));
-                    ImGui::Text("Drag to move another plot");
+                    bool const move_all_signals = ImGui::GetIO().KeyShift;
+                    std::vector<PlotScalarDragDropPayload> dragged_scalars;
+                    if (move_all_signals) {
+                        dragged_scalars.reserve(subplot.scalars.size());
+                        for (Scalar* source_scalar : subplot.scalars) {
+                            dragged_scalars.push_back({&scalar_plot, subplot_idx, source_scalar});
+                        }
+                    } else {
+                        dragged_scalars.push_back({&scalar_plot, subplot_idx, scalar});
+                    }
+                    ImGui::SetDragDropPayload("PLOT_AND_SCALAR",
+                                              dragged_scalars.data(),
+                                              dragged_scalars.size() * sizeof(PlotScalarDragDropPayload));
+                    ImGui::TextUnformatted(move_all_signals ? "Drag to move all signals" : "Drag to move signal");
+                    for (PlotScalarDragDropPayload const& dragged_scalar : dragged_scalars) {
+                        ImGui::Text("  %s", dragged_scalar.scalar->alias_and_group.c_str());
+                    }
                     ImPlot::EndDragDropSource();
                 }
             }
@@ -283,13 +297,14 @@ void DbgGui::showScalarPlots() {
                     }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_SCALAR")) {
-                    PlotScalarDragDropPayload plot_and_scalar = *(PlotScalarDragDropPayload*)payload->Data;
-                    ScalarPlot* original_plot = plot_and_scalar.plot;
-                    int original_subplot_idx = plot_and_scalar.subplot_idx;
-                    Scalar* scalar = plot_and_scalar.scalar;
-                    if (original_plot != &scalar_plot || original_subplot_idx != subplot_idx) {
-                        original_plot->removeScalar(scalar, original_subplot_idx);
-                        scalar_plot.addScalarToPlot(scalar, subplot_idx);
+                    std::span<PlotScalarDragDropPayload const> dragged_scalars(
+                      static_cast<PlotScalarDragDropPayload const*>(payload->Data),
+                      payload->DataSize / sizeof(PlotScalarDragDropPayload));
+                    for (PlotScalarDragDropPayload const& dragged_scalar : dragged_scalars) {
+                        if (dragged_scalar.plot != &scalar_plot || dragged_scalar.subplot_idx != subplot_idx) {
+                            dragged_scalar.plot->removeScalar(dragged_scalar.scalar, dragged_scalar.subplot_idx);
+                            scalar_plot.addScalarToPlot(dragged_scalar.scalar, subplot_idx);
+                        }
                     }
                 }
                 ImPlot::EndDragDropTarget();
