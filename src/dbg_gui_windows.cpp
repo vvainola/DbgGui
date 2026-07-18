@@ -1536,9 +1536,14 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
                                       m_selected_symbols.data(),
                                       m_selected_symbols.size() * sizeof(VariantSymbol*));
             ImGui::Text("Drag %d symbols to plot", (int)m_selected_symbols.size());
+            ImGui::Indent();
+            for (VariantSymbol* selected_symbol : m_selected_symbols) {
+                ImGui::TextUnformatted(selected_symbol->getFullName().c_str());
+            }
+            ImGui::Unindent();
         } else {
             ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-            ImGui::Text("Drag to plot");
+            ImGui::Text("Drag to plot\n\t%s", sym->getFullName().c_str());
         }
         ImGui::EndDragDropSource();
     }
