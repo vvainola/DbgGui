@@ -262,6 +262,20 @@ TEST_CASE("Basic symbol access") {
     g_enum = EnumValue_1n;
     CHECK(g_enum_sym->valueAsStr() == "EnumValue_1n");
 
+    // Scalar plots apply their scale and offset before displaying a tooltip.
+    // Enum lookups must undo that transformation before reading the enum name.
+    ValueSource enum_source = g_enum_sym->getValueSource();
+    auto* enum_value_source = std::get_if<ReadWriteFnCustomStr>(&enum_source);
+    REQUIRE(enum_value_source != nullptr);
+    constexpr double scale = 2.0;
+    constexpr double offset = 3.0;
+    double plotted_value = static_cast<double>(EnumValue1) * scale + offset;
+    double source_value = (plotted_value - offset) / scale;
+    double original_value = enum_value_source->operator()(std::nullopt).second;
+    enum_value_source->operator()(source_value);
+    CHECK(enum_value_source->operator()(std::nullopt).first == "EnumValue1");
+    enum_value_source->operator()(original_value);
+
     // g_cross_tu_enum is defined in this TU where CrossTuEnum is only
     // forward-declared. The PDB type index for the global points to an LF_ENUM
     // forward reference; resolving the enumerator name requires following it

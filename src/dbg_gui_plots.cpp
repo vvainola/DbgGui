@@ -27,6 +27,7 @@
 #include "implot.h"
 #include "nfd.h"
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <kissfft/kissfft.hh>
@@ -343,27 +344,33 @@ void DbgGui::showScalarPlots() {
                     double tooltip_value = value.y_min[0];
                     std::stringstream ss;
                     ss << scalar->alias_and_group << " : " << tooltip_value;
-                    // Write enum value as string if not closing in destructor and it is not possible to write anymore
+                    // Retrieve the name for enum values from the unscaled sample value.
+                    // During destruction, enum sources can no longer be safely written.
                     if (std::get_if<ReadWriteFnCustomStr>(&scalar->src) && !m_closing) {
                         // Retrieving the enum value on every iteration is slow so the values are cached.
                         static std::map<std::pair<Scalar*, double>, std::string> enum_str_cache;
-                        std::pair<Scalar*, double> scalar_and_value{scalar, tooltip_value};
-                        if (!enum_str_cache.contains(scalar_and_value)) {
-                            bool paused = m_paused;
-                            m_paused = true;
-                            // Wait until main thread goes to pause state
-                            while (m_next_sync_timestamp > 0) {
+                        double source_value = (tooltip_value - scalar->getOffset()) / scalar->getScale();
+                        if (std::isfinite(source_value)) {
+                            std::pair<Scalar*, double> scalar_and_value{scalar, source_value};
+                            if (!enum_str_cache.contains(scalar_and_value)) {
+                                bool paused = m_paused;
+                                m_paused = true;
+                                // Wait until main thread goes to pause state
+                                while (m_next_sync_timestamp > 0) {
+                                }
+                                double current_value = getSourceValue(scalar->src);
+                                // Temporarily write the unscaled sample value to retrieve its enum name.
+                                setSourceValue(scalar->src, source_value);
+                                enum_str_cache[scalar_and_value] = getSourceValueStr(scalar->src);
+                                // Write the original value back
+                                setSourceValue(scalar->src, current_value);
+                                m_paused = paused;
                             }
-                            double current_value = getSourceValue(scalar->src);
-                            // Write the tooltip value to the scalar to retrieve the enum value as str
-                            setSourceValue(scalar->src, tooltip_value);
-                            enum_str_cache[scalar_and_value] = getSourceValueStr(scalar->src);
-                            // Write the original value back
-                            setSourceValue(scalar->src, current_value);
-                            m_paused = paused;
+                            std::string const& enum_str = enum_str_cache[scalar_and_value];
+                            if (!enum_str.empty()) {
+                                ss << " (" << enum_str << ")";
+                            }
                         }
-                        std::string enum_str = enum_str_cache[scalar_and_value];
-                        ss << " (" << enum_str << ")";
                     }
 
                     ImGui::PushStyleColor(ImGuiCol_Text, scalar->color);
