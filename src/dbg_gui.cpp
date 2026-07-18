@@ -315,7 +315,6 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"add-vector-plot", "Add vector plot", "Open the add-vector-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2, [&] { ImGui::OpenPopup(str::ADD_VECTOR_PLOT); }},
       {"add-spectrum-plot", "Add spectrum plot", "Open the add-spectrum-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3, [&] { ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT); }},
       {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
-      {"add-script-window", "Add script window", "Open the add-script-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_5, [&] { ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW); }},
       {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
       {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
       {"copy-visible-samples", "Copy visible samples to clipboard", "Copy visible scalar samples for import into CsvPlotter.", ImGuiMod_Ctrl | ImGuiKey_T, [&] { copyAllScalarSamplesToClipboard(); }},
@@ -424,7 +423,6 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_VECTOR_PLOT);
         addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
-        addPopupModal(str::ADD_SCRIPT_WINDOW);
         addPopupModal(str::ADD_DOCKSPACE);
         addPopupModal(str::ADD_GRID_WINDOW);
         addPopupModal(str::PAUSE_AFTER);
@@ -694,6 +692,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 m_script_windows.emplace_back(this, script_window_data);
             }
         }
+        m_selected_script_id.reset();
 
         m_grid_windows.clear();
         for (auto grid_window_data : m_settings["grid_windows"]) {
@@ -933,16 +932,18 @@ void DbgGui::updateSavedSettings() {
 
     {
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+        // Arrays preserve the order chosen in the Scripts window. Loading still
+        // accepts the legacy object format because both are iterable as scripts.
+        nlohmann::json script_windows = nlohmann::json::array();
         for (ScriptWindow& script_window : m_script_windows) {
-            if (!script_window.open) {
-                m_settings["script_windows"].erase(std::to_string(script_window.id));
-                continue;
-            }
             if (script_window.id == 0) {
                 script_window.id = hashWithTime(script_window.name);
             }
-            script_window.updateJson(m_settings["script_windows"][std::to_string(script_window.id)]);
+            nlohmann::json script_window_json;
+            script_window.updateJson(script_window_json);
+            script_windows.push_back(std::move(script_window_json));
         }
+        m_settings["script_windows"] = std::move(script_windows);
     }
 
     for (GridWindow& grid_window : m_grid_windows) {
@@ -1113,13 +1114,6 @@ void DbgGui::setInitialFocus() {
         ImGui::Begin(custom_window.title().c_str());
         if (custom_window.focus.initial_focus) {
             ImGui::SetWindowFocus(custom_window.title().c_str());
-        }
-        ImGui::End();
-    }
-    for (ScriptWindow& script_window : m_script_windows) {
-        ImGui::Begin(script_window.title().c_str());
-        if (script_window.focus.initial_focus) {
-            ImGui::SetWindowFocus(script_window.title().c_str());
         }
         ImGui::End();
     }

@@ -626,14 +626,6 @@ void DbgGui::showMainMenuBar() {
                 HelpMarker(std::format("Hotkey to add new custom window is {}.", commandHotkeyName("add-custom-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4)).c_str());
                 addPopupModal(str::ADD_CUSTOM_WINDOW);
 
-                // Script window
-                if (ImGui::Button("Script window")) {
-                    ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
-                }
-                ImGui::SameLine();
-                HelpMarker(std::format("Hotkey to add new script window is {}.", commandHotkeyName("add-script-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_5)).c_str());
-                addPopupModal(str::ADD_SCRIPT_WINDOW);
-
                 // Grid window
                 if (ImGui::Button("Grid window")) {
                     ImGui::OpenPopup(str::ADD_GRID_WINDOW);
@@ -1605,90 +1597,138 @@ void DbgGui::showSymbolsWindow() {
 }
 
 void DbgGui::showScriptWindow() {
-    for (ScriptWindow& script_window : m_script_windows) {
-        if (!script_window.open) {
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            script_window.stopScript();
-            continue;
-        }
-
-        script_window.focus.focused = ImGui::Begin(script_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        script_window.closeOnMiddleClick();
-        script_window.contextMenu();
-        if (!script_window.focus.focused) {
-            ImGui::End();
-            continue;
-        }
-
-        bool script_running = false;
-        bool script_loop = false;
-        ScriptLanguage script_language = ScriptLanguage::Lua;
-        double script_time = 0;
-        int script_line = 0;
-        {
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            script_running = script_window.running();
-            script_loop = script_window.loop;
-            script_language = script_window.language;
-            script_time = script_window.getTime(m_plot_timestamp);
-            script_line = script_window.currentLine();
-        }
-
-        if (ImGui::Button("Run")) {
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
-        }
-        if (ImGui::BeginPopupContextItem("Run_context_menu")) {
-            // Toggling the text edit window will cause it reapper if it's hidden behind other windows
-            script_window.text_edit_open = !script_window.text_edit_open;
-            ImGui::EndPopup();
-        }
-        ImGui::SameLine();
-        ImGui::BeginDisabled(script_running);
-        if (ImGui::Checkbox("Loop", &script_loop)) {
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            script_window.loop = script_loop;
-        }
-        ImGui::EndDisabled();
-
-        // Stop button only visible if running
-        if (script_running) {
-
-            ImGui::SameLine();
-            if (ImGui::Button("Stop")) {
-                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-                script_window.stopScript();
-            }
-            ImGui::SameLine();
-            ImGui::Text(std::format("{:.2f}", script_time).c_str());
-        }
-
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Scripts", nullptr, ImGuiWindowFlags_NoNavFocus)) {
         ImGui::End();
+        return;
+    }
 
-        // Open text edit in a separate window
-        if (script_window.text_edit_open) {
-            ImGui::SetNextWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
-            ImGui::Begin(std::format("{}##editor", script_window.name).c_str(), &script_window.text_edit_open);
-            // Close on middle click like other windows
-            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-                script_window.text_edit_open = false;
+    // Script order changes while dragging, so keep the UI selection by stable ID.
+    if (!m_selected_script_id.has_value() && !m_script_windows.empty()) {
+        m_selected_script_id = m_script_windows.front().id;
+    }
+
+    std::optional<size_t> script_to_delete;
+    // Use a table so the sidebar divider remains user-resizable while both
+    // child windows fill their respective panes.
+    if (ImGui::BeginTable("scripts_layout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("Scripts", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+        ImGui::TableSetupColumn("Editor", ImGuiTableColumnFlags_WidthStretch);
+
+        ImGui::TableNextColumn();
+        if (ImGui::CollapsingHeader("Menu")) {
+            if (ImGui::Button("Add script")) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                std::string const script_name = std::format("new script {}", m_script_windows.size() + 1);
+                uint64_t const script_id = hashWithTime(script_name);
+                m_script_windows.emplace_back(this, script_name, script_id);
+                m_selected_script_id = script_id;
+            }
+        }
+        ImGui::Separator();
+        ImGui::BeginChild("##script_list", ImVec2(0, 0));
+        // During a drag swap, the same script is submitted in two rows for one
+        // frame. This is the pattern used by ImGui's simple reorder demo.
+        ImGui::PushItemFlag(ImGuiItemFlags_AllowDuplicateId, true);
+        for (size_t script_index = 0; script_index < m_script_windows.size(); ++script_index) {
+            ScriptWindow& script_window = m_script_windows[script_index];
+            bool script_running;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_running = script_window.running();
+            }
+
+            if (script_running) {
+                ImGui::PushStyleColor(ImGuiCol_Text, COLOR_GREEN);
+            }
+            // The stable ID lets ImGui keep the drag active after the script
+            // has moved to the adjacent row.
+            ImGui::PushID(std::to_string(script_window.id).c_str());
+            if (ImGui::Selectable(script_window.name.c_str(), m_selected_script_id == script_window.id)) {
+                m_selected_script_id = script_window.id;
+            }
+            bool const reorder_script = ImGui::IsItemActive() && !ImGui::IsItemHovered();
+            if (ImGui::BeginPopupContextItem("Script context")) {
+                ImGui::InputText("Name", &script_window.name);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete")) {
+                    script_to_delete = script_index;
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+            if (script_running) {
+                ImGui::PopStyleColor();
+            }
+
+            // This follows ImGui's simple reorder demo: swap with the adjacent
+            // item after a vertical drag, then reset the drag delta for repeats.
+            if (!script_to_delete.has_value() && reorder_script) {
+                int const next_script_index = static_cast<int>(script_index)
+                                            + (ImGui::GetMouseDragDelta(0).y < 0.0f ? -1 : 1);
+                if (next_script_index >= 0 && next_script_index < static_cast<int>(m_script_windows.size())) {
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    std::swap(m_script_windows[script_index], m_script_windows[next_script_index]);
+                    ImGui::ResetMouseDragDelta();
+                }
+            }
+        }
+        ImGui::PopItemFlag();
+        ImGui::EndChild();
+
+        if (script_to_delete.has_value()) {
+            size_t const script_index = *script_to_delete;
+            uint64_t const script_id = m_script_windows[script_index].id;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                // The sampler can be executing this script, so stop it before
+                // destroying its runner and removing it from the collection.
+                m_script_windows[script_index].stopScript();
+                m_script_windows.erase(m_script_windows.begin() + script_index);
+            }
+            if (m_selected_script_id == script_id) {
+                if (m_script_windows.empty()) {
+                    m_selected_script_id.reset();
+                } else {
+                    m_selected_script_id = m_script_windows[std::min(script_index, m_script_windows.size() - 1)].id;
+                }
+            }
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::BeginChild("##script_editor", ImVec2(0, 0));
+        auto script_it = std::find_if(m_script_windows.begin(), m_script_windows.end(), [&](ScriptWindow const& script_window) {
+            return m_selected_script_id == script_window.id;
+        });
+        if (script_it == m_script_windows.end()) {
+            ImGui::TextDisabled("Select a script or add a new one.");
+        } else {
+            ScriptWindow& script_window = *script_it;
+            bool script_running;
+            bool script_loop;
+            ScriptLanguage script_language;
+            double script_time;
+            int script_line;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_running = script_window.running();
+                script_loop = script_window.loop;
+                script_language = script_window.language;
+                script_time = script_window.getTime(m_plot_timestamp);
+                script_line = script_window.currentLine();
             }
 
             if (ImGui::Button("Run")) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
             }
-
             ImGui::SameLine();
             ImGui::BeginDisabled(script_running);
             if (ImGui::Checkbox("Loop", &script_loop)) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 script_window.loop = script_loop;
             }
-            ImGui::EndDisabled();
-
             ImGui::SameLine();
-            ImGui::BeginDisabled(script_running);
             char const* language_name = script_language == ScriptLanguage::Lua ? "Lua" : "Legacy";
             ImGui::SetNextItemWidth(ImGui::CalcTextSize("Legacy").x + ImGui::GetStyle().FramePadding.x * 2);
             if (ImGui::BeginCombo("Format", language_name)) {
@@ -1731,7 +1771,7 @@ void DbgGui::showScriptWindow() {
                            "    Save all current scalars to a CSV file.");
             }
 
-            // Stop button only visible if running
+            // Stop button only visible if running.
             if (script_running) {
                 ImGui::SameLine();
                 if (ImGui::Button("Stop")) {
@@ -1740,21 +1780,23 @@ void DbgGui::showScriptWindow() {
                 }
                 ImGui::SameLine();
                 ImGui::Text(std::format("{:.2f}", script_time).c_str());
-
-                // Show progress of the script by adding a separator where it is currently waiting
-                std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
-                showRunningScriptWithLineNumbers(lines,
-                                                 script_line,
-                                                 script_language == ScriptLanguage::Lua);
-            } else {
-                inputScriptTextWithLineNumbers(script_window.text,
-                                               ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y),
-                                               script_language == ScriptLanguage::Lua);
             }
 
-            ImGui::End();
+            ImGui::Separator();
+            if (script_running) {
+                // Show progress of the script by adding a separator where it
+                // is currently waiting. Running scripts remain read-only.
+                std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
+                showRunningScriptWithLineNumbers(lines, script_line, script_language == ScriptLanguage::Lua);
+            } else {
+                ImVec2 const editor_size = ImGui::GetContentRegionAvail();
+                inputScriptTextWithLineNumbers(script_window.text, editor_size, script_language == ScriptLanguage::Lua);
+            }
         }
+        ImGui::EndChild();
+        ImGui::EndTable();
     }
+    ImGui::End();
 }
 
 void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col) {

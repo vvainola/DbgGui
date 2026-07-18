@@ -52,6 +52,7 @@ inline constexpr const char* USER_SETTINGS_LOCATION = "USERPROFILE";
 inline constexpr const char* USER_SETTINGS_LOCATION = "HOME";
 #endif
 inline constexpr ImVec4 COLOR_TEAL = ImVec4(0.0f, 1.0f, 1.0f, 1);
+inline constexpr ImVec4 COLOR_GREEN = ImVec4(0.3f, 0.9f, 0.3f, 1);
 inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
@@ -61,7 +62,6 @@ inline constexpr const char* ADD_SCALAR_PLOT = "Add scalar plot";
 inline constexpr const char* ADD_VECTOR_PLOT = "Add vector plot";
 inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
-inline constexpr const char* ADD_SCRIPT_WINDOW = "Add script window";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
@@ -210,6 +210,7 @@ class DbgGui {
     std::vector<CustomWindow> m_custom_windows;
     std::vector<GridWindow> m_grid_windows;
     std::vector<ScriptWindow> m_script_windows;
+    std::optional<uint64_t> m_selected_script_id;
     std::vector<ScalarPlot> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;

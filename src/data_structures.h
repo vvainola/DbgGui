@@ -712,7 +712,6 @@ struct ScriptWindow : Window {
     std::string text;
     ScriptLanguage language = ScriptLanguage::Lua;
     bool loop = false;
-    bool text_edit_open = false;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
     std::string processScript(double timestamp);
