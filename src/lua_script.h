@@ -85,6 +85,7 @@ class LuaScriptRunner {
     lua_State* m_thread = nullptr;
     int m_thread_ref = -1;
     double m_start_time = 0;
+    double m_process_timestamp = 0;
     double m_resume_time = 0;
     double m_next_resume_time = 0;
     int m_current_line = 0;

@@ -103,6 +103,7 @@ std::expected<void, std::string> LuaScriptRunner::start(double timestamp, bool l
 std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     stop();
     m_start_time = timestamp;
+    m_process_timestamp = timestamp;
     m_resume_time = timestamp;
     m_next_resume_time = timestamp;
     m_current_line = 0;
@@ -171,6 +172,7 @@ std::expected<void, std::string> LuaScriptRunner::process(double timestamp) {
     if (!m_running) {
         return {};
     }
+    m_process_timestamp = timestamp;
     // A delayed sampling call may pass several scheduled wake-up times. Run
     // through those waits now so waits are measured on the sampling clock,
     // rather than being stretched by GUI frame timing.
@@ -330,11 +332,10 @@ int LuaScriptRunner::wait(lua_State* state) {
     // current wall/GUI time. This preserves the script's requested cadence.
     runner->m_next_resume_time = runner->m_resume_time + seconds;
     if (seconds == 0) {
-        // A zero wait must still advance the deadline past this timestamp;
-        // otherwise process() would resume it forever in one sample. nextafter
-        // is used instead of a fixed epsilon because that epsilon can round
-        // back to zero when simulation timestamps are large.
-        runner->m_next_resume_time = std::nextafter(runner->m_resume_time, std::numeric_limits<double>::infinity());
+        // A zero wait resumes at the next sampling timestamp. Basing this on
+        // the current processing timestamp stops the catch-up loop from
+        // consuming a huge number of tiny scheduled increments in one frame.
+        runner->m_next_resume_time = std::nextafter(runner->m_process_timestamp, std::numeric_limits<double>::infinity());
     }
     runner->m_waiting = true;
     runner->m_has_waited = true;

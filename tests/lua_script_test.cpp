@@ -121,6 +121,17 @@ TEST_CASE("Lua wait zero defers execution until the next sampling timestamp") {
     CHECK(writes == std::vector<double>{1.0, 2.0});
 }
 
+TEST_CASE("Lua wait zero yields once per sampling timestamp") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("while true do\n    write('target', 1)\n    wait(0)\nend", makeHost(writes));
+
+    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.process(0.0));
+    REQUIRE(runner.process(1.0));
+    REQUIRE(runner.process(2.0));
+    CHECK(writes == std::vector<double>{1.0, 1.0, 1.0});
+}
+
 TEST_CASE("Lua loop restarts from a fresh state after waiting") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait(1)", makeHost(writes));
