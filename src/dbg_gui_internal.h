@@ -70,6 +70,11 @@ inline constexpr const char* PAUSE_AT = "Pause at";
 
 class DbgGui {
   public:
+    enum class MessageType {
+        Error,
+        Info,
+    };
+
     DbgGui(double sampling_time);
     ~DbgGui();
     void startUpdateLoop();
@@ -98,7 +103,7 @@ class DbgGui {
                         std::string const& name_y,
                         double scale = 1.0,
                         double offset = 0.0);
-    void logMessage(const char* msg);
+    void logMessage(std::string message, MessageType type = MessageType::Error);
 
   private:
     void updateLoop();
@@ -112,6 +117,14 @@ class DbgGui {
     void showCustomWindow();
     void showScriptWindow();
     void showGridWindow();
+
+    struct Message {
+        std::string text;
+        MessageType type;
+    };
+
+    std::optional<Message> getMessage();
+    void clearMessage();
     void showCommandPalette();
     std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_sampling_hotkeys = true);
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
@@ -223,8 +236,8 @@ class DbgGui {
 
     std::deque<std::string> m_message_queue;
     std::string m_all_messages;
-    std::string m_error_message;
-    std::string m_info_message;
+    std::optional<Message> m_message;
+    std::mutex m_message_mutex;
 
     struct OptionalSettings {
         bool pause_on_close = false;

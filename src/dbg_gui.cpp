@@ -239,10 +239,20 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     { // Sample scalars
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
         if (timestamp < m_sample_timestamp) {
-            m_sampler.shiftTime(timestamp - m_sample_timestamp);
+            double const time_offset = timestamp - m_sample_timestamp;
+            m_sampler.shiftTime(time_offset);
+            for (ScriptWindow& script_window : m_script_windows) {
+                script_window.shiftScriptSchedule(time_offset);
+            }
             m_next_sync_timestamp = 0;
         }
         m_sample_timestamp = timestamp;
+
+        for (ScriptWindow& script_window : m_script_windows) {
+            if (std::string const error = script_window.processScript(m_sample_timestamp); !error.empty()) {
+                logMessage(error);
+            }
+        }
         m_sampler.sample(m_sample_timestamp);
 
         // Check pause triggers
@@ -473,7 +483,7 @@ void DbgGui::loadPreviousSessionSettings() {
     m_initial_focus_set = false;
     const char* env = std::getenv(USER_SETTINGS_LOCATION);
     if (env == nullptr) {
-        m_error_message = std::format("The {} environment variable is not set. Settings cannot be saved or loaded.", USER_SETTINGS_LOCATION);
+        logMessage(std::format("The {} environment variable is not set. Settings cannot be saved or loaded.", USER_SETTINGS_LOCATION));
         return;
     }
     std::string settings_dir = std::string(env) + "/.dbg_gui/";
@@ -677,9 +687,12 @@ void DbgGui::loadPreviousSessionSettings() {
             });
         }
 
-        m_script_windows.clear();
-        for (auto script_window_data : m_settings["script_windows"]) {
-            m_script_windows.emplace_back(this, script_window_data);
+        {
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            m_script_windows.clear();
+            for (auto script_window_data : m_settings["script_windows"]) {
+                m_script_windows.emplace_back(this, script_window_data);
+            }
         }
 
         m_grid_windows.clear();
@@ -918,15 +931,18 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
-    for (ScriptWindow& script_window : m_script_windows) {
-        if (!script_window.open) {
-            m_settings["script_windows"].erase(std::to_string(script_window.id));
-            continue;
+    {
+        std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+        for (ScriptWindow& script_window : m_script_windows) {
+            if (!script_window.open) {
+                m_settings["script_windows"].erase(std::to_string(script_window.id));
+                continue;
+            }
+            if (script_window.id == 0) {
+                script_window.id = hashWithTime(script_window.name);
+            }
+            script_window.updateJson(m_settings["script_windows"][std::to_string(script_window.id)]);
         }
-        if (script_window.id == 0) {
-            script_window.id = hashWithTime(script_window.name);
-        }
-        script_window.updateJson(m_settings["script_windows"][std::to_string(script_window.id)]);
     }
 
     for (GridWindow& grid_window : m_grid_windows) {
@@ -1297,10 +1313,35 @@ Vector2D* DbgGui::addVectorFromScalars(Scalar* x, Scalar* y) {
     return new_vector.get();
 }
 
-void DbgGui::logMessage(const char* msg) {
-    m_all_messages += msg;
+void DbgGui::logMessage(std::string message, MessageType type) {
+    if (message.empty()) {
+        return;
+    }
+
+    std::scoped_lock<std::mutex> lock(m_message_mutex);
+    m_all_messages += message;
+    if (!message.ends_with('\n')) {
+        m_all_messages += '\n';
+    }
     if (m_message_queue.size() > 20) {
         m_message_queue.pop_front();
     }
-    m_message_queue.push_back(msg);
+    m_message_queue.push_back(message);
+
+    if (m_message) {
+        m_message->text += '\n';
+        m_message->text += message;
+    } else {
+        m_message = Message{.text = std::move(message), .type = type};
+    }
+}
+
+std::optional<DbgGui::Message> DbgGui::getMessage() {
+    std::scoped_lock<std::mutex> lock(m_message_mutex);
+    return m_message;
+}
+
+void DbgGui::clearMessage() {
+    std::scoped_lock<std::mutex> lock(m_message_mutex);
+    m_message.reset();
 }

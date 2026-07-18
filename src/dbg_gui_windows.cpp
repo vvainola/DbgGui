@@ -96,7 +96,7 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
     ImGui::Dummy(gutter_size);
     ImVec2 const gutter_max = ImVec2(gutter_min.x + gutter_size.x, gutter_min.y + gutter_size.y);
     ImGui::SameLine();
-    ImGui::InputTextMultiline("##source", &text, ImVec2(editor_width, size.y));
+    ImGui::InputTextMultiline("##source", &text, ImVec2(editor_width, size.y), ImGuiInputTextFlags_AllowTabInput);
     // InputTextMultiline is implemented as a child window. Its ChildId is the
     // input ID, but its window ID is generated from the parent/window name.
     ImGuiWindow* input_window = findChildWindowByChildId(input_id);
@@ -337,10 +337,10 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
             ImGui::CloseCurrentPopup();
         }
         if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
-            m_error_message = *error;
+            logMessage(*error);
         }
         if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
-            m_error_message = *error;
+            logMessage(*error);
         }
 
         if (ImGui::Button("Copy name")) {
@@ -393,7 +393,7 @@ void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
                                || sym.getType() == VariantSymbol::Type::Enum;
         if (arithmetic_or_enum) {
             if (std::optional<std::string> error = addSymbolScaleInput(sym, m_selected_symbols, m_symbol_scale_settings)) {
-                m_error_message = *error;
+                logMessage(*error);
             }
         }
         bool can_fold_children = !sym.getChildren().empty()
@@ -723,15 +723,24 @@ void DbgGui::showMainMenuBar() {
             ImGui::Separator();
         }
 
-        if (m_options.show_latest_message_on_main_menu_bar
-            && !m_message_queue.empty()) {
-            ImGui::Text(m_message_queue.back().c_str());
-            if (ImGui::IsItemHovered()) {
-                std::string m;
-                for (std::string const& msg : m_message_queue) {
-                    m += msg;
+        std::string latest_message;
+        std::string message_tooltip;
+        if (m_options.show_latest_message_on_main_menu_bar) {
+            std::scoped_lock<std::mutex> lock(m_message_mutex);
+            if (!m_message_queue.empty()) {
+                latest_message = m_message_queue.back();
+                for (std::string const& message : m_message_queue) {
+                    message_tooltip += message;
+                    if (!message.ends_with('\n')) {
+                        message_tooltip += '\n';
+                    }
                 }
-                ImGui::SetTooltip(m.c_str());
+            }
+        }
+        if (!latest_message.empty()) {
+            ImGui::Text(latest_message.c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(message_tooltip.c_str());
             }
         }
 
@@ -743,13 +752,19 @@ void DbgGui::showMainMenuBar() {
 }
 
 void DbgGui::showLogWindow() {
+    std::string all_messages;
+    {
+        std::scoped_lock<std::mutex> lock(m_message_mutex);
+        all_messages = m_all_messages;
+    }
+
     m_window_focus.log.focused = ImGui::Begin("Log", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.log.focused) {
         ImGui::End();
         return;
     }
 
-    ImGui::TextUnformatted(m_all_messages.c_str());
+    ImGui::TextUnformatted(all_messages.c_str());
     // Autoscroll
     if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
         ImGui::SetScrollHereY(1.0f);
@@ -1561,20 +1576,36 @@ void DbgGui::showSymbolsWindow() {
 void DbgGui::showScriptWindow() {
     for (ScriptWindow& script_window : m_script_windows) {
         if (!script_window.open) {
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            script_window.stopScript();
             continue;
         }
 
         script_window.focus.focused = ImGui::Begin(script_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
         script_window.closeOnMiddleClick();
         script_window.contextMenu();
-        script_window.processScript(m_plot_timestamp);
         if (!script_window.focus.focused) {
             ImGui::End();
             continue;
         }
 
+        bool script_running = false;
+        bool script_loop = false;
+        ScriptLanguage script_language = ScriptLanguage::Lua;
+        double script_time = 0;
+        int script_line = 0;
+        {
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            script_running = script_window.running();
+            script_loop = script_window.loop;
+            script_language = script_window.language;
+            script_time = script_window.getTime(m_plot_timestamp);
+            script_line = script_window.currentLine();
+        }
+
         if (ImGui::Button("Run")) {
-            m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
         }
         if (ImGui::BeginPopupContextItem("Run_context_menu")) {
             // Toggling the text edit window will cause it reapper if it's hidden behind other windows
@@ -1582,17 +1613,23 @@ void DbgGui::showScriptWindow() {
             ImGui::EndPopup();
         }
         ImGui::SameLine();
-        ImGui::Checkbox("Loop", &script_window.loop);
+        ImGui::BeginDisabled(script_running);
+        if (ImGui::Checkbox("Loop", &script_loop)) {
+            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+            script_window.loop = script_loop;
+        }
+        ImGui::EndDisabled();
 
         // Stop button only visible if running
-        if (script_window.running()) {
+        if (script_running) {
 
             ImGui::SameLine();
             if (ImGui::Button("Stop")) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 script_window.stopScript();
             }
             ImGui::SameLine();
-            ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
+            ImGui::Text(std::format("{:.2f}", script_time).c_str());
         }
 
         ImGui::End();
@@ -1607,23 +1644,60 @@ void DbgGui::showScriptWindow() {
             }
 
             if (ImGui::Button("Run")) {
-                m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
             }
 
             ImGui::SameLine();
-            ImGui::Checkbox("Loop", &script_window.loop);
+            ImGui::BeginDisabled(script_running);
+            if (ImGui::Checkbox("Loop", &script_loop)) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_window.loop = script_loop;
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            ImGui::BeginDisabled(script_running);
+            char const* language_name = script_language == ScriptLanguage::Lua ? "Lua" : "Legacy";
+            ImGui::SetNextItemWidth(ImGui::CalcTextSize("Legacy").x + ImGui::GetStyle().FramePadding.x * 2);
+            if (ImGui::BeginCombo("Format", language_name)) {
+                if (ImGui::Selectable("Lua", script_language == ScriptLanguage::Lua)) {
+                    script_language = ScriptLanguage::Lua;
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    script_window.language = script_language;
+                }
+                if (ImGui::Selectable("Legacy", script_language == ScriptLanguage::Legacy)) {
+                    script_language = ScriptLanguage::Legacy;
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    script_window.language = script_language;
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+
+            if (script_language == ScriptLanguage::Lua) {
+                ImGui::SameLine();
+                HelpMarker("Lua API:\n"
+                           "write('symbol', value)\n"
+                           "read('symbol')\n"
+                           "wait(seconds)\n"
+                           "pause()\n"
+                           "save_csv('filename')");
+            }
+
             // Stop button only visible if running
-            if (script_window.running()) {
+            if (script_running) {
                 ImGui::SameLine();
                 if (ImGui::Button("Stop")) {
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                     script_window.stopScript();
                 }
                 ImGui::SameLine();
-                ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
+                ImGui::Text(std::format("{:.2f}", script_time).c_str());
 
                 // Show progress of the script by adding a separator where it is currently waiting
                 std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
-                showRunningScriptWithLineNumbers(lines, script_window.currentLine());
+                showRunningScriptWithLineNumbers(lines, script_line);
             } else {
                 inputScriptTextWithLineNumbers(script_window.text, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
             }

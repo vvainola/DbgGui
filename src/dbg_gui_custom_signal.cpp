@@ -18,19 +18,19 @@ void DbgGui::showCustomSignalCreator() {
         ImGui::InputText("Name", &custom_signal_name);
         if (ImGui::Button("Add")) {
             if (custom_signal_eq.empty()) {
-                m_error_message = "Equation cannot be empty";
+                logMessage("Equation cannot be empty");
                 ImGui::End();
                 return;
             }
 
             if (custom_signal_name.empty()) {
-                m_error_message = "New custom signal name cannot be empty";
+                logMessage("New custom signal name cannot be empty");
                 ImGui::End();
                 return;
             }
 
             if (m_selected_symbols.empty() || m_selected_symbols.size() > MAX_CUSTOM_SIGNALS_IN_EQ) {
-                m_error_message = std::format("Select between 1 and {} signals", MAX_CUSTOM_SIGNALS_IN_EQ);
+                logMessage(std::format("Select between 1 and {} signals", MAX_CUSTOM_SIGNALS_IN_EQ));
                 ImGui::End();
                 return;
             }
@@ -41,7 +41,7 @@ void DbgGui::showCustomSignalCreator() {
             std::vector<double> zeros(m_selected_symbols.size(), 0.0);
             std::expected<double, std::string> expr_value = str::evaluateExpression(getFormattedEqForSample(custom_signal_eq, zeros));
             if (!expr_value.has_value()) {
-                m_error_message = std::format("Invalid equation: {}", expr_value.error());
+                logMessage(std::format("Invalid equation: {}", expr_value.error()));
                 ImGui::End();
                 return;
             }

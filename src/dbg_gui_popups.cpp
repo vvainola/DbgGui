@@ -69,6 +69,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Script window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 m_script_windows.push_back(ScriptWindow{this, window_or_plot_name, hashWithTime(window_or_plot_name)});
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
@@ -160,31 +161,24 @@ void DbgGui::loadSnapshot() {
 }
 
 void DbgGui::showErrorModal() {
-    if (!m_error_message.empty()) {
-        ImGui::OpenPopup("Error");
-    }
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-    if (ImGui::BeginPopupModal("Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || m_error_message.empty()) {
-            m_error_message.clear();
-            ImGui::CloseCurrentPopup();
+    std::optional<Message> const message = getMessage();
+    for (auto const [type, title] : {std::pair{MessageType::Error, "Error"}, std::pair{MessageType::Info, "Info"}}) {
+        if (message && message->type == type) {
+            ImGui::OpenPopup(title);
         }
-        ImGui::Text(m_error_message.c_str());
-        ImGui::EndPopup();
-    }
 
-    if (!m_info_message.empty()) {
-        ImGui::OpenPopup("Info");
-    }
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-    if (ImGui::BeginPopupModal("Info", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || m_info_message.empty()) {
-            m_info_message.clear();
-            ImGui::CloseCurrentPopup();
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+        if (ImGui::BeginPopupModal(title, NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            std::optional<Message> const current_message = getMessage();
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                clearMessage();
+                ImGui::CloseCurrentPopup();
+            } else if (!current_message || current_message->type != type) {
+                ImGui::CloseCurrentPopup();
+            } else {
+                ImGui::Text(current_message->text.c_str());
+            }
+            ImGui::EndPopup();
         }
-        ImGui::Text(m_info_message.c_str());
-        ImGui::EndPopup();
     }
 }

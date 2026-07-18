@@ -50,6 +50,7 @@ deps = [
     dependency('glfw3'),
     dependency('kissfft-float'),
     dependency('cxxopts'),
+    dependency('lua'),
 ]
 
 if not WINDOWS
@@ -165,6 +166,8 @@ lib_gui = static_library('dbg_gui',
         'src/dbg_gui.cpp',
         'src/imgui_helpers.cpp',
         'src/imgui_settings_migration.cpp',
+        'src/lua_script.cpp',
+        'src/lua_script.h',
         'src/plot_decimation.cpp',
         'src/sample_clipboard.cpp',
         'src/script_window.cpp',
@@ -266,12 +269,14 @@ if get_option('tests')
         sources : [
             'src/csv_plot/csv_helpers.cpp',
             'src/imgui_settings_migration.cpp',
+            'src/lua_script.cpp',
             'src/plot_decimation.cpp',
             'src/sample_clipboard.cpp',
             'src/test_library_loader.cpp',
             'tests/csv_helpers_test.cpp',
             'tests/fwd_decl_types.cpp',
             'tests/imgui_settings_migration_test.cpp',
+            'tests/lua_script_test.cpp',
             'tests/sample_clipboard_test.cpp',
             'tests/signal_cleanup_test.cpp',
             'tests/symbols_test.cpp',

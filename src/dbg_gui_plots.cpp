@@ -226,10 +226,10 @@ void DbgGui::showScalarPlots() {
                         ImGui::CloseCurrentPopup();
                     }
                     if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
-                        m_error_message = *error;
+                        logMessage(*error);
                     }
                     if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
-                        m_error_message = *error;
+                        logMessage(*error);
                     }
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(scalar->alias.c_str());
@@ -824,7 +824,7 @@ void DbgGui::copyAllScalarSamplesToClipboard() {
 
     SampleClipboardData samples = collectScalarSamples(scalars, m_linked_scalar_x_axis_limits);
     if (!copySamplesToClipboard(samples)) {
-        m_error_message = "No sampled scalar data in the visible range";
+        logMessage("No sampled scalar data in the visible range");
     }
 }
 
@@ -835,7 +835,7 @@ void DbgGui::saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& 
 
     SampleClipboardData samples = collectScalarSamples(scalars, time_limits);
     if (samples.data.empty()) {
-        m_error_message = "No sampled scalar data in the visible range";
+        logMessage("No sampled scalar data in the visible range");
         return;
     }
     std::string csv_text = formatCsvColumns(samples.header, samples.data);

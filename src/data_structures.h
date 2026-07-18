@@ -26,6 +26,7 @@
 #include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "lua_script.h"
 #include "minmax.h"
 #include "spectrum.h"
 #include "str_helpers.h"
@@ -686,6 +687,11 @@ struct SignalGroup {
 };
 
 class DbgGui;
+enum class ScriptLanguage {
+    Lua,
+    Legacy,
+};
+
 struct ScriptWindow : Window {
   public:
     ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_);
@@ -693,20 +699,24 @@ struct ScriptWindow : Window {
         : Window(j), m_gui(gui) {
         text = j.value("text", "");
         loop = j.value("loop", loop);
+        language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["text"] = text;
         j["loop"] = loop;
+        j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
         return j;
     }
 
     std::string text;
+    ScriptLanguage language = ScriptLanguage::Lua;
     bool loop = false;
     bool text_edit_open = false;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
-    void processScript(double timestamp);
+    std::string processScript(double timestamp);
+    void shiftScriptSchedule(double time_offset);
     void stopScript();
     int currentLine();
     bool running();
@@ -719,6 +729,7 @@ struct ScriptWindow : Window {
         int line;
     };
     std::vector<Operation> m_operations;
+    std::unique_ptr<LuaScriptRunner> m_lua_script;
     int m_idx = -1;
     double m_start_time = 0;
     DbgGui* m_gui;
