@@ -52,7 +52,8 @@ bool isLuaKeyword(std::string_view word) {
 
 bool isLuaBuiltin(std::string_view word) {
     return word == "math" || word == "string" || word == "table" || word == "utf8"
-        || word == "read" || word == "write" || word == "wait" || word == "pause" || word == "save_csv";
+        || word == "read" || word == "read_u" || word == "write" || word == "write_u"
+        || word == "exists" || word == "wait" || word == "pause" || word == "save_csv";
 }
 
 float textWidth(std::string_view text) {

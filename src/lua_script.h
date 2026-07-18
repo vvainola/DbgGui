@@ -36,6 +36,7 @@ enum class LuaSymbolAccess {
 };
 
 struct LuaScriptHost {
+    std::function<bool(std::string_view)> exists;
     std::function<std::expected<double, std::string>(std::string_view)> read;
     std::function<std::expected<void, std::string>(std::string_view, double)> write;
     std::function<std::expected<void, std::string>(std::string_view, LuaSymbolAccess)> validate_symbol;
@@ -68,7 +69,10 @@ class LuaScriptRunner {
     void updateCurrentLine(lua_State* state);
 
     static int read(lua_State* state);
+    static int readUnchecked(lua_State* state);
     static int write(lua_State* state);
+    static int writeUnchecked(lua_State* state);
+    static int exists(lua_State* state);
     static int wait(lua_State* state);
     static int pause(lua_State* state);
     static int saveCsv(lua_State* state);

@@ -49,11 +49,6 @@ void openLibrary(lua_State* state, char const* name, lua_CFunction open) {
     lua_pop(state, 1);
 }
 
-void removeGlobal(lua_State* state, char const* name) {
-    lua_pushnil(state);
-    lua_setglobal(state, name);
-}
-
 void addFunction(lua_State* state, char const* name, lua_CFunction function) {
     lua_pushcfunction(state, function);
     lua_setglobal(state, name);
@@ -128,12 +123,14 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     openLibrary(m_state, LUA_STRLIBNAME, luaopen_string);
     openLibrary(m_state, LUA_TABLIBNAME, luaopen_table);
     openLibrary(m_state, LUA_UTF8LIBNAME, luaopen_utf8);
-    removeGlobal(m_state, "dofile");
-    removeGlobal(m_state, "load");
-    removeGlobal(m_state, "loadfile");
+    openLibrary(m_state, LUA_IOLIBNAME, luaopen_io);
+    openLibrary(m_state, LUA_OSLIBNAME, luaopen_os);
 
     addFunction(m_state, "read", &LuaScriptRunner::read);
+    addFunction(m_state, "read_u", &LuaScriptRunner::readUnchecked);
     addFunction(m_state, "write", &LuaScriptRunner::write);
+    addFunction(m_state, "write_u", &LuaScriptRunner::writeUnchecked);
+    addFunction(m_state, "exists", &LuaScriptRunner::exists);
     addFunction(m_state, "wait", &LuaScriptRunner::wait);
     addFunction(m_state, "pause", &LuaScriptRunner::pause);
     addFunction(m_state, "save_csv", &LuaScriptRunner::saveCsv);
@@ -275,6 +272,17 @@ int LuaScriptRunner::read(lua_State* state) {
     return lua_error(state);
 }
 
+int LuaScriptRunner::readUnchecked(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    size_t name_length = 0;
+    char const* name = luaL_checklstring(state, 1, &name_length);
+    if (!runner->m_host.exists(std::string_view(name, name_length))) {
+        lua_pushnumber(state, 0);
+        return 1;
+    }
+    return read(state);
+}
+
 int LuaScriptRunner::write(lua_State* state) {
     LuaScriptRunner* runner = getRunner(state);
     runner->updateCurrentLine(state);
@@ -289,6 +297,24 @@ int LuaScriptRunner::write(lua_State* state) {
         lua_pushlstring(state, result.error().data(), result.error().size());
     }
     return lua_error(state);
+}
+
+int LuaScriptRunner::writeUnchecked(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    size_t name_length = 0;
+    char const* name = luaL_checklstring(state, 1, &name_length);
+    if (!runner->m_host.exists(std::string_view(name, name_length))) {
+        return 0;
+    }
+    return write(state);
+}
+
+int LuaScriptRunner::exists(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    size_t name_length = 0;
+    char const* name = luaL_checklstring(state, 1, &name_length);
+    lua_pushboolean(state, runner->m_host.exists(std::string_view(name, name_length)));
+    return 1;
 }
 
 int LuaScriptRunner::wait(lua_State* state) {

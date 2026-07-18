@@ -1702,12 +1702,27 @@ void DbgGui::showScriptWindow() {
 
             if (script_language == ScriptLanguage::Lua) {
                 ImGui::SameLine();
-                HelpMarker("Lua API:\n"
+                HelpMarker("Available Lua libraries:\n"
+                           "    math, string, table, utf8, io, os\n"
+                           "    load(), loadfile(), and dofile() can load code from any path.\n\n"
+                           "package and debug are unavailable.\n\n"
+                           "DbgGui API:\n"
                            "write('symbol', value)\n"
+                           "    Write a scalar or arithmetic/enum symbol.\n"
                            "read('symbol')\n"
+                           "    Read a scalar or arithmetic/enum symbol.\n"
+                           "write_u('symbol', value)\n"
+                           "    Like write(), but ignore a missing scalar or symbol.\n"
+                           "read_u('symbol')\n"
+                           "    Like read(), but return 0 for a missing scalar or symbol.\n"
+                           "exists('symbol')\n"
+                           "    Check whether a scalar or arithmetic/enum symbol exists.\n"
                            "wait(seconds)\n"
+                           "    Yield script execution until the given sampling time.\n"
                            "pause()\n"
-                           "save_csv('filename')");
+                           "    Pause sampling after this script step.\n"
+                           "save_csv('filename')\n"
+                           "    Save all current scalars to a CSV file.");
             }
 
             // Stop button only visible if running

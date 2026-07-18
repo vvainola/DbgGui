@@ -31,6 +31,9 @@
 namespace {
 LuaScriptHost makeHost(std::vector<double>& writes) {
     LuaScriptHost host;
+    host.exists = [](std::string_view name) {
+        return name == "source" || name == "target";
+    };
     host.read = [](std::string_view name) -> std::expected<double, std::string> {
         if (name == "source") {
             return 2.0;
@@ -75,6 +78,21 @@ TEST_CASE("Lua scripts execute on the sampling clock and resume after wait") {
     REQUIRE(runner.process(11.0));
     CHECK(writes == std::vector<double>{3.0, 5.0});
     CHECK_FALSE(runner.running());
+}
+
+TEST_CASE("Lua unchecked symbol access ignores missing names") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("local lua_only = 1\n"
+                           "write('target', exists('source') and 1 or 0)\n"
+                           "write('target', exists('missing') and 1 or 0)\n"
+                           "write('target', exists('lua_only') and 1 or 0)\n"
+                           "write_u('missing', 123)\n"
+                           "write('target', read_u('missing'))",
+                           makeHost(writes));
+
+    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.process(0.0));
+    CHECK(writes == std::vector<double>{1.0, 0.0, 0.0, 0.0});
 }
 
 TEST_CASE("Lua scripts rebase waits after a backwards sampling timestamp jump") {
@@ -125,12 +143,17 @@ TEST_CASE("Lua while loops can yield repeatedly without exhausting their instruc
     CHECK(writes.size() >= 10000);
 }
 
-TEST_CASE("Lua scripts reject forbidden libraries and runaway loops") {
+TEST_CASE("Lua scripts expose trusted libraries and reject runaway loops") {
     std::vector<double> writes;
-    LuaScriptRunner sandbox_runner("if os ~= nil or io ~= nil or package ~= nil or debug ~= nil then error('unsafe library') end\nwait(1)", makeHost(writes));
+    LuaScriptRunner sandbox_runner("if os == nil or io == nil or package ~= nil or debug ~= nil then error('unexpected library configuration') end\n"
+                                 "local script = assert(load(\"write('target', 1)\"))\n"
+                                 "script()\n"
+                                 "wait(1)",
+                                 makeHost(writes));
     REQUIRE(sandbox_runner.start(0.0, false));
     REQUIRE(sandbox_runner.process(0.0));
     CHECK(sandbox_runner.running());
+    CHECK(writes == std::vector<double>{1.0});
 
     LuaScriptRunner runaway_runner("while true do end", makeHost(writes));
     REQUIRE(runaway_runner.start(0.0, false));

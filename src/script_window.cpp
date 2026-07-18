@@ -79,6 +79,15 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
 
     if (language == ScriptLanguage::Lua) {
         LuaScriptHost host;
+        host.exists = [gui = m_gui](std::string_view symbol_name) {
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted && scalar->name == symbol_name) {
+                    return true;
+                }
+            }
+            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+            return symbol && (symbol->getType() == VariantSymbol::Type::Arithmetic || symbol->getType() == VariantSymbol::Type::Enum);
+        };
         host.read = [gui = m_gui](std::string_view symbol_name) -> std::expected<double, std::string> {
             for (auto const& scalar : gui->m_scalars) {
                 if (!scalar->deleted && scalar->name == symbol_name) {
