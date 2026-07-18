@@ -25,6 +25,7 @@
 #include "imgui_stdlib.h"
 #include "str_helpers.h"
 #include "imgui_internal.h"
+#include "lua_syntax_highlighter.h"
 #include "themes.h"
 #include "multi_select_helpers.h"
 
@@ -81,7 +82,7 @@ ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
     return nullptr;
 }
 
-void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
+void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua) {
     ImGuiID const input_id = ImGui::GetID("##source");
     float const gutter_width = scriptLineNumberGutterWidth(scriptLineCount(text));
     float const editor_width = std::max(1.0f, size.x - gutter_width);
@@ -96,7 +97,17 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
     ImGui::Dummy(gutter_size);
     ImVec2 const gutter_max = ImVec2(gutter_min.x + gutter_size.x, gutter_min.y + gutter_size.y);
     ImGui::SameLine();
+    ImVec2 const editor_min = ImGui::GetCursorScreenPos();
+    if (highlight_lua) {
+        // The highlighter redraws every glyph after InputTextMultiline().
+        // Hiding InputText's glyphs avoids double anti-aliased text, while its
+        // editing, selection, and scrolling behavior remains intact.
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+    }
     ImGui::InputTextMultiline("##source", &text, ImVec2(editor_width, size.y), ImGuiInputTextFlags_AllowTabInput);
+    if (highlight_lua) {
+        ImGui::PopStyleColor();
+    }
     // InputTextMultiline is implemented as a child window. Its ChildId is the
     // input ID, but its window ID is generated from the parent/window name.
     ImGuiWindow* input_window = findChildWindowByChildId(input_id);
@@ -105,7 +116,21 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size) {
                              input_window->Scroll.y :
                            input_state ? input_state->Scroll.y :
                                          0.0f;
+    float const scroll_x = input_window ?
+                             input_window->Scroll.x :
+                           input_state ? input_state->Scroll.x :
+                                         0.0f;
     drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
+    if (highlight_lua) {
+        ImDrawList* draw_list = input_window ? input_window->DrawList : ImGui::GetWindowDrawList();
+        int const cursor_position = input_state && ImGui::GetActiveID() == input_id ? input_state->GetCursorPos() : -1;
+        drawLuaSyntaxHighlightOverlay(draw_list,
+                                      text,
+                                      editor_min,
+                                      ImVec2(editor_min.x + editor_width, editor_min.y + size.y),
+                                      ImVec2(scroll_x, scroll_y),
+                                      cursor_position);
+    }
     ImGui::PopStyleVar();
 }
 
@@ -1699,7 +1724,9 @@ void DbgGui::showScriptWindow() {
                 std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
                 showRunningScriptWithLineNumbers(lines, script_line);
             } else {
-                inputScriptTextWithLineNumbers(script_window.text, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y));
+                inputScriptTextWithLineNumbers(script_window.text,
+                                               ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y),
+                                               script_language == ScriptLanguage::Lua);
             }
 
             ImGui::End();
