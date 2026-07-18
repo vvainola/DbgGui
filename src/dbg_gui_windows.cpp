@@ -98,6 +98,8 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlig
     ImVec2 const gutter_max = ImVec2(gutter_min.x + gutter_size.x, gutter_min.y + gutter_size.y);
     ImGui::SameLine();
     ImVec2 const editor_min = ImGui::GetCursorScreenPos();
+    ImFont* const editor_font = ImGui::GetFont();
+    float const editor_font_size = ImGui::GetFontSize();
     if (highlight_lua) {
         // The highlighter redraws every glyph after InputTextMultiline().
         // Hiding InputText's glyphs avoids double anti-aliased text, while its
@@ -125,6 +127,8 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlig
         ImDrawList* draw_list = input_window ? input_window->DrawList : ImGui::GetWindowDrawList();
         int const cursor_position = input_state && ImGui::GetActiveID() == input_id ? input_state->GetCursorPos() : -1;
         drawLuaSyntaxHighlightOverlay(draw_list,
+                                      editor_font,
+                                      editor_font_size,
                                       text,
                                       editor_min,
                                       ImVec2(editor_min.x + editor_width, editor_min.y + size.y),

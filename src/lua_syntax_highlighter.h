@@ -29,6 +29,8 @@
 // Draws Lua token colors over an InputTextMultiline widget. The input text
 // remains responsible for editing, selection, cursor handling, and scrolling.
 void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
+                                   ImFont* font,
+                                   float font_size,
                                    std::string_view text,
                                    ImVec2 editor_min,
                                    ImVec2 editor_max,

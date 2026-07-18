@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <string_view>
 
 namespace {
@@ -56,23 +57,33 @@ bool isLuaBuiltin(std::string_view word) {
         || word == "exists" || word == "wait" || word == "pause" || word == "save_csv";
 }
 
-float textWidth(std::string_view text) {
+float textWidth(ImFont* font, float font_size, std::string_view text) {
     float width = 0;
     size_t segment_start = 0;
     for (size_t i = 0; i < text.size(); ++i) {
         if (text[i] != '\t') {
             continue;
         }
-        width += ImGui::CalcTextSize(text.data() + segment_start, text.data() + i).x;
-        width += ImGui::CalcTextSize("    ").x;
+        width += font->CalcTextSizeA(font_size,
+                                     std::numeric_limits<float>::max(),
+                                     0.0f,
+                                     text.data() + segment_start,
+                                     text.data() + i)
+                   .x;
+        width += font->CalcTextSizeA(font_size, std::numeric_limits<float>::max(), 0.0f, "    ").x;
         segment_start = i + 1;
     }
-    width += ImGui::CalcTextSize(text.data() + segment_start, text.data() + text.size()).x;
+    width += font->CalcTextSizeA(font_size,
+                                 std::numeric_limits<float>::max(),
+                                 0.0f,
+                                 text.data() + segment_start,
+                                 text.data() + text.size())
+               .x;
     return width;
 }
 
-void drawToken(ImDrawList* draw_list, ImVec2 position, std::string_view token, ImVec4 color) {
-    draw_list->AddText(position, ImGui::ColorConvertFloat4ToU32(color), token.data(), token.data() + token.size());
+void drawToken(ImDrawList* draw_list, ImFont* font, float font_size, ImVec2 position, std::string_view token, ImVec4 color) {
+    draw_list->AddText(font, font_size, position, ImGui::ColorConvertFloat4ToU32(color), token.data(), token.data() + token.size());
 }
 
 template <typename Function>
@@ -122,11 +133,11 @@ void forEachLuaToken(std::string_view line, Function&& function) {
     }
 }
 
-void drawLuaLine(ImDrawList* draw_list, std::string_view line, ImVec2 position) {
+void drawLuaLine(ImDrawList* draw_list, ImFont* font, float font_size, std::string_view line, ImVec2 position) {
     float x = position.x;
     forEachLuaToken(line, [&](std::string_view token, ImVec4 color) {
-        drawToken(draw_list, ImVec2(x, position.y), token, color);
-        x += textWidth(token);
+        drawToken(draw_list, font, font_size, ImVec2(x, position.y), token, color);
+        x += textWidth(font, font_size, token);
     });
 }
 
@@ -147,6 +158,8 @@ void showLuaHighlightedText(std::string_view text) {
 }
 
 void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
+                                   ImFont* font,
+                                   float font_size,
                                    std::string_view text,
                                    ImVec2 editor_min,
                                    ImVec2 editor_max,
@@ -155,7 +168,7 @@ void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
     ImGuiStyle const& style = ImGui::GetStyle();
     ImVec2 position = ImVec2(editor_min.x + style.FramePadding.x - scroll.x,
                              editor_min.y + style.FramePadding.y - scroll.y);
-    float const line_height = ImGui::GetTextLineHeight();
+    float const line_height = font_size;
 
     draw_list->PushClipRect(editor_min, editor_max, true);
     size_t line_start = 0;
@@ -163,7 +176,7 @@ void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
         size_t const line_end = text.find('\n', line_start);
         size_t const line_length = (line_end == std::string_view::npos ? text.size() : line_end) - line_start;
         if (position.y + line_height >= editor_min.y && position.y <= editor_max.y) {
-            drawLuaLine(draw_list, text.substr(line_start, line_length), position);
+            drawLuaLine(draw_list, font, font_size, text.substr(line_start, line_length), position);
         }
         if (line_end == std::string_view::npos) {
             break;
@@ -176,8 +189,8 @@ void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
         size_t const previous_line_end = cursor == 0 ? std::string_view::npos : text.rfind('\n', cursor - 1);
         size_t const cursor_line_start = previous_line_end == std::string_view::npos ? 0 : previous_line_end + 1;
         int const cursor_line = static_cast<int>(std::ranges::count(text.substr(0, cursor), '\n'));
-        ImVec2 const cursor_position_on_screen = ImVec2(position.x + textWidth(text.substr(cursor_line_start, cursor - cursor_line_start)),
-                                                         editor_min.y + style.FramePadding.y - scroll.y + cursor_line * line_height);
+        ImVec2 const cursor_position_on_screen = ImVec2(position.x + textWidth(font, font_size, text.substr(cursor_line_start, cursor - cursor_line_start)),
+                                                        editor_min.y + style.FramePadding.y - scroll.y + cursor_line * line_height);
         draw_list->AddLine(cursor_position_on_screen,
                            ImVec2(cursor_position_on_screen.x, cursor_position_on_screen.y + line_height),
                            ImGui::GetColorU32(ImGuiCol_Text));
