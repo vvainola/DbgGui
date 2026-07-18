@@ -1880,7 +1880,8 @@ void CsvPlotter::showSignalWindow() {
     // rendered get pushed). Begin-side requests use the previous frame's list, matching the
     // pattern used in DbgGui's scalar/vector/symbol trees.
     ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                   | ImGuiMultiSelectFlags_BoxSelect1d;
+                                   | ImGuiMultiSelectFlags_BoxSelect1d
+                                   | ImGuiMultiSelectFlags_SelectOnClickRelease;
     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                         (int)m_selected_signals.size(),
                                                         -1);

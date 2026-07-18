@@ -819,7 +819,8 @@ void DbgGui::showScalarWindow() {
 
         ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
                                        | ImGuiMultiSelectFlags_BoxSelect2d
-                                       | ImGuiMultiSelectFlags_ScopeRect;
+                                       | ImGuiMultiSelectFlags_ScopeRect
+                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
         ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                             (int)m_selected_scalars.size(),
                                                             -1);
@@ -1025,7 +1026,8 @@ void DbgGui::showVectorWindow() {
 
         ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
                                        | ImGuiMultiSelectFlags_BoxSelect2d
-                                       | ImGuiMultiSelectFlags_ScopeRect;
+                                       | ImGuiMultiSelectFlags_ScopeRect
+                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
         ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                             (int)m_selected_vectors.size(),
                                                             -1);
@@ -1348,7 +1350,9 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
     // area, not the whole window (the search inputs above would otherwise be in scope).
     ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
                                    | ImGuiMultiSelectFlags_BoxSelect2d
-                                   | ImGuiMultiSelectFlags_ScopeRect;
+                                   | ImGuiMultiSelectFlags_ScopeRect
+                                   // Let an unselected symbol be dragged without first selecting it.
+                                   | ImGuiMultiSelectFlags_SelectOnClickRelease;
     ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
                                                         (int)m_selected_symbols.size(),
                                                         -1); // Not used
