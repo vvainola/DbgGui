@@ -61,97 +61,25 @@ static void appendInheritedMembers(SymbolDescriptor& symbol,
 // Address computation helpers
 // ============================================================================
 
-// Finds the runtime base address by reading /proc/self/maps and matching it
-// with the ELF section headers. DWARF addresses are relative to the ELF
-// virtual address space, so we need to convert them to runtime addresses.
-static MemoryAddress getDataSectionBase() {
-    static MemoryAddress cached_base = 0;
-    if (cached_base != 0) {
-        return cached_base;
-    }
-
-    // Get the path of the current executable
-    char exe_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len == -1) {
-        return 0;
-    }
-    exe_path[len] = '\0';
-
-    // Open the ELF file to find the .data section's virtual address
-    int fd = open(exe_path, O_RDONLY);
-    if (fd < 0) {
-        return 0;
-    }
-
-    // Read ELF header
-    Elf64_Ehdr ehdr;
-    if (read(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
-        close(fd);
-        return 0;
-    }
-
-    // Get section header table
-    Elf64_Off shoff = ehdr.e_shoff;
-    Elf64_Half shentsize = ehdr.e_shentsize;
-    Elf64_Half shnum = ehdr.e_shnum;
-    Elf64_Half shstrndx = ehdr.e_shstrndx;
-
-    // Read section header string table
-    lseek(fd, shoff + shstrndx * shentsize, SEEK_SET);
-    Elf64_Shdr shstrhdr;
-    read(fd, &shstrhdr, sizeof(shstrhdr));
-    lseek(fd, shstrhdr.sh_offset, SEEK_SET);
-    char* strtab = new char[shstrhdr.sh_size];
-    read(fd, strtab, shstrhdr.sh_size);
-
-    // Find .data section's virtual address in the ELF file
-    Elf64_Addr data_elf_addr = 0;
-    for (Elf64_Half i = 0; i < shnum; i++) {
-        lseek(fd, shoff + i * shentsize, SEEK_SET);
-        Elf64_Shdr shdr;
-        read(fd, &shdr, sizeof(shdr));
-        const char* name = strtab + shdr.sh_name;
-        if (strcmp(name, ".data") == 0) {
-            data_elf_addr = shdr.sh_addr;
-            break;
-        }
-    }
-    delete[] strtab;
-    close(fd);
-
-    if (data_elf_addr == 0) {
-        return 0;
-    }
-
-    // Now find where the data segment is loaded in memory
-    FILE* maps = fopen("/proc/self/maps", "r");
-    if (!maps) {
-        return 0;
-    }
-    char line[512];
-    while (fgets(line, sizeof(line), maps)) {
-        // Look for the data segment (rw-p) of our executable
-        if (strstr(line, " rw-p ") && strstr(line, exe_path)) {
-            unsigned long start, end;
-            char perms[5];
-            if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) == 3) {
-                // The data segment start in memory maps to data_elf_addr in the ELF file
-                // So the runtime base for any ELF virtual address is:
-                // runtime_addr = runtime_data_segment_start + (elf_addr - data_elf_addr)
-                cached_base = start - data_elf_addr;
-                fclose(maps);
-                return cached_base;
-            }
-        }
-    }
-    fclose(maps);
-    return 0;
-}
-
 // Determines where the current executable was loaded in memory.
 static MemoryAddress getLoadBase() {
-    return getDataSectionBase();
+    static MemoryAddress const load_base = [] {
+        MemoryAddress base = 0;
+        dl_iterate_phdr(
+          [](dl_phdr_info* info, size_t, void* data) {
+              // The main executable is represented by the entry with an empty
+              // name. dlpi_addr is its ELF load bias: zero for ET_EXEC and the
+              // relocation base for PIE executables.
+              if (info->dlpi_name == nullptr || info->dlpi_name[0] == '\0') {
+                  *static_cast<MemoryAddress*>(data) = info->dlpi_addr;
+                  return 1;
+              }
+              return 0;
+          },
+          &base);
+        return base;
+    }();
+    return load_base;
 }
 
 // ============================================================================
