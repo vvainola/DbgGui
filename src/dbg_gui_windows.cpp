@@ -1846,6 +1846,7 @@ void DbgGui::showGridWindow() {
             text_font_size *= scale;
             value_font_size *= scale;
         }
+        text_font_size = std::max(text_font_size, float(MIN_FONT_SIZE));
         value_font_size = std::max(value_font_size, float(MIN_FONT_SIZE));
 
         if (ImGui::BeginTable("grid_table",
@@ -1863,7 +1864,7 @@ void DbgGui::showGridWindow() {
                         ImVec2 available = ImGui::GetContentRegionAvail();
                         if (available.x < text_size.x) {
                             ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x) - 1));
+                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x)));
                         }
 
                         // Name
