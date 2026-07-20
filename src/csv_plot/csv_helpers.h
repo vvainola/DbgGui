@@ -24,7 +24,9 @@
 #include <string>
 #include <algorithm>
 #include <span>
+#include <string_view>
 
+#include "plot_decimation.h"
 #include "str_helpers.h"
 
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count = 1);
@@ -34,6 +36,10 @@ enum class CsvPlotStyle {
     LeadingStairs,
     LaggingStairs,
 };
+
+std::string formatCsvColumns(std::vector<std::string> const& header,
+                             std::vector<std::vector<double>> const& data);
+std::vector<std::string> makeUniqueCsvSignalNames(std::vector<std::string> const& signal_names);
 
 // Opens PSCAD .inf file, reads the signal names, parses the .out files for data and creates single
 // csv file with same basename. Returns true if csv file was created, false if something went wrong.
@@ -45,7 +51,7 @@ inline void remove(std::vector<T>& v, const T& item) {
 }
 
 template <typename T>
-inline bool contains(std::vector<T>& v, const T& item_to_search) {
+inline bool contains(std::vector<T> const& v, const T& item_to_search) {
     for (auto const& item : v) {
         if (item == item_to_search) {
             return true;
@@ -54,19 +60,6 @@ inline bool contains(std::vector<T>& v, const T& item_to_search) {
     return false;
 }
 
-struct DecimatedValues {
-    std::vector<double> x;
-    std::vector<double> y_min;
-    std::vector<double> y_max;
-};
-DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count);
-
-struct StairValues {
-    std::vector<double> x;
-    std::vector<double> y;
-};
-
-StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style);
 double getPlotValueAtX(CsvPlotStyle plot_style,
                        std::span<double const> x,
                        std::span<double const> y,

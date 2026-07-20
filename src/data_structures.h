@@ -25,6 +25,9 @@
 #include "symbols/dbg_symbols.hpp"
 #include "symbols/arithmetic_symbol.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
+#include "lua_script.h"
+#include "minmax.h"
 #include "spectrum.h"
 #include "str_helpers.h"
 #include "nlohmann/json.hpp"
@@ -51,18 +54,13 @@ inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
 uint64_t hash(const std::string& str);
 uint64_t hashWithTime(const std::string& str);
+// Compute the signal id from name and group, matching the formula used by
+// addScalar/addVector: hash(name + " (" + group + ")").
+inline uint64_t signalId(std::string const& name, std::string const& group) {
+    return hash(name + " (" + group + ")");
+}
 std::string getFilenameToSave(std::string const& filter = "csv", std::string default_path = "");
 std::string getFilenameToOpen(std::string const& filter, std::string default_path = "");
-
-template <typename T>
-T inline min(T a, T b) {
-    return a < b ? a : b;
-}
-
-template <typename T>
-T inline max(T a, T b) {
-    return a > b ? a : b;
-}
 
 template <typename T>
 inline void remove(std::vector<T>& v, const T& item) {
@@ -70,7 +68,7 @@ inline void remove(std::vector<T>& v, const T& item) {
 }
 
 template <typename T>
-inline bool contains(std::vector<T>& v, const T& item_to_search) {
+inline bool contains(std::vector<T> const& v, const T& item_to_search) {
     for (auto const& item : v) {
         if (item == item_to_search) {
             return true;
@@ -132,6 +130,7 @@ struct Scalar {
     std::string alias_and_group;
     ImVec4 color = {-1, -1, -1, -1};
     ValueSource src;
+    bool read_only = false;
     bool hide_from_scalars_window = false;
     bool deleted = false;
     Scalar* replacement = nullptr;
@@ -305,12 +304,7 @@ struct Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::EndPopup();
         }
     }
@@ -461,12 +455,7 @@ struct ScalarPlot : Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             int new_rows = m_rows;
             int new_cols = m_cols;
             if (ImGui::InputInt("Rows", &new_rows)) {
@@ -643,12 +632,7 @@ struct GridWindow : Window {
         rows = std::clamp(rows, 1, MAX_ROWS);
         columns = std::clamp(columns, 1, MAX_COLUMNS);
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::InputInt("Rows", &rows, 0, 0);
             ImGui::InputInt("Columms", &columns, 0, 0);
             ImGui::InputFloat("Text to value ratio", &text_to_value_ratio, 0, 0, "%.2f");
@@ -676,12 +660,7 @@ struct DockSpace : Window {
 
     void contextMenu() {
         if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            name.reserve(MAX_NAME_LENGTH);
-            if (ImGui::InputText("Name##window_context_menu",
-                                 name.data(),
-                                 MAX_NAME_LENGTH)) {
-                name = std::string(name.data());
-            }
+            ImGui::InputText("Name##window_context_menu", &name);
             ImGui::Checkbox("Even split", &even_split);
             ImGui::EndPopup();
         }
@@ -708,29 +687,35 @@ struct SignalGroup {
 };
 
 class DbgGui;
+enum class ScriptLanguage {
+    Lua,
+    Legacy,
+};
+
 struct ScriptWindow : Window {
   public:
     ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_);
     ScriptWindow(DbgGui* gui, nlohmann::json const& j)
         : Window(j), m_gui(gui) {
-        std::string json_text = j.value("text", "");
-        std::memcpy((void*)text, (void*)json_text.data(), json_text.size());
-        text[json_text.size()] = '\0';
+        text = j.value("text", "");
         loop = j.value("loop", loop);
+        language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["text"] = text;
         j["loop"] = loop;
+        j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
         return j;
     }
 
-    char text[1024 * 16];
+    std::string text;
+    ScriptLanguage language = ScriptLanguage::Lua;
     bool loop = false;
-    bool text_edit_open = false;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
-    void processScript(double timestamp);
+    std::string processScript(double timestamp);
+    void shiftScriptSchedule(double time_offset);
     void stopScript();
     int currentLine();
     bool running();
@@ -743,6 +728,7 @@ struct ScriptWindow : Window {
         int line;
     };
     std::vector<Operation> m_operations;
+    std::unique_ptr<LuaScriptRunner> m_lua_script;
     int m_idx = -1;
     double m_start_time = 0;
     DbgGui* m_gui;

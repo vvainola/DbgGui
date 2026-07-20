@@ -99,7 +99,7 @@ std::expected<std::string, std::string> readFile(const std::string& filename) {
 }
 #endif
 
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count) {
+std::vector<std::string_view> splitSv(std::string_view s, char delim, int expected_column_count) {
     std::vector<std::string_view> elems;
     elems.reserve(expected_column_count);
     if (s.empty()) {
@@ -108,15 +108,19 @@ std::vector<std::string_view> splitSv(const std::string& s, char delim, int expe
     size_t pos_start = 0;
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] == delim) {
-            elems.push_back(std::string_view(&s[pos_start], &s[i]));
+            elems.push_back(s.substr(pos_start, i - pos_start));
             pos_start = i + 1;
         }
     }
     // Add the last value if there is no trailing delimiter
     if (s.back() != delim) {
-        elems.push_back(std::string_view(&s[pos_start]));
+        elems.push_back(s.substr(pos_start));
     }
     return elems;
+}
+
+std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count) {
+    return splitSv(std::string_view(s), delim, expected_column_count);
 }
 
 std::vector<std::string> split(const std::string& s, char delim) {

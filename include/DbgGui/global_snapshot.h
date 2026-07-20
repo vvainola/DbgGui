@@ -27,9 +27,7 @@ extern "C" {
 #endif
 
 /// @brief Get information of all global symbols from PDB file.
-/// @return Symbol information. The object is a singleton that does not have to
-///     deleted because DbgHelp library cannot be initialized multiple times in
-///     a single process.
+/// @return Symbol information. The object is a singleton that does not have to be deleted.
 void* SNP_getSymbolsFromPdb();
 
 /**

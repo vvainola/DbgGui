@@ -20,15 +20,256 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "str_helpers.h"
 #include "imgui_internal.h"
+#include "lua_syntax_highlighter.h"
 #include "themes.h"
+#include "multi_select_helpers.h"
 
+#include <algorithm>
 #include <format>
 #include <iostream>
 #include <fstream>
+#include <string_view>
+#include <span>
+
+namespace {
+
+int scriptLineCount(std::string_view text) {
+    return static_cast<int>(std::ranges::count(text, '\n')) + 1;
+}
+
+float scriptLineNumberGutterWidth(int line_count) {
+    ImGuiStyle const& style = ImGui::GetStyle();
+    return ImGui::CalcTextSize(std::to_string(std::max(1, line_count)).c_str()).x + 2.0f * style.FramePadding.x;
+}
+
+void drawScriptLineNumberGutter(std::string const& text, ImVec2 min, ImVec2 max, float scroll_y) {
+    ImGuiStyle const& style = ImGui::GetStyle();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImU32 const text_color = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    float const line_height = ImGui::GetFontSize();
+    int const line_count = scriptLineCount(text);
+
+    draw_list->PushClipRect(min, max, true);
+    for (int line = 1; line <= line_count; ++line) {
+        // InputTextMultiline scrolls internally, so draw the gutter with the
+        // same vertical scroll instead of making line numbers their own child.
+        float const y = min.y + style.FramePadding.y + static_cast<float>(line - 1) * line_height - scroll_y;
+        if (y + line_height < min.y) {
+            continue;
+        }
+        if (y > max.y) {
+            break;
+        }
+        std::string line_number = std::to_string(line);
+        float const x = max.x - style.FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x;
+        draw_list->AddText(ImVec2(x, y), text_color, line_number.c_str());
+    }
+    draw_list->PopClipRect();
+}
+
+ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
+    ImGuiContext& g = *GImGui;
+    for (ImGuiWindow* window : g.Windows) {
+        if (window->ChildId == child_id) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua) {
+    ImGuiID const input_id = ImGui::GetID("##source");
+    float const gutter_width = scriptLineNumberGutterWidth(scriptLineCount(text));
+    float const editor_width = std::max(1.0f, size.x - gutter_width);
+
+    // Layout order is intentional:
+    // 1. Reserve gutter space with Dummy().
+    // 2. Submit InputTextMultiline() so ImGui updates its internal scroll state.
+    // 3. Draw line numbers into the reserved gutter using that scroll offset.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+    ImVec2 const gutter_min = ImGui::GetCursorScreenPos();
+    ImVec2 const gutter_size = ImVec2(gutter_width, size.y);
+    ImGui::Dummy(gutter_size);
+    ImVec2 const gutter_max = ImVec2(gutter_min.x + gutter_size.x, gutter_min.y + gutter_size.y);
+    ImGui::SameLine();
+    ImVec2 const editor_min = ImGui::GetCursorScreenPos();
+    ImFont* const editor_font = ImGui::GetFont();
+    float const editor_font_size = ImGui::GetFontSize();
+    if (highlight_lua) {
+        // The highlighter redraws every glyph after InputTextMultiline().
+        // Hiding InputText's glyphs avoids double anti-aliased text, while its
+        // editing, selection, and scrolling behavior remains intact.
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+    }
+    ImGui::InputTextMultiline("##source", &text, ImVec2(editor_width, size.y), ImGuiInputTextFlags_AllowTabInput);
+    if (highlight_lua) {
+        ImGui::PopStyleColor();
+    }
+    // InputTextMultiline is implemented as a child window. Its ChildId is the
+    // input ID, but its window ID is generated from the parent/window name.
+    ImGuiWindow* input_window = findChildWindowByChildId(input_id);
+    ImGuiInputTextState* input_state = ImGui::GetInputTextState(input_id);
+    float const scroll_y = input_window ?
+                             input_window->Scroll.y :
+                           input_state ? input_state->Scroll.y :
+                                         0.0f;
+    float const scroll_x = input_window ?
+                             input_window->Scroll.x :
+                           input_state ? input_state->Scroll.x :
+                                         0.0f;
+    drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
+    if (highlight_lua) {
+        ImDrawList* draw_list = input_window ? input_window->DrawList : ImGui::GetWindowDrawList();
+        int const cursor_position = input_state && ImGui::GetActiveID() == input_id ? input_state->GetCursorPos() : -1;
+        drawLuaSyntaxHighlightOverlay(draw_list,
+                                      editor_font,
+                                      editor_font_size,
+                                      text,
+                                      editor_min,
+                                      ImVec2(editor_min.x + editor_width, editor_min.y + size.y),
+                                      ImVec2(scroll_x, scroll_y),
+                                      cursor_position);
+    }
+    ImGui::PopStyleVar();
+}
+
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua) {
+    int const line_count = static_cast<int>(lines.size());
+    float const gutter_width = scriptLineNumberGutterWidth(line_count);
+    if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("##line", ImGuiTableColumnFlags_WidthFixed, gutter_width);
+        ImGui::TableSetupColumn("##source", ImGuiTableColumnFlags_WidthStretch);
+        for (int i = 0; i < line_count; ++i) {
+            if (i == current_line) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TableNextColumn();
+                ImGui::Separator();
+            }
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            std::string line_number = std::to_string(i + 1);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - ImGui::GetStyle().FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x);
+            ImGui::TextDisabled("%s", line_number.c_str());
+            ImGui::TableNextColumn();
+            if (highlight_lua) {
+                showLuaHighlightedText(lines[i]);
+            } else {
+                ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
+            }
+        }
+        ImGui::EndTable();
+    }
+}
+
+std::string getSymbolScaleStr(VariantSymbol const& sym,
+                              std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
+    auto it = symbol_scale_settings.find(sym.getFullName());
+    return it == symbol_scale_settings.end() ? "1" : it->second;
+}
+
+std::optional<std::string> setSymbolScaleStr(VariantSymbol& sym,
+                                             std::string const& scale,
+                                             std::unordered_map<std::string, std::string>& symbol_scale_settings) {
+    auto scale_value = str::evaluateExpression(scale);
+    if (!scale_value.has_value()) {
+        return scale_value.error();
+    }
+
+    if (scale_value.value() == 1) {
+        symbol_scale_settings.erase(sym.getFullName());
+    } else {
+        symbol_scale_settings[sym.getFullName()] = scale;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> addSymbolScaleInput(VariantSymbol& sym,
+                                               std::vector<VariantSymbol*> const& selected_symbols,
+                                               std::unordered_map<std::string, std::string>& symbol_scale_settings) {
+    std::string scale = getSymbolScaleStr(sym, symbol_scale_settings);
+    if (ImGui::InputText("Scale", &scale, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        // If the symbol is part of the selection, apply the scale to all selected symbols.
+        if (contains(selected_symbols, &sym)) {
+            for (VariantSymbol* selected : selected_symbols) {
+                if (std::optional<std::string> error = setSymbolScaleStr(*selected, scale, symbol_scale_settings)) {
+                    return error;
+                }
+            }
+        } else if (std::optional<std::string> error = setSymbolScaleStr(sym, scale, symbol_scale_settings)) {
+            return error;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<VariantSymbol*> buildSymbolSearchResults(DbgSymbols const& symbols,
+                                                     std::string const& search_string,
+                                                     int search_depth) {
+    if (search_string.size() <= 2) {
+        return {};
+    }
+
+    std::vector<VariantSymbol*> results = symbols.findMatchingSymbols(search_string, search_depth);
+    std::vector<VariantSymbol*>::iterator begin_it = results.begin();
+    // Don't sort first element if it is an exact match.
+    if (!results.empty() && results[0]->getFullName() == search_string) {
+        ++begin_it;
+    }
+    std::sort(begin_it, results.end(), [](VariantSymbol* l, VariantSymbol* r) {
+        return l->getFullName() < r->getFullName();
+    });
+    return results;
+}
+
+} // namespace
+
+std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getScaleStr().data(), scalar->getScaleStr().size());
+    buffer[scalar->getScaleStr().size()] = '\0';
+    if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        std::expected<double, std::string> scale = str::evaluateExpression(buffer);
+        if (scale.has_value()) {
+            if (contains(selected_scalars, scalar)) {
+                for (Scalar* s : selected_scalars) {
+                    s->setScaleStr(buffer);
+                }
+            } else {
+                scalar->setScaleStr(buffer);
+            }
+        } else {
+            return scale.error();
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars) {
+    char buffer[1024];
+    std::memcpy(buffer, scalar->getOffsetStr().data(), scalar->getOffsetStr().size());
+    buffer[scalar->getOffsetStr().size()] = '\0';
+    if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        std::expected<double, std::string> offset = str::evaluateExpression(buffer);
+        if (offset.has_value()) {
+            if (contains(selected_scalars, scalar)) {
+                for (Scalar* s : selected_scalars) {
+                    s->setOffsetStr(buffer);
+                }
+            } else {
+                scalar->setOffsetStr(buffer);
+            }
+        } else {
+            return offset.error();
+        }
+    }
+    return std::nullopt;
+}
 
 std::string getSourceValueStr(ValueSource src) {
     return std::visit(
@@ -45,62 +286,37 @@ std::string getSourceValueStr(ValueSource src) {
       src);
 }
 
-void HelpMarker(const char* desc) {
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip();
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
-
-int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data) {
-    ImGuiKey* pressed_key = (ImGuiKey*)data->UserData;
-    if (*pressed_key == ImGuiKey_None) {
-        return 0;
-    }
-    // Minus is handled separately because its name is "Minus" instead of "-"
-    std::string key_name;
-    if (*pressed_key == ImGuiKey_Minus) {
-        key_name = "-";
+void addReadonlyScalar(ValueSource const& value_src, double scale = 1, double offset = 0) {
+    std::string value_str;
+    if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
+        value_str = getSourceValueStr(value_src);
     } else {
-        key_name = ImGui::GetKeyName(*pressed_key);
+        value_str = numberAsStr(getSourceValue(value_src) * scale + offset);
     }
-    if (key_name.starts_with("Keypad")) {
-        key_name = key_name[6];
+
+    ImVec2 available = ImGui::GetContentRegionAvail();
+    ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
+    if (available.x < text_size.x) {
+        float current_font_size = ImGui::GetFontSize();
+        float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
+        ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
+        ImGui::Text(value_str.c_str());
+        ImGui::PopFont();
+    } else {
+        ImGui::Text(value_str.c_str());
     }
-    // Clear text edit and set cursor after first character
-    strncpy(data->Buf, key_name.c_str(), 20);
-    data->Buf[19] = '\0';
-    data->BufTextLen = 1;
-    data->BufDirty = 1;
-    data->CursorPos = 1;
-    data->SelectionStart = 1;
-    data->SelectionEnd = 1;
-    *pressed_key = ImGuiKey_None;
-    return 0;
 }
 
-std::optional<ImGuiKey> pressedNumber() {
-    for (int key = ImGuiKey_0; key <= ImGuiKey_9; key++) {
-        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
-            return ImGuiKey(key);
-        }
+void addInputScalar(ValueSource const& value_src,
+                    std::string const& label,
+                    double scale = 1,
+                    double offset = 0,
+                    bool read_only = false) {
+    if (read_only) {
+        addReadonlyScalar(value_src, scale, offset);
+        return;
     }
-    for (int key = ImGuiKey_Keypad0; key <= ImGuiKey_Keypad9; key++) {
-        if (ImGui::IsKeyPressed(ImGuiKey(key))) {
-            return ImGuiKey(key);
-        }
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-        return ImGuiKey_Minus;
-    }
-    return std::nullopt;
-}
 
-void addInputScalar(ValueSource const& value_src, std::string const& label, double scale = 1, double offset = 0) {
     if (std::get_if<ReadWriteFnCustomStr>(&value_src)) {
         // Scale text to fit
         ImVec2 available = ImGui::GetContentRegionAvail();
@@ -108,7 +324,7 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
         ImVec2 text_size = ImGui::CalcTextSize(value_str.c_str());
         if (available.x < text_size.x) {
             float current_font_size = ImGui::GetFontSize();
-            float font_size = max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
+            float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
             ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
             ImGui::Text(value_str.c_str());
             ImGui::PopFont();
@@ -137,7 +353,7 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
     };
     // When number is pressed and item is not already edited, move keyboard focus, write the pressed number and set cursor
     // after the number. This way input can be immediately edited by just typing numbers
-    std::optional<ImGuiKey> number_pressed = pressedNumber();
+    std::optional<ImGuiKey> number_pressed = pressedNumberKey();
     if (ImGui::IsItemFocused() && !ImGui::IsItemActive() && number_pressed) {
         ImGui::SetKeyboardFocusHere(-1);
         // The pressed number is global between all input fields so the value is set here for next frame and the cursor
@@ -146,15 +362,19 @@ void addInputScalar(ValueSource const& value_src, std::string const& label, doub
     }
 }
 
-void DbgGui::addScalarContextMenu(Scalar* scalar) {
+void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = scalar->getScaledValue();
         if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
             m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
             ImGui::CloseCurrentPopup();
         }
-        addScalarScaleInput(scalar);
-        addScalarOffsetInput(scalar);
+        if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
+            logMessage(*error);
+        }
+        if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
+            logMessage(*error);
+        }
 
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(scalar->name.c_str());
@@ -169,51 +389,80 @@ void DbgGui::addScalarContextMenu(Scalar* scalar) {
             ImGui::CloseCurrentPopup();
         }
 
-        scalar->alias.reserve(MAX_NAME_LENGTH);
-        if (ImGui::InputText("Alias##scalar_context_menu",
-                             scalar->alias.data(),
-                             MAX_NAME_LENGTH)) {
-            scalar->alias = std::string(scalar->alias.data());
+        if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
             if (scalar->alias.empty()) {
                 scalar->alias = scalar->name;
             }
-            scalar->alias_and_group = std::string(scalar->alias.data()) + " (" + scalar->group + ")";
+            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+        }
+        if (show_delete) {
+            ImGui::Separator();
+            if (ImGui::Button("Delete")) {
+                if (contains(m_selected_scalars, scalar)) {
+                    for (Scalar* selected_scalar : m_selected_scalars) {
+                        selected_scalar->deleted = true;
+                    }
+                    m_selected_scalars.clear();
+                } else {
+                    scalar->deleted = true;
+                }
+                ImGui::CloseCurrentPopup();
+            }
         }
         ImGui::EndPopup();
     }
 }
 
-void DbgGui::addScalarScaleInput(Scalar* scalar) {
-    char buffer[1024];
-    std::memcpy(buffer, scalar->getScaleStr().data(), scalar->getScaleStr().size());
-    buffer[scalar->getScaleStr().size()] = '\0';
-    if (ImGui::InputText("Scale", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        auto scale = str::evaluateExpression(buffer);
-        if (scale.has_value()) {
-            scalar->setScaleStr(buffer);
-        } else {
-            m_error_message = scale.error();
-        }
-    }
-}
-
-void DbgGui::addScalarOffsetInput(Scalar* scalar) {
-    char buffer[1024];
-    std::memcpy(buffer, scalar->getOffsetStr().data(), scalar->getOffsetStr().size());
-    buffer[scalar->getOffsetStr().size()] = '\0';
-    if (ImGui::InputText("Offset", buffer, 1024, ImGuiInputTextFlags_EnterReturnsTrue)) {
-        auto offset = str::evaluateExpression(buffer);
-        if (offset.has_value()) {
-            scalar->setOffsetStr(buffer);
-        } else {
-            m_error_message = offset.error();
-        }
-    }
+double getSymbolScale(VariantSymbol const& sym,
+                      std::unordered_map<std::string, std::string> const& symbol_scale_settings) {
+    auto scale = str::evaluateExpression(getSymbolScaleStr(sym, symbol_scale_settings));
+    return scale.has_value() ? scale.value() : 1;
 }
 
 void DbgGui::addSymbolContextMenu(VariantSymbol& sym) {
     std::string full_name = sym.getFullName();
     if (ImGui::BeginPopupContextItem((full_name + "_context_menu").c_str())) {
+        bool arithmetic_or_enum = sym.getType() == VariantSymbol::Type::Arithmetic
+                               || sym.getType() == VariantSymbol::Type::Enum;
+        if (arithmetic_or_enum) {
+            if (std::optional<std::string> error = addSymbolScaleInput(sym, m_selected_symbols, m_symbol_scale_settings)) {
+                logMessage(*error);
+            }
+        }
+        bool can_fold_children = !sym.getChildren().empty()
+                              || (sym.getType() == VariantSymbol::Type::Pointer && sym.getPointedSymbol() != nullptr);
+        std::function<void(VariantSymbol&, bool, std::set<VariantSymbol*>&)> fold_all =
+          [&](VariantSymbol& symbol, bool opened, std::set<VariantSymbol*>& visiting) {
+              // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
+              if (visiting.contains(&symbol)) {
+                  return;
+              }
+              visiting.insert(&symbol);
+              symbol.opened_manually = opened;
+              if (symbol.getType() == VariantSymbol::Type::Pointer) {
+                  if (VariantSymbol* pointed_symbol = symbol.getPointedSymbol()) {
+                      fold_all(*pointed_symbol, opened, visiting);
+                  }
+              } else {
+                  for (std::unique_ptr<VariantSymbol>& child : symbol.getChildren()) {
+                      fold_all(*child, opened, visiting);
+                  }
+              }
+              visiting.erase(&symbol);
+          };
+        if (can_fold_children) {
+            ImGui::Separator();
+            if (ImGui::Button("Unfold all")) {
+                std::set<VariantSymbol*> visiting;
+                fold_all(sym, true, visiting);
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::Button("Fold all")) {
+                std::set<VariantSymbol*> visiting;
+                fold_all(sym, false, visiting);
+                ImGui::CloseCurrentPopup();
+            }
+        }
         if (ImGui::Button("Copy name")) {
             ImGui::SetClipboardText(full_name.c_str());
             ImGui::CloseCurrentPopup();
@@ -316,33 +565,34 @@ void DbgGui::showDockSpaces() {
 }
 
 void DbgGui::showMainMenuBar() {
+    bool open_command_palette = false;
     if (ImGui::BeginMainMenuBar()) {
         ImGui::Text("Time %.3f s", m_plot_timestamp);
         ImGui::SameLine();
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Menu")) {
+            if (ImGui::Button("Command palette")) {
+                open_command_palette = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", commandHotkeyName("command-palette", ImGuiMod_Ctrl | ImGuiKey_P).c_str());
+            ImGui::Separator();
 
             // Pause after
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
             double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadDivide)) {
-                ImGui::SetKeyboardFocusHere();
-            }
             if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
                 m_pause_at_time = m_sample_timestamp + pause_after;
             }
             ImGui::SameLine();
-            HelpMarker("Pause after x seconds. Hotkey is \"numpad /\"");
+            HelpMarker(std::format("Pause after x seconds. Hotkey is \"{}\".", commandHotkeyName("pause-after", ImGuiKey_KeypadDivide)).c_str());
 
             // Pause at
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
-            if (ImGui::IsKeyPressed(ImGuiKey_KeypadMultiply)) {
-                ImGui::SetKeyboardFocusHere();
-            }
             ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
             ImGui::SameLine();
-            HelpMarker("Pause at given time. Hotkey is \"numpad *\"");
+            HelpMarker(std::format("Pause at given time. Hotkey is \"{}\".", commandHotkeyName("pause-at", ImGuiKey_KeypadMultiply)).c_str());
 
             if (ImGui::Button("Add..")) {
                 ImGui::OpenPopup("##Add");
@@ -353,7 +603,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new scalar plot is ctrl+shift+1");
+                HelpMarker(std::format("Hotkey to add new scalar plot is {}.", commandHotkeyName("add-scalar-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1)).c_str());
                 addPopupModal(str::ADD_SCALAR_PLOT);
 
                 // Vector plot
@@ -361,7 +611,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new vector plot is ctrl+shift+2");
+                HelpMarker(std::format("Hotkey to add new vector plot is {}.", commandHotkeyName("add-vector-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2)).c_str());
                 addPopupModal(str::ADD_VECTOR_PLOT);
 
                 // Spectrum plot
@@ -369,7 +619,7 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new spectrum plot is ctrl+shift+3");
+                HelpMarker(std::format("Hotkey to add new spectrum plot is {}.", commandHotkeyName("add-spectrum-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3)).c_str());
                 addPopupModal(str::ADD_SPECTRUM_PLOT);
 
                 // Custom window
@@ -377,16 +627,8 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
                 }
                 ImGui::SameLine();
-                HelpMarker("Hotkey to add new custom window is ctrl+shift+4");
+                HelpMarker(std::format("Hotkey to add new custom window is {}.", commandHotkeyName("add-custom-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4)).c_str());
                 addPopupModal(str::ADD_CUSTOM_WINDOW);
-
-                // Script window
-                if (ImGui::Button("Script window")) {
-                    ImGui::OpenPopup(str::ADD_SCRIPT_WINDOW);
-                }
-                ImGui::SameLine();
-                HelpMarker("Hotkey to add new script window is ctrl+shift+5");
-                addPopupModal(str::ADD_SCRIPT_WINDOW);
 
                 // Grid window
                 if (ImGui::Button("Grid window")) {
@@ -406,6 +648,11 @@ void DbgGui::showMainMenuBar() {
                 ImGui::EndPopup();
             }
 
+            if (ImGui::Button("Copy all samples to clipboard")) {
+                copyAllScalarSamplesToClipboard();
+            }
+            ImGui::SameLine();
+            HelpMarker(std::format("Copy visible samples of all scalar signals to clipboard. Hotkey is {}.", commandHotkeyName("copy-visible-samples", ImGuiMod_Ctrl | ImGuiKey_T)).c_str());
             if (ImGui::Button("Save all plots as csv")) {
                 std::vector<Scalar*> scalars;
                 for (auto const& scalar : m_scalars) {
@@ -418,13 +665,13 @@ void DbgGui::showMainMenuBar() {
                 saveSnapshot();
             }
             ImGui::SameLine();
-            HelpMarker("Save snapshot of global variables to restore the same values later. Hotkey is ctrl+S");
+            HelpMarker(std::format("Save snapshot of global variables to restore the same values later. Hotkey is {}.", commandHotkeyName("save-snapshot", ImGuiMod_Ctrl | ImGuiKey_S)).c_str());
             ImGui::SameLine();
             if (ImGui::Button("Load snapshot")) {
                 loadSnapshot();
             }
             ImGui::SameLine();
-            HelpMarker("Load values of global variables from previously saved snapshot. Hotkey is ctrl+R");
+            HelpMarker(std::format("Load values of global variables from previously saved snapshot. Hotkey is {}.", commandHotkeyName("load-snapshot", ImGuiMod_Ctrl | ImGuiKey_R)).c_str());
             ImGui::Separator();
 
             // Options
@@ -459,23 +706,13 @@ void DbgGui::showMainMenuBar() {
 
             ImGui::Separator();
 
-            const char* env = std::getenv(USER_SETTINGS_LOCATION);
-            if (env) {
-                std::string settings_dir = std::format("{}/.dbg_gui/", env);
+            if (std::getenv(USER_SETTINGS_LOCATION)) {
                 if (ImGui::Button("Save settings")) {
-                    std::string out_path = getFilenameToSave("json", settings_dir);
-                    if (!out_path.empty()) {
-                        std::ofstream(out_path) << std::setw(4) << m_settings;
-                    }
+                    saveSettings();
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Load settings")) {
-                    std::string out_path = getFilenameToOpen("json", settings_dir);
-                    if (!out_path.empty()) {
-                        // Overwrite existing settings. The file will be reloaded in updateSavedSettings
-                        std::string settings_path = std::format("{}/settings.json", settings_dir);
-                        std::filesystem::copy_file(out_path, settings_path, std::filesystem::copy_options::overwrite_existing);
-                    }
+                    loadSettings();
                 }
             }
 
@@ -511,30 +748,48 @@ void DbgGui::showMainMenuBar() {
             ImGui::Separator();
         }
 
-        if (m_options.show_latest_message_on_main_menu_bar
-            && !m_message_queue.empty()) {
-            ImGui::Text(m_message_queue.back().c_str());
-            if (ImGui::IsItemHovered()) {
-                std::string m;
-                for (std::string const& msg : m_message_queue) {
-                    m += msg;
+        std::string latest_message;
+        std::string message_tooltip;
+        if (m_options.show_latest_message_on_main_menu_bar) {
+            std::scoped_lock<std::mutex> lock(m_message_mutex);
+            if (!m_message_queue.empty()) {
+                latest_message = m_message_queue.back();
+                for (std::string const& message : m_message_queue) {
+                    message_tooltip += message;
+                    if (!message.ends_with('\n')) {
+                        message_tooltip += '\n';
+                    }
                 }
-                ImGui::SetTooltip(m.c_str());
+            }
+        }
+        if (!latest_message.empty()) {
+            ImGui::Text(latest_message.c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(message_tooltip.c_str());
             }
         }
 
         ImGui::EndMainMenuBar();
     }
+    if (open_command_palette) {
+        ImGui::OpenPopup("Command Palette");
+    }
 }
 
 void DbgGui::showLogWindow() {
+    std::string all_messages;
+    {
+        std::scoped_lock<std::mutex> lock(m_message_mutex);
+        all_messages = m_all_messages;
+    }
+
     m_window_focus.log.focused = ImGui::Begin("Log", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.log.focused) {
         ImGui::End();
         return;
     }
 
-    ImGui::TextUnformatted(m_all_messages.c_str());
+    ImGui::TextUnformatted(all_messages.c_str());
     // Autoscroll
     if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
         ImGui::SetScrollHereY(1.0f);
@@ -548,9 +803,8 @@ void DbgGui::showScalarWindow() {
         ImGui::End();
         return;
     }
-    static char scalar_name_filter_buffer[256] = "";
-    ImGui::InputText("Filter", scalar_name_filter_buffer, IM_ARRAYSIZE(scalar_name_filter_buffer));
-    std::string scalar_name_filter = std::string(scalar_name_filter_buffer);
+    static std::string scalar_name_filter;
+    ImGui::InputText("Filter", &scalar_name_filter);
 
     if (ImGui::BeginTable("scalar_table",
                           2,
@@ -558,6 +812,16 @@ void DbgGui::showScalarWindow() {
         const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
+
+        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                       | ImGuiMultiSelectFlags_BoxSelect2d
+                                       | ImGuiMultiSelectFlags_ScopeRect
+                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
+        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                            (int)m_selected_scalars.size(),
+                                                            -1);
+        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+        m_visible_scalars.clear();
 
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
             std::vector<Scalar*> const& scalars = group.signals;
@@ -601,11 +865,7 @@ void DbgGui::showScalarWindow() {
             // Symbols can be dragged from one group to another for easier reorganizing if symbol
             // is initially added to wrong group
             if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Scalar* scalar = getScalar(id);
-                    // Do nothing if dragged to same group.
-                    // Old one will be deleted if new one is added.
+                auto move_scalar_to_group = [&](Scalar* scalar) {
                     if (scalar->group != group.full_name) {
                         VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
                         if (scalar_symbol) {
@@ -619,6 +879,16 @@ void DbgGui::showScalarWindow() {
                                 m_sampler.copySamples(*scalar, *new_scalar);
                             }
                             scalar->replacement = new_scalar;
+                        }
+                    }
+                };
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                            payload->DataSize / sizeof(uint64_t));
+                    for (uint64_t id : ids) {
+                        Scalar* scalar = findScalar(m_scalars, id);
+                        if (scalar) {
+                            move_scalar_to_group(scalar);
                         }
                     }
                 }
@@ -649,29 +919,59 @@ void DbgGui::showScalarWindow() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
 
-                    // Show name. Text is used instead of selectable because the
-                    // keyboard navigation in the table does not work properly
-                    // and up/down changes columns
-                    if (scalar->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, scalar->alias.c_str());
-                    } else {
-                        ImGui::Text(scalar->alias.c_str());
+                    // Render as a leaf tree node so the multi-select API can manage selection.
+                    bool const selected = contains(m_selected_scalars, scalar);
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+                                             | ImGuiTreeNodeFlags_SpanAvailWidth
+                                             | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (selected) {
+                        flags |= ImGuiTreeNodeFlags_Selected;
                     }
-                    // Make text drag-and-droppable
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot");
+                    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_scalars.size());
+                    if (scalar->customScaleOrOffset()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, COLOR_LIGHT_BLUE);
+                        ImGui::TreeNodeEx(scalar->alias.c_str(), flags);
+                        ImGui::PopStyleColor();
+                    } else {
+                        ImGui::TreeNodeEx(scalar->alias.c_str(), flags);
+                    }
+                    m_visible_scalars.push_back(scalar);
+
+                    // Drag-and-drop: carry all selected scalars if this one is selected,
+                    // otherwise just the dragged scalar.
+                    if (ImGui::BeginDragDropSource()) {
+                        std::vector<uint64_t> ids;
+                        if (contains(m_selected_scalars, scalar)) {
+                            for (Scalar* s : m_selected_scalars) {
+                                ids.push_back(s->id);
+                            }
+                        } else {
+                            ids.push_back(scalar->id);
+                        }
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI",
+                                                  ids.data(),
+                                                  ids.size() * sizeof(uint64_t));
+                        if (ids.size() == 1) {
+                            ImGui::Text("Drag to plot");
+                        } else {
+                            ImGui::Text("Drag %d scalars", (int)ids.size());
+                        }
                         ImGui::EndDragDropSource();
                     }
+
                     // Mark signal as deleted
                     if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
-                    addScalarContextMenu(scalar);
+                    addScalarContextMenu(scalar, true);
 
                     // Show value
                     ImGui::TableNextColumn();
-                    addInputScalar(scalar->src, "##scalar_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                    addInputScalar(scalar->src,
+                                   "##scalar_" + scalar->name_and_group,
+                                   scalar->getScale(),
+                                   scalar->getOffset(),
+                                   scalar->read_only);
                 }
 
                 ImGui::TreePop();
@@ -693,6 +993,10 @@ void DbgGui::showScalarWindow() {
         for (auto it = m_scalar_groups.begin(); it != m_scalar_groups.end(); it++) {
             show_scalar_group(it->second, false);
         }
+
+        ms_io = ImGui::EndMultiSelect();
+        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+
         ImGui::EndTable();
     }
     ImGui::End();
@@ -705,9 +1009,8 @@ void DbgGui::showVectorWindow() {
         return;
     }
 
-    static char vector_name_filter_buffer[256] = "";
-    ImGui::InputText("Filter", vector_name_filter_buffer, IM_ARRAYSIZE(vector_name_filter_buffer));
-    std::string vector_name_filter = std::string(vector_name_filter_buffer);
+    static std::string vector_name_filter;
+    ImGui::InputText("Filter", &vector_name_filter);
 
     if (ImGui::BeginTable("vector_table",
                           3,
@@ -716,6 +1019,16 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
+
+        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                       | ImGuiMultiSelectFlags_BoxSelect2d
+                                       | ImGuiMultiSelectFlags_ScopeRect
+                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
+        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                            (int)m_selected_vectors.size(),
+                                                            -1);
+        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+        m_visible_vectors.clear();
 
         std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
             std::vector<Vector2D*> const& vectors = group.signals;
@@ -744,10 +1057,10 @@ void DbgGui::showVectorWindow() {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
                     uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = getVector(id);
+                    Vector2D* vector = findVector(m_vectors, id);
                     // Do nothing if dragged to same group.
                     // Old one will be deleted if new one is added.
-                    if (vector->group != group.full_name) {
+                    if (vector && vector->group != group.full_name) {
                         VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
                         VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
                         if (x && y) {
@@ -787,8 +1100,37 @@ void DbgGui::showVectorWindow() {
 
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
-                    // Show name
-                    ImGui::Text(vector->name.c_str());
+                    bool const selected = contains(m_selected_vectors, vector);
+                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+                                             | ImGuiTreeNodeFlags_SpanAvailWidth
+                                             | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    if (selected) {
+                        flags |= ImGuiTreeNodeFlags_Selected;
+                    }
+                    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_vectors.size());
+                    ImGui::TreeNodeEx(std::format("{}##{}", vector->name, vector->name_and_group).c_str(), flags);
+                    m_visible_vectors.push_back(vector);
+
+                    if (ImGui::BeginPopupContextItem((vector->name_and_group + "_vector_context_menu").c_str())) {
+                        if (ImGui::Button("Copy name")) {
+                            ImGui::SetClipboardText(vector->name.c_str());
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::Separator();
+                        if (ImGui::Button("Delete")) {
+                            if (contains(m_selected_vectors, vector)) {
+                                for (Vector2D* selected_vector : m_selected_vectors) {
+                                    selected_vector->deleted = true;
+                                }
+                                m_selected_vectors.clear();
+                            } else {
+                                vector->deleted = true;
+                            }
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
+
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         ImGui::SetDragDropPayload("VECTOR_ID", &vector->id, sizeof(uint64_t));
@@ -805,13 +1147,13 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}x", vector->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->x->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->x->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
                     if (vector->x->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->x->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->x->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(vector->x->getValue()).c_str());
                     }
@@ -821,13 +1163,13 @@ void DbgGui::showVectorWindow() {
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::format("##{}y", vector->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID", &vector->y->id, sizeof(uint64_t));
+                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->y->id, sizeof(uint64_t));
                         ImGui::Text("Drag to plot");
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
                     if (vector->y->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_GRAY, numberAsStr(vector->y->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->y->getScaledValue()).c_str());
                     } else {
                         ImGui::Text(numberAsStr(vector->y->getValue()).c_str());
                     }
@@ -840,6 +1182,9 @@ void DbgGui::showVectorWindow() {
             show_vector_group(it->second, false);
         }
 
+        ms_io = ImGui::EndMultiSelect();
+        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+
         ImGui::EndTable();
     }
     ImGui::End();
@@ -847,15 +1192,28 @@ void DbgGui::showVectorWindow() {
 
 void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            uint64_t id = *(uint64_t*)payload->Data;
-            Scalar* scalar = getScalar(id);
-            custom_window.addScalar(scalar);
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+            std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                    payload->DataSize / sizeof(uint64_t));
+            for (uint64_t id : ids) {
+                Scalar* scalar = findScalar(m_scalars, id);
+                if (scalar) {
+                    custom_window.addScalar(scalar);
+                }
+            }
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
             VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
             Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
             custom_window.addScalar(scalar);
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+            std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
+                                              payload->DataSize / sizeof(VariantSymbol*));
+            for (VariantSymbol* symbol : symbols) {
+                Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+                custom_window.addScalar(scalar);
+            }
         }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OBJECT_SYMBOL")) {
             char* symbol_name = (char*)payload->Data;
@@ -911,14 +1269,14 @@ void DbgGui::showCustomWindow() {
                 // keyboard navigation in the table does not work properly
                 // and up/down changes columns
                 if (scalar->customScaleOrOffset()) {
-                    ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
+                    ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
                 } else {
                     ImGui::Text(scalar->alias_and_group.c_str());
                 }
                 addCustomWindowDragAndDrop(custom_window);
                 // Make text drag-and-droppable
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    ImGui::SetDragDropPayload("SCALAR_ID", &scalar->id, sizeof(uint64_t));
+                    ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
                     ImGui::Text("Drag to plot");
                     ImGui::EndDragDropSource();
                 }
@@ -930,7 +1288,11 @@ void DbgGui::showCustomWindow() {
 
                 // Show value
                 ImGui::TableNextColumn();
-                addInputScalar(scalar->src, "##custom_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                addInputScalar(scalar->src,
+                               "##custom_" + scalar->name_and_group,
+                               scalar->getScale(),
+                               scalar->getOffset(),
+                               scalar->read_only);
             }
             ImGui::EndTable();
         }
@@ -948,6 +1310,256 @@ void DbgGui::showCustomWindow() {
     }
 }
 
+std::vector<VariantSymbol*> DbgGui::buildSymbolSearchRoots(SymbolSearchRenderState& state) const {
+    std::set<VariantSymbol*> search_root_set;
+    std::vector<VariantSymbol*> search_roots;
+    for (VariantSymbol* symbol : m_symbol_search_results) {
+        if (symbol == nullptr) {
+            continue;
+        }
+
+        VariantSymbol* root = symbol;
+        state.visible_symbols.insert(symbol);
+        for (VariantSymbol* parent = symbol->getParent(); parent != nullptr; parent = parent->getParent()) {
+            root = parent;
+            state.visible_symbols.insert(parent);
+            state.auto_open_symbols.insert(parent);
+        }
+        if (search_root_set.insert(root).second) {
+            search_roots.push_back(root);
+        }
+    }
+    return search_roots;
+}
+
+void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_hidden_symbols, bool show_constants) {
+    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
+                                       | ImGuiTableFlags_BordersH
+                                       | ImGuiTableFlags_Resizable
+                                       | ImGuiTableFlags_NoSavedSettings;
+    if (!ImGui::BeginTable("symbols_table", 2, table_flags)) {
+        return;
+    }
+
+    // Multi-select scope wraps the whole table. BoxSelect2d because tree nodes have varying
+    // indentation (2D layout); ScopeRect so box-select/clear-on-void is confined to the table
+    // area, not the whole window (the search inputs above would otherwise be in scope).
+    ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                   | ImGuiMultiSelectFlags_BoxSelect2d
+                                   | ImGuiMultiSelectFlags_ScopeRect
+                                   // Let an unselected symbol be dragged without first selecting it.
+                                   | ImGuiMultiSelectFlags_SelectOnClickRelease;
+    ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                        (int)m_selected_symbols.size(),
+                                                        -1); // Not used
+    // Begin-side requests (e.g. Ctrl+A, Escape, auto-clear on plain click) use the previous
+    // frame's m_visible_tree_symbols. The list is rebuilt below during traversal.
+    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+    m_visible_tree_symbols.clear();
+
+    SymbolSearchRenderState state{
+      .show_hidden_symbols = show_hidden_symbols,
+      .show_constants = show_constants,
+      .filter_recursive_tree = !search_string.empty() && m_symbol_search_depth > 0,
+    };
+    for (VariantSymbol* symbol : buildSymbolSearchRoots(state)) {
+        showSymbolTreeNode(symbol, state, true);
+    }
+
+    ms_io = ImGui::EndMultiSelect();
+    // End-side requests (e.g. SetRange from shift-click/box-select) use this frame's list.
+    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+
+    ImGui::EndTable();
+}
+
+void DbgGui::showSymbolTreeNode(VariantSymbol* sym,
+                                SymbolSearchRenderState& state,
+                                bool filter_to_search_path,
+                                bool force_full_name) {
+    if (sym == nullptr) {
+        assert(false);
+        return;
+    }
+    // Pointer expansion can create cycles, e.g. a node pointing back to an ancestor.
+    if (state.visiting.contains(sym)) {
+        return;
+    }
+    if (filter_to_search_path && state.filter_recursive_tree && !state.visible_symbols.contains(sym)) {
+        return;
+    }
+
+    bool const hidden = m_hidden_symbols.contains(sym->getFullName());
+    bool const constant = sym->isConst();
+    if (!state.show_hidden_symbols && hidden) {
+        return;
+    }
+    if (!state.show_constants && constant) {
+        return;
+    }
+
+    state.visiting.insert(sym);
+    bool const custom_symbol_scale = getSymbolScale(*sym, m_symbol_scale_settings) != 1;
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          hidden              ? COLOR_GRAY :
+                          custom_symbol_scale ? COLOR_LIGHT_BLUE :
+                                                ImGui::GetStyle().Colors[ImGuiCol_Text]);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    // Full name is needed for top-level recursive results from multiple scopes.
+    bool const show_full_name = force_full_name
+                             || (sym->getParent() == nullptr && m_symbol_search_depth > 0);
+    std::string const symbol_name = show_full_name ? sym->getFullName() : sym->getName();
+    bool const auto_open = state.auto_open_symbols.contains(sym);
+    if (sym->getType() == VariantSymbol::Type::Pointer) {
+        showPointerSymbolTreeNode(sym, sym->getPointedSymbol(), symbol_name, auto_open, state, filter_to_search_path);
+    } else if (!sym->getChildren().empty()) {
+        showObjectSymbolTreeNode(sym, symbol_name, auto_open, state, filter_to_search_path);
+    } else {
+        showLeafSymbolTreeNode(sym, symbol_name);
+    }
+
+    ImGui::PopStyleColor();
+    state.visiting.erase(sym);
+}
+
+void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
+                                       VariantSymbol* pointed_symbol,
+                                       std::string const& symbol_name,
+                                       bool auto_open,
+                                       SymbolSearchRenderState& state,
+                                       bool filter_to_search_path) {
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+    if (!pointed_symbol) {
+        flags |= ImGuiTreeNodeFlags_Leaf;
+        sym->opened_manually = false;
+    } else {
+        ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
+    }
+    bool const open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+    if (pointed_symbol && !auto_open) {
+        sym->opened_manually = open;
+    }
+    addSymbolContextMenu(*sym);
+
+    // Add symbol to scalar window on double click. The pointer can be null or
+    // point to function-scope static storage; then it is not dereferenced and
+    // only shows NAN as value.
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+        addScalarSymbol(sym, m_group_to_add_symbols);
+    }
+
+    if (ImGui::BeginDragDropSource()) {
+        // Drag-and-droppable to scalar plot.
+        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+        ImGui::Text("Drag to plot");
+        ImGui::EndDragDropSource();
+    }
+
+    ImGui::TableNextColumn();
+    ImGui::Text(sym->valueAsStr().c_str());
+    if (open) {
+        if (pointed_symbol) {
+            showSymbolTreeNode(pointed_symbol, state, filter_to_search_path && auto_open, true);
+        }
+        ImGui::TreePop();
+    }
+}
+
+void DbgGui::showObjectSymbolTreeNode(VariantSymbol* sym,
+                                      std::string const& symbol_name,
+                                      bool auto_open,
+                                      SymbolSearchRenderState& state,
+                                      bool filter_to_search_path) {
+    ImGui::SetNextItemOpen(auto_open || sym->opened_manually, ImGuiCond_Always);
+    bool const open = ImGui::TreeNodeEx(symbol_name.c_str());
+    if (!auto_open) {
+        sym->opened_manually = open;
+    }
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        // Drag-and-droppable to custom window.
+        static char symbol_name_buffer[MAX_NAME_LENGTH];
+        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
+        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
+        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
+        ImGui::Text("Drag to custom window to add all children");
+        ImGui::EndDragDropSource();
+    }
+    addSymbolContextMenu(*sym);
+
+    ImGui::TableNextColumn();
+    ImGui::Text(sym->valueAsStr().c_str());
+    if (open) {
+        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
+            showSymbolTreeNode(child.get(), state, filter_to_search_path && auto_open);
+        }
+        ImGui::TreePop();
+    }
+}
+
+void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name) {
+    bool const selected = contains(m_selected_symbols, sym);
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
+    if (selected) {
+        flags |= ImGuiTreeNodeFlags_Selected;
+    }
+    // Register this leaf with the multi-select system. The index is its position in
+    // m_visible_tree_symbols (built in tree display order), which applySymbolSelectionRequests
+    // uses to map SetRange/SetAll indices back to VariantSymbol*.
+    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_tree_symbols.size());
+    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
+    ImGui::TreePop();
+    m_visible_tree_symbols.push_back(sym);
+
+    // The multi-select API handles plain-click select, ctrl-toggle (with toggle-off),
+    // shift-range, box-select, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
+    // the Custom Signal Creator, since that is an application-specific action.
+    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift) {
+        m_show_custom_signal_creator = true;
+    }
+
+    bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
+                                 || sym->getType() == VariantSymbol::Type::Enum;
+    if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
+        // Drag-and-droppable to scalar plot. When the symbol is part of the selection,
+        // carry all selected symbols; otherwise just the dragged one.
+        if (contains(m_selected_symbols, sym)) {
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL_MULTI",
+                                      m_selected_symbols.data(),
+                                      m_selected_symbols.size() * sizeof(VariantSymbol*));
+            ImGui::Text("Drag %d symbols to plot", (int)m_selected_symbols.size());
+            ImGui::Indent();
+            for (VariantSymbol* selected_symbol : m_selected_symbols) {
+                ImGui::TextUnformatted(selected_symbol->getFullName().c_str());
+            }
+            ImGui::Unindent();
+        } else {
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+            ImGui::Text("Drag to plot\n\t%s", sym->getFullName().c_str());
+        }
+        ImGui::EndDragDropSource();
+    }
+
+    // Add symbol to scalar window on double click.
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
+        addScalarSymbol(sym, m_group_to_add_symbols);
+    }
+    addSymbolContextMenu(*sym);
+
+    // Add value.
+    ImGui::TableNextColumn();
+    if (arithmetic_or_enum) {
+        addInputScalar(sym->getValueSource(),
+                       "##symbol_" + sym->getFullName(),
+                       getSymbolScale(*sym, m_symbol_scale_settings),
+                       0,
+                       sym->isConst());
+    } else {
+        ImGui::Text(sym->valueAsStr().c_str());
+    }
+}
+
 void DbgGui::showSymbolsWindow() {
     m_window_focus.symbols.focused = ImGui::Begin("Symbols", NULL, ImGuiWindowFlags_NoNavFocus);
     if (!m_window_focus.symbols.focused) {
@@ -955,269 +1567,253 @@ void DbgGui::showSymbolsWindow() {
         return;
     }
 
-    static bool recursive_symbol_search = false;
-    static bool recursive_search_toggled = false;
     static bool show_hidden_symbols = false;
+    static bool show_constants = false;
 
     // Just manually tested width that name, group and menu boxes are visible.
     float name_and_group_boxes_width = ImGui::GetContentRegionAvail().x - 20 * ImGui::CalcTextSize("x").x;
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.65f);
-    static char symbols_to_search[MAX_NAME_LENGTH];
-    if (ImGui::InputText("Name", symbols_to_search, MAX_NAME_LENGTH, ImGuiInputTextFlags_CharsNoBlank) || recursive_search_toggled) {
-        if (std::string(symbols_to_search).size() > 2) {
-            m_symbol_search_results = m_symbols.findMatchingSymbols(symbols_to_search, recursive_symbol_search);
-            auto begin_it = m_symbol_search_results.begin();
-            // Don't sort first element if it is an exact match
-            if (m_symbol_search_results.size() > 0 && m_symbol_search_results[0]->getFullName() == symbols_to_search) {
-                begin_it++;
-            }
-            // Sort search results
-            std::sort(begin_it, m_symbol_search_results.end(), [](VariantSymbol* l, VariantSymbol* r) {
-                return l->getFullName() < r->getFullName();
-            });
-        } else {
-            m_symbol_search_results.clear();
-        }
-    }
+    static std::string symbols_to_search;
+    bool search_changed = ImGui::InputText("Name", &symbols_to_search, ImGuiInputTextFlags_CharsNoBlank);
     // Group box
     ImGui::SameLine();
     ImGui::PushItemWidth(name_and_group_boxes_width * 0.35f);
-    ImGui::InputText("Group", m_group_to_add_symbols, MAX_NAME_LENGTH);
-    // Recursive checkbox
+    ImGui::InputText("Group", &m_group_to_add_symbols);
+    // Search options
     ImGui::SameLine();
     if (ImGui::BeginMenu("Menu")) {
-        recursive_search_toggled = ImGui::Checkbox("Recursive", &recursive_symbol_search);
+        ImGui::SetNextItemWidth(100.0f);
+        if (ImGui::InputInt("Recursion depth", &m_symbol_search_depth)) {
+            m_symbol_search_depth = std::max(0, m_symbol_search_depth);
+            search_changed = true;
+        }
         ImGui::Checkbox("Show hidden", &show_hidden_symbols);
+        ImGui::Checkbox("Show constants", &show_constants);
         ImGui::EndMenu();
     }
 
-    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersV
-                                       | ImGuiTableFlags_BordersH
-                                       | ImGuiTableFlags_Resizable
-                                       | ImGuiTableFlags_NoSavedSettings;
-    if (ImGui::BeginTable("symbols_table", 2, table_flags)) {
-        for (VariantSymbol* symbol : m_symbol_search_results) {
-            // Recursive lambda for displaying children in the table
-            std::function<void(VariantSymbol*)> show_children = [&](VariantSymbol* sym) {
-                // Hide "C6011 Deferencing NULL pointer 'sym'" warning.
-                if (sym == nullptr) {
-                    assert(false);
-                    return;
-                }
+    if (search_changed) {
+        m_symbol_search_results = buildSymbolSearchResults(m_symbols, symbols_to_search, m_symbol_search_depth);
+    }
 
-                // Skip hidden symbols
-                bool hidden = m_hidden_symbols.contains(sym->getFullName());
-                if (!show_hidden_symbols && hidden) {
-                    return;
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, hidden ? COLOR_GRAY : ImGui::GetStyle().Colors[ImGuiCol_Text]);
+    showSymbolSearchTable(symbols_to_search, show_hidden_symbols, show_constants);
+    ImGui::End();
+}
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                // Full name has to be displayed with recursive search
-                std::string symbol_name = recursive_symbol_search ? sym->getFullName() : sym->getName();
-                std::vector<std::unique_ptr<VariantSymbol>>& children = sym->getChildren();
-                if (children.size() > 0) {
-                    // Object/array
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str());
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        static char symbol_name_buffer[MAX_NAME_LENGTH];
-                        strncpy(symbol_name_buffer, sym->getFullName().data(), MAX_NAME_LENGTH);
-                        symbol_name_buffer[MAX_NAME_LENGTH - 1] = '\0';
-                        ImGui::SetDragDropPayload("OBJECT_SYMBOL", &symbol_name_buffer, sizeof(symbol_name_buffer));
-                        ImGui::Text("Drag to custom window to add all children");
-                        ImGui::EndDragDropSource();
-                    }
-                    addSymbolContextMenu(*sym);
+void DbgGui::showScriptWindow() {
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Scripts", nullptr, ImGuiWindowFlags_NoNavFocus)) {
+        ImGui::End();
+        return;
+    }
 
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        for (std::unique_ptr<VariantSymbol>& child : children) {
-                            show_children(child.get());
-                        }
-                        ImGui::TreePop();
-                    }
-                } else if (sym->getType() == VariantSymbol::Type::Pointer) {
-                    // Pointer
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-                    VariantSymbol* pointed_symbol = sym->getPointedSymbol();
-                    if (!pointed_symbol) {
-                        flags |= ImGuiTreeNodeFlags_Leaf;
-                    }
-                    bool open = ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    addSymbolContextMenu(*sym);
+    // Script order changes while dragging, so keep the UI selection by stable ID.
+    if (!m_selected_script_id.has_value() && !m_script_windows.empty()) {
+        m_selected_script_id = m_script_windows.front().id;
+    }
 
-                    // Add symbol to scalar window on double click. The pointer can be null pointer or
-                    // point to function scope static or something but in that case it will not be
-                    // dereferenced and will show only NAN as value
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
+    std::optional<size_t> script_to_delete;
+    // Use a table so the sidebar divider remains user-resizable while both
+    // child windows fill their respective panes.
+    if (ImGui::BeginTable("scripts_layout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("Scripts", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+        ImGui::TableSetupColumn("Editor", ImGuiTableColumnFlags_WidthStretch);
 
-                    if (ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sym->valueAsStr().c_str());
-                    if (open) {
-                        if (pointed_symbol) {
-                            show_children(pointed_symbol);
-                        }
-                        ImGui::TreePop();
-                    }
-                } else {
-                    // Rest
-                    bool selected = contains(m_selected_symbols, sym);
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf;
-                    if (selected) {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::TreeNodeEx(symbol_name.c_str(), flags);
-                    ImGui::TreePop();
-                    if (ImGui::IsItemClicked()) {
-                        if (ImGui::GetIO().KeyCtrl) {
-                            m_selected_symbols.push_back(sym);
-                            // Show custom signal creator if ctrl+shift is pressed
-                            if (ImGui::GetIO().KeyShift) {
-                                m_show_custom_signal_creator = true;
-                            }
-                        } else if (!(flags & ImGuiTreeNodeFlags_Selected)) {
-                            // Clear if clicking something else than the selected
-                            m_selected_symbols.clear();
-                        }
-                    }
-
-                    bool arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
-                                           || sym->getType() == VariantSymbol::Type::Enum;
-                    if (m_selected_symbols.size() == 2) {
-                        // drag-and-droppable to vector plot
-                        if (ImGui::BeginDragDropSource()) {
-                            ImGui::SetDragDropPayload("VECTOR_SYMBOL", m_selected_symbols.data(), sizeof(VariantSymbol*) * 2);
-                            ImGui::Text("Drag to vector plot");
-                            ImGui::EndDragDropSource();
-                        }
-                    } else if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
-                        // drag-and-droppable to scalar plot
-                        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
-                        ImGui::Text("Drag to plot");
-                        ImGui::EndDragDropSource();
-                    }
-
-                    // Add symbol to scalar window on double click
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && arithmetic_or_enum) {
-                        addScalarSymbol(sym, m_group_to_add_symbols);
-                    }
-                    addSymbolContextMenu(*sym);
-
-                    // Add value
-                    ImGui::TableNextColumn();
-                    if (arithmetic_or_enum) {
-                        addInputScalar(sym->getValueSource(), "##symbol_" + sym->getFullName());
-                    } else {
-                        ImGui::Text(sym->valueAsStr().c_str());
-                    }
-                }
-                ImGui::PopStyleColor();
-            };
-            show_children(symbol);
+        ImGui::TableNextColumn();
+        if (ImGui::CollapsingHeader("Menu")) {
+            if (ImGui::Button("Add script")) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                std::string const script_name = std::format("new script {}", m_script_windows.size() + 1);
+                uint64_t const script_id = hashWithTime(script_name);
+                m_script_windows.emplace_back(this, script_name, script_id);
+                m_selected_script_id = script_id;
+            }
         }
+        ImGui::Separator();
+        ImGui::BeginChild("##script_list", ImVec2(0, 0));
+        // During a drag swap, the same script is submitted in two rows for one
+        // frame. This is the pattern used by ImGui's simple reorder demo.
+        ImGui::PushItemFlag(ImGuiItemFlags_AllowDuplicateId, true);
+        for (size_t script_index = 0; script_index < m_script_windows.size(); ++script_index) {
+            ScriptWindow& script_window = m_script_windows[script_index];
+            bool script_running;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_running = script_window.running();
+            }
+
+            if (script_running) {
+                ImGui::PushStyleColor(ImGuiCol_Text, COLOR_GREEN);
+            }
+            // The stable ID lets ImGui keep the drag active after the script
+            // has moved to the adjacent row.
+            ImGui::PushID(std::to_string(script_window.id).c_str());
+            if (ImGui::Selectable(script_window.name.c_str(), m_selected_script_id == script_window.id)) {
+                m_selected_script_id = script_window.id;
+            }
+            bool const reorder_script = ImGui::IsItemActive() && !ImGui::IsItemHovered();
+            if (ImGui::BeginPopupContextItem("Script context")) {
+                ImGui::InputText("Name", &script_window.name);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete")) {
+                    script_to_delete = script_index;
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+            if (script_running) {
+                ImGui::PopStyleColor();
+            }
+
+            // This follows ImGui's simple reorder demo: swap with the adjacent
+            // item after a vertical drag, then reset the drag delta for repeats.
+            if (!script_to_delete.has_value() && reorder_script) {
+                int const next_script_index = static_cast<int>(script_index)
+                                            + (ImGui::GetMouseDragDelta(0).y < 0.0f ? -1 : 1);
+                if (next_script_index >= 0 && next_script_index < static_cast<int>(m_script_windows.size())) {
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    std::swap(m_script_windows[script_index], m_script_windows[next_script_index]);
+                    ImGui::ResetMouseDragDelta();
+                }
+            }
+        }
+        ImGui::PopItemFlag();
+        ImGui::EndChild();
+
+        if (script_to_delete.has_value()) {
+            size_t const script_index = *script_to_delete;
+            uint64_t const script_id = m_script_windows[script_index].id;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                // The sampler can be executing this script, so stop it before
+                // destroying its runner and removing it from the collection.
+                m_script_windows[script_index].stopScript();
+                m_script_windows.erase(m_script_windows.begin() + script_index);
+            }
+            if (m_selected_script_id == script_id) {
+                if (m_script_windows.empty()) {
+                    m_selected_script_id.reset();
+                } else {
+                    m_selected_script_id = m_script_windows[std::min(script_index, m_script_windows.size() - 1)].id;
+                }
+            }
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::BeginChild("##script_editor", ImVec2(0, 0));
+        auto script_it = std::find_if(m_script_windows.begin(), m_script_windows.end(), [&](ScriptWindow const& script_window) {
+            return m_selected_script_id == script_window.id;
+        });
+        if (script_it == m_script_windows.end()) {
+            ImGui::TextDisabled("Select a script or add a new one.");
+        } else {
+            ScriptWindow& script_window = *script_it;
+            bool script_running;
+            bool script_loop;
+            ScriptLanguage script_language;
+            double script_time;
+            int script_line;
+            {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_running = script_window.running();
+                script_loop = script_window.loop;
+                script_language = script_window.language;
+                script_time = script_window.getTime(m_plot_timestamp);
+                script_line = script_window.currentLine();
+            }
+
+            if (ImGui::Button("Run")) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(script_running);
+            if (ImGui::Checkbox("Loop", &script_loop)) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_window.loop = script_loop;
+            }
+            ImGui::SameLine();
+            char const* language_name = script_language == ScriptLanguage::Lua ? "Lua" : "Legacy";
+            ImGui::SetNextItemWidth(ImGui::CalcTextSize("Legacy").x + ImGui::GetStyle().FramePadding.x * 2);
+            if (ImGui::BeginCombo("Format", language_name)) {
+                if (ImGui::Selectable("Lua", script_language == ScriptLanguage::Lua)) {
+                    script_language = ScriptLanguage::Lua;
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    script_window.language = script_language;
+                }
+                if (ImGui::Selectable("Legacy", script_language == ScriptLanguage::Legacy)) {
+                    script_language = ScriptLanguage::Legacy;
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    script_window.language = script_language;
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+
+            if (script_language == ScriptLanguage::Lua) {
+                ImGui::SameLine();
+                HelpMarker("Available Lua libraries:\n"
+                           "    math, string, table, utf8, io, os\n"
+                           "    load(), loadfile(), and dofile() can load code from any path.\n\n"
+                           "package and debug are unavailable.\n\n"
+                           "DbgGui API:\n"
+                           "write('symbol', value)\n"
+                           "    Write a scalar or arithmetic/enum symbol.\n"
+                           "read('symbol')\n"
+                           "    Read a scalar or arithmetic/enum symbol.\n"
+                           "write_u('symbol', value)\n"
+                           "    Like write(), but ignore a missing scalar or symbol.\n"
+                           "read_u('symbol')\n"
+                           "    Like read(), but return 0 for a missing scalar or symbol.\n"
+                           "exists('symbol')\n"
+                           "    Check whether a scalar or arithmetic/enum symbol exists.\n"
+                           "wait(seconds)\n"
+                           "    Yield script execution until the given sampling time.\n"
+                           "pause()\n"
+                           "    Pause sampling after this script step.\n"
+                           "save_csv('filename')\n"
+                           "    Save all current scalars to a CSV file.");
+            }
+
+            // Stop button only visible if running.
+            if (script_running) {
+                ImGui::SameLine();
+                if (ImGui::Button("Stop")) {
+                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                    script_window.stopScript();
+                }
+                ImGui::SameLine();
+                ImGui::Text(std::format("{:.2f}", script_time).c_str());
+            }
+
+            ImGui::Separator();
+            if (script_running) {
+                // Show progress of the script by adding a separator where it
+                // is currently waiting. Running scripts remain read-only.
+                std::vector<std::string_view> lines = str::splitSv(script_window.text, '\n');
+                showRunningScriptWithLineNumbers(lines, script_line, script_language == ScriptLanguage::Lua);
+            } else {
+                ImVec2 const editor_size = ImGui::GetContentRegionAvail();
+                inputScriptTextWithLineNumbers(script_window.text, editor_size, script_language == ScriptLanguage::Lua);
+            }
+        }
+        ImGui::EndChild();
         ImGui::EndTable();
     }
     ImGui::End();
 }
 
-void DbgGui::showScriptWindow() {
-    for (ScriptWindow& script_window : m_script_windows) {
-        if (!script_window.open) {
-            continue;
-        }
-
-        script_window.focus.focused = ImGui::Begin(script_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        script_window.closeOnMiddleClick();
-        script_window.contextMenu();
-        script_window.processScript(m_plot_timestamp);
-        if (!script_window.focus.focused) {
-            ImGui::End();
-            continue;
-        }
-
-        if (ImGui::Button("Run")) {
-            m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
-        }
-        if (ImGui::BeginPopupContextItem("Run_context_menu")) {
-            // Toggling the text edit window will cause it reapper if it's hidden behind other windows
-            script_window.text_edit_open = !script_window.text_edit_open;
-            ImGui::EndPopup();
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("Loop", &script_window.loop);
-
-        // Stop button only visible if running
-        if (script_window.running()) {
-
-            ImGui::SameLine();
-            if (ImGui::Button("Stop")) {
-                script_window.stopScript();
-            }
-            ImGui::SameLine();
-            ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
-        }
-
-        ImGui::End();
-
-        // Open text edit in a separate window
-        if (script_window.text_edit_open) {
-            ImGui::SetNextWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
-            ImGui::Begin(std::format("{}##editor", script_window.name).c_str(), &script_window.text_edit_open);
-            // Close on middle click like other windows
-            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-                script_window.text_edit_open = false;
-            }
-
-            if (ImGui::Button("Run")) {
-                m_error_message = script_window.startScript(m_plot_timestamp, m_scalars);
-            }
-
-            ImGui::SameLine();
-            ImGui::Checkbox("Loop", &script_window.loop);
-            // Stop button only visible if running
-            if (script_window.running()) {
-                ImGui::SameLine();
-                if (ImGui::Button("Stop")) {
-                    script_window.stopScript();
-                }
-                ImGui::SameLine();
-                ImGui::Text(std::format("{:.2f}", script_window.getTime(m_plot_timestamp)).c_str());
-
-                // Show progress of the script by adding a separator where it is currently waiting
-                std::vector<std::string> lines = str::split(script_window.text, '\n');
-                for (int i = 0; i < script_window.currentLine(); ++i) {
-                    ImGui::Text(lines[i].c_str());
-                }
-                ImGui::Separator();
-                for (int i = script_window.currentLine(); i < lines.size(); ++i) {
-                    ImGui::Text(lines[i].c_str());
-                }
-            } else {
-                ImGui::InputTextMultiline("##source", script_window.text, IM_ARRAYSIZE(script_window.text), ImVec2(-FLT_MIN, ImGui::GetContentRegionAvail().y));
-            }
-
-            ImGui::End();
-        }
-    }
-}
-
 void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col) {
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID")) {
-            uint64_t id = *(uint64_t*)payload->Data;
-            Scalar* dropped_scalar = getScalar(id);
-            grid_window.scalars[row][col] = dropped_scalar->id;
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+            std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                    payload->DataSize / sizeof(uint64_t));
+            if (!ids.empty()) {
+                Scalar* dropped_scalar = findScalar(m_scalars, ids[0]);
+                if (dropped_scalar) {
+                    grid_window.scalars[row][col] = dropped_scalar->id;
+                }
+            }
         }
         ImGui::EndDragDropTarget();
     }
@@ -1250,6 +1846,7 @@ void DbgGui::showGridWindow() {
             text_font_size *= scale;
             value_font_size *= scale;
         }
+        text_font_size = std::max(text_font_size, float(MIN_FONT_SIZE));
         value_font_size = std::max(value_font_size, float(MIN_FONT_SIZE));
 
         if (ImGui::BeginTable("grid_table",
@@ -1259,7 +1856,7 @@ void DbgGui::showGridWindow() {
                 for (int col = 0; col < grid_window.columns; ++col) {
                     ImGui::TableNextColumn();
 
-                    Scalar* scalar = getScalar(grid_window.scalars[row][col]);
+                    Scalar* scalar = findScalar(m_scalars, grid_window.scalars[row][col]);
                     if (scalar) {
                         // Resize text so that it fits the cell
                         ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);
@@ -1267,12 +1864,12 @@ void DbgGui::showGridWindow() {
                         ImVec2 available = ImGui::GetContentRegionAvail();
                         if (available.x < text_size.x) {
                             ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x) - 1));
+                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x)));
                         }
 
                         // Name
                         if (scalar->customScaleOrOffset()) {
-                            ImGui::TextColored(COLOR_GRAY, scalar->alias_and_group.c_str());
+                            ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
                         } else {
                             ImGui::Text(scalar->alias_and_group.c_str());
                         }
@@ -1284,8 +1881,7 @@ void DbgGui::showGridWindow() {
                         ImGui::PopFont();
                         // Make text drag-and-droppable
                         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                            uint64_t id = scalar->id;
-                            ImGui::SetDragDropPayload("SCALAR_ID", &id, sizeof(uint64_t));
+                            ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
                             ImGui::Text("Drag to plot");
                             ImGui::EndDragDropSource();
                         }
@@ -1295,7 +1891,11 @@ void DbgGui::showGridWindow() {
                         if (grid_window.isCellFocused({row, col})) {
                             ImGui::SetKeyboardFocusHere();
                         }
-                        addInputScalar(scalar->src, "##grid_" + scalar->name_and_group, scalar->getScale(), scalar->getOffset());
+                        addInputScalar(scalar->src,
+                                       "##grid_" + scalar->name_and_group,
+                                       scalar->getScale(),
+                                       scalar->getOffset(),
+                                       scalar->read_only);
                         if (ImGui::IsItemFocused()) {
                             if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_DownArrow)) {
                                 grid_window.focusCell({std::min(row + 1, grid_window.rows - 1), col});

@@ -23,7 +23,7 @@
 #include "dbg_symbols.hpp"
 #include "str_helpers.h"
 #include "variant_symbol.h"
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 
 #include <cassert>
 #include <sstream>
@@ -35,7 +35,7 @@
 #include <nlohmann/json.hpp>
 
 void DbgSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
-    saveSymbolsToJson(filename, m_raw_symbols, omit_names);
+    saveSymbolDescriptorsToJson(filename, m_symbol_descriptors, omit_names);
 }
 
 DbgSymbols::DbgSymbols() {
@@ -137,51 +137,46 @@ VariantSymbol* DbgSymbols::getSymbol(std::string const& name) const {
 }
 
 std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& name,
-                                                            bool recursive,
+                                                            int recursion_depth,
                                                             int max_count) const {
     std::vector<VariantSymbol*> matching_symbols;
-    // Find from all symbols, can be pretty slow
-    if (recursive) {
-        std::function<void(VariantSymbol*)> find_matching_recursively = [&](VariantSymbol* sym) {
-            // Exact match is shown first
-            if (name == sym->getFullName()) {
-                matching_symbols.insert(matching_symbols.begin(), sym);
-            } else if (matching_symbols.size() < max_count
-                       && str::fuzzy_match(name.c_str(), sym->getFullName().c_str())) {
-                matching_symbols.push_back(sym);
-            }
-            for (std::unique_ptr<VariantSymbol> const& child : sym->getChildren()) {
-                find_matching_recursively(child.get());
-            }
-        };
-        for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
-            find_matching_recursively(sym.get());
-        }
-        return matching_symbols;
+    recursion_depth = std::max(0, recursion_depth);
+    size_t result_limit = max_count < 0 ? 0 : static_cast<size_t>(max_count);
+    VariantSymbol* exact_match = getSymbol(name);
+    if (exact_match != nullptr) {
+        matching_symbols.push_back(exact_match);
     }
 
-    std::vector<std::unique_ptr<VariantSymbol>> const* symbols_to_search = &m_root_symbols;
-    std::string name_to_search = name;
-
-    // Search only members of a symbol if the name contains "."
-    size_t idx = name.rfind('.');
-    if (idx != std::string::npos) {
-        std::string parent_name = name.substr(0, idx);
-        VariantSymbol* parent = getSymbol(parent_name);
-        if (parent) {
-            symbols_to_search = &parent->getChildren();
-            name_to_search = name.substr(idx + 1, name.size());
+    auto add_match = [&](VariantSymbol* sym, std::string const& symbol_name) {
+        if (sym == exact_match) {
+            return;
         }
-    }
-
-    for (std::unique_ptr<VariantSymbol> const& sym : *symbols_to_search) {
         // Exact match is shown first
-        if (name_to_search == sym->getName()) {
-            matching_symbols.insert(matching_symbols.begin(), sym.get());
-        } else if (matching_symbols.size() < max_count
-                   && str::fuzzy_match(name_to_search.c_str(), sym->getName().c_str())) {
-            matching_symbols.push_back(sym.get());
+        if (name == symbol_name) {
+            matching_symbols.insert(matching_symbols.begin(), sym);
+        } else if (matching_symbols.size() < result_limit
+                   && str::fuzzy_match(name.c_str(), symbol_name.c_str())) {
+            matching_symbols.push_back(sym);
         }
+    };
+
+    std::function<void(VariantSymbol*, int)> find_matching_recursively = [&](VariantSymbol* sym, int depth) {
+        if (depth > recursion_depth) {
+            return;
+        }
+
+        add_match(sym, sym->getFullName());
+        if (depth == recursion_depth) {
+            return;
+        }
+        for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
+            find_matching_recursively(child.get(), depth + 1);
+        }
+    };
+
+    for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
+        int root_depth = static_cast<int>(std::ranges::count(sym->getName(), '|'));
+        find_matching_recursively(sym.get(), root_depth);
     }
     return matching_symbols;
 }
@@ -199,8 +194,8 @@ bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
 
         m_root_symbols.reserve(symbols_json.size());
         for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
-            auto raw_symbol = RawSymbol::fromJson(symbol_data);
-            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &raw_symbol));
+            auto symbol = SymbolDescriptor::fromJson(symbol_data);
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &symbol));
         }
     } catch (nlohmann::json::exception& err) {
         std::cerr << err.what();
@@ -217,6 +212,10 @@ void DbgSymbols::saveSnapshotToFile(std::string const& json) const {
     snapshot["write_time"] = module_info.write_time;
 
     std::function<void(VariantSymbol*)> save_symbol_state = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         std::string key = std::format("{} {}", sym->getFullName(), address_offset);
@@ -261,6 +260,10 @@ void DbgSymbols::loadSnapshotFromFile(std::string const& json) const {
     auto& state = snapshot["state"];
 
     std::function<void(VariantSymbol*)> load_symbol_state = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         MemoryAddress address_offset = sym->getAddress() - module_info.base_address;
         std::string key = std::format("{} {}", sym->getFullName(), address_offset);
@@ -298,11 +301,13 @@ void DbgSymbols::loadSnapshotFromFile(std::string const& json) const {
 void DbgSymbols::loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const {
     for (SymbolValue symbol_snapshot : snapshot) {
         VariantSymbol* sym = symbol_snapshot.symbol;
+        if (sym->isConst()) {
+            continue;
+        }
         std::visit(
           [=](auto&& value) {
               using T = std::decay_t<decltype(value)>;
-              // Change value only if it is different because trying to write const variables causes crash
-              // and there seems to be no easy way to determine if a symbol is const
+              // Change value only if it is different.
               if constexpr (std::is_same_v<T, MemoryAddress>) {
                   MemoryAddress current_pointed_address = sym->getPointedAddress();
                   MemoryAddress new_pointed_address = value;

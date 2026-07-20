@@ -21,34 +21,26 @@
 // SOFTWARE.
 #pragma once
 
+#include "plot_base.h"
 #include "themes.h"
 #include "imgui.h"
-#include "spectrum.h"
+#include "imgui_helpers.h"
+#include <expected>
 #include <string>
 #include <filesystem>
 #include <map>
 #include <array>
-#include <future>
 #include <span>
 #include <vector>
+#include <optional>
 #include "csv_helpers.h"
-
-struct MinMax {
-    double min;
-    double max;
-
-    bool operator==(MinMax const& other) const {
-        return min == other.min && max == other.max;
-    }
-    bool operator!=(MinMax const& other) const {
-        return !(*this == other);
-    }
-};
 
 inline constexpr int NOT_VISIBLE = -1;
 inline constexpr ImVec4 NO_COLOR = {-1, -1, -1, -1};
 inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 inline constexpr int MAX_PLOTS = 10;
+inline constexpr int MAX_PLOT_WINDOWS = MAX_PLOTS * MAX_PLOTS;
+inline constexpr int MAX_UNDOCKED_PLOTS = 10;
 inline constexpr int MAX_RECENT_CUSTOM_EQUATIONS = 10;
 
 struct CsvSignal;
@@ -61,6 +53,8 @@ struct CsvFileData {
     std::filesystem::file_time_type write_time;
     double x_axis_shift = 0;
     int run_number = 0;
+    bool enabled = true;
+    bool in_memory = false;
 
     bool operator==(CsvFileData const& other) {
         return name == other.name
@@ -93,74 +87,6 @@ struct RecentCustomEquation {
     std::string equation;
 };
 
-struct ScalarPlot {
-    std::vector<CsvSignal*> signals;
-    bool autofit_next_frame = false;
-
-    void addSignal(CsvSignal* signal) {
-        if (contains(signals, signal)) {
-            return;
-        }
-        signals.push_back(signal);
-    }
-
-    void removeSignal(CsvSignal* signal) {
-        if (!contains(signals, signal)) {
-            return;
-        }
-        remove(signals, signal);
-    }
-
-    void clear() {
-        for (int i = (int)signals.size() - 1; i >= 0; --i) {
-            removeSignal(signals[i]);
-        }
-    }
-};
-
-struct VectorPlot {
-    std::vector<std::pair<CsvSignal*, CsvSignal*>> signals;
-    bool autofit_next_frame = false;
-
-    void addSignal(std::pair<CsvSignal*, CsvSignal*> signal) {
-        signals.push_back(signal);
-    }
-
-    void removeSignal(CsvSignal* signal) {
-        for (int i = (int)signals.size() - 1; i >= 0; --i) {
-            if (signals[i].first == signal || signals[i].second == signal) {
-                signals.erase(signals.begin() + i);
-            }
-        }
-    }
-};
-
-struct SpectrumPlot {
-    std::vector<Spectrum<CsvSignal>> spectrum;
-    SpectrumWindow window = SpectrumWindow::None;
-    bool logarithmic_y_axis = false;
-    MinMax x_axis;
-    MinMax y_axis;
-    MinMax prev_x_range = {0, 0};
-
-    void addSignal(CsvSignal* real, CsvSignal* imag) {
-        for (auto& spec : spectrum) {
-            if (spec.real == real && spec.imag == imag) {
-                return;
-            }
-        }
-        spectrum.push_back(Spectrum<CsvSignal>(real, imag));
-    }
-
-    void removeSignal(CsvSignal* signal) {
-        for (int i = (int)spectrum.size() - 1; i >= 0; --i) {
-            if (spectrum[i].real == signal || spectrum[i].imag == signal) {
-                spectrum.erase(spectrum.begin() + i);
-            }
-        }
-    }
-};
-
 class CsvPlotter {
   public:
     CsvPlotter(std::vector<std::string> files = {},
@@ -172,12 +98,16 @@ class CsvPlotter {
 
   private:
     void showErrorModal();
+    void showCommandPalette();
+    std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_hotkeys = true);
     void showCustomSignalCreator();
     void showSignalWindow();
-    void showScalarPlots();
-    void showVectorPlots();
-    void showSpectrumPlots();
+    void showPlots();
+    void showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next);
+    void showVectorPlot(PlotBase& plot_base, int visible_plot_idx);
+    void showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx);
     void showXSignalCombo();
+    bool showPlotContextMenu(PlotBase& plot);
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
@@ -185,29 +115,54 @@ class CsvPlotter {
     void applySignalTransforms(CsvFileData& file);
     void applyPlottedSignals(CsvFileData& file);
     void updatePlottedSignalSettings();
+    void updateComparisonMode();
+    void snapshotComparisonPlotSettings();
+    void showComparisonFile(CsvFileData& file);
+    int dockedPlotCount() const;
+    int activePlotCount() const;
+    PlotBase& plotAt(int visible_plot_idx);
+    PlotBase const& plotAt(int visible_plot_idx) const;
+    std::string plotWindowName(int visible_plot_idx) const;
+    template <typename Fn>
+    void forEachPlot(Fn&& fn);
+    bool isSignalPlotted(CsvSignal* signal) const;
+    void removeSignalFromAllPlots(CsvSignal* signal);
+    void replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& new_file);
     void setSignalTransform(std::string const& signal_name, CsvSignalTransform const& transform);
+    std::expected<void, std::string> setSignalScale(std::vector<CsvSignal*> const& signals, std::string const& scale_expression);
+    std::expected<void, std::string> setSignalOffset(std::vector<CsvSignal*> const& signals, std::string const& offset_expression);
+    void setSignalPlotStyle(std::vector<CsvSignal*> const& signals, std::optional<CsvPlotStyle> plot_style);
     CsvPlotStyle getSignalPlotStyle(CsvSignal const& signal) const;
-    void showSignalPlotStyleCombo(std::string const& signal_name);
+    void showSignalPlotStyleCombo(CsvSignal const& signal, std::vector<CsvSignal*> const& signals_to_update);
+    std::vector<CsvSignal*> sameNamedSignalsFromOpenFiles(std::vector<CsvSignal*> const& signals);
 
-    void updateSavedSettings();
+    void updateSavedSettings(bool force = false);
     void loadPreviousSessionSettings();
+    void saveSettings();
+    void loadSettings();
+    void removeFileFromPlots(CsvFileData& file);
+    void removeAllFiles();
+    void openFilesFromDialog();
+    void clearPlots();
+    void copyPlottedSignalArgumentsToClipboard();
+    void addClipboardFileFromClipboard();
     GLFWwindow* m_window;
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
-    // signal name -> plot indices it is plotted on; persisted across sessions
-    std::map<std::string, std::vector<int>> m_plotted_signal_settings;
+    CommandHotkeyOverrides m_hotkey_overrides;
     std::vector<RecentCustomEquation> m_recent_custom_equations;
     // When signals are given on the command line they override the persisted selection at
-    // startup: the saved plotted signals are not auto-restored on launch and are not
-    // overwritten. The first interactive "Open" flips this back on, resuming normal restore
-    // and persistence of plotted signals.
+    // startup. Only normal GUI sessions restore saved plotted signal assignments.
     bool m_use_saved_plotted_signals = true;
+    bool m_save_settings = true;
     int m_rows = 1;
     int m_cols = 1;
-    int m_vector_plot_cnt = 0;
-    int m_spectrum_plot_cnt = 0;
+    // Docked plots are stored in stable row/column slots: row * MAX_PLOTS + col.
+    // plotAt() still receives a visible row-major index from render loops, but maps
+    // it through the current grid dimensions so adding columns does not move lower rows.
+    int m_undocked_plot_count = 0;
     float m_signals_window_width = 0.15f;
     struct {
         std::string x_signal_name;
@@ -223,27 +178,35 @@ class CsvPlotter {
         int font_size = 13;
     } m_options;
     MinMax m_x_axis = AUTOFIT_AXIS;
+    MinMax m_x_shift_slider_range = AUTOFIT_AXIS;
+    bool m_x_shift_slider_active = false;
     double m_drag_x1 = 0;
     double m_drag_x2 = 0;
     std::string m_error_message;
-
+    int m_clipboard_file_count = 0;
     struct {
         bool reset_colors;
     } m_flags;
 
-    std::vector<CsvSignal*> m_selected_signals;
-    std::array<ScalarPlot, MAX_PLOTS * MAX_PLOTS> m_scalar_plots;
-    std::array<VectorPlot, MAX_PLOTS> m_vector_plots;
-    std::array<SpectrumPlot, MAX_PLOTS> m_spectrum_plots;
-};
+    // Comparison selection persists between Alt holds, while the per-plot name
+    // snapshots are refreshed for each new hold and never store signal pointers.
+    struct {
+        bool active = false;
+        bool reset_colors = false;
+        float alt_hold_duration = 0;
+        // Retained after Alt is released so the next comparison starts here.
+        int selected_file_index = 0;
+        std::array<CsvPlotSignalSettings, MAX_PLOT_WINDOWS> docked_plot_settings;
+        std::array<CsvPlotSignalSettings, MAX_UNDOCKED_PLOTS> undocked_plot_settings;
+    } m_comparison;
 
-inline void HelpMarker(const char* desc) {
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip();
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
+    std::vector<CsvSignal*> m_selected_signals;
+    // Flattened list of signal pointers actually submitted this frame (i.e. inside expanded
+    // file tree nodes and matching the filter). Built during the submission loop and used to
+    // map multi-select SetRange/SetAll indices back to CsvSignal* in applyMultiSelectRequests().
+    // Must outlive the BeginMultiSelect/EndMultiSelect scope (i.e. be a member, not a
+    // frame-local), because EndMultiSelect's requests are applied after the loop.
+    std::vector<CsvSignal*> m_visible_signals;
+    std::array<PlotBase, MAX_PLOT_WINDOWS> m_docked_plots;
+    std::array<PlotBase, MAX_UNDOCKED_PLOTS> m_undocked_plots;
+};

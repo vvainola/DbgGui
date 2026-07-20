@@ -23,6 +23,7 @@
 #pragma once
 
 #include "DbgGui/global_snapshot.h"
+#include "symbol_descriptor.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,7 +36,6 @@
 #include <libdwarf.h>
 #endif
 
-struct RawSymbol;
 class VariantSymbol;
 
 class DbgSymbols {
@@ -49,6 +49,11 @@ class DbgSymbols {
     /// @return Symbols succesfully loaded from json file
     bool symbolsLoadedFromJson() const { return m_symbols_loaded_from_json; }
 
+    /// @brief Diagnostics produced while loading debug symbols.
+    /// These are intended for the GUI log; one unreadable module must not
+    /// prevent symbols from the remaining modules from loading.
+    std::vector<std::string> const& symbolLoadErrors() const { return m_symbol_load_errors; }
+
     /// @brief Save symbol info collected from PDB file into a json file that can be used for
     /// loading symbol information without PDB file later on.
     /// @param filename Filename to save
@@ -57,15 +62,14 @@ class DbgSymbols {
     /// PDB file but otherwise symbol searching does not work.
     void saveSymbolInfoToJson(std::string const& filename, bool omit_names) const;
 
-    /// @brief Fuzzy search for all matching symbol names in the global namespace. Exact match is
-    /// always the first element. Members of a symbol are searched if the parent name is an exact
-    /// match
+    /// @brief Fuzzy search for matching symbol names up to the requested depth. Exact match is
+    /// always the first element.
     /// @param search_string Full or partial part of symbol name
-    /// @param recursive Search also members of all symbols
+    /// @param recursion_depth Maximum nested symbol depth to search. Module-prefixed globals count as depth 1.
     /// @param max_count Maximum number of results
     /// @return Matching symbols
     std::vector<VariantSymbol*> findMatchingSymbols(std::string const& search_string,
-                                                    bool recursive = false,
+                                                    int recursion_depth = 1,
                                                     int max_count = 1000) const;
 
     /// @brief Search for symbol that has exactly the given name.
@@ -83,11 +87,11 @@ class DbgSymbols {
     void loadSnapshotFromFile(std::string const& json) const;
     void loadSnapshotFromMemory(std::vector<SymbolValue> const snapshot) const;
 
-#if LINUX
     /// @brief Resolve a function address to its demangled name.
     /// @return Function name or empty string if not found.
     std::string resolveFunctionAddress(MemoryAddress address) const;
 
+#if LINUX
     using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
 #endif
 
@@ -121,10 +125,14 @@ class DbgSymbols {
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");
-    std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#endif
+    mutable std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#if WINDOWS
+    mutable bool m_function_addresses_loaded = false;
 #endif
 
-    std::vector<std::unique_ptr<RawSymbol>> m_raw_symbols;
+    std::vector<std::unique_ptr<SymbolDescriptor>> m_symbol_descriptors;
     std::vector<std::unique_ptr<VariantSymbol>> m_root_symbols;
+    std::vector<std::string> m_symbol_load_errors;
     bool m_symbols_loaded_from_json = false;
 };

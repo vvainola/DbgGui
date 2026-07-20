@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 // Linux-specific symbol loading using DWARF debug information from ELF binaries.
-// Unlike Windows which uses DbgHelp API with PDB files, Linux uses libdwarf
+// Unlike Windows which uses RawPDB with PDB files, Linux uses libdwarf
 // to read DWARF debug info directly from the executable's .debug_* sections.
 // Also supports reading symbols from loaded shared libraries via dl_iterate_phdr.
 
@@ -30,7 +30,7 @@
 #include "variant_symbol.h"
 
 #include <cassert>
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 
 #include <fcntl.h>
 #include <link.h>
@@ -47,122 +47,60 @@
 #include <string>
 #include <vector>
 
+static void appendInheritedMembers(SymbolDescriptor& symbol,
+                                   SymbolDescriptor const& base_symbol,
+                                   uint32_t base_offset) {
+    for (auto const& base_child : base_symbol.children) {
+        auto inherited_child = std::make_shared<SymbolDescriptor>(*base_child);
+        inherited_child->offset_to_parent += base_offset;
+        symbol.children.push_back(std::move(inherited_child));
+    }
+}
+
 // ============================================================================
 // Address computation helpers
 // ============================================================================
 
-// Finds the runtime base address by reading /proc/self/maps and matching it
-// with the ELF section headers. DWARF addresses are relative to the ELF
-// virtual address space, so we need to convert them to runtime addresses.
-static MemoryAddress getDataSectionBase() {
-    static MemoryAddress cached_base = 0;
-    if (cached_base != 0) {
-        return cached_base;
-    }
-
-    // Get the path of the current executable
-    char exe_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len == -1) {
-        return 0;
-    }
-    exe_path[len] = '\0';
-
-    // Open the ELF file to find the .data section's virtual address
-    int fd = open(exe_path, O_RDONLY);
-    if (fd < 0) {
-        return 0;
-    }
-
-    // Read ELF header
-    Elf64_Ehdr ehdr;
-    if (read(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
-        close(fd);
-        return 0;
-    }
-
-    // Get section header table
-    Elf64_Off shoff = ehdr.e_shoff;
-    Elf64_Half shentsize = ehdr.e_shentsize;
-    Elf64_Half shnum = ehdr.e_shnum;
-    Elf64_Half shstrndx = ehdr.e_shstrndx;
-
-    // Read section header string table
-    lseek(fd, shoff + shstrndx * shentsize, SEEK_SET);
-    Elf64_Shdr shstrhdr;
-    read(fd, &shstrhdr, sizeof(shstrhdr));
-    lseek(fd, shstrhdr.sh_offset, SEEK_SET);
-    char* strtab = new char[shstrhdr.sh_size];
-    read(fd, strtab, shstrhdr.sh_size);
-
-    // Find .data section's virtual address in the ELF file
-    Elf64_Addr data_elf_addr = 0;
-    for (Elf64_Half i = 0; i < shnum; i++) {
-        lseek(fd, shoff + i * shentsize, SEEK_SET);
-        Elf64_Shdr shdr;
-        read(fd, &shdr, sizeof(shdr));
-        const char* name = strtab + shdr.sh_name;
-        if (strcmp(name, ".data") == 0) {
-            data_elf_addr = shdr.sh_addr;
-            break;
-        }
-    }
-    delete[] strtab;
-    close(fd);
-
-    if (data_elf_addr == 0) {
-        return 0;
-    }
-
-    // Now find where the data segment is loaded in memory
-    FILE* maps = fopen("/proc/self/maps", "r");
-    if (!maps) {
-        return 0;
-    }
-    char line[512];
-    while (fgets(line, sizeof(line), maps)) {
-        // Look for the data segment (rw-p) of our executable
-        if (strstr(line, " rw-p ") && strstr(line, exe_path)) {
-            unsigned long start, end;
-            char perms[5];
-            if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) == 3) {
-                // The data segment start in memory maps to data_elf_addr in the ELF file
-                // So the runtime base for any ELF virtual address is:
-                // runtime_addr = runtime_data_segment_start + (elf_addr - data_elf_addr)
-                cached_base = start - data_elf_addr;
-                fclose(maps);
-                return cached_base;
-            }
-        }
-    }
-    fclose(maps);
-    return 0;
-}
-
 // Determines where the current executable was loaded in memory.
 static MemoryAddress getLoadBase() {
-    return getDataSectionBase();
+    static MemoryAddress const load_base = [] {
+        MemoryAddress base = 0;
+        dl_iterate_phdr(
+          [](dl_phdr_info* info, size_t, void* data) {
+              // The main executable is represented by the entry with an empty
+              // name. dlpi_addr is its ELF load bias: zero for ET_EXEC and the
+              // relocation base for PIE executables.
+              if (info->dlpi_name == nullptr || info->dlpi_name[0] == '\0') {
+                  *static_cast<MemoryAddress*>(data) = info->dlpi_addr;
+                  return 1;
+              }
+              return 0;
+          },
+          &base);
+        return base;
+    }();
+    return load_base;
 }
 
 // ============================================================================
 // DWARF type resolution
 // ============================================================================
 
-// Map DWARF base type encoding to our BasicType enum
-static BasicType encodingToBasicType(Dwarf_Unsigned encoding) {
+// Map DWARF base type encoding to the backend-neutral scalar type.
+static ScalarType encodingToScalarType(Dwarf_Unsigned encoding) {
     switch (encoding) {
         case DW_ATE_signed:
         case DW_ATE_signed_char:
-            return BasicType::btInt;
+            return ScalarType::SignedInteger;
         case DW_ATE_unsigned:
         case DW_ATE_unsigned_char:
-            return BasicType::btUInt;
+            return ScalarType::UnsignedInteger;
         case DW_ATE_float:
-            return BasicType::btFloat;
+            return ScalarType::FloatingPoint;
         case DW_ATE_boolean:
-            return BasicType::btBool;
+            return ScalarType::Boolean;
         default:
-            return BasicType::btNoType;
+            return ScalarType::None;
     }
 }
 
@@ -204,8 +142,93 @@ static Dwarf_Off followTypeChain(Dwarf_Debug dbg, Dwarf_Off type_offset) {
     return type_offset;
 }
 
-// Resolve a DWARF type (given by offset) and populate the RawSymbol's
-// tag, size, basic_type, children, and array_element_count.
+// followTypeChain strips typedef/const/volatile/restrict wrappers before
+// resolving the underlying layout. Walk the same wrapper chain first so the
+// const qualifier can be preserved on the SymbolDescriptor before the type
+// offset is replaced with the unqualified type.
+static bool isConstQualifiedType(Dwarf_Debug dbg, Dwarf_Off type_offset) {
+    Dwarf_Error err = nullptr;
+
+    for (int depth = 0; depth < 50; ++depth) {
+        Dwarf_Die type_die = nullptr;
+        if (dwarf_offdie_b(dbg, type_offset, 1, &type_die, &err) != DW_DLV_OK) {
+            return false;
+        }
+
+        Dwarf_Half tag;
+        dwarf_tag(type_die, &tag, &err);
+        bool const is_const = tag == DW_TAG_const_type;
+        if (tag != DW_TAG_typedef
+            && tag != DW_TAG_const_type
+            && tag != DW_TAG_volatile_type
+            && tag != DW_TAG_restrict_type) {
+            dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+            return false;
+        }
+
+        Dwarf_Attribute attr = nullptr;
+        if (dwarf_attr(type_die, DW_AT_type, &attr, &err) != DW_DLV_OK) {
+            dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+            return is_const;
+        }
+
+        Dwarf_Off next_offset;
+        dwarf_global_formref(attr, &next_offset, &err);
+        dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
+        dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+
+        if (is_const) {
+            return true;
+        }
+        type_offset = next_offset;
+    }
+
+    return false;
+}
+
+static uint32_t getDataMemberLocationOffset(Dwarf_Debug dbg, Dwarf_Die die) {
+    Dwarf_Error err = nullptr;
+    uint32_t offset = 0;
+
+    Dwarf_Attribute loc_attr = nullptr;
+    if (dwarf_attr(die, DW_AT_data_member_location, &loc_attr, &err) == DW_DLV_OK) {
+        Dwarf_Unsigned uval;
+        if (dwarf_formudata(loc_attr, &uval, &err) == DW_DLV_OK) {
+            offset = (uint32_t)uval;
+        } else {
+            Dwarf_Signed sval;
+            if (dwarf_formsdata(loc_attr, &sval, &err) == DW_DLV_OK && sval >= 0) {
+                offset = (uint32_t)sval;
+            }
+        }
+        dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+    }
+
+    return offset;
+}
+
+static std::string getTypeName(Dwarf_Debug dbg, Dwarf_Off type_offset) {
+    Dwarf_Error err = nullptr;
+    type_offset = followTypeChain(dbg, type_offset);
+
+    Dwarf_Die type_die = nullptr;
+    if (dwarf_offdie_b(dbg, type_offset, 1, &type_die, &err) != DW_DLV_OK) {
+        return "";
+    }
+
+    std::string name;
+    char* type_name = nullptr;
+    if (dwarf_diename(type_die, &type_name, &err) == DW_DLV_OK && type_name != nullptr) {
+        name = type_name;
+        dwarf_dealloc(dbg, type_name, DW_DLA_STRING);
+    }
+    dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+
+    return name;
+}
+
+// Resolve a DWARF type (given by offset) and populate the SymbolDescriptor's
+// kind, size, scalar_type, children, and array_element_count.
 // The name, address, and offset_to_parent should already be set by the caller.
 // Returns false if the type DIE could not be resolved.
 //
@@ -215,11 +238,12 @@ static Dwarf_Off followTypeChain(Dwarf_Debug dbg, Dwarf_Off type_offset) {
 // this map and re-resolve against the full definition's DIE.
 static bool resolveType(Dwarf_Debug dbg,
                         Dwarf_Off type_offset,
-                        RawSymbol& raw_sym,
+                        SymbolDescriptor& symbol,
                         DbgSymbols::FullTypeDefs const& full_type_defs) {
     Dwarf_Error err = nullptr;
 
     // Follow typedef/const/volatile chains
+    symbol.is_const = symbol.is_const || isConstQualifiedType(dbg, type_offset);
     type_offset = followTypeChain(dbg, type_offset);
 
     Dwarf_Die type_die = nullptr;
@@ -233,10 +257,16 @@ static bool resolveType(Dwarf_Debug dbg,
     Dwarf_Unsigned type_size = 0;
     dwarf_bytesize(type_die, &type_size, &err);
 
-    // If this is a forward-declared class/struct/union, find the full definition
-    // by name in another CU and resolve against that instead.
-    if ((tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type)
-        && type_size == 0) {
+    // If this is a forward-declared class/struct/union/enum, find the full
+    // definition by name in another CU and resolve against that instead.
+    // Note: type_size is not checked here because a forward-declared enum with
+    // an explicit underlying type (e.g. `enum class E : int;`) carries
+    // DW_AT_byte_size from the underlying type even though it has no
+    // enumerator children. DW_AT_declaration is the reliable indicator.
+    if (tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type) {
         Dwarf_Bool is_decl = 0;
         Dwarf_Attribute decl_attr = nullptr;
         if (dwarf_attr(type_die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {
@@ -252,7 +282,7 @@ static bool resolveType(Dwarf_Debug dbg,
                 for (auto it = range.first; it != range.second; ++it) {
                     if (it->second != type_offset) {
                         dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
-                        return resolveType(dbg, it->second, raw_sym, full_type_defs);
+                        return resolveType(dbg, it->second, symbol, full_type_defs);
                     }
                 }
             }
@@ -261,27 +291,27 @@ static bool resolveType(Dwarf_Debug dbg,
 
     switch (tag) {
         case DW_TAG_base_type: {
-            raw_sym.tag = SymTagBaseType;
-            raw_sym.size = (uint32_t)type_size;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.size = (uint32_t)type_size;
 
             Dwarf_Attribute enc_attr = nullptr;
             if (dwarf_attr(type_die, DW_AT_encoding, &enc_attr, &err) == DW_DLV_OK) {
                 Dwarf_Unsigned encoding = 0;
                 dwarf_formudata(enc_attr, &encoding, &err);
-                raw_sym.basic_type = encodingToBasicType(encoding);
+                symbol.scalar_type = encodingToScalarType(encoding);
                 dwarf_dealloc(dbg, enc_attr, DW_DLA_ATTR);
             }
             break;
         }
 
         case DW_TAG_pointer_type: {
-            raw_sym.tag = SymTagPointerType;
-            raw_sym.size = (type_size > 0) ? (uint32_t)type_size : 8;
+            symbol.kind = SymbolKind::Pointer;
+            symbol.size = (type_size > 0) ? (uint32_t)type_size : 8;
             break;
         }
 
         case DW_TAG_array_type: {
-            raw_sym.tag = SymTagArrayType;
+            symbol.kind = SymbolKind::Array;
 
             // Get the element type
             Dwarf_Attribute elem_type_attr = nullptr;
@@ -331,14 +361,14 @@ static bool resolveType(Dwarf_Debug dbg,
 
             if (has_elem_type && !dimensions.empty()) {
                 // Resolve the innermost element type
-                auto innermost = std::make_unique<RawSymbol>();
+                auto innermost = std::make_shared<SymbolDescriptor>();
                 if (resolveType(dbg, elem_type_offset, *innermost, full_type_defs)) {
                     // Build nested array structure from innermost dimension outward
                     // For dimensions [3, 3] with element type int32_t:
                     // Build: array(3, array(3, int32_t))
                     for (int i = (int)dimensions.size() - 1; i >= 1; --i) {
-                        auto array_elem = std::make_unique<RawSymbol>(RawSymbol{
-                            .tag = SymTagArrayType
+                        auto array_elem = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
+                          .kind = SymbolKind::Array,
                         });
                         array_elem->array_element_count = dimensions[i];
                         array_elem->size = innermost->size * dimensions[i];
@@ -346,9 +376,9 @@ static bool resolveType(Dwarf_Debug dbg,
                         innermost = std::move(array_elem);
                     }
 
-                    raw_sym.array_element_count = dimensions[0];
-                    raw_sym.size = innermost->size * dimensions[0];
-                    raw_sym.children.push_back(std::move(innermost));
+                    symbol.array_element_count = dimensions[0];
+                    symbol.size = innermost->size * dimensions[0];
+                    symbol.children.push_back(std::move(innermost));
                 }
             }
             break;
@@ -357,8 +387,8 @@ static bool resolveType(Dwarf_Debug dbg,
         case DW_TAG_structure_type:
         case DW_TAG_class_type:
         case DW_TAG_union_type: {
-            raw_sym.tag = SymTagUDT;
-            raw_sym.size = (uint32_t)type_size;
+            symbol.kind = SymbolKind::Object;
+            symbol.size = (uint32_t)type_size;
 
             // Enumerate member children
             Dwarf_Die child_die = nullptr;
@@ -372,15 +402,7 @@ static bool resolveType(Dwarf_Debug dbg,
                         dwarf_diename(child_die, &member_name, &err);
 
                         // Get member offset from containing structure
-                        uint32_t offset = 0;
-                        Dwarf_Attribute loc_attr = nullptr;
-                        if (dwarf_attr(child_die, DW_AT_data_member_location, &loc_attr, &err) == DW_DLV_OK) {
-                            Dwarf_Unsigned uval;
-                            if (dwarf_formudata(loc_attr, &uval, &err) == DW_DLV_OK) {
-                                offset = (uint32_t)uval;
-                            }
-                            dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
-                        }
+                        uint32_t offset = getDataMemberLocationOffset(dbg, child_die);
 
                         // Get member type
                         Dwarf_Attribute mem_type_attr = nullptr;
@@ -389,8 +411,8 @@ static bool resolveType(Dwarf_Debug dbg,
                             dwarf_global_formref(mem_type_attr, &member_type_offset, &err);
                             dwarf_dealloc(dbg, mem_type_attr, DW_DLA_ATTR);
 
-                        auto child_sym = std::make_unique<RawSymbol>(RawSymbol{
-                                .name = member_name ? member_name : ""
+                            auto child_sym = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
+                              .name = member_name ? member_name : "",
                             });
                             child_sym->offset_to_parent = offset;
 
@@ -427,12 +449,28 @@ static bool resolveType(Dwarf_Debug dbg,
                                     child_sym->size = (uint32_t)bit_size;
                                 }
 
-                                raw_sym.children.push_back(std::move(child_sym));
+                                symbol.children.push_back(std::move(child_sym));
                             }
                         }
 
                         if (member_name) {
                             dwarf_dealloc(dbg, member_name, DW_DLA_STRING);
+                        }
+                    } else if (child_tag == DW_TAG_inheritance) {
+                        Dwarf_Attribute base_type_attr = nullptr;
+                        if (dwarf_attr(child_die, DW_AT_type, &base_type_attr, &err) == DW_DLV_OK) {
+                            Dwarf_Off base_type_offset;
+                            dwarf_global_formref(base_type_attr, &base_type_offset, &err);
+                            dwarf_dealloc(dbg, base_type_attr, DW_DLA_ATTR);
+
+                            SymbolDescriptor base_symbol{
+                              .name = getTypeName(dbg, base_type_offset),
+                            };
+                            uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
+
+                            if (resolveType(dbg, base_type_offset, base_symbol, full_type_defs)) {
+                                appendInheritedMembers(symbol, base_symbol, base_offset);
+                            }
                         }
                     }
 
@@ -450,9 +488,9 @@ static bool resolveType(Dwarf_Debug dbg,
         }
 
         case DW_TAG_enumeration_type: {
-            raw_sym.tag = SymTagEnumerator;
-            raw_sym.size = (uint32_t)type_size;
-            raw_sym.basic_type = BasicType::btInt;
+            symbol.kind = SymbolKind::Enum;
+            symbol.size = (uint32_t)type_size;
+            symbol.scalar_type = ScalarType::SignedInteger;
 
             Dwarf_Attribute underlying_type_attr = nullptr;
             if (dwarf_attr(type_die, DW_AT_type, &underlying_type_attr, &err) == DW_DLV_OK) {
@@ -460,11 +498,11 @@ static bool resolveType(Dwarf_Debug dbg,
                 dwarf_global_formref(underlying_type_attr, &underlying_offset, &err);
                 dwarf_dealloc(dbg, underlying_type_attr, DW_DLA_ATTR);
 
-                RawSymbol temp{};
+                SymbolDescriptor temp{};
                 if (resolveType(dbg, underlying_offset, temp, full_type_defs)) {
-                    raw_sym.basic_type = temp.basic_type;
-                    if (raw_sym.size == 0) {
-                        raw_sym.size = temp.size;
+                    symbol.scalar_type = temp.scalar_type;
+                    if (symbol.size == 0) {
+                        symbol.size = temp.size;
                     }
                 }
             }
@@ -486,11 +524,12 @@ static bool resolveType(Dwarf_Debug dbg,
                             }
                             dwarf_dealloc(dbg, const_val_attr, DW_DLA_ATTR);
                         }
-                        auto enum_child = std::make_unique<RawSymbol>(RawSymbol{
-                            .name = enum_name ? enum_name : ""
+                        auto enum_child = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
+                          .name = enum_name ? enum_name : "",
+                          .kind = SymbolKind::EnumValue,
                         });
                         enum_child->enum_value = enum_const_value;
-                        raw_sym.children.push_back(std::move(enum_child));
+                        symbol.children.push_back(std::move(enum_child));
                         if (enum_name) {
                             dwarf_dealloc(dbg, enum_name, DW_DLA_STRING);
                         }
@@ -510,9 +549,9 @@ static bool resolveType(Dwarf_Debug dbg,
 
         default: {
             // Unknown/unhandled type
-            raw_sym.tag = SymTagBaseType;
-            raw_sym.basic_type = BasicType::btUInt;
-            raw_sym.size = (uint32_t)type_size;
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = ScalarType::UnsignedInteger;
+            symbol.size = (uint32_t)type_size;
             break;
         }
     }
@@ -520,7 +559,7 @@ static bool resolveType(Dwarf_Debug dbg,
     dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
     // Skip symbols whose size we could not determine (e.g. a forward declaration
     // for which no full definition was found in any CU's DWARF).
-    return raw_sym.size > 0;
+    return symbol.size > 0;
 }
 
 // ============================================================================
@@ -659,17 +698,18 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 }
 
                 if (has_type) {
-                    std::string sym_name = effective_name_is_fully_qualified
-                                             ? (module_prefix + effective_name)
-                                             : (module_prefix + namespace_prefix + effective_name);
-                    auto raw_sym = std::make_unique<RawSymbol>(RawSymbol{
-                        .name = sym_name,
-                        .address = addr
+                    std::string sym_name = effective_name_is_fully_qualified ?
+                                             (module_prefix + effective_name) :
+                                             (module_prefix + namespace_prefix + effective_name);
+                    auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+                      .name = sym_name,
+                      .address = addr,
+                      .is_const = isConstQualifiedType(dbg, type_offset),
                     });
-                    if (resolveType(dbg, type_offset, *raw_sym, full_type_defs)) {
-                        m_raw_symbols.push_back(std::move(raw_sym));
+                    if (resolveType(dbg, type_offset, *symbol, full_type_defs)) {
+                        m_symbol_descriptors.push_back(std::move(symbol));
                         m_root_symbols.push_back(std::make_unique<VariantSymbol>(
-                          m_root_symbols, m_raw_symbols.back().get()));
+                          m_root_symbols, m_symbol_descriptors.back().get()));
                     }
                 }
             }
@@ -768,10 +808,10 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
     }
 }
 
-// Pre-pass: walk a DIE tree and index every full class/struct/union definition
-// (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified name so
-// resolveType can follow a forward declaration in one CU to the full definition
-// in another.
+// Pre-pass: walk a DIE tree and index every full class/struct/union/enum
+// definition (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified
+// name so resolveType can follow a forward declaration in one CU to the full
+// definition in another.
 static void collectFullTypeDefs(Dwarf_Debug dbg,
                                 Dwarf_Die die,
                                 DbgSymbols::FullTypeDefs& full_type_defs) {
@@ -779,7 +819,10 @@ static void collectFullTypeDefs(Dwarf_Debug dbg,
     Dwarf_Half tag = 0;
     dwarf_tag(die, &tag, &err);
 
-    if (tag == DW_TAG_structure_type || tag == DW_TAG_class_type || tag == DW_TAG_union_type) {
+    if (tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type) {
         Dwarf_Bool is_decl = 0;
         Dwarf_Attribute decl_attr = nullptr;
         if (dwarf_attr(die, DW_AT_declaration, &decl_attr, &err) == DW_DLV_OK) {
@@ -966,6 +1009,10 @@ std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
 std::vector<SymbolValue> DbgSymbols::saveSnapshotToMemory() const {
     std::vector<SymbolValue> snapshot;
     std::function<void(VariantSymbol*)> save_symbol_to_snapshot = [&](VariantSymbol* sym) {
+        if (sym->isConst()) {
+            return;
+        }
+
         VariantSymbol::Type type = sym->getType();
         if (type == VariantSymbol::Type::Arithmetic || type == VariantSymbol::Type::Enum) {
             snapshot.push_back({sym, sym->read()});

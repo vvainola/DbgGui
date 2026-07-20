@@ -22,7 +22,7 @@
 
 #include "data_structures.h"
 #include "str_helpers.h"
-#include "dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include "variant_symbol.h"
 
 #include <regex>
@@ -69,15 +69,92 @@ std::expected<std::vector<VariantSymbol*>, std::string> getValueSymbols(std::str
 
 ScriptWindow::ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_)
     : Window(name_, id_), m_gui(gui) {
-    text[0] = '\0';
     name = name_;
     id = id_;
 }
 
 std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_ptr<Scalar>> const& scalars) {
-    m_operations.clear();
-    m_idx = -1;
+    stopScript();
     m_start_time = timestamp;
+
+    if (language == ScriptLanguage::Lua) {
+        LuaScriptHost host;
+        host.exists = [gui = m_gui](std::string_view symbol_name) {
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted && scalar->name == symbol_name) {
+                    return true;
+                }
+            }
+            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+            return symbol && (symbol->getType() == VariantSymbol::Type::Arithmetic || symbol->getType() == VariantSymbol::Type::Enum);
+        };
+        host.read = [gui = m_gui](std::string_view symbol_name) -> std::expected<double, std::string> {
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted && scalar->name == symbol_name) {
+                    return scalar->getValue();
+                }
+            }
+            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+            if (symbol && (symbol->getType() == VariantSymbol::Type::Arithmetic || symbol->getType() == VariantSymbol::Type::Enum)) {
+                return symbol->read();
+            }
+            return std::unexpected(std::format("No matching scalar or arithmetic symbol found for '{}'", symbol_name));
+        };
+        auto validate_symbol = [gui = m_gui](std::string_view symbol_name, LuaSymbolAccess access) -> std::expected<void, std::string> {
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted && scalar->name == symbol_name) {
+                    if (access == LuaSymbolAccess::Write && scalar->read_only) {
+                        return std::unexpected(std::format("Scalar '{}' is read-only", symbol_name));
+                    }
+                    return {};
+                }
+            }
+            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+            if (symbol && (symbol->getType() == VariantSymbol::Type::Arithmetic || symbol->getType() == VariantSymbol::Type::Enum)) {
+                if (access == LuaSymbolAccess::Write && symbol->isConst()) {
+                    return std::unexpected(std::format("Symbol '{}' is const", symbol_name));
+                }
+                return {};
+            }
+            if (access == LuaSymbolAccess::Write) {
+                return std::unexpected(std::format("No writable scalar or arithmetic symbol found for '{}'", symbol_name));
+            }
+            return std::unexpected(std::format("No matching scalar or arithmetic symbol found for '{}'", symbol_name));
+        };
+        host.validate_symbol = validate_symbol;
+        host.write = [gui = m_gui, validate_symbol](std::string_view symbol_name, double value) -> std::expected<void, std::string> {
+            if (std::expected<void, std::string> result = validate_symbol(symbol_name, LuaSymbolAccess::Write); !result.has_value()) {
+                return result;
+            }
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted && scalar->name == symbol_name) {
+                    scalar->setValue(value);
+                    return {};
+                }
+            }
+            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+            symbol->write(value);
+            return {};
+        };
+        host.pause = [gui = m_gui] { gui->m_paused = true; };
+        host.save_csv = [gui = m_gui](std::string filename) {
+            std::vector<Scalar*> scalar_ptrs;
+            scalar_ptrs.reserve(gui->m_scalars.size());
+            for (auto const& scalar : gui->m_scalars) {
+                if (!scalar->deleted) {
+                    scalar_ptrs.push_back(scalar.get());
+                }
+            }
+            gui->saveScalarsAsCsv(std::move(filename), scalar_ptrs, gui->m_linked_scalar_x_axis_limits);
+        };
+
+        m_lua_script = std::make_unique<LuaScriptRunner>(text, std::move(host), name);
+        std::expected<void, std::string> result = m_lua_script->start(timestamp, loop);
+        if (!result.has_value()) {
+            return result.error();
+        }
+        return "";
+    }
 
     std::vector<std::string> lines = str::split(text, '\n');
     for (int i = 0; i < lines.size(); ++i) {
@@ -172,7 +249,18 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
     return "";
 }
 
-void ScriptWindow::processScript(double timestamp) {
+std::string ScriptWindow::processScript(double timestamp) {
+    if (language == ScriptLanguage::Lua) {
+        if (m_lua_script) {
+            std::expected<void, std::string> result = m_lua_script->process(timestamp);
+            if (!result.has_value()) {
+                return result.error();
+            }
+            m_start_time = m_lua_script->startTime();
+        }
+        return "";
+    }
+
     if (m_idx >= 0 && m_idx < m_operations.size()) {
         Operation* op = &m_operations[m_idx];
         while (timestamp > m_start_time + op->time) {
@@ -186,14 +274,25 @@ void ScriptWindow::processScript(double timestamp) {
             }
         }
     }
+    return "";
+}
+
+void ScriptWindow::shiftScriptSchedule(double time_offset) {
+    if (language == ScriptLanguage::Lua && m_lua_script) {
+        m_lua_script->shiftSchedule(time_offset);
+    }
 }
 
 void ScriptWindow::stopScript() {
     m_idx = -1;
     m_operations.clear();
+    m_lua_script.reset();
 }
 
 int ScriptWindow::currentLine() {
+    if (language == ScriptLanguage::Lua && m_lua_script) {
+        return m_lua_script->currentLine();
+    }
     if (m_idx >= 0) {
         return m_operations[m_idx].line;
     }
@@ -201,10 +300,16 @@ int ScriptWindow::currentLine() {
 }
 
 bool ScriptWindow::running() {
+    if (language == ScriptLanguage::Lua) {
+        return m_lua_script && m_lua_script->running();
+    }
     return m_idx >= 0;
 }
 
 double ScriptWindow::getTime(double timestamp) {
+    if (language == ScriptLanguage::Lua && m_lua_script) {
+        return timestamp - m_lua_script->startTime();
+    }
     return timestamp - m_start_time;
 }
 

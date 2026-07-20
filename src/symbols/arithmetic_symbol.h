@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #pragma once
-#include "raw_symbol.h"
+#include "symbol_descriptor.h"
 #include <functional>
 #include <optional>
 #include <variant>
@@ -44,7 +44,7 @@ using ValueSource = std::variant<
 
 class ArithmeticSymbol {
   public:
-    ArithmeticSymbol(BasicType basic_type,
+    ArithmeticSymbol(ScalarType scalar_type,
                      MemoryAddress address,
                      uint32_t size,
                      int bitfield_idx = NO_VALUE);

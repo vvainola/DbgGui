@@ -7,7 +7,10 @@
 
 #include "test_library_loader.h"
 #include "fwd_decl_types.h"
+#include "test_retention.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <random>
 
@@ -44,6 +47,21 @@ struct B {
     A a;
 };
 
+void test_fn1();
+
+struct ResetBase {
+    int base_value = 0;
+    double base_double = 0;
+};
+
+struct ResetDerived : ResetBase {
+    int derived_value = 0;
+};
+
+struct ResetDoubleDerived : ResetDerived {
+    int double_derived_value = 0;
+};
+
 enum Enumeration {
     EnumValue_1n = -1,
     EnumValue0 = 0,
@@ -51,7 +69,36 @@ enum Enumeration {
     EnumValue2 = 2
 };
 
-void test_fn1() {}
+volatile int g_function_address_anchor = 0;
+
+void test_fn1() {
+    g_function_address_anchor = 1;
+}
+
+namespace pdb_collision {
+struct A {
+    void hello() {};
+    int m_a = 2;
+    int (*m_ap)(double) = &A::f;
+    static int f(double) { return 0; };
+};
+
+struct B {
+    double m_b = 1;
+    A a;
+    int (*m_ap)(double) = &A::f;
+};
+
+struct C {
+    A a;
+    B b;
+    float m_c = 0;
+    B m_d[3];
+    B m_e[3][3];
+};
+
+C a_struct;
+} // namespace pdb_collision
 
 // Define global variables of different types
 int g_int;
@@ -59,9 +106,14 @@ namespace g {
 A g_a;
 B g_b1;
 B g_b2;
+B g_b_array[2];
 float g_float;
-void test_fn2() {}
-void test_fn3(int) {}
+void test_fn2() {
+    g_function_address_anchor = 2;
+}
+void test_fn3(int value) {
+    g_function_address_anchor = value + 3;
+}
 } // namespace g
 double g_double1;
 double g_double2;
@@ -72,6 +124,22 @@ void (*g_fn_ptr2)();
 void (*g_fn_ptr3)(int);
 BitField g_bitfield;
 Enumeration g_enum;
+ResetDerived g_reset_derived;
+ResetDoubleDerived g_reset_double_derived;
+extern const int g_const_int = 123;
+
+// A const global that a pointer can reference. Snapshot restore must be able
+// to save and restore a pointer to this constant even though the constant
+// itself is read-only and excluded from save/restore.
+extern const int g_const_target = 42;
+int const* g_const_ptr = &g_const_target;
+
+struct ConstMemberStruct {
+    int mutable_value = 1;
+    const int const_value = 2;
+};
+
+ConstMemberStruct g_const_member_struct;
 
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
@@ -102,6 +170,12 @@ static int s_array[3] = {10, 20, 30};
 // member.
 FwdDeclOuter g_fwd_outer;
 
+// Defined in this TU where CrossTuEnum is only forward-declared (the complete
+// definition is in fwd_decl_types.cpp). Initialized via getCrossTuEnumValue()
+// so the complete enum definition is emitted into the PDB. The PDB will emit
+// an LF_ENUM forward reference for the global's type.
+CrossTuEnum g_cross_tu_enum = getCrossTuEnumValue();
+
 // A function with a function-local static — same pattern Catch2 uses inside
 // CATCH_REGISTER_ENUM. The static must NOT be exposed by DbgSymbols, because
 // its lazy-init guard (a `_ZGV*` symbol) is filtered out by name and so a
@@ -113,8 +187,58 @@ int* getLocalStaticPtr() {
     return s_local_static_ptr;
 }
 
+volatile std::uintptr_t g_symbol_fixture_keep_alive_sink = 0;
+
+extern "C" std::uintptr_t keep_test_types_alive();
+
+template <typename T>
+void keepSymbolAddress(std::uintptr_t& value, T const& symbol) {
+    value ^= reinterpret_cast<std::uintptr_t>(&symbol);
+}
+
+DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
+    std::uintptr_t value = 0;
+    keepSymbolAddress(value, g_int);
+    keepSymbolAddress(value, g::g_a);
+    keepSymbolAddress(value, g::g_b1);
+    keepSymbolAddress(value, g::g_b2);
+    keepSymbolAddress(value, g::g_b_array);
+    keepSymbolAddress(value, g::g_float);
+    keepSymbolAddress(value, g_double1);
+    keepSymbolAddress(value, g_double2);
+    keepSymbolAddress(value, g_multidim_double);
+    keepSymbolAddress(value, g_double_ptr);
+    keepSymbolAddress(value, g_fn_ptr);
+    keepSymbolAddress(value, g_fn_ptr2);
+    keepSymbolAddress(value, g_fn_ptr3);
+    keepSymbolAddress(value, g_bitfield);
+    keepSymbolAddress(value, g_enum);
+    keepSymbolAddress(value, g_reset_derived);
+    keepSymbolAddress(value, g_reset_double_derived);
+    keepSymbolAddress(value, g_const_int);
+    keepSymbolAddress(value, g_const_target);
+    keepSymbolAddress(value, g_const_ptr);
+    keepSymbolAddress(value, g_const_member_struct);
+    keepSymbolAddress(value, pdb_collision::a_struct);
+    keepSymbolAddress(value, static_ns::s_int);
+    keepSymbolAddress(value, static_ns::s_double);
+    keepSymbolAddress(value, static_ns::s_a);
+    keepSymbolAddress(value, static_ns::s_b);
+    keepSymbolAddress(value, static_ns::s_ctor);
+    keepSymbolAddress(value, static_ns::s_array);
+    keepSymbolAddress(value, g_fwd_outer);
+    keepSymbolAddress(value, g_cross_tu_enum);
+    value ^= keep_test_types_alive();
+    g_symbol_fixture_keep_alive_sink = value;
+}
+
+DbgSymbols const& getTestSymbols() {
+    keepSymbolTestFixturesAlive();
+    return DbgSymbols::getSymbols();
+}
+
 TEST_CASE("Basic symbol access") {
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
     g_int = random<int>();
     VariantSymbol* g_int_sym = symbols.getSymbol("g_int");
     CHECK(g_int_sym->read() == g_int);
@@ -138,7 +262,31 @@ TEST_CASE("Basic symbol access") {
     g_enum = EnumValue_1n;
     CHECK(g_enum_sym->valueAsStr() == "EnumValue_1n");
 
+    // Scalar plots apply their scale and offset before displaying a tooltip.
+    // Enum lookups must undo that transformation before reading the enum name.
+    ValueSource enum_source = g_enum_sym->getValueSource();
+    auto* enum_value_source = std::get_if<ReadWriteFnCustomStr>(&enum_source);
+    REQUIRE(enum_value_source != nullptr);
+    constexpr double scale = 2.0;
+    constexpr double offset = 3.0;
+    double plotted_value = static_cast<double>(EnumValue1) * scale + offset;
+    double source_value = (plotted_value - offset) / scale;
+    double original_value = enum_value_source->operator()(std::nullopt).second;
+    enum_value_source->operator()(source_value);
+    CHECK(enum_value_source->operator()(std::nullopt).first == "EnumValue1");
+    enum_value_source->operator()(original_value);
+
+    // g_cross_tu_enum is defined in this TU where CrossTuEnum is only
+    // forward-declared. The PDB type index for the global points to an LF_ENUM
+    // forward reference; resolving the enumerator name requires following it
+    // to the full definition in fwd_decl_types.cpp's TPI records.
+    VariantSymbol* cross_tu_enum_sym = symbols.getSymbol("g_cross_tu_enum");
+    REQUIRE(cross_tu_enum_sym != nullptr);
+    CHECK(cross_tu_enum_sym->valueAsStr() == "CrossTuB");
+
     VariantSymbol* g_fn_ptr_sym = symbols.getSymbol("g_fn_ptr");
+    REQUIRE(g_fn_ptr_sym != nullptr);
+    CHECK_FALSE(g_fn_ptr_sym->isConst());
     g_fn_ptr = &test_fn1;
     CHECK(g_fn_ptr_sym->valueAsStr() == "test_fn1");
     g_fn_ptr = &g::test_fn2;
@@ -149,21 +297,125 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_fn_ptr3_sym->valueAsStr() == "g::test_fn3");
 
     VariantSymbol* g_a_sym = symbols.getSymbol("g::g_a");
+    REQUIRE(g_a_sym != nullptr);
     CHECK(g_a_sym->getChildren().size() == 1);
 
     VariantSymbol* g_b1_sym = symbols.getSymbol("g::g_b1");
+    REQUIRE(g_b1_sym != nullptr);
     CHECK(g_b1_sym->getChildren().size() == 2);
     VariantSymbol* g_b2_sym = symbols.getSymbol("g::g_b2");
+    REQUIRE(g_b2_sym != nullptr);
     CHECK(g_b2_sym->getChildren().size() == 2);
 
     VariantSymbol* g_b1_a_sym = symbols.getSymbol("g::g_b1.a");
+    REQUIRE(g_b1_a_sym != nullptr);
     CHECK(g_b1_a_sym->getChildren().size() == 1);
     VariantSymbol* g_b2_a_sym = symbols.getSymbol("g::g_b2.a");
+    REQUIRE(g_b2_a_sym != nullptr);
     CHECK(g_b2_a_sym->getChildren().size() == 1);
+
+    g::g_b_array[0].a.m_a = 1;
+    g::g_b_array[1].a.m_a = 2;
+    VariantSymbol* g_b_array_member_sym = symbols.getSymbol("g::g_b_array[1].a.m_a");
+    REQUIRE(g_b_array_member_sym != nullptr);
+    CHECK(g_b_array_member_sym->read() == g::g_b_array[1].a.m_a);
+
+    pdb_collision::a_struct.m_d[0].a.m_a = 1;
+    pdb_collision::a_struct.m_d[1].a.m_a = 2;
+    VariantSymbol* a_struct_member_sym = symbols.getSymbol("pdb_collision::a_struct.m_d[1].a.m_a");
+    REQUIRE(a_struct_member_sym != nullptr);
+    CHECK(a_struct_member_sym->read() == pdb_collision::a_struct.m_d[1].a.m_a);
+
+    VariantSymbol* c_struct_i64_sym = symbols.getSymbol("g_test_types[1].values.i64");
+    REQUIRE(c_struct_i64_sym != nullptr);
+    CHECK(c_struct_i64_sym->read() == -11);
+    VariantSymbol* c_struct_f32_sym = symbols.getSymbol("g_test_types[1].values.f32");
+    REQUIRE(c_struct_f32_sym != nullptr);
+    CHECK(c_struct_f32_sym->read() == Approx(2.5f));
+    VariantSymbol* c_struct_u32_sym = symbols.getSymbol("g_test_types[1].values.u32");
+    REQUIRE(c_struct_u32_sym != nullptr);
+    CHECK(c_struct_u32_sym->read() == 21);
+    VariantSymbol* c_struct_i32_sym = symbols.getSymbol("g_test_types[1].values.i32");
+    REQUIRE(c_struct_i32_sym != nullptr);
+    CHECK(c_struct_i32_sym->read() == -31);
+    VariantSymbol* c_struct_u16_sym = symbols.getSymbol("g_test_types[1].values.u16");
+    REQUIRE(c_struct_u16_sym != nullptr);
+    CHECK(c_struct_u16_sym->read() == 41);
+    VariantSymbol* c_struct_outer_i32_sym = symbols.getSymbol("g_test_types[1].i32");
+    REQUIRE(c_struct_outer_i32_sym != nullptr);
+    CHECK(c_struct_outer_i32_sym->read() == 51);
+
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
+    VariantSymbol* derived_sym = symbols.getSymbol("g_reset_derived");
+    REQUIRE(derived_sym != nullptr);
+
+    VariantSymbol* base_value_sym = symbols.getSymbol("g_reset_derived.base_value");
+    VariantSymbol* base_double_sym = symbols.getSymbol("g_reset_derived.base_double");
+    REQUIRE(base_value_sym != nullptr);
+    REQUIRE(base_double_sym != nullptr);
+    CHECK(base_value_sym->getFullName() == "g_reset_derived.base_value");
+    CHECK(base_double_sym->getFullName() == "g_reset_derived.base_double");
+    CHECK(base_value_sym->read() == g_reset_derived.base_value);
+    CHECK(base_double_sym->read() == Approx(g_reset_derived.base_double));
+
+    g_reset_double_derived.base_value = random<int>();
+    g_reset_double_derived.base_double = random<double>();
+    g_reset_double_derived.derived_value = random<int>();
+    VariantSymbol* double_derived_sym = symbols.getSymbol("g_reset_double_derived");
+    REQUIRE(double_derived_sym != nullptr);
+
+    VariantSymbol* double_derived_base_value_sym = symbols.getSymbol("g_reset_double_derived.base_value");
+    VariantSymbol* double_derived_base_double_sym = symbols.getSymbol("g_reset_double_derived.base_double");
+    VariantSymbol* inherited_derived_value_sym = symbols.getSymbol("g_reset_double_derived.derived_value");
+    REQUIRE(double_derived_base_value_sym != nullptr);
+    REQUIRE(double_derived_base_double_sym != nullptr);
+    REQUIRE(inherited_derived_value_sym != nullptr);
+    CHECK(double_derived_base_value_sym->getFullName() == "g_reset_double_derived.base_value");
+    CHECK(double_derived_base_double_sym->getFullName() == "g_reset_double_derived.base_double");
+    CHECK(inherited_derived_value_sym->getFullName() == "g_reset_double_derived.derived_value");
+    CHECK(double_derived_base_value_sym->read() == g_reset_double_derived.base_value);
+    CHECK(double_derived_base_double_sym->read() == Approx(g_reset_double_derived.base_double));
+    CHECK(inherited_derived_value_sym->read() == g_reset_double_derived.derived_value);
+
+    VariantSymbol* const_int_sym = symbols.getSymbol("g_const_int");
+    REQUIRE(const_int_sym != nullptr);
+    CHECK(const_int_sym->isConst());
+    CHECK(const_int_sym->read() == g_const_int);
+
+    VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
+    REQUIRE(mutable_member_sym != nullptr);
+    CHECK_FALSE(mutable_member_sym->isConst());
+    CHECK(mutable_member_sym->read() == g_const_member_struct.mutable_value);
+
+    VariantSymbol* const_member_sym = symbols.getSymbol("g_const_member_struct.const_value");
+    REQUIRE(const_member_sym != nullptr);
+    CHECK(const_member_sym->isConst());
+    CHECK(const_member_sym->read() == g_const_member_struct.const_value);
+
+    std::vector<SymbolValue> snapshot = symbols.saveSnapshotToMemory();
+    auto snapshot_contains = [&](VariantSymbol* symbol) {
+        return std::any_of(snapshot.begin(), snapshot.end(), [=](SymbolValue const& value) {
+            return value.symbol == symbol;
+        });
+    };
+    CHECK(snapshot_contains(mutable_member_sym));
+    CHECK_FALSE(snapshot_contains(const_member_sym));
+    CHECK_FALSE(snapshot_contains(const_int_sym));
+
+#if WINDOWS
+    // magic_enum constexpr string storage lives in .rdata; it should be visible
+    // as a read-only constant so pointers to it can be snapshotted, but its
+    // value should not be saved/restored.
+    VariantSymbol* magic_enum_name_char_sym = symbols.getSymbol("magic_enum::detail::enum_name_v<enum ScalarType,3>.chars_[3]");
+    REQUIRE(magic_enum_name_char_sym != nullptr);
+    CHECK(magic_enum_name_char_sym->isConst());
+    CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
+#endif
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     // Statics have internal linkage, so their definition DIE in DWARF lacks
     // both DW_AT_name and DW_AT_linkage_name. The walker must recover the
@@ -217,7 +469,7 @@ TEST_CASE("Function-local statics are not exposed") {
     // passes for the wrong reason.
     REQUIRE(getLocalStaticPtr() != nullptr);
 
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     // The statics are inside a DW_TAG_subprogram, so the walker must skip them.
     // If exposed, snapshot save/restore could zero the storage while leaving the
@@ -235,7 +487,7 @@ TEST_CASE("Forward-declared type definition lookup") {
     // in fwd_decl_types.cpp. The walker must resolve the forward declaration
     // to the full definition to be able to size up FwdDeclOuter and expose
     // FwdDeclInner's members.
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     g_fwd_outer.inner.a = 17;
     g_fwd_outer.inner.b = 2.75;
@@ -270,6 +522,8 @@ TEST_CASE("Snapshot from file") {
     double temp_double2 = random<double>();
     uint32_t temp_bf0 = random<uint32_t>() % 7;
     uint32_t temp_bf9 = random<uint32_t>() % 17;
+    int temp_reset_base_value = random<int>();
+    double temp_reset_base_double = random<double>();
 
     // Assign random values to global variables
     g_int = temp_int;
@@ -281,6 +535,8 @@ TEST_CASE("Snapshot from file") {
     g_multidim_double[idx1][idx2] = temp_double2;
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
+    g_reset_derived.base_value = temp_reset_base_value;
+    g_reset_derived.base_double = temp_reset_base_double;
 
     // Try loading non-existent json file
     std::string const& symbols_json = "test_symbols.json";
@@ -310,6 +566,8 @@ TEST_CASE("Snapshot from file") {
     g_multidim_double[idx1][idx2] = random<double>();
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
     // Load snapshot
     SNP_loadSnapshotFromFile(symbols, "test_snapshot.json");
 
@@ -323,6 +581,8 @@ TEST_CASE("Snapshot from file") {
     REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
+    REQUIRE(g_reset_derived.base_value == temp_reset_base_value);
+    REQUIRE(g_reset_derived.base_double == temp_reset_base_double);
 
     SNP_deleteSymbolLookup(symbols);
 }
@@ -337,6 +597,8 @@ TEST_CASE("Snapshot from memory") {
     double temp_double2 = random<double>();
     uint32_t temp_bf0 = random<uint32_t>() % 7;
     uint32_t temp_bf9 = random<uint32_t>() % 17;
+    int temp_reset_base_value = random<int>();
+    double temp_reset_base_double = random<double>();
 
     // Assign random values to global variables
     g_int = temp_int;
@@ -348,6 +610,8 @@ TEST_CASE("Snapshot from memory") {
     g_multidim_double[idx1][idx2] = temp_double2;
     g_bitfield.b0 = temp_bf0;
     g_bitfield.b9 = temp_bf9;
+    g_reset_derived.base_value = temp_reset_base_value;
+    g_reset_derived.base_double = temp_reset_base_double;
 
     void* symbols = SNP_getSymbolsFromPdb();
     auto snapshot = SNP_saveSnapshotToMemory(symbols);
@@ -362,6 +626,8 @@ TEST_CASE("Snapshot from memory") {
     g_multidim_double[idx1][idx2] = random<double>();
     g_bitfield.b0 = random<uint32_t>() % 9;
     g_bitfield.b9 = random<uint32_t>() % 17;
+    g_reset_derived.base_value = random<int>();
+    g_reset_derived.base_double = random<double>();
 
     // Load snapshot
     SNP_loadSnapshotFromMemory(symbols, snapshot);
@@ -376,23 +642,70 @@ TEST_CASE("Snapshot from memory") {
     REQUIRE(g_multidim_double[idx1][idx2] == temp_double2);
     REQUIRE(g_bitfield.b0 == temp_bf0);
     REQUIRE(g_bitfield.b9 == temp_bf9);
+    REQUIRE(g_reset_derived.base_value == temp_reset_base_value);
+    REQUIRE(g_reset_derived.base_double == temp_reset_base_double);
 
     SNP_deleteSymbolLookup(symbols);
 }
 
+TEST_CASE("Snapshot restores pointer to const global") {
+    // A pointer to a const global must be saved and restored by the in-memory
+    // snapshot. The const global itself is not saved/restored (it is read-only),
+    // but the pointer's value (the address of the const global) must still be
+    // preserved so that restoring the snapshot puts the pointer back where it
+    // was.
+    DbgSymbols const& symbols = getTestSymbols();
+
+    VariantSymbol* ptr_sym = symbols.getSymbol("g_const_ptr");
+    REQUIRE(ptr_sym != nullptr);
+
+    // Point the pointer at the const global.
+    g_const_ptr = &g_const_target;
+    REQUIRE(g_const_ptr == &g_const_target);
+
+    auto snapshot = symbols.saveSnapshotToMemory();
+
+    // Move the pointer somewhere else.
+    int dummy = 0;
+    g_const_ptr = &dummy;
+    REQUIRE(g_const_ptr != &g_const_target);
+
+    // Restore the snapshot — the pointer should go back to the const global.
+    symbols.loadSnapshotFromMemory(snapshot);
+    CHECK(g_const_ptr == &g_const_target);
+}
+
 // ============================================================================
 // Shared library symbol reading tests
-// On Windows, DbgHelp enumerates symbols from all loaded modules and prefixes
-// symbols from other modules with "modulename|symbolname".
+// On Windows, RawPDB reads symbols from loaded modules and prefixes symbols
+// from other modules with "modulename|symbolname".
 // On Linux, libdwarf reads DWARF debug info from loaded shared libraries
 // via dl_iterate_phdr.
 // ============================================================================
 TEST_CASE("Read symbols from shared library") {
     REQUIRE(test_library_loader.handle != nullptr);
 
-    DbgSymbols const& symbols = DbgSymbols::getSymbols();
+    DbgSymbols const& symbols = getTestSymbols();
 
     std::string prefix = "test_library|";
+    SECTION("Search recursion depth controls module-prefixed globals") {
+        auto contains_symbol = [](std::vector<VariantSymbol*> const& matches, std::string const& full_name) {
+            return std::ranges::any_of(matches, [&](VariantSymbol* symbol) {
+                return symbol->getFullName() == full_name;
+            });
+        };
+
+        CHECK(contains_symbol(symbols.findMatchingSymbols("g_int", 0), "g_int"));
+        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("base_value", 0), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("g_reset_derived.base_value", 0), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_derived.base_value"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_double_derived.base_value"));
+        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("lib_int32", 0), prefix + "lib_int32"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols(prefix + "lib_motor.status.flags.enabled", 0),
+                              prefix + "lib_motor.status.flags.enabled"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("lib_int32", 1), prefix + "lib_int32"));
+    }
+
     // ---- Primitive types ----
     SECTION("Primitive integer types") {
         VariantSymbol* sym_int32 = symbols.getSymbol(prefix + "lib_int32");

@@ -1697,11 +1697,11 @@ void PlotScatterG(const char* label_id, ImPlotGetter getter_func, void* data, in
 //-----------------------------------------------------------------------------
 
 template <typename Getter>
-void PlotStairsEx(const char* label_id, const Getter& getter, ImPlotStairsFlags flags) {
+bool PlotStairsEx(const char* label_id, const Getter& getter, ImPlotStairsFlags flags) {
     if (BeginItemEx(label_id, Fitter1<Getter>(getter), flags, ImPlotCol_Line)) {
         if (getter.Count <= 0) {
             EndItem();
-            return;
+            return false;
         }
         const ImPlotNextItemData& s = GetItemData();
         if (getter.Count > 1) {
@@ -1729,31 +1729,33 @@ void PlotStairsEx(const char* label_id, const Getter& getter, ImPlotStairsFlags 
             RenderMarkers<Getter>(getter, s.Marker, s.MarkerSize, s.RenderMarkerFill, col_fill, s.RenderMarkerLine, col_line, s.MarkerWeight);
         }
         EndItem();
+        return true;
     }
+    return false;
 }
 
 template <typename T>
-void PlotStairs(const char* label_id, const T* values, int count, double xscale, double x0, ImPlotStairsFlags flags, int offset, int stride) {
+bool PlotStairs(const char* label_id, const T* values, int count, double xscale, double x0, ImPlotStairsFlags flags, int offset, int stride) {
     GetterXY<IndexerLin,IndexerIdx<T>> getter(IndexerLin(xscale,x0),IndexerIdx<T>(values,count,offset,stride),count);
-    PlotStairsEx(label_id, getter, flags);
+    return PlotStairsEx(label_id, getter, flags);
 }
 
 template <typename T>
-void PlotStairs(const char* label_id, const T* xs, const T* ys, int count, ImPlotStairsFlags flags, int offset, int stride) {
+bool PlotStairs(const char* label_id, const T* xs, const T* ys, int count, ImPlotStairsFlags flags, int offset, int stride) {
     GetterXY<IndexerIdx<T>,IndexerIdx<T>> getter(IndexerIdx<T>(xs,count,offset,stride),IndexerIdx<T>(ys,count,offset,stride),count);
     return PlotStairsEx(label_id, getter, flags);
 }
 
 #define INSTANTIATE_MACRO(T) \
-    template IMPLOT_API void PlotStairs<T> (const char* label_id, const T* values, int count, double xscale, double x0, ImPlotStairsFlags flags, int offset, int stride); \
-    template IMPLOT_API void PlotStairs<T>(const char* label_id, const T* xs, const T* ys, int count, ImPlotStairsFlags flags, int offset, int stride);
+    template IMPLOT_API bool PlotStairs<T> (const char* label_id, const T* values, int count, double xscale, double x0, ImPlotStairsFlags flags, int offset, int stride); \
+    template IMPLOT_API bool PlotStairs<T>(const char* label_id, const T* xs, const T* ys, int count, ImPlotStairsFlags flags, int offset, int stride);
 CALL_INSTANTIATE_FOR_NUMERIC_TYPES()
 #undef INSTANTIATE_MACRO
 
 // custom
 void PlotStairsG(const char* label_id, ImPlotGetter getter_func, void* data, int count, ImPlotStairsFlags flags) {
     GetterFuncPtr getter(getter_func,data, count);
-    return PlotStairsEx(label_id, getter, flags);
+    PlotStairsEx(label_id, getter, flags);
 }
 
 //-----------------------------------------------------------------------------

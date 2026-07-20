@@ -21,8 +21,10 @@
 // SOFTWARE.
 
 #include "csvplot.h"
+#include "imgui_helpers.h"
 #include "str_helpers.h"
 #include "custom_signal.hpp"
+#include "imgui_stdlib.h"
 
 #include <algorithm>
 #include <stack>
@@ -59,12 +61,6 @@ void updateRecentCustomEquations(std::vector<RecentCustomEquation>& recent_equat
 void CsvPlotter::showCustomSignalCreator() {
     static std::string custom_signal_eq;
     static std::string custom_signal_name;
-    static bool once = true;
-    if (once) {
-        once = false;
-        custom_signal_eq.reserve(MAX_CUSTOM_EQ_LENGTH);
-        custom_signal_name.reserve(MAX_CUSTOM_EQ_NAME);
-    }
 
     if (ImGui::BeginCombo("Recent", m_recent_custom_equations.empty() ? "" : "Select recent equation")) {
         for (int i = 0; i < (int)m_recent_custom_equations.size(); ++i) {
@@ -74,20 +70,16 @@ void CsvPlotter::showCustomSignalCreator() {
             if (ImGui::Selectable(label.c_str(), false)) {
                 custom_signal_name = recent.name;
                 custom_signal_eq = recent.equation;
-                custom_signal_name.reserve(MAX_CUSTOM_EQ_NAME);
-                custom_signal_eq.reserve(MAX_CUSTOM_EQ_LENGTH);
             }
             ImGui::PopID();
         }
         ImGui::EndCombo();
     }
-    ImGui::InputText("Equation", custom_signal_eq.data(), MAX_CUSTOM_EQ_LENGTH);
+    ImGui::InputText("Equation", &custom_signal_eq);
     ImGui::SameLine();
     HelpMarker("Curly brackets in the equation are replaced with the selected signals in the same order. Same signal can be selected multiple times.\nSupports sqrt,+-*/ and parenthesis. Example:\n-({} + sqrt({}))");
-    ImGui::InputText("Name", custom_signal_name.data(), MAX_CUSTOM_EQ_NAME);
+    ImGui::InputText("Name", &custom_signal_name);
     if (ImGui::Button("Add")) {
-        custom_signal_eq = custom_signal_eq.data();
-        custom_signal_name = custom_signal_name.data();
         if (custom_signal_eq.empty()) {
             m_error_message = "Invalid custom equation";
             return;

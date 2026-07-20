@@ -28,16 +28,8 @@
 #include <iomanip>
 #include <cmath>
 #include <limits>
-
-template <typename T>
-T inline min(T a, T b) {
-    return a < b ? a : b;
-}
-
-template <typename T>
-T inline max(T a, T b) {
-    return a > b ? a : b;
-}
+#include <format>
+#include <map>
 
 std::vector<std::string_view> splitWhitespace(std::string const& s, int expected_column_count) {
     std::vector<std::string_view> elems;
@@ -142,72 +134,50 @@ bool pscadInfToCsv(std::string const& inf_filename) {
     return true;
 }
 
-DecimatedValues decimateValues(std::vector<double> const& x, std::vector<double> const& y, int count) {
-    DecimatedValues decimated_values;
-    if (x.empty() || y.empty() || count <= 0) {
-        return decimated_values;
+std::string formatCsvColumns(std::vector<std::string> const& header,
+                             std::vector<std::vector<double>> const& data) {
+    std::stringstream csv;
+
+    for (std::string const& signal_name : header) {
+        csv << signal_name << ",";
     }
+    csv << "\n";
 
-    size_t sample_count = std::min(x.size(), y.size());
-    decimated_values.x.reserve(count + 2);
-    decimated_values.y_min.reserve(count + 2);
-    decimated_values.y_max.reserve(count + 2);
-
-    int32_t decimation = static_cast<int32_t>(std::max(std::floor(double(sample_count) / count) - 1, 0.0));
-
-    double current_min = INFINITY;
-    double current_max = -INFINITY;
-    int64_t counter = 0;
-    for (int32_t i = 0; i < sample_count; i++) {
-        if (counter < 0) {
-            decimated_values.x.push_back(x[i - 1]);
-            decimated_values.y_min.push_back(current_min);
-            decimated_values.y_max.push_back(current_max);
-
-            current_min = INFINITY;
-            current_max = -INFINITY;
-            counter = decimation;
+    size_t row_count = 0;
+    for (std::vector<double> const& column : data) {
+        row_count = std::max(row_count, column.size());
+    }
+    for (size_t row = 0; row < row_count; ++row) {
+        for (std::vector<double> const& column : data) {
+            if (row < column.size()) {
+                csv << std::format("{:g}", column[row]);
+            }
+            csv << ",";
         }
-        current_min = min(y[i], current_min);
-        current_max = max(y[i], current_max);
-        counter--;
+        csv << "\n";
     }
-    // Add last value
-    decimated_values.x.push_back(x[sample_count - 1]);
-    decimated_values.y_min.push_back(y[sample_count - 1]);
-    decimated_values.y_max.push_back(y[sample_count - 1]);
-    return decimated_values;
+
+    return csv.str();
 }
 
-StairValues makeStairValues(std::span<double const> x, std::span<double const> y, CsvPlotStyle plot_style) {
-    StairValues stair_values;
-    size_t sample_count = std::min(x.size(), y.size());
-    if (sample_count == 0) {
-        return stair_values;
-    }
-    if (plot_style == CsvPlotStyle::Linear || sample_count == 1) {
-        stair_values.x.assign(x.begin(), x.begin() + sample_count);
-        stair_values.y.assign(y.begin(), y.begin() + sample_count);
-        return stair_values;
+std::vector<std::string> makeUniqueCsvSignalNames(std::vector<std::string> const& signal_names) {
+    std::map<std::string, int> signal_name_count;
+    for (std::string const& signal_name : signal_names) {
+        ++signal_name_count[signal_name];
     }
 
-    stair_values.x.reserve(2 * sample_count - 1);
-    stair_values.y.reserve(2 * sample_count - 1);
-    stair_values.x.push_back(x[0]);
-    stair_values.y.push_back(y[0]);
-
-    for (size_t i = 1; i < sample_count; ++i) {
-        if (plot_style == CsvPlotStyle::LeadingStairs) {
-            stair_values.x.push_back(x[i - 1]);
-            stair_values.y.push_back(y[i]);
+    std::vector<std::string> unique_names;
+    unique_names.reserve(signal_names.size());
+    std::map<std::string, int> signal_name_counter;
+    for (std::string const& signal_name : signal_names) {
+        if (signal_name_count[signal_name] > 1) {
+            unique_names.push_back(std::format("{}#{}", signal_name, signal_name_counter[signal_name]));
+            ++signal_name_counter[signal_name];
         } else {
-            stair_values.x.push_back(x[i]);
-            stair_values.y.push_back(y[i - 1]);
+            unique_names.push_back(signal_name);
         }
-        stair_values.x.push_back(x[i]);
-        stair_values.y.push_back(y[i]);
     }
-    return stair_values;
+    return unique_names;
 }
 
 double getPlotValueAtX(CsvPlotStyle plot_style,
@@ -258,25 +228,7 @@ void saveAsCsv(std::string const& filename,
         return;
     }
 
-    // Write header row
-    for (int i = 0; i < header.size(); i++) {
-        csv_file << header[i];
-        if (i < header.size() - 1) {
-            csv_file << ",";
-        }
-    }
-    csv_file << ",\n";
-
-    // Write data
-    for (int i = 0; i < data[0].size(); i++) {
-        for (int j = 0; j < data.size(); j++) {
-            csv_file << data[j][i];
-            if (j < data.size() - 1) {
-                csv_file << ",";
-            }
-        }
-        csv_file << "\n";
-    }
+    csv_file << formatCsvColumns(header, data);
 
     csv_file.close();
 }

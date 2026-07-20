@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2022 vvainola
+// Copyright (c) 2026 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -19,45 +19,24 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-
 #pragma once
 
-#include "cvconst.h"
+template <typename T>
+T inline MIN(T a, T b) {
+    return a < b ? a : b;
+}
 
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
-#include <optional>
-#include <nlohmann/json.hpp>
+template <typename T, typename... Rest>
+T inline MIN(T a, T b, T c, Rest... rest) {
+    return MIN(MIN(a, b), c, rest...);
+}
 
-using MemoryAddress = uint64_t;
-inline constexpr int NO_VALUE = -1;
+template <typename T>
+T inline MAX(T a, T b) {
+    return a > b ? a : b;
+}
 
-struct RawSymbol {
-    std::string name;
-    MemoryAddress address = 0;
-    uint32_t size = 0;
-    SymTagEnum tag = SymTagNull;
-    uint32_t offset_to_parent = 0;
-    uint32_t array_element_count = 0;
-    BasicType basic_type = BasicType::btNoType;
-    int bitfield_position = -1;
-    int64_t enum_value = 0;
-    std::vector<std::unique_ptr<RawSymbol>> children;
-
-#if WINDOWS
-    MemoryAddress mod_base = 0;
-    uint32_t type_index = 0;
-    uint32_t index = 0;
-    SymTagEnum pdb_tag = SymTagNull;
-#endif
-
-    static RawSymbol fromJson(nlohmann::json const& j);
-    std::unique_ptr<RawSymbol> clone() const;
-};
-
-void to_json(nlohmann::json& j, RawSymbol const& sym);
-void saveSymbolsToJson(std::string const& filename,
-                       std::vector<std::unique_ptr<RawSymbol>> const& symbols,
-                       bool omit_names);
+template <typename T, typename... Rest>
+T inline MAX(T a, T b, T c, Rest... rest) {
+    return MAX(MAX(a, b), c, rest...);
+}

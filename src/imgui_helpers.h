@@ -1,0 +1,62 @@
+// MIT License
+//
+// Copyright (c) 2026 vvainola
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include "imgui.h"
+
+#include <functional>
+#include <map>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+
+void HelpMarker(const char* desc);
+bool ImRightAlign(const char* str_id);
+void ImEndRightAlign();
+std::optional<int> pressedNumber();
+std::optional<ImGuiKey> pressedNumberKey(bool include_minus = true);
+int setCursorOnFirstNumberPress(ImGuiInputTextCallbackData* data);
+
+struct CommandPaletteCommand {
+    std::string_view id;
+    std::string_view name;
+    std::string_view description;
+    ImGuiKeyChord default_hotkey = ImGuiKey_None;
+    std::function<void()> action;
+    bool repeatHotkey = false;
+};
+
+using CommandHotkeyOverrides = std::map<std::string, ImGuiKeyChord>;
+
+bool isValidCommandHotkey(ImGuiKeyChord hotkey);
+ImGuiKeyChord effectiveCommandHotkey(CommandPaletteCommand const& command,
+                                    CommandHotkeyOverrides const& overrides);
+std::string commandHotkeyName(CommandPaletteCommand const& command,
+                              CommandHotkeyOverrides const& overrides);
+void triggerCommandHotkeys(char const* title,
+                           std::span<CommandPaletteCommand const> commands,
+                           CommandHotkeyOverrides const& overrides);
+std::optional<size_t> showCommandPaletteTable(char const* title,
+                                               std::span<CommandPaletteCommand const> commands,
+                                               CommandHotkeyOverrides& overrides);

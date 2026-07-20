@@ -50,34 +50,37 @@ deps = [
     dependency('glfw3'),
     dependency('kissfft-float'),
     dependency('cxxopts'),
+    dependency('lua'),
 ]
 
-if WINDOWS
-    deps += [cpp.find_library('dbghelp')]
-else
+if not WINDOWS
     deps += [dependency('libdwarf'), dependency('gtk+-3.0')]
+else
+    deps += [cpp.find_library('dbghelp')]
 endif
 
 imgui_src = files([
-    'src/imgui/calibri.cpp',
-    'src/imgui/cousine_regular.cpp',
-    'src/imgui/backend/imgui_impl_opengl3.cpp',
-    'src/imgui/backend/imgui_impl_opengl3.h',
     'src/imgui/backend/imgui_impl_glfw.cpp',
     'src/imgui/backend/imgui_impl_glfw.h',
-    'src/imgui/imgui.cpp',
-    'src/imgui/imgui.h',
+    'src/imgui/backend/imgui_impl_opengl3.cpp',
+    'src/imgui/backend/imgui_impl_opengl3.h',
+    'src/imgui/calibri.cpp',
+    'src/imgui/cousine_regular.cpp',
     'src/imgui/imgui_demo.cpp',
     'src/imgui/imgui_draw.cpp',
     'src/imgui/imgui_internal.h',
     'src/imgui/imgui_tables.cpp',
     'src/imgui/imgui_widgets.cpp',
-    'src/imgui/implot/implot.cpp',
-    'src/imgui/implot/implot.h',
+    'src/imgui/imgui.cpp',
+    'src/imgui/imgui.h',
     'src/imgui/implot/implot_demo.cpp',
     'src/imgui/implot/implot_internal.h',
     'src/imgui/implot/implot_items.cpp',
     'src/imgui/implot/implot_items.cpp',
+    'src/imgui/implot/implot.cpp',
+    'src/imgui/implot/implot.h',
+    'src/imgui/misc/cpp/imgui_stdlib.cpp',
+    'src/imgui/misc/cpp/imgui_stdlib.h',
     'src/nativefiledialog/nfd_common.c',
 ])
 
@@ -88,12 +91,13 @@ else
 endif
 inc = []
 inc += include_directories(
+    'include',
     'src/imgui',
-    'src/imgui/implot',
     'src/imgui/backend',
+    'src/imgui/implot',
+    'src/imgui/misc/cpp',
     'src/nativefiledialog/include',
     'src/symbols',
-    'include'
 )
 
 imgui_lib = static_library('imgui',
@@ -105,8 +109,30 @@ imgui_lib = static_library('imgui',
 
 platform_src = []
 if WINDOWS
-    platform_src += ['src/symbols/dbghelp_helpers.cpp']
-    platform_src += ['src/symbols/dbg_symbols_win.cpp']
+    platform_src += [
+        'src/raw_pdb/PDB_CoalescedMSFStream.cpp',
+        'src/raw_pdb/PDB_DBIStream.cpp',
+        'src/raw_pdb/PDB_DBITypes.cpp',
+        'src/raw_pdb/PDB_DirectMSFStream.cpp',
+        'src/raw_pdb/PDB_GlobalSymbolStream.cpp',
+        'src/raw_pdb/PDB_ImageSectionStream.cpp',
+        'src/raw_pdb/PDB_InfoStream.cpp',
+        'src/raw_pdb/PDB_IPIStream.cpp',
+        'src/raw_pdb/PDB_ModuleInfoStream.cpp',
+        'src/raw_pdb/PDB_ModuleLineStream.cpp',
+        'src/raw_pdb/PDB_ModuleSymbolStream.cpp',
+        'src/raw_pdb/PDB_NamesStream.cpp',
+        'src/raw_pdb/PDB_PCH.cpp',
+        'src/raw_pdb/PDB_PublicSymbolStream.cpp',
+        'src/raw_pdb/PDB_RawFile.cpp',
+        'src/raw_pdb/PDB_SectionContributionStream.cpp',
+        'src/raw_pdb/PDB_SourceFileStream.cpp',
+        'src/raw_pdb/PDB_TPIStream.cpp',
+        'src/raw_pdb/PDB_Types.cpp',
+        'src/raw_pdb/PDB.cpp',
+        'src/symbols/dbghelp_helpers.cpp',
+        'src/symbols/dbg_symbols_win.cpp',
+    ]
 else
     platform_src += ['src/symbols/elf_helpers.cpp']
     platform_src += ['src/symbols/dbg_symbols_linux.cpp']
@@ -118,31 +144,40 @@ lib_symbols = static_library('symbols',
         'src/symbols/arithmetic_symbol.cpp',
         'src/symbols/dbg_symbols.cpp',
         'src/symbols/global_snapshot.cpp',
-        'src/symbols/raw_symbol.cpp',
+        'src/symbols/symbol_descriptor.cpp',
         'src/symbols/variant_symbol.cpp',
     ] + platform_src,
     dependencies : deps,
-    include_directories : ['include', 'src'],
+    include_directories : ['include', 'src', 'src/raw_pdb'],
     override_options : override_options,
 )
 
 lib_gui = static_library('dbg_gui',
     sources : [
+        'src/csv_plot/csv_helpers.cpp',
         'src/custom_signal.cpp',
         'src/data_structures.cpp',
         'src/dbg_gui_custom_signal.cpp',
+        'src/dbg_gui_internal.h',
         'src/dbg_gui_plots.cpp',
         'src/dbg_gui_popups.cpp',
         'src/dbg_gui_windows.cpp',
         'src/dbg_gui_wrapper.cpp',
         'src/dbg_gui.cpp',
-        'src/dbg_gui.h',
+        'src/imgui_helpers.cpp',
+        'src/imgui_settings_migration.cpp',
+        'src/lua_script.cpp',
+        'src/lua_script.h',
+        'src/lua_syntax_highlighter.cpp',
+        'src/lua_syntax_highlighter.h',
+        'src/plot_decimation.cpp',
+        'src/sample_clipboard.cpp',
         'src/script_window.cpp',
         'src/spectrum.cpp',
         'src/str_helpers.cpp',
         'src/themes.cpp',
     ],
-    include_directories : inc,
+    include_directories : inc + ['src'],
     link_with : [lib_symbols, imgui_lib],
     dependencies : deps,
     override_options : override_options,
@@ -150,6 +185,7 @@ lib_gui = static_library('dbg_gui',
 
 test_library = shared_library('test_library',
     sources : ['src/test_library.cpp'],
+    include_directories : 'tests',
     override_options : override_options,
 )
 
@@ -183,7 +219,7 @@ else
     csv_plotter_icon = []
 endif
 
-csv_plotter = executable('csv_plotter',
+csv_plotter = executable('csvplotter',
     sources : [
         'src/csv_plot/csv_helpers.cpp',
         'src/csv_plot/csvplot_custom_signal.cpp',
@@ -191,8 +227,13 @@ csv_plotter = executable('csv_plotter',
         'src/csv_plot/csvplot_spectrum.cpp',
         'src/csv_plot/csvplot_vector.cpp',
         'src/csv_plot/csvplot.cpp',
+        'src/csv_plot/plot_base.cpp',
         'src/csv_plot/save_image.cpp',
         'src/custom_signal.cpp',
+        'src/imgui_helpers.cpp',
+        'src/imgui_settings_migration.cpp',
+        'src/plot_decimation.cpp',
+        'src/sample_clipboard.cpp',
         'src/spectrum.cpp',
         'src/str_helpers.cpp',
         'src/themes.cpp',
@@ -218,7 +259,6 @@ lib_symbols_dep = declare_dependency(
     link_with : lib_symbols,
     include_directories : 'include'
 )
-lib_dbghelp_symbols_dep = lib_symbols_dep
 
 lib_gui_dep = declare_dependency(
     link_with : [lib_gui, lib_symbols],
@@ -229,11 +269,20 @@ lib_gui_dep = declare_dependency(
 if get_option('tests')
     executable('tests',
         sources : [
-            'tests/symbols_test.cpp',
+            'src/csv_plot/csv_helpers.cpp',
+            'src/imgui_settings_migration.cpp',
+            'src/lua_script.cpp',
+            'src/plot_decimation.cpp',
+            'src/sample_clipboard.cpp',
+            'src/test_library_loader.cpp',
             'tests/csv_helpers_test.cpp',
             'tests/fwd_decl_types.cpp',
-            'src/test_library_loader.cpp',
-            'src/csv_plot/csv_helpers.cpp',
+            'tests/imgui_settings_migration_test.cpp',
+            'tests/lua_script_test.cpp',
+            'tests/sample_clipboard_test.cpp',
+            'tests/signal_cleanup_test.cpp',
+            'tests/symbols_test.cpp',
+            'tests/test_types.c',
         ],
         dependencies : [
             lib_symbols_dep,
@@ -241,6 +290,6 @@ if get_option('tests')
             deps
         ],
         link_depends : test_library,
-        include_directories: ['src', 'tests'],
+        include_directories: inc + ['src', 'tests'],
     )
 endif

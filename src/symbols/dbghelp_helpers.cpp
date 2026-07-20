@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2022 vvainola
+// Copyright (c) 2026 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,278 +21,490 @@
 // SOFTWARE.
 
 #include "dbghelp_helpers.h"
+#include "cvconst.h"
 
-#include <Psapi.h>
-#include <fstream>
-#include <format>
-#include <filesystem>
+#include <DbgHelp.h>
+#include <Windows.h>
+
+#include <array>
+#include <cctype>
 #include <iostream>
-#include <cassert>
-#include <map>
+#include <mutex>
+#include <unordered_set>
+#include <variant>
+#include <vector>
 
-static HANDLE current_process = GetCurrentProcess();
+namespace {
 
-void printLastError() {
-    // Printing all errors causes mostly noise with "element not found" (symbols are not found for that module?)
-    DWORD error = GetLastError();
-    if (error) {
-        LPSTR messageBuffer = nullptr;
-        size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                     NULL,
-                                     error,
-                                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                     (LPSTR)&messageBuffer,
-                                     0,
-                                     NULL);
-
-        std::string message(messageBuffer, size);
-        LocalFree(messageBuffer);
-        std::cerr << "Symbol search error: " << message << std::endl;
+static void appendInheritedMembers(SymbolDescriptor& symbol,
+                                   SymbolDescriptor const& base_symbol,
+                                   uint32_t base_offset) {
+    for (auto const& base_child : base_symbol.children) {
+        auto inherited_child = std::make_shared<SymbolDescriptor>(*base_child);
+        inherited_child->offset_to_parent += base_offset;
+        symbol.children.push_back(std::move(inherited_child));
     }
 }
 
-double getVariantEnumValue(VARIANT const& variant) {
-    switch (variant.vt) {
-        case VT_BOOL:
-            return variant.boolVal;
-        case VT_INT:
-            return variant.intVal;
-        case VT_I1:
-            return variant.cVal;
-        case VT_I2:
-            return variant.iVal;
-        case VT_I4:
-            return variant.lVal;
-        case VT_I8:
-            return static_cast<double>(variant.llVal); // hide warning C4244: 'return': conversion from 'LONGLONG' to 'double', possible loss of data
-        case VT_UINT:
-            return variant.uintVal;
-        case VT_UI1:
-            return variant.bVal;
-        case VT_UI2:
-            return variant.uiVal;
-        case VT_UI4:
-            return variant.ulVal;
-        case VT_UI8:
-            return static_cast<double>(variant.ullVal); // hide warning C4244: 'return': conversion from 'ULONGLONG' to 'double', possible loss of data
-        case VT_R4:
-            return variant.fltVal;
-        case VT_R8:
-            return variant.dblVal;
+std::string narrow(std::wstring const& value) {
+    if (value.empty()) {
+        return "";
+    }
+
+    int size = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
+    if (size <= 0) {
+        return "";
+    }
+    std::string result(size, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), result.data(), size, nullptr, nullptr);
+    return result;
+}
+
+std::optional<std::string> dbgHelpTypeName(HANDLE process, DWORD64 module_base, ULONG type_id) {
+    WCHAR* name = nullptr;
+    if (!SymGetTypeInfo(process, module_base, type_id, TI_GET_SYMNAME, &name) || name == nullptr) {
+        return std::nullopt;
+    }
+
+    std::string result = narrow(name);
+    LocalFree(name);
+    return result;
+}
+
+template <typename T>
+bool dbgHelpTypeInfo(HANDLE process, DWORD64 module_base, ULONG type_id, IMAGEHLP_SYMBOL_TYPE_INFO info, T& value) {
+    return SymGetTypeInfo(process, module_base, type_id, info, &value) != FALSE;
+}
+
+ScalarType dbgHelpScalarType(BasicType basic_type) {
+    switch (basic_type) {
+        case btChar:
+        case btInt:
+        case btLong:
+            return ScalarType::SignedInteger;
+        case btUInt:
+        case btULong:
+            return ScalarType::UnsignedInteger;
+        case btFloat:
+            return ScalarType::FloatingPoint;
+        case btBool:
+            return ScalarType::Boolean;
+        case btWChar:
+            return ScalarType::WChar;
         default:
-            assert(0);
+            return ScalarType::None;
+    }
+}
+
+int64_t variantToInt64(VARIANT const& value) {
+    switch (value.vt) {
+        case VT_I1:
+            return value.cVal;
+        case VT_UI1:
+            return value.bVal;
+        case VT_I2:
+            return value.iVal;
+        case VT_UI2:
+            return value.uiVal;
+        case VT_I4:
+        case VT_INT:
+            return value.lVal;
+        case VT_UI4:
+        case VT_UINT:
+            return value.ulVal;
+        case VT_I8:
+            return value.llVal;
+        case VT_UI8:
+            return static_cast<int64_t>(value.ullVal);
+        default:
             return 0;
     }
 }
 
-int getBitPosition(SymbolInfo const& info) {
-    int position = NO_VALUE;
-    if (!SymGetTypeInfo(current_process, info.ModBase, info.Index, TI_GET_BITPOSITION, &position)) {
-        return NO_VALUE;
+std::vector<ULONG> dbgHelpTypeChildren(HANDLE process, DWORD64 module_base, ULONG type_id) {
+    DWORD child_count = 0;
+    if (!dbgHelpTypeInfo(process, module_base, type_id, TI_GET_CHILDRENCOUNT, child_count) || child_count == 0) {
+        return {};
     }
-    return position;
+
+    size_t const bytes = sizeof(TI_FINDCHILDREN_PARAMS) + (child_count - 1) * sizeof(ULONG);
+    std::vector<uint8_t> buffer(bytes);
+    auto* children = reinterpret_cast<TI_FINDCHILDREN_PARAMS*>(buffer.data());
+    children->Count = child_count;
+    children->Start = 0;
+    if (!SymGetTypeInfo(process, module_base, type_id, TI_FINDCHILDREN, children)) {
+        return {};
+    }
+
+    return std::vector<ULONG>(children->ChildId, children->ChildId + child_count);
 }
 
-BasicType getBasicType(SymbolInfo const& info) {
-    BasicType base_type = BasicType::btNoType;
-    if (!SymGetTypeInfo(current_process, info.ModBase, info.TypeIndex, TI_GET_BASETYPE, &base_type)) {
-        printLastError();
-        assert(("Unable to get base type of symbol.", 0));
-    }
-    return base_type;
+bool shouldSkipDbgHelpChild(std::string const& name) {
+    return name.starts_with("std::")
+        || (name.size() > 2 && name[0] == '_' && std::isupper(static_cast<unsigned char>(name[1])));
 }
 
-SymTagEnum getSymbolTag(SymbolInfo const& sym) {
-    SymTagEnum tag = SymTagEnum::SymTagNull;
-    if (!SymGetTypeInfo(current_process, sym.ModBase, sym.TypeIndex, TI_GET_SYMTAG, &tag)) {
-    }
-    return tag;
-}
+bool resolveDbgHelpType(HANDLE process,
+                        DWORD64 module_base,
+                        ULONG type_id,
+                        SymbolDescriptor& symbol,
+                        std::unordered_set<ULONG>& resolving);
 
-std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
-    if (address == NULL) {
-        return nullptr;
-    }
-
-    char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
-    PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
-
-    pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-    pSymbol->MaxNameLen = MAX_SYM_NAME;
-
-    DWORD64 dwDisplacement = 0;
-    if (SymFromAddr(current_process, address, &dwDisplacement, pSymbol)) {
-        return std::make_unique<RawSymbol>(rawSymbolFromSymInfo(SymbolInfo(pSymbol)));
-    } else {
-        return nullptr;
-    }
-}
-
-std::unique_ptr<RawSymbol> getSymbolFromIndex(DWORD index, RawSymbol const& parent) {
-    char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
-    PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
-
-    pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-    pSymbol->MaxNameLen = MAX_SYM_NAME;
-
-    if (SymFromIndex(current_process, parent.mod_base, index, pSymbol) && pSymbol->TypeIndex != 0) {
-        return std::make_unique<RawSymbol>(rawSymbolFromSymInfo(SymbolInfo(pSymbol)));
-    } else {
-        return nullptr;
-    }
-}
-
-void addFirstChildToArray(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
-    assert((parent.tag == SymTagArrayType, "Symbol is not an array."));
-    ULONG64 array_size_in_bytes = 0;
-    DWORD element_count = 0;
-    DWORD array_typeid = 0;
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_LENGTH, &array_size_in_bytes));
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_COUNT, &element_count));
-    assert(SymGetTypeInfo(GetCurrentProcess(), parent.mod_base, parent.type_index, TI_GET_TYPEID, &array_typeid));
-    if (array_size_in_bytes == 0 || element_count == 0) {
-        return;
-    }
-    parent.array_element_count = element_count;
-    ULONG element_size = ULONG(array_size_in_bytes / element_count);
-    SymbolInfo elem_si;
-    // Use the parent symbol as a base info and change only relevant fields to fit the array member
-    elem_si.ModBase = parent.mod_base;
-    elem_si.TypeIndex = array_typeid;
-    elem_si.Size = (uint32_t)element_size;
-    elem_si.Name = parent.name;
-    auto first_child = std::make_unique<RawSymbol>(rawSymbolFromSymInfo(elem_si));
-    parent.children.push_back(std::move(first_child));
-    addChildrenToSymbol(*parent.children.back(), reference_symbols);
-}
-
-// https://yanshurong.wordpress.com/2009/01/02/how-to-use-dbghelp-to-access-type-information-from-www-debuginfo-com/
-void addChildrenToSymbol(RawSymbol& parent, std::map<std::pair<ModuleBase, TypeIndex>, RawSymbol*>& reference_symbols) {
-    // Copy structure from reference symbol if children have already been looked up for same type before
-    std::pair<ModuleBase, TypeIndex> modbase_and_type_idx{parent.mod_base, parent.type_index};
-    if (reference_symbols.find(modbase_and_type_idx) != reference_symbols.end()) {
-        auto cloned = reference_symbols[modbase_and_type_idx]->clone();
-        parent.children = std::move(cloned->children);
-        parent.array_element_count = cloned->array_element_count;
-        return;
-    } else {
-        reference_symbols[modbase_and_type_idx] = &parent;
-    }
-
-    DWORD num_children = 0;
-    assert(SymGetTypeInfo(current_process, parent.mod_base, parent.type_index, TI_GET_CHILDRENCOUNT, &num_children));
-    if (num_children == 0) {
-        if (parent.tag == SymTagArrayType) {
-            addFirstChildToArray(parent, reference_symbols);
+void addDbgHelpFields(HANDLE process,
+                      DWORD64 module_base,
+                      ULONG type_id,
+                      SymbolDescriptor& symbol,
+                      std::unordered_set<ULONG>& resolving) {
+    for (ULONG child_id : dbgHelpTypeChildren(process, module_base, type_id)) {
+        SymTagEnum child_tag = SymTagNull;
+        if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_SYMTAG, child_tag)) {
+            continue;
         }
-        return;
-    }
 
-    // Get child indices
-    int find_children_size = sizeof(TI_FINDCHILDREN_PARAMS) + num_children * sizeof(ULONG);
-    TI_FINDCHILDREN_PARAMS* found_children = (TI_FINDCHILDREN_PARAMS*)_alloca(find_children_size);
-    memset(found_children, 0, find_children_size);
-    found_children->Count = num_children;
-    assert(SymGetTypeInfo(current_process, parent.mod_base, parent.type_index, TI_FINDCHILDREN, found_children));
+        if (child_tag == SymTagData) {
+            DataKind data_kind = DataIsUnknown;
+            if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_DATAKIND, data_kind)
+                || data_kind != DataIsMember) {
+                continue;
+            }
 
-    for (DWORD i = 0; i < num_children; i++) {
-        std::unique_ptr<RawSymbol> child = getSymbolFromIndex(found_children->ChildId[i], parent);
-        if (child && (child->pdb_tag == SymTagData || child->pdb_tag == SymTagBaseClass)) {
-            // Memory address offset relative to parent
-            DWORD offset_to_parent = 0;
-            // If parent is an enum, the names and values can be used for mapping "enum value <-> enum string"
-            if (parent.tag == SymTagEnumerator) {
-                VARIANT variant;       // Enumerators have their values stored as variant
-                VariantInit(&variant); // Variant has to be initialized to be empty
-                assert(SymGetTypeInfo(current_process, child->mod_base, child->index, TI_GET_VALUE, &variant));
-                child->enum_value = static_cast<int64_t>(getVariantEnumValue(variant));
-                parent.children.push_back(std::move(child));
-                VariantClear(&variant);
-            } else if (SymGetTypeInfo(current_process, child->mod_base, child->index, TI_GET_OFFSET, &offset_to_parent)) {
-                // Members by default have no address, the address is offset relative to parent
-                child->offset_to_parent = offset_to_parent;
+            DWORD child_type_id = 0;
+            DWORD child_offset = 0;
+            if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_TYPEID, child_type_id)
+                || !dbgHelpTypeInfo(process, module_base, child_id, TI_GET_OFFSET, child_offset)) {
+                continue;
+            }
 
-                // Skip stdlib objects e.g. std::default_delete and symbols with reserved identifier "underscore + uppercase letter"
-                std::string child_name = child->name;
-                if (!startsWith(child_name, "std::")
-                    && !(child_name.size() > 2 && child_name[0] == '_' && isupper(child_name[1]))) {
-                    addChildrenToSymbol(*child, reference_symbols);
-                    parent.children.push_back(std::move(child));
+            auto child = std::make_shared<SymbolDescriptor>();
+            child->name = dbgHelpTypeName(process, module_base, child_id).value_or("");
+            if (child->name.empty() || shouldSkipDbgHelpChild(child->name)) {
+                continue;
+            }
+            child->offset_to_parent = child_offset;
+            if (!resolveDbgHelpType(process, module_base, child_type_id, *child, resolving)) {
+                continue;
+            }
+
+            DWORD bit_position = 0;
+            if (dbgHelpTypeInfo(process, module_base, child_id, TI_GET_BITPOSITION, bit_position)) {
+                child->bitfield_position = static_cast<int>(bit_position);
+                ULONG64 bit_length = 0;
+                if (dbgHelpTypeInfo(process, module_base, child_id, TI_GET_LENGTH, bit_length)) {
+                    child->size = static_cast<uint32_t>(bit_length);
                 }
             }
-        } else if (child) {
-            // Member functions could be added here but left out for now since pointers to those are probably rarely used
+            symbol.children.push_back(std::move(child));
+        } else if (child_tag == SymTagBaseClass) {
+            DWORD base_type_id = 0;
+            DWORD base_offset = 0;
+            if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_TYPEID, base_type_id)
+                || !dbgHelpTypeInfo(process, module_base, child_id, TI_GET_OFFSET, base_offset)) {
+                continue;
+            }
+
+            SymbolDescriptor base_symbol{
+              .name = dbgHelpTypeName(process, module_base, child_id).value_or("")
+            };
+            if (base_symbol.name.empty() || shouldSkipDbgHelpChild(base_symbol.name)) {
+                continue;
+            }
+            if (resolveDbgHelpType(process, module_base, base_type_id, base_symbol, resolving)) {
+                appendInheritedMembers(symbol, base_symbol, base_offset);
+            }
         }
     }
 }
 
-RawSymbol rawSymbolFromSymInfo(SymbolInfo const& si) {
-    RawSymbol sym{
-        .name = si.Name,
-        .address = si.Address,
-        .size = si.Size,
-        .tag = getSymbolTag(si),
-        .mod_base = si.ModBase,
-        .type_index = si.TypeIndex,
-        .index = si.Index,
-        .pdb_tag = si.PdbTag,
+bool resolveDbgHelpType(HANDLE process,
+                        DWORD64 module_base,
+                        ULONG type_id,
+                        SymbolDescriptor& symbol,
+                        std::unordered_set<ULONG>& resolving) {
+    if (type_id == 0) {
+        return false;
+    }
+    if (resolving.contains(type_id)) {
+        symbol.kind = SymbolKind::Object;
+        return true;
+    }
+
+    SymTagEnum tag = SymTagNull;
+    if (!dbgHelpTypeInfo(process, module_base, type_id, TI_GET_SYMTAG, tag)) {
+        return false;
+    }
+
+    resolving.insert(type_id);
+    bool resolved = true;
+    switch (tag) {
+        case SymTagBaseType: {
+            BasicType basic_type = btNoType;
+            ULONG64 length = 0;
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_BASETYPE, basic_type);
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_LENGTH, length);
+            symbol.kind = SymbolKind::Scalar;
+            symbol.scalar_type = dbgHelpScalarType(basic_type);
+            symbol.size = static_cast<uint32_t>(length);
+            break;
+        }
+        case SymTagPointerType: {
+            ULONG64 length = 0;
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_LENGTH, length);
+            symbol.kind = SymbolKind::Pointer;
+            symbol.size = length != 0 ? static_cast<uint32_t>(length) : sizeof(void*);
+            break;
+        }
+        case SymTagArrayType: {
+            ULONG64 length = 0;
+            DWORD element_type_id = 0;
+            DWORD count = 0;
+            if (!dbgHelpTypeInfo(process, module_base, type_id, TI_GET_TYPEID, element_type_id)
+                || !dbgHelpTypeInfo(process, module_base, type_id, TI_GET_LENGTH, length)) {
+                resolved = false;
+                break;
+            }
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_COUNT, count);
+
+            auto element = std::make_shared<SymbolDescriptor>();
+            resolved = resolveDbgHelpType(process, module_base, element_type_id, *element, resolving);
+            if (resolved && element->size != 0) {
+                symbol.kind = SymbolKind::Array;
+                symbol.size = static_cast<uint32_t>(length);
+                symbol.array_element_count = count != 0 ? count : static_cast<uint32_t>(length / element->size);
+                symbol.children.push_back(std::move(element));
+            }
+            break;
+        }
+        case SymTagUDT: {
+            ULONG64 length = 0;
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_LENGTH, length);
+            symbol.kind = SymbolKind::Object;
+            symbol.size = static_cast<uint32_t>(length);
+            addDbgHelpFields(process, module_base, type_id, symbol, resolving);
+            break;
+        }
+        case SymTagEnumerator: {
+            BasicType basic_type = btInt;
+            ULONG64 length = 0;
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_BASETYPE, basic_type);
+            dbgHelpTypeInfo(process, module_base, type_id, TI_GET_LENGTH, length);
+            symbol.kind = SymbolKind::Enum;
+            symbol.scalar_type = dbgHelpScalarType(basic_type);
+            symbol.size = length != 0 ? static_cast<uint32_t>(length) : 4;
+            for (ULONG child_id : dbgHelpTypeChildren(process, module_base, type_id)) {
+                SymTagEnum child_tag = SymTagNull;
+                DataKind data_kind = DataIsUnknown;
+                if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_SYMTAG, child_tag)
+                    || child_tag != SymTagData
+                    || !dbgHelpTypeInfo(process, module_base, child_id, TI_GET_DATAKIND, data_kind)
+                    || data_kind != DataIsConstant) {
+                    continue;
+                }
+                VARIANT value{};
+                if (!dbgHelpTypeInfo(process, module_base, child_id, TI_GET_VALUE, value)) {
+                    continue;
+                }
+                auto enum_child = std::make_shared<SymbolDescriptor>(SymbolDescriptor{
+                    .name = dbgHelpTypeName(process, module_base, child_id).value_or(""),
+                    .kind = SymbolKind::EnumValue
+                });
+                enum_child->enum_value = variantToInt64(value);
+                VariantClear(&value);
+                symbol.children.push_back(std::move(enum_child));
+            }
+            break;
+        }
+        case SymTagTypedef: {
+            DWORD underlying_type_id = 0;
+            resolved = dbgHelpTypeInfo(process, module_base, type_id, TI_GET_TYPEID, underlying_type_id)
+                    && resolveDbgHelpType(process, module_base, underlying_type_id, symbol, resolving);
+            break;
+        }
+        default:
+            resolved = false;
+            break;
+    }
+
+    resolving.erase(type_id);
+    return resolved && symbol.size > 0;
+}
+
+std::mutex& symbolHandlerMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+class ScopedSymbolHandler {
+  public:
+    ScopedSymbolHandler()
+        : m_lock(symbolHandlerMutex()),
+          m_process(GetCurrentProcess()) {
+        // Symbols are loaded lazily by DbgHelp. Keep the handler scoped so it
+        // cannot block another module in the process from calling SymInitialize.
+        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
+        m_initialized = SymInitialize(m_process, nullptr, TRUE) != FALSE;
+        if (!m_initialized) {
+            std::cerr << "SymInitialize failed with error " << GetLastError() << "\n";
+        }
+    }
+
+    ScopedSymbolHandler(ScopedSymbolHandler const&) = delete;
+    ScopedSymbolHandler& operator=(ScopedSymbolHandler const&) = delete;
+
+    ~ScopedSymbolHandler() {
+        if (m_initialized) {
+            SymCleanup(m_process);
+        }
+    }
+
+    bool initialized() const {
+        return m_initialized;
+    }
+
+    HANDLE process() const {
+        return m_process;
+    }
+
+  private:
+    std::unique_lock<std::mutex> m_lock;
+    HANDLE m_process = nullptr;
+    bool m_initialized = false;
+};
+
+std::string moduleStem(std::filesystem::path const& path) {
+    return path.stem().string();
+}
+
+std::string descriptorValue(std::string const& value) {
+    return "\"" + value + "\"";
+}
+
+std::string descriptorValue(SymbolKind value) {
+    return std::to_string(static_cast<int>(value));
+}
+
+std::string descriptorValue(ScalarType value) {
+    return std::to_string(static_cast<int>(value));
+}
+
+template <typename T>
+std::string descriptorValue(T value) {
+    return std::to_string(value);
+}
+
+template <typename T>
+bool compareDescriptorField(std::string const& path,
+                            char const* field,
+                            T const& raw_value,
+                            T const& dbghelp_value,
+                            std::string& mismatch) {
+    if (raw_value == dbghelp_value) {
+        return true;
+    }
+
+    mismatch = path + ": " + field + " mismatch raw="
+             + descriptorValue(raw_value) + " dbghelp=" + descriptorValue(dbghelp_value);
+    return false;
+}
+
+std::string childDescriptorPath(std::string const& parent, SymbolDescriptor const& child, size_t index) {
+    if (!child.name.empty()) {
+        return parent + "." + child.name;
+    }
+    return parent + ".children[" + std::to_string(index) + "]";
+}
+
+bool symbolDescriptorsMatch(SymbolDescriptor const& raw,
+                            SymbolDescriptor const& dbghelp,
+                            std::string const& path,
+                            std::string& mismatch) {
+    if (!compareDescriptorField(path, "name", raw.name, dbghelp.name, mismatch)
+        || !compareDescriptorField(path, "size", raw.size, dbghelp.size, mismatch)
+        || !compareDescriptorField(path, "kind", raw.kind, dbghelp.kind, mismatch)
+        || !compareDescriptorField(path, "offset_to_parent", raw.offset_to_parent, dbghelp.offset_to_parent, mismatch)
+        || !compareDescriptorField(path, "array_element_count", raw.array_element_count, dbghelp.array_element_count, mismatch)
+        || !compareDescriptorField(path, "scalar_type", raw.scalar_type, dbghelp.scalar_type, mismatch)
+        || !compareDescriptorField(path, "bitfield_position", raw.bitfield_position, dbghelp.bitfield_position, mismatch)
+        || !compareDescriptorField(path, "enum_value", raw.enum_value, dbghelp.enum_value, mismatch)
+        || !compareDescriptorField(path, "child_count", raw.children.size(), dbghelp.children.size(), mismatch)) {
+        return false;
+    }
+
+    for (size_t i = 0; i < raw.children.size(); ++i) {
+        if (raw.children[i] == nullptr || dbghelp.children[i] == nullptr) {
+            mismatch = path + ": null child at index " + std::to_string(i);
+            return false;
+        }
+        if (!symbolDescriptorsMatch(*raw.children[i],
+                                    *dbghelp.children[i],
+                                    childDescriptorPath(path, *raw.children[i], i),
+                                    mismatch)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+namespace {
+
+std::optional<SymbolDescriptor> loadDbgHelpSymbolDescriptor(DbgHelpModuleContext const& module,
+                                                            std::string const& raw_name,
+                                                            std::string const& display_name,
+                                                            MemoryAddress address) {
+    ScopedSymbolHandler symbol_handler;
+    if (!symbol_handler.initialized()) {
+        return std::nullopt;
+    }
+    HANDLE process = symbol_handler.process();
+
+    std::array<uint8_t, sizeof(SYMBOL_INFO) + MAX_SYM_NAME> symbol_buffer{};
+    auto* symbol_info = reinterpret_cast<SYMBOL_INFO*>(symbol_buffer.data());
+    symbol_info->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol_info->MaxNameLen = MAX_SYM_NAME;
+
+    std::string const module_name = moduleStem(module.path);
+    std::array<std::string, 2> names = {
+      module_name + "!" + raw_name,
+      raw_name
     };
-    if (sym.tag == SymTagBaseType) {
-        sym.basic_type = getBasicType(si);
-        if (sym.basic_type == BasicType::btUInt
-            || sym.basic_type == BasicType::btInt
-            || sym.basic_type == BasicType::btLong
-            || sym.basic_type == BasicType::btULong
-            || sym.basic_type == BasicType::btBool) {
-            sym.bitfield_position = getBitPosition(si);
+    bool found = false;
+    for (std::string const& name : names) {
+        if (SymFromName(process, name.c_str(), symbol_info) && symbol_info->ModBase == module.base_address) {
+            found = true;
+            break;
         }
-    } else if (sym.tag == SymTagEnumerator) {
-        sym.basic_type = getBasicType(si);
     }
-    return sym;
+    if (!found) {
+        return std::nullopt;
+    }
+
+    SymbolDescriptor symbol{
+      .name = display_name,
+      .address = address
+    };
+    std::unordered_set<ULONG> resolving;
+    if (!resolveDbgHelpType(process, symbol_info->ModBase, symbol_info->TypeIndex, symbol, resolving)) {
+        return std::nullopt;
+    }
+    return symbol;
 }
 
-std::string getUndecoratedSymbolName(std::string const& name) {
-    char buffer[MAX_SYM_NAME * sizeof(TCHAR)];
-    UnDecorateSymbolName(name.data(), buffer, MAX_SYM_NAME, UNDNAME_NAME_ONLY);
-    return std::string(buffer);
-}
+} // namespace
 
-ModuleInfo getCurrentModuleInfo() {
-    HMODULE handle = NULL;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCSTR)&getCurrentModuleInfo,
-                           &handle)) {
-        printLastError();
-        std::abort();
+void verifyRawPdbSymbolWithDbgHelp(DbgHelpModuleContext const& module,
+                                   std::string const& raw_name,
+                                   SymbolDescriptor const& symbol,
+                                   MemoryAddress address) {
+    auto dbghelp_symbol = loadDbgHelpSymbolDescriptor(module, raw_name, symbol.name, address);
+    if (!dbghelp_symbol) {
+        std::cerr << "RawPDB/DbgHelp verification skipped for \"" << symbol.name
+                  << "\": DbgHelp could not resolve the symbol\n";
+        return;
     }
-    MODULEINFO module_info;
-    if (!GetModuleInformation(GetCurrentProcess(), handle, &module_info, sizeof(module_info))) {
-        printLastError();
-        std::abort();
-    }
-    char path[MAX_PATH];
-    if (!GetModuleFileName(handle, path, sizeof(path))) {
-        printLastError();
-        std::abort();
-    }
-    return ModuleInfo{
-      .base_address = (MemoryAddress)handle,
-      .size = module_info.SizeOfImage,
-      .write_time = std::format("{:%Y-%m-%d %H-%M-%S}", std::filesystem::last_write_time(std::string(path))),
-      .path = path};
-}
 
-std::string getModuleName(ModuleBase module_base) {
-    char path[MAX_PATH];
-    if (!GetModuleBaseName(current_process, (HMODULE)module_base, path, sizeof(path))) {
-        printLastError();
-        std::abort();
+    std::string mismatch;
+    if (!symbolDescriptorsMatch(symbol, *dbghelp_symbol, symbol.name, mismatch)) {
+        std::cerr << "RawPDB/DbgHelp mismatch for \"" << symbol.name << "\": " << mismatch << "\n";
     }
-    std::filesystem::path p(path);
-    return p.stem().string();
-}
-
-std::string readFile(std::string const& filename) {
-    return (std::stringstream() << std::ifstream(filename).rdbuf()).str();
 }

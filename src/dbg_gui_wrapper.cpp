@@ -20,8 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "DbgGui/dbg_gui_wrapper.h"
-#include "dbg_gui.h"
+#include "DbgGui/dbg_gui.h"
+#include "dbg_gui_internal.h"
 #include <memory>
 
 static std::unique_ptr<DbgGui> g_dbg_gui;

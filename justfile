@@ -48,7 +48,7 @@ setup build *opts:
     export PKG_CONFIG_PATH="{{build}}/conan"
     uv run conan install conanfile-linux.txt --build missing --output-folder {{build}}/conan
     source ./{{build}}/conan/conanbuild.sh
-    uv run meson setup {{build}} {{opts}} -Dtests=true -Dcpp_std=c++23
+    uv run meson setup {{build}} {{opts}} -Dtests=true -Dcpp_std=c++23 -Db_pie=true
 
 [no-cd]
 [linux]

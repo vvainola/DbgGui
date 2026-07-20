@@ -23,6 +23,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <expected>
 #include <vector>
 
@@ -30,7 +31,8 @@ namespace str {
 
 std::expected<std::string, std::string> readFile(const std::string& filename);
 
-std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count = 1);
+std::vector<std::string_view> splitSv(std::string_view s, char delim, int expected_column_count = 1);
+std::vector<std::string_view> splitSv(const std::string& s, char delim, int expected_column_count);
 std::vector<std::string> split(const std::string& s, char delim);
 std::string replaceAll(const std::string& str,
                        const std::string& find,

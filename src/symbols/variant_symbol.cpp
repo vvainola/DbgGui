@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 #include "variant_symbol.h"
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 #include <cassert>
 #include <numeric>
 #include <format>
@@ -32,10 +32,12 @@
 #endif
 
 VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_symbols,
-                             RawSymbol* symbol,
+                             SymbolDescriptor const* symbol,
                              VariantSymbol* parent)
     : m_root_symbols(root_symbols),
       m_parent(parent) {
+    m_is_const = symbol->is_const || (parent && parent->isConst());
+
     if (parent) {
         m_address = parent->getAddress() + symbol->offset_to_parent;
     } else {
@@ -43,38 +45,38 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
 
     if (parent && parent->getType() == Type::Array) {
-        std::string idx = "[" + std::to_string(parent->getChildren().size()) + "]";
-        m_name = parent->getName() + idx;
+        m_name = std::format("{}[{}]", parent->getName(), parent->getChildren().size());
     } else {
         m_name = symbol->name;
     }
 
-    switch (symbol->tag) {
-        case SymTagPointerType:
+    switch (symbol->kind) {
+        case SymbolKind::Pointer:
             m_type = Type::Pointer;
             break;
-        case SymTagBaseType: {
+        case SymbolKind::Scalar: {
             m_type = Type::Arithmetic;
-            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->size, symbol->bitfield_position);
+            m_arithmetic_symbol.emplace(symbol->scalar_type, m_address, symbol->size, symbol->bitfield_position);
             break;
         }
-        case SymTagEnumerator: {
-            m_arithmetic_symbol.emplace(symbol->basic_type, m_address, symbol->size);
+        case SymbolKind::Enum: {
+            m_arithmetic_symbol.emplace(symbol->scalar_type, m_address, symbol->size);
             m_type = Type::Enum;
             // Children of enum contain the enum values as strings.
+            m_enum_mappings.reserve(symbol->children.size());
             for (auto& child : symbol->children) {
-                m_enum_mappings.push_back(std::make_pair(static_cast<int32_t>(child->enum_value), child->name));
+                m_enum_mappings.emplace_back(static_cast<int32_t>(child->enum_value), child->name);
             }
             break;
         }
-        case SymTagArrayType: {
+        case SymbolKind::Array: {
             m_type = Type::Array;
-            if (symbol->array_element_count > 0) {
-                m_children.reserve(symbol->array_element_count);
-                RawSymbol* first_element = symbol->children[0].get();
+            if (symbol->array_element_count > 0 && !symbol->children.empty()) {
+                SymbolDescriptor const* first_element = symbol->children[0].get();
                 MemoryAddress original_address = m_address;
                 // Skip very large arrays
                 if (symbol->array_element_count < DBGHELP_MAX_ARRAY_ELEMENT_COUNT) {
+                    m_children.reserve(symbol->array_element_count);
                     for (uint32_t i = 0; i < symbol->array_element_count; ++i) {
                         m_children.push_back(std::make_unique<VariantSymbol>(m_root_symbols, first_element, this));
                         m_address += first_element->size;
@@ -84,7 +86,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
             }
             break;
         }
-        case SymTagUDT:
+        case SymbolKind::Object:
             m_type = Type::Object;
             m_children.reserve(symbol->children.size());
             for (auto& child : symbol->children) {
@@ -130,15 +132,24 @@ VariantSymbol* VariantSymbol::getPointedSymbol() const {
 }
 
 void VariantSymbol::setPointedAddress(MemoryAddress address) {
+    if (m_is_const) {
+        return;
+    }
     std::memcpy(reinterpret_cast<void*>(m_address), &address, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::setPointedSymbol(VariantSymbol* symbol) {
+    if (m_is_const) {
+        return;
+    }
     MemoryAddress addr = symbol->getAddress();
     std::memcpy(reinterpret_cast<void*>(m_address), &addr, sizeof(MemoryAddress));
 }
 
 void VariantSymbol::write(double value) {
+    if (m_is_const) {
+        return;
+    }
     if (m_arithmetic_symbol) {
         m_arithmetic_symbol->write(value);
     } else if (m_type == Type::Pointer) {
@@ -164,21 +175,21 @@ double VariantSymbol::read() const {
 ValueSource VariantSymbol::getValueSource() {
     if (m_type == Type::Arithmetic && m_arithmetic_symbol->isBitfield()) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 m_arithmetic_symbol->write(*value);
             }
             return m_arithmetic_symbol->read();
         };
     } else if (m_type == Type::Enum) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 m_arithmetic_symbol->write(*value);
             }
             return std::make_pair(valueAsStr(), m_arithmetic_symbol->read());
         };
     } else if (m_type == Type::Pointer) {
         return [&](std::optional<double> value) {
-            if (value) {
+            if (value && !m_is_const) {
                 this->write(*value);
             }
             return std::make_pair(valueAsStr(), this->read());
@@ -204,29 +215,18 @@ std::string VariantSymbol::valueAsStr() const {
                 return symbol->getFullName() + " (" + symbol->valueAsStr() + ")";
             }
 
-            // Try find name just a name with DbgHelp API
-            // Cache symbols because constantly reinitializing DbgHelp is slow
+            // Cache address lookups because resolving function names may require
+            // searching the loaded module symbol maps.
             static std::unordered_map<MemoryAddress, std::string> symbol_addresses;
             auto it = symbol_addresses.find(pointed_address);
             if (it != symbol_addresses.end()) {
                 return it->second;
             }
 
-#if WINDOWS
-            ScopedSymbolHandler scoped_symbol_handler;
-#endif
             auto sym = getSymbolFromAddress(pointed_address);
             std::string name = "??";
             if (sym) {
                 name = sym->name;
-#if WINDOWS
-                size_t decoration_offset = name.find("?");
-                if (decoration_offset != name.npos) {
-                    std::string decorated_name = name.substr(decoration_offset);
-                    decorated_name.pop_back(); // Remove trailing ")"
-                    name = getUndecoratedSymbolName(decorated_name);
-                }
-#endif
                 symbol_addresses[pointed_address] = name;
             }
             return name;

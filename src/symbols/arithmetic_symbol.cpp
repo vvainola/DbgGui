@@ -24,9 +24,9 @@
 #include <bitset>
 #include <cassert>
 
-ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32_t size);
+ValueSource addressAsVariant(ScalarType scalar_type, MemoryAddress address, uint32_t size);
 
-ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
+ArithmeticSymbol::ArithmeticSymbol(ScalarType scalar_type,
                                    MemoryAddress address,
                                    uint32_t size_in_bytes,
                                    int bitfield_idx)
@@ -36,7 +36,7 @@ ArithmeticSymbol::ArithmeticSymbol(BasicType basic_type,
         size_in_bytes = (size_in_bytes - 1 + m_bitfield_idx) / 8 + 1;
     }
     assert(size_in_bytes > 0);
-    m_value = addressAsVariant(basic_type, address, size_in_bytes);
+    m_value = addressAsVariant(scalar_type, address, size_in_bytes);
 }
 
 void ArithmeticSymbol::write(double value) {
@@ -75,11 +75,10 @@ double ArithmeticSymbol::read() const {
     }
 }
 
-ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32_t size) {
+ValueSource addressAsVariant(ScalarType scalar_type, MemoryAddress address, uint32_t size) {
     assert(size != 0);
-    switch (basic_type) {
-        case btInt:
-        case btLong:
+    switch (scalar_type) {
+        case ScalarType::SignedInteger:
             if (size == 1)
                 return (int8_t*)address;
             else if (size == 2)
@@ -89,13 +88,11 @@ ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32
             else if (size == 8)
                 return (int64_t*)address;
             break;
-        case btBool:
-        case btUInt:
-        case btULong:
-        case btChar:
-        case btWChar:
-        case btChar16:
-        case btChar32:
+        case ScalarType::Boolean:
+        case ScalarType::UnsignedInteger:
+        case ScalarType::WChar:
+        case ScalarType::Char16:
+        case ScalarType::Char32:
             if (size == 1)
                 return (uint8_t*)address;
             else if (size == 2)
@@ -105,11 +102,14 @@ ValueSource addressAsVariant(BasicType basic_type, MemoryAddress address, uint32
             else if (size <= 8)
                 return (uint64_t*)address;
             break;
-        case btFloat:
+        case ScalarType::FloatingPoint:
             if (size == 4)
                 return (float*)address;
             else if (size == 8)
                 return (double*)address;
+            break;
+        case ScalarType::None:
+            break;
     }
     return (uint32_t*)address;
 }

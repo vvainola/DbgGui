@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "dbghelp_helpers.h"
+#include "symbol_helpers.h"
 #include "dbg_symbols.hpp"
 
 #include <fstream>
@@ -96,13 +96,13 @@ ModuleInfo getCurrentModuleInfo() {
     return cached;
 }
 
-std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
+std::unique_ptr<SymbolDescriptor> getSymbolFromAddress(MemoryAddress address) {
     std::string const& resolved = DbgSymbols::getSymbols().resolveFunctionAddress(address);
     if (!resolved.empty()) {
-        return std::make_unique<RawSymbol>(RawSymbol{
+        return std::make_unique<SymbolDescriptor>(SymbolDescriptor{
             .name = resolved,
             .address = address,
-            .tag = SymTagPublicSymbol
+            .kind = SymbolKind::Function
         });
     }
 
@@ -121,10 +121,10 @@ std::unique_ptr<RawSymbol> getSymbolFromAddress(MemoryAddress address) {
         name = info.dli_sname;
     }
 
-    return std::make_unique<RawSymbol>(RawSymbol{
+    return std::make_unique<SymbolDescriptor>(SymbolDescriptor{
         .name = name,
         .address = reinterpret_cast<MemoryAddress>(info.dli_saddr),
-        .tag = SymTagPublicSymbol
+        .kind = SymbolKind::Function
     });
 }
 
