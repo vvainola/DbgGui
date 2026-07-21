@@ -805,6 +805,7 @@ void DbgGui::showScalarWindow() {
     }
     static std::string scalar_name_filter;
     ImGui::InputText("Filter", &scalar_name_filter);
+    ImGui::BeginChild("##scalar_list", ImVec2(0, 0));
 
     if (ImGui::BeginTable("scalar_table",
                           2,
@@ -994,6 +995,7 @@ void DbgGui::showScalarWindow() {
 
         ImGui::EndTable();
     }
+    ImGui::EndChild();
     ImGui::End();
 }
 
@@ -1006,6 +1008,7 @@ void DbgGui::showVectorWindow() {
 
     static std::string vector_name_filter;
     ImGui::InputText("Filter", &vector_name_filter);
+    ImGui::BeginChild("##vector_list", ImVec2(0, 0));
 
     if (ImGui::BeginTable("vector_table",
                           3,
@@ -1174,6 +1177,7 @@ void DbgGui::showVectorWindow() {
 
         ImGui::EndTable();
     }
+    ImGui::EndChild();
     ImGui::End();
 }
 
@@ -1608,7 +1612,9 @@ void DbgGui::showSymbolsWindow() {
         m_symbol_search_results = buildSymbolSearchResults(m_symbols, symbols_to_search, m_symbol_search_depth);
     }
 
+    ImGui::BeginChild("##symbol_list", ImVec2(0, 0));
     showSymbolSearchTable(symbols_to_search, show_hidden_symbols, show_constants);
+    ImGui::EndChild();
     ImGui::End();
 }
 
