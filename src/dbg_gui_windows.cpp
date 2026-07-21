@@ -813,14 +813,7 @@ void DbgGui::showScalarWindow() {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
-        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                       | ImGuiMultiSelectFlags_BoxSelect2d
-                                       | ImGuiMultiSelectFlags_ScopeRect
-                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
-        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
-                                                            (int)m_selected_scalars.size(),
-                                                            -1);
-        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+        beginMultiSelect(m_selected_scalars, m_visible_scalars);
         m_visible_scalars.clear();
 
         std::function<void(SignalGroup<Scalar>&, bool)> show_scalar_group = [&](SignalGroup<Scalar>& group, bool delete_entire_group) {
@@ -994,8 +987,7 @@ void DbgGui::showScalarWindow() {
             show_scalar_group(it->second, false);
         }
 
-        ms_io = ImGui::EndMultiSelect();
-        applyMultiSelectRequests(ms_io, m_selected_scalars, m_visible_scalars);
+        endMultiSelect(m_selected_scalars, m_visible_scalars);
 
         ImGui::EndTable();
     }
@@ -1020,14 +1012,7 @@ void DbgGui::showVectorWindow() {
         ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
         ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
 
-        ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                       | ImGuiMultiSelectFlags_BoxSelect2d
-                                       | ImGuiMultiSelectFlags_ScopeRect
-                                       | ImGuiMultiSelectFlags_SelectOnClickRelease;
-        ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
-                                                            (int)m_selected_vectors.size(),
-                                                            -1);
-        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+        beginMultiSelect(m_selected_vectors, m_visible_vectors);
         m_visible_vectors.clear();
 
         std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
@@ -1182,8 +1167,7 @@ void DbgGui::showVectorWindow() {
             show_vector_group(it->second, false);
         }
 
-        ms_io = ImGui::EndMultiSelect();
-        applyMultiSelectRequests(ms_io, m_selected_vectors, m_visible_vectors);
+        endMultiSelect(m_selected_vectors, m_visible_vectors);
 
         ImGui::EndTable();
     }
@@ -1264,14 +1248,9 @@ void DbgGui::showCustomWindow() {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
 
-            ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                           | ImGuiMultiSelectFlags_BoxSelect2d
-                                           | ImGuiMultiSelectFlags_ScopeRect
-                                           | ImGuiMultiSelectFlags_SelectOnClickRelease;
-            ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
-                                                                (int)m_selected_scalars.size(),
-                                                                (int)custom_window.scalars.size());
-            applyMultiSelectRequests(ms_io, m_selected_scalars, custom_window.scalars);
+            beginMultiSelect(m_selected_scalars,
+                             custom_window.scalars,
+                             (int)custom_window.scalars.size());
 
             for (size_t i = 0; i < custom_window.scalars.size(); ++i) {
                 Scalar* scalar = custom_window.scalars[i];
@@ -1336,8 +1315,7 @@ void DbgGui::showCustomWindow() {
                                scalar->read_only);
             }
 
-            ms_io = ImGui::EndMultiSelect();
-            applyMultiSelectRequests(ms_io, m_selected_scalars, custom_window.scalars);
+            endMultiSelect(m_selected_scalars, custom_window.scalars);
             ImGui::EndTable();
         }
 
@@ -1386,20 +1364,9 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
         return;
     }
 
-    // Multi-select scope wraps the whole table. BoxSelect2d because tree nodes have varying
-    // indentation (2D layout); ScopeRect so box-select/clear-on-void is confined to the table
-    // area, not the whole window (the search inputs above would otherwise be in scope).
-    ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
-                                   | ImGuiMultiSelectFlags_BoxSelect2d
-                                   | ImGuiMultiSelectFlags_ScopeRect
-                                   // Let an unselected symbol be dragged without first selecting it.
-                                   | ImGuiMultiSelectFlags_SelectOnClickRelease;
-    ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
-                                                        (int)m_selected_symbols.size(),
-                                                        -1); // Not used
     // Begin-side requests (e.g. Ctrl+A, Escape, auto-clear on plain click) use the previous
     // frame's m_visible_tree_symbols. The list is rebuilt below during traversal.
-    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+    beginMultiSelect(m_selected_symbols, m_visible_tree_symbols);
     m_visible_tree_symbols.clear();
 
     SymbolSearchRenderState state{
@@ -1411,9 +1378,8 @@ void DbgGui::showSymbolSearchTable(std::string const& search_string, bool show_h
         showSymbolTreeNode(symbol, state, true);
     }
 
-    ms_io = ImGui::EndMultiSelect();
-    // End-side requests (e.g. SetRange from shift-click/box-select) use this frame's list.
-    applyMultiSelectRequests(ms_io, m_selected_symbols, m_visible_tree_symbols);
+    // End-side requests (e.g. SetRange from shift-click) use this frame's list.
+    endMultiSelect(m_selected_symbols, m_visible_tree_symbols);
 
     ImGui::EndTable();
 }

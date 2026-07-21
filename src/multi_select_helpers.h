@@ -60,3 +60,22 @@ void applyMultiSelectRequests(ImGuiMultiSelectIO* ms_io,
         }
     }
 }
+
+template <typename T>
+void beginMultiSelect(std::vector<T>& selected,
+                      std::vector<T> const& visible,
+                      int items_count = -1,
+                      ImGuiMultiSelectFlags extra_flags = ImGuiMultiSelectFlags_None) {
+    ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                | ImGuiMultiSelectFlags_SelectOnClickRelease
+                                | extra_flags;
+    ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(flags,
+                                                        (int)selected.size(),
+                                                        items_count);
+    applyMultiSelectRequests(ms_io, selected, visible);
+}
+
+template <typename T>
+void endMultiSelect(std::vector<T>& selected, std::vector<T> const& visible) {
+    applyMultiSelectRequests(ImGui::EndMultiSelect(), selected, visible);
+}
