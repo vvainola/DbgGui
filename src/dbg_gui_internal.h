@@ -175,6 +175,11 @@ class DbgGui {
     void saveSnapshot();
     void loadSnapshot();
 
+    Scalar* addScalarExpression(ValueSource const& src,
+                                std::string group,
+                                std::string const& name,
+                                std::string const& scale,
+                                std::string const& offset);
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
     Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);

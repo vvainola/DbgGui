@@ -1130,7 +1130,9 @@ void DbgGui::setInitialFocus() {
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
-    Scalar* scalar = addScalar(sym->getValueSource(), group, sym->getFullName(), getSymbolScale(*sym, m_symbol_scale_settings));
+    auto scale_it = m_symbol_scale_settings.find(sym->getFullName());
+    std::string const scale = scale_it == m_symbol_scale_settings.end() ? "1" : scale_it->second;
+    Scalar* scalar = addScalarExpression(sym->getValueSource(), group, sym->getFullName(), scale, "0");
     scalar->read_only = sym->isConst();
     m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
     m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
@@ -1192,6 +1194,18 @@ Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std
 }
 
 Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name, double scale, double offset) {
+    return addScalarExpression(src,
+                               std::move(group),
+                               name,
+                               std::format("{:g}", scale),
+                               std::format("{:g}", offset));
+}
+
+Scalar* DbgGui::addScalarExpression(ValueSource const& src,
+                                    std::string group,
+                                    std::string const& name,
+                                    std::string const& scale,
+                                    std::string const& offset) {
     if (group.empty()) {
         group = "debug";
     }
@@ -1208,8 +1222,8 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
     new_scalar->name_and_group = name + " (" + new_scalar->group + ")";
     new_scalar->alias_and_group = new_scalar->name_and_group;
     new_scalar->id = id;
-    new_scalar->setScaleStr(std::format("{:g}", scale));
-    new_scalar->setOffsetStr(std::format("{:g}", offset));
+    new_scalar->setScaleStr(scale);
+    new_scalar->setOffsetStr(offset);
     if (m_initialized.load()
         && restoreScalarSettings(new_scalar.get(), m_settings, m_scalar_plots, m_custom_windows)) {
         m_sampler.startSampling(new_scalar.get());
