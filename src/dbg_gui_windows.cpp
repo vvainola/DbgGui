@@ -1186,11 +1186,6 @@ void DbgGui::addCustomWindowDragAndDrop(CustomWindow& custom_window) {
                 }
             }
         }
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
-            VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
-            Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-            custom_window.addScalar(scalar);
-        }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
             std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
                                               payload->DataSize / sizeof(VariantSymbol*));
@@ -1463,7 +1458,7 @@ void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
 
     if (ImGui::BeginDragDropSource()) {
         // Drag-and-droppable to scalar plot.
-        ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+        ImGui::SetDragDropPayload("SCALAR_SYMBOL_MULTI", &sym, sizeof(VariantSymbol*));
         ImGui::Text("Drag to plot");
         ImGui::EndDragDropSource();
     }
@@ -1546,7 +1541,7 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
             }
             ImGui::Unindent();
         } else {
-            ImGui::SetDragDropPayload("SCALAR_SYMBOL", &sym, sizeof(VariantSymbol*));
+            ImGui::SetDragDropPayload("SCALAR_SYMBOL_MULTI", &sym, sizeof(VariantSymbol*));
             ImGui::Text("Drag to plot\n\t%s", sym->getFullName().c_str());
         }
         ImGui::EndDragDropSource();
@@ -1820,9 +1815,19 @@ void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col)
             std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                     payload->DataSize / sizeof(uint64_t));
             if (!ids.empty()) {
-                Scalar* dropped_scalar = findScalar(m_scalars, ids[0]);
-                if (dropped_scalar) {
-                    grid_window.scalars[row][col] = dropped_scalar->id;
+                Scalar* scalar = findScalar(m_scalars, ids[0]);
+                if (scalar) {
+                    grid_window.scalars[row][col] = scalar->id;
+                }
+            }
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+            std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
+                                              payload->DataSize / sizeof(VariantSymbol*));
+            if (!symbols.empty()) {
+                Scalar* scalar = addScalarSymbol(symbols[0], m_group_to_add_symbols);
+                if (scalar) {
+                    grid_window.scalars[row][col] = scalar->id;
                 }
             }
         }

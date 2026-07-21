@@ -282,12 +282,6 @@ void DbgGui::showScalarPlots() {
                         }
                     }
                 }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
-                    VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
-                    Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-                    m_sampler.startSampling(scalar);
-                    scalar_plot.addScalarToPlot(scalar, subplot_idx);
-                }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
                     std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
                                                       payload->DataSize / sizeof(VariantSymbol*));
@@ -675,12 +669,6 @@ void DbgGui::showSpectrumPlots() {
                             plot.addToPlot(scalar, nullptr);
                         }
                     }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL")) {
-                    VariantSymbol* symbol = *(VariantSymbol**)payload->Data;
-                    Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
-                    m_sampler.startSampling(scalar);
-                    plot.addToPlot(scalar, nullptr);
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
                     std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
