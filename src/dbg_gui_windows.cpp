@@ -393,7 +393,7 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
             if (scalar->alias.empty()) {
                 scalar->alias = scalar->name;
             }
-            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+            scalar->updateDisplayNames();
         }
         if (show_delete) {
             ImGui::Separator();
@@ -865,6 +865,7 @@ void DbgGui::showScalarWindow() {
                         if (scalar_symbol) {
                             Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
                             new_scalar->alias = scalar->alias;
+                            new_scalar->updateDisplayNames();
                             new_scalar->setScaleStr(scalar->getScaleStr());
                             new_scalar->setOffsetStr(scalar->getOffsetStr());
                             scalar->deleted = true;

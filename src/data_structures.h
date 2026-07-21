@@ -135,6 +135,11 @@ struct Scalar {
     bool deleted = false;
     Scalar* replacement = nullptr;
 
+    void updateDisplayNames() {
+        name_and_group = name + " (" + group + ")";
+        alias_and_group = alias + " (" + group + ")";
+    }
+
     void fromJson(nlohmann::json const& j) {
         std::string scale = "1";
         if (j["scale"].is_number()) {
@@ -151,7 +156,7 @@ struct Scalar {
         }
         setOffsetStr(offset);
         alias = j.value("alias", alias);
-        alias_and_group = alias + " (" + group + ")";
+        updateDisplayNames();
     }
 
     nlohmann::json updateJson(nlohmann::json& j) const {

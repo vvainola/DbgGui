@@ -76,7 +76,7 @@ bool restoreScalarSettings(Scalar* scalar,
             std::string offset = scalar_data["offset"];
             scalar->setOffsetStr(offset);
             scalar->alias = std::string(scalar_data["alias"]);
-            scalar->alias_and_group = scalar->alias + " (" + scalar->group + ")";
+            scalar->updateDisplayNames();
             break;
         }
     })
@@ -1185,7 +1185,7 @@ Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std
         Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
         ptr->read_only = sym->isConst();
         ptr->alias = alias;
-        ptr->alias_and_group = ptr->alias + "(" + ptr->group + ")";
+        ptr->updateDisplayNames();
         m_settings["scalar_symbols"][ptr->name_and_group]["name"] = ptr->name;
         m_settings["scalar_symbols"][ptr->name_and_group]["group"] = ptr->group;
         return ptr;
@@ -1219,8 +1219,7 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     new_scalar->name = name;
     new_scalar->group = group;
     new_scalar->alias = new_scalar->name;
-    new_scalar->name_and_group = name + " (" + new_scalar->group + ")";
-    new_scalar->alias_and_group = new_scalar->name_and_group;
+    new_scalar->updateDisplayNames();
     new_scalar->id = id;
     new_scalar->setScaleStr(scale);
     new_scalar->setOffsetStr(offset);

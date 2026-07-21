@@ -40,9 +40,8 @@ std::unique_ptr<Scalar> makeScalar(std::string const& name, std::string const& g
     auto scalar = std::make_unique<Scalar>();
     scalar->name = name;
     scalar->group = group;
-    scalar->name_and_group = name + " (" + group + ")";
     scalar->alias = name;
-    scalar->alias_and_group = scalar->name_and_group;
+    scalar->updateDisplayNames();
     scalar->id = testSignalId(name, group);
     return scalar;
 }
