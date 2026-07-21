@@ -110,9 +110,9 @@ void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
                     ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
                     ImGui::BeginTooltip();
                     ImVec4 color = ImPlot::GetColormapColor(spec_idx);
-                    ImGui::TextColored(color, std::format("{} x : {:10f}", spec.real->name.c_str(), spec.data.freq[idx]).c_str());
-                    ImGui::TextColored(color, std::format("{} y : {:10f}", spec.real->name.c_str(), spec.data.mag[idx]).c_str());
-                    ImGui::TextColored(color, std::format("{} < : {:10.2f}", spec.real->name.c_str(), spec.data.angle[idx] * RAD_TO_DEG).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->name, spec.data.freq[idx]).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->name, spec.data.mag[idx]).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} < : {:10.2f}", spec.real->name, spec.data.angle[idx] * RAD_TO_DEG).c_str());
                     ImGui::EndTooltip();
                 }
             }

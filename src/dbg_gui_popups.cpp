@@ -165,7 +165,7 @@ void DbgGui::showErrorModal() {
             } else if (!current_message || current_message->type != type) {
                 ImGui::CloseCurrentPopup();
             } else {
-                ImGui::Text(current_message->text.c_str());
+                ImGui::TextUnformatted(current_message->text.c_str());
             }
             ImGui::EndPopup();
         }

@@ -300,10 +300,10 @@ void addReadonlyScalar(ValueSource const& value_src, double scale = 1, double of
         float current_font_size = ImGui::GetFontSize();
         float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
         ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
-        ImGui::Text(value_str.c_str());
+        ImGui::TextUnformatted(value_str.c_str());
         ImGui::PopFont();
     } else {
-        ImGui::Text(value_str.c_str());
+        ImGui::TextUnformatted(value_str.c_str());
     }
 }
 
@@ -326,10 +326,10 @@ void addInputScalar(ValueSource const& value_src,
             float current_font_size = ImGui::GetFontSize();
             float font_size = std::max(current_font_size * (available.x / text_size.x) - 1, 1.0f);
             ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
-            ImGui::Text(value_str.c_str());
+            ImGui::TextUnformatted(value_str.c_str());
             ImGui::PopFont();
         } else {
-            ImGui::Text(value_str.c_str());
+            ImGui::TextUnformatted(value_str.c_str());
         }
         ImGui::SameLine();
     }
@@ -763,9 +763,9 @@ void DbgGui::showMainMenuBar() {
             }
         }
         if (!latest_message.empty()) {
-            ImGui::Text(latest_message.c_str());
+            ImGui::TextUnformatted(latest_message.c_str());
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(message_tooltip.c_str());
+                ImGui::SetTooltip("%s", message_tooltip.c_str());
             }
         }
 
@@ -1144,9 +1144,9 @@ void DbgGui::showVectorWindow() {
                     }
                     ImGui::SameLine();
                     if (vector->x->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->x->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", numberAsStr(vector->x->getScaledValue()).c_str());
                     } else {
-                        ImGui::Text(numberAsStr(vector->x->getValue()).c_str());
+                        ImGui::TextUnformatted(numberAsStr(vector->x->getValue()).c_str());
                     }
                     addScalarContextMenu(vector->x);
 
@@ -1160,9 +1160,9 @@ void DbgGui::showVectorWindow() {
                     }
                     ImGui::SameLine();
                     if (vector->y->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_LIGHT_BLUE, numberAsStr(vector->y->getScaledValue()).c_str());
+                        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", numberAsStr(vector->y->getScaledValue()).c_str());
                     } else {
-                        ImGui::Text(numberAsStr(vector->y->getValue()).c_str());
+                        ImGui::TextUnformatted(numberAsStr(vector->y->getValue()).c_str());
                     }
                     addScalarContextMenu(vector->y);
                 }
@@ -1474,7 +1474,7 @@ void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
     }
 
     ImGui::TableNextColumn();
-    ImGui::Text(sym->valueAsStr().c_str());
+    ImGui::TextUnformatted(sym->valueAsStr().c_str());
     if (open) {
         if (pointed_symbol) {
             showSymbolTreeNode(pointed_symbol, state, filter_to_search_path && auto_open, true);
@@ -1505,7 +1505,7 @@ void DbgGui::showObjectSymbolTreeNode(VariantSymbol* sym,
     addSymbolContextMenu(*sym);
 
     ImGui::TableNextColumn();
-    ImGui::Text(sym->valueAsStr().c_str());
+    ImGui::TextUnformatted(sym->valueAsStr().c_str());
     if (open) {
         for (std::unique_ptr<VariantSymbol>& child : sym->getChildren()) {
             showSymbolTreeNode(child.get(), state, filter_to_search_path && auto_open);
@@ -1529,7 +1529,7 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     m_visible_tree_symbols.push_back(sym);
 
     // The multi-select API handles plain-click select, ctrl-toggle (with toggle-off),
-    // shift-range, box-select, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
+    // shift-range, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
     // the Custom Signal Creator, since that is an application-specific action.
     if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift) {
         m_show_custom_signal_creator = true;
@@ -1572,7 +1572,7 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
                        0,
                        sym->isConst());
     } else {
-        ImGui::Text(sym->valueAsStr().c_str());
+        ImGui::TextUnformatted(sym->valueAsStr().c_str());
     }
 }
 
@@ -1801,7 +1801,7 @@ void DbgGui::showScriptWindow() {
                     script_window.stopScript();
                 }
                 ImGui::SameLine();
-                ImGui::Text(std::format("{:.2f}", script_time).c_str());
+                ImGui::TextUnformatted(std::format("{:.2f}", script_time).c_str());
             }
 
             ImGui::Separator();
@@ -1897,9 +1897,9 @@ void DbgGui::showGridWindow() {
 
                         // Name
                         if (scalar->customScaleOrOffset()) {
-                            ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
+                            ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", scalar->alias_and_group.c_str());
                         } else {
-                            ImGui::Text(scalar->alias_and_group.c_str());
+                            ImGui::TextUnformatted(scalar->alias_and_group.c_str());
                         }
                         addScalarContextMenu(scalar);
                         // Hide symbol on delete

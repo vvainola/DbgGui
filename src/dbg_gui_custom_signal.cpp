@@ -74,7 +74,7 @@ void DbgGui::showCustomSignalCreator() {
         ImGui::Text("Selected signals:");
         for (int i = 0; i < MAX_CUSTOM_SIGNALS_IN_EQ; ++i) {
             if (i < m_selected_symbols.size()) {
-                ImGui::Text(std::format("  {}. {}", i, m_selected_symbols[i]->getFullName()).c_str());
+                ImGui::TextUnformatted(std::format("  {}. {}", i, m_selected_symbols[i]->getFullName()).c_str());
                 if (ImGui::BeginPopupContextItem((m_selected_symbols[i]->getFullName() + "_context_menu").c_str())) {
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(m_selected_symbols[i]->getFullName().c_str());
@@ -83,7 +83,7 @@ void DbgGui::showCustomSignalCreator() {
                     ImGui::EndPopup();
                 }
             } else {
-                ImGui::Text(std::format("  {}. -", i).c_str());
+                ImGui::TextUnformatted(std::format("  {}. -", i).c_str());
             }
         }
 

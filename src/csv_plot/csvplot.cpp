@@ -1674,7 +1674,7 @@ void CsvPlotter::showErrorModal() {
             m_error_message.clear();
             ImGui::CloseCurrentPopup();
         }
-        ImGui::Text(m_error_message.c_str());
+        ImGui::TextUnformatted(m_error_message.c_str());
         ImGui::EndPopup();
     }
 }
@@ -2286,11 +2286,11 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
             ImGui::TableNextColumn();
             ImGui::Text("Time");
             ImGui::TableNextColumn();
-            ImGui::Text(std::format("{:g}", m_drag_x1).c_str());
+            ImGui::TextUnformatted(std::format("{:g}", m_drag_x1).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text(std::format("{:g}", m_drag_x2).c_str());
+            ImGui::TextUnformatted(std::format("{:g}", m_drag_x2).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
+            ImGui::TextUnformatted(std::format("{:g}", m_drag_x2 - m_drag_x1).c_str());
 
             for (int i = 0; i < plot.signals.size(); ++i) {
                 CsvSignal* signal = plot.signals[i];
@@ -2312,13 +2312,13 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
 
                 ImVec4 color = ImPlot::GetColormapColor(i);
                 ImGui::TableNextColumn();
-                ImGui::TextColored(color, displayed_signal_name.c_str());
+                ImGui::TextColored(color, "%s", displayed_signal_name.c_str());
                 ImGui::TableNextColumn();
-                ImGui::TextColored(color, std::format("{:g}", y1).c_str());
+                ImGui::TextColored(color, "%s", std::format("{:g}", y1).c_str());
                 ImGui::TableNextColumn();
-                ImGui::TextColored(color, std::format("{:g}", y2).c_str());
+                ImGui::TextColored(color, "%s", std::format("{:g}", y2).c_str());
                 ImGui::TableNextColumn();
-                ImGui::TextColored(color, std::format("{:g}", y2 - y1).c_str());
+                ImGui::TextColored(color, "%s", std::format("{:g}", y2 - y1).c_str());
             }
             ImGui::EndTable();
         }
@@ -2460,7 +2460,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                 ss.str("");
                 ss << signal->name << " : " << tooltip_value;
                 ImGui::PushStyleColor(ImGuiCol_Text, line_color);
-                ImGui::Text(ss.str().c_str());
+                ImGui::TextUnformatted(ss.str().c_str());
                 ImGui::PopStyleColor();
                 ImGui::EndTooltip();
             } else if (m_options.show_vertical_line_in_all_plots && !std::isnan(vertical_line_time)) {

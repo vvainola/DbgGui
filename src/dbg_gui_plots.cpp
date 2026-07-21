@@ -219,7 +219,7 @@ void DbgGui::showScalarPlots() {
                 if (ImPlot::BeginLegendPopup(label_id.c_str())) {
                     double current_value = scalar->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::Text(scalar->alias_and_group.c_str());
+                    ImGui::TextUnformatted(scalar->alias_and_group.c_str());
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
                     if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -368,7 +368,7 @@ void DbgGui::showScalarPlots() {
                     }
 
                     ImGui::PushStyleColor(ImGuiCol_Text, scalar->color);
-                    ImGui::Text(ss.str().c_str());
+                    ImGui::TextUnformatted(ss.str().c_str());
                     ImGui::PopStyleColor();
                 }
 
@@ -700,8 +700,8 @@ void DbgGui::showSpectrumPlots() {
                         ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
                         ImGui::BeginTooltip();
                         ImVec4 color = ImPlot::GetColormapColor(i);
-                        ImGui::TextColored(color, std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
-                        ImGui::TextColored(color, std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
+                        ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
+                        ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
                         ImGui::EndTooltip();
                     }
                 }
