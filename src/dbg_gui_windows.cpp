@@ -1255,7 +1255,7 @@ void DbgGui::showCustomWindow() {
             ImGui::End();
             continue;
         }
-        Scalar* scalar_to_remove = nullptr;
+        std::vector<Scalar*> scalars_to_remove;
 
         if (ImGui::BeginTable("custom_table",
                               2,
@@ -1263,26 +1263,67 @@ void DbgGui::showCustomWindow() {
             const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDDDDDDD").x;
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, num_width);
-            for (Scalar* scalar : custom_window.scalars) {
+
+            ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape
+                                           | ImGuiMultiSelectFlags_BoxSelect2d
+                                           | ImGuiMultiSelectFlags_ScopeRect
+                                           | ImGuiMultiSelectFlags_SelectOnClickRelease;
+            ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags,
+                                                                (int)m_selected_scalars.size(),
+                                                                (int)custom_window.scalars.size());
+            applyMultiSelectRequests(ms_io, m_selected_scalars, custom_window.scalars);
+
+            for (size_t i = 0; i < custom_window.scalars.size(); ++i) {
+                Scalar* scalar = custom_window.scalars[i];
                 ImGui::TableNextColumn();
-                // Show name. Text is used instead of selectable because the
-                // keyboard navigation in the table does not work properly
-                // and up/down changes columns
+                bool const selected = contains(m_selected_scalars, scalar);
+                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+                                         | ImGuiTreeNodeFlags_SpanAvailWidth
+                                         | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                if (selected) {
+                    flags |= ImGuiTreeNodeFlags_Selected;
+                }
+                ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)i);
+                std::string const label = std::format("{}##{}", scalar->alias_and_group, scalar->name_and_group);
                 if (scalar->customScaleOrOffset()) {
-                    ImGui::TextColored(COLOR_LIGHT_BLUE, scalar->alias_and_group.c_str());
+                    ImGui::PushStyleColor(ImGuiCol_Text, COLOR_LIGHT_BLUE);
+                    ImGui::TreeNodeEx(label.c_str(), flags);
+                    ImGui::PopStyleColor();
                 } else {
-                    ImGui::Text(scalar->alias_and_group.c_str());
+                    ImGui::TreeNodeEx(label.c_str(), flags);
                 }
                 addCustomWindowDragAndDrop(custom_window);
-                // Make text drag-and-droppable
-                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
-                    ImGui::Text("Drag to plot");
+
+                if (ImGui::BeginDragDropSource()) {
+                    std::vector<uint64_t> ids;
+                    if (contains(m_selected_scalars, scalar)) {
+                        for (Scalar* selected_scalar : m_selected_scalars) {
+                            ids.push_back(selected_scalar->id);
+                        }
+                    } else {
+                        ids.push_back(scalar->id);
+                    }
+                    ImGui::SetDragDropPayload("SCALAR_ID_MULTI",
+                                              ids.data(),
+                                              ids.size() * sizeof(uint64_t));
+                    if (ids.size() == 1) {
+                        ImGui::Text("Drag to plot");
+                    } else {
+                        ImGui::Text("Drag %d scalars", (int)ids.size());
+                    }
                     ImGui::EndDragDropSource();
                 }
-                // Hide symbol on delete
+
                 if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
-                    scalar_to_remove = scalar;
+                    if (contains(m_selected_scalars, scalar)) {
+                        for (Scalar* selected_scalar : m_selected_scalars) {
+                            if (contains(custom_window.scalars, selected_scalar)) {
+                                scalars_to_remove.push_back(selected_scalar);
+                            }
+                        }
+                    } else {
+                        scalars_to_remove.push_back(scalar);
+                    }
                 }
                 addScalarContextMenu(scalar);
 
@@ -1294,15 +1335,19 @@ void DbgGui::showCustomWindow() {
                                scalar->getOffset(),
                                scalar->read_only);
             }
+
+            ms_io = ImGui::EndMultiSelect();
+            applyMultiSelectRequests(ms_io, m_selected_scalars, custom_window.scalars);
             ImGui::EndTable();
         }
 
         ImGui::InvisibleButton("##canvas", ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), std::max(ImGui::GetContentRegionAvail().y, 1.f)));
         addCustomWindowDragAndDrop(custom_window);
 
-        if (scalar_to_remove) {
-            remove(custom_window.scalars, scalar_to_remove);
-            size_t signals_removed = m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar_to_remove->group + " " + scalar_to_remove->name);
+        for (Scalar* scalar : scalars_to_remove) {
+            remove(custom_window.scalars, scalar);
+            remove(m_selected_scalars, scalar);
+            size_t signals_removed = m_settings["custom_windows"][std::to_string(custom_window.id)]["signals"].erase(scalar->group + " " + scalar->name);
             assert(signals_removed > 0);
         }
 
