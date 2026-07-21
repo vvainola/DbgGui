@@ -649,7 +649,7 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         m_spectrum_plots.clear();
-        for (auto spec_plot_data : m_settings.at("spec_plots")) {
+        for (auto spec_plot_data : m_settings["spec_plots"]) {
             SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data);
             if (spec_plot_data.contains("signals")) {
                 for (auto xy : spec_plot_data.at("signals")) {
