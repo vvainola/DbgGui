@@ -945,9 +945,12 @@ void DbgGui::showScalarWindow() {
                                                   ids.data(),
                                                   ids.size() * sizeof(uint64_t));
                         if (ids.size() == 1) {
-                            ImGui::Text("Drag to plot");
+                            ImGui::Text("Drag to plot\n  %s", scalar->name_and_group.c_str());
                         } else {
                             ImGui::Text("Drag %d scalars", (int)ids.size());
+                            for (Scalar* selected_scalar : m_selected_scalars) {
+                                ImGui::Text("  %s", selected_scalar->name_and_group.c_str());
+                            }
                         }
                         ImGui::EndDragDropSource();
                     }
@@ -1119,7 +1122,7 @@ void DbgGui::showVectorWindow() {
                     // Make text drag-and-droppable
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                         ImGui::SetDragDropPayload("VECTOR_ID", &vector->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to vector plot");
+                        ImGui::Text("Drag to vector plot\n  %s", vector->name_and_group.c_str());
                         ImGui::EndDragDropSource();
                     }
 
@@ -1133,7 +1136,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::Selectable(std::format("##{}x", vector->x->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
                         ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->x->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot");
+                        ImGui::Text("Drag to plot\n  %s", vector->x->name_and_group.c_str());
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
@@ -1149,7 +1152,7 @@ void DbgGui::showVectorWindow() {
                     ImGui::Selectable(std::format("##{}y", vector->y->name_and_group).c_str());
                     if (ImGui::BeginDragDropSource()) {
                         ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->y->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot");
+                        ImGui::Text("Drag to plot\n  %s", vector->y->name_and_group.c_str());
                         ImGui::EndDragDropSource();
                     }
                     ImGui::SameLine();
@@ -1281,9 +1284,12 @@ void DbgGui::showCustomWindow() {
                                               ids.data(),
                                               ids.size() * sizeof(uint64_t));
                     if (ids.size() == 1) {
-                        ImGui::Text("Drag to plot");
+                        ImGui::Text("Drag to plot\n  %s", scalar->name_and_group.c_str());
                     } else {
                         ImGui::Text("Drag %d scalars", (int)ids.size());
+                        for (Scalar* selected_scalar : m_selected_scalars) {
+                            ImGui::Text("  %s", selected_scalar->name_and_group.c_str());
+                        }
                     }
                     ImGui::EndDragDropSource();
                 }
@@ -1459,7 +1465,7 @@ void DbgGui::showPointerSymbolTreeNode(VariantSymbol* sym,
     if (ImGui::BeginDragDropSource()) {
         // Drag-and-droppable to scalar plot.
         ImGui::SetDragDropPayload("SCALAR_SYMBOL_MULTI", &sym, sizeof(VariantSymbol*));
-        ImGui::Text("Drag to plot");
+        ImGui::Text("Drag to plot\n  %s", sym->getFullName().c_str());
         ImGui::EndDragDropSource();
     }
 
@@ -1898,7 +1904,7 @@ void DbgGui::showGridWindow() {
                         // Make text drag-and-droppable
                         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                             ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
-                            ImGui::Text("Drag to plot");
+                            ImGui::Text("Drag to plot\n  %s", scalar->name_and_group.c_str());
                             ImGui::EndDragDropSource();
                         }
 

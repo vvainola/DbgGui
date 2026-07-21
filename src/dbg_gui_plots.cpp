@@ -534,7 +534,7 @@ void DbgGui::showVectorPlots() {
                 if (ImPlot::BeginDragDropSourceItem(vector->name_and_group.c_str(), ImGuiDragDropFlags_None)) {
                     std::pair<VectorPlot*, Vector2D*> plot_and_vector = {&vector_plot, vector};
                     ImGui::SetDragDropPayload("PLOT_AND_VECTOR", &plot_and_vector, sizeof(plot_and_vector));
-                    ImGui::Text("Drag to move another plot");
+                    ImGui::Text("Drag to move to another plot\n  %s", vector->name_and_group.c_str());
                     ImPlot::EndDragDropSource();
                 }
             }
