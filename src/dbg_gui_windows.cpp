@@ -144,6 +144,7 @@ void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines
     if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
         ImGui::TableSetupColumn("##line", ImGuiTableColumnFlags_WidthFixed, gutter_width);
         ImGui::TableSetupColumn("##source", ImGuiTableColumnFlags_WidthStretch);
+        bool inside_block_comment = false;
         for (int i = 0; i < line_count; ++i) {
             if (i == current_line) {
                 ImGui::TableNextRow();
@@ -158,7 +159,7 @@ void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines
             ImGui::TextDisabled("%s", line_number.c_str());
             ImGui::TableNextColumn();
             if (highlight_lua) {
-                showLuaHighlightedText(lines[i]);
+                showLuaHighlightedText(lines[i], inside_block_comment);
             } else {
                 ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
             }

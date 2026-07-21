@@ -87,14 +87,33 @@ void drawToken(ImDrawList* draw_list, ImFont* font, float font_size, ImVec2 posi
 }
 
 template <typename Function>
-void forEachLuaToken(std::string_view line, Function&& function) {
+void forEachLuaToken(std::string_view line, bool& inside_block_comment, Function&& function) {
     size_t index = 0;
     while (index < line.size()) {
         size_t const token_start = index;
         ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 
-        if (index + 1 < line.size() && line[index] == '-' && line[index + 1] == '-') {
-            index = line.size();
+        // Continue a block comment opened on an earlier line. If it closes here,
+        // resume normal tokenization after the closing brackets.
+        if (inside_block_comment) {
+            size_t const close = line.find("]]", index);
+            index = close == std::string_view::npos ? line.size() : close + 2;
+            if (close != std::string_view::npos) {
+                inside_block_comment = false;
+            }
+            color = CommentColor;
+        } else if (index + 1 < line.size() && line[index] == '-' && line[index + 1] == '-') {
+            // Lua comments beginning with --[[ may span lines, while any other
+            // comment beginning with -- extends only to the end of this line.
+            if (line.substr(index, 4) == "--[[") {
+                size_t const close = line.find("]]", index + 4);
+                index = close == std::string_view::npos ? line.size() : close + 2;
+                if (close == std::string_view::npos) {
+                    inside_block_comment = true;
+                }
+            } else {
+                index = line.size();
+            }
             color = CommentColor;
         } else if (line[index] == '\'' || line[index] == '"') {
             char const quote = line[index++];
@@ -133,9 +152,14 @@ void forEachLuaToken(std::string_view line, Function&& function) {
     }
 }
 
-void drawLuaLine(ImDrawList* draw_list, ImFont* font, float font_size, std::string_view line, ImVec2 position) {
+void drawLuaLine(ImDrawList* draw_list,
+                 ImFont* font,
+                 float font_size,
+                 std::string_view line,
+                 ImVec2 position,
+                 bool& inside_block_comment) {
     float x = position.x;
-    forEachLuaToken(line, [&](std::string_view token, ImVec4 color) {
+    forEachLuaToken(line, inside_block_comment, [&](std::string_view token, ImVec4 color) {
         drawToken(draw_list, font, font_size, ImVec2(x, position.y), token, color);
         x += textWidth(font, font_size, token);
     });
@@ -143,9 +167,9 @@ void drawLuaLine(ImDrawList* draw_list, ImFont* font, float font_size, std::stri
 
 } // namespace
 
-void showLuaHighlightedText(std::string_view text) {
+void showLuaHighlightedText(std::string_view text, bool& inside_block_comment) {
     bool first_token = true;
-    forEachLuaToken(text, [&](std::string_view token, ImVec4 color) {
+    forEachLuaToken(text, inside_block_comment, [&](std::string_view token, ImVec4 color) {
         if (!first_token) {
             ImGui::SameLine(0, 0);
         }
@@ -171,12 +195,17 @@ void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
     float const line_height = font_size;
 
     draw_list->PushClipRect(editor_min, editor_max, true);
+    bool inside_block_comment = false;
     size_t line_start = 0;
     while (line_start <= text.size()) {
         size_t const line_end = text.find('\n', line_start);
         size_t const line_length = (line_end == std::string_view::npos ? text.size() : line_end) - line_start;
+        std::string_view const line = text.substr(line_start, line_length);
         if (position.y + line_height >= editor_min.y && position.y <= editor_max.y) {
-            drawLuaLine(draw_list, font, font_size, text.substr(line_start, line_length), position);
+            drawLuaLine(draw_list, font, font_size, line, position, inside_block_comment);
+        } else {
+            // Off-screen lines still affect whether visible lines are inside a long comment.
+            forEachLuaToken(line, inside_block_comment, [](std::string_view, ImVec4) {});
         }
         if (line_end == std::string_view::npos) {
             break;

@@ -38,4 +38,4 @@ void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,
                                    int cursor_position = -1);
 
 // Render one Lua source line with syntax colors in the current ImGui layout.
-void showLuaHighlightedText(std::string_view text);
+void showLuaHighlightedText(std::string_view text, bool& inside_block_comment);
