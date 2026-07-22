@@ -52,6 +52,15 @@ constexpr std::array<XY<double>, 1000> unitCirclePoints(double radius) {
 const std::array<XY<double>, 1000> UNIT_CIRCLE = unitCirclePoints(1.0);
 const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 
+void addScalarAliasInput(Scalar& scalar) {
+    if (ImGui::InputText("Alias", &scalar.alias)) {
+        if (scalar.alias.empty()) {
+            scalar.alias = scalar.name;
+        }
+        scalar.updateDisplayNames();
+    }
+}
+
 void DbgGui::showScalarPlots() {
     // Show vertical line at same time in all plots if mouse is hovered in any plot
     static double vertical_line_time_next = 0;
@@ -220,20 +229,20 @@ void DbgGui::showScalarPlots() {
                     double current_value = scalar->getScaledValue();
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
                     ImGui::TextUnformatted(scalar->alias_and_group.c_str());
+                    addScalarAliasInput(*scalar);
                     ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.5f);
-                    ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g");
-                    if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-                        m_pause_triggers.push_back(PauseTrigger(scalar, current_value));
-                        ImGui::CloseCurrentPopup();
-                    }
                     if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
                         logMessage(*error);
                     }
                     if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
                         logMessage(*error);
                     }
+                    if (ImGui::InputDouble("Trigger level", &current_value, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        m_pause_triggers.push_back(PauseTrigger(scalar, current_value));
+                        ImGui::CloseCurrentPopup();
+                    }
                     if (ImGui::Button("Copy name")) {
-                        ImGui::SetClipboardText(scalar->alias.c_str());
+                        ImGui::SetClipboardText(scalar->name.c_str());
                         ImGui::CloseCurrentPopup();
                     }
                     if (ImGui::Button("Copy alias")) {
@@ -648,9 +657,11 @@ void DbgGui::showSpectrumPlots() {
             }
 
             for (auto& spec : plot.spectrums) {
-                ImPlot::PlotStems(spec.real->alias_and_group.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
+                std::string const label_id = std::format("{}###{}", spec.real->alias_and_group, spec.real->name_and_group);
+                ImPlot::PlotStems(label_id.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
                 // Legend right-click
-                if (ImPlot::BeginLegendPopup(spec.real->alias_and_group.c_str())) {
+                if (ImPlot::BeginLegendPopup(label_id.c_str())) {
+                    addScalarAliasInput(*spec.real);
                     if (ImGui::Button("Remove")) {
                         plot.removeFromPlot(spec.real);
                     };
