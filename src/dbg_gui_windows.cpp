@@ -60,6 +60,7 @@ void showLuaHelpMarker() {
     show_function("write('symbol', value)", "    Write a scalar or arithmetic/enum symbol.");
     show_function("write_u('symbol', value)", "    Like write(), but ignore a missing scalar or symbol.");
     show_function("wait(seconds)", "    Yield script execution until the given sampling time.");
+    show_function("wait_until(timestamp)", "    Yield script execution until the given sampling timestamp.");
     show_function("pause()", "    Pause sampling after this script step.");
     show_function("add_scalar('name', ['group'])",
                   "    Add a zero-valued scalar and return its name. Group defaults to 'Scripts'.");

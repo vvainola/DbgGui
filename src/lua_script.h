@@ -76,6 +76,7 @@ class LuaScriptRunner {
     static int writeUnchecked(lua_State* state);
     static int exists(lua_State* state);
     static int wait(lua_State* state);
+    static int waitUntil(lua_State* state);
     static int pause(lua_State* state);
     static int saveCsv(lua_State* state);
     static void instructionHook(lua_State* state, lua_Debug* debug);

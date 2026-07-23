@@ -83,6 +83,31 @@ TEST_CASE("Lua scripts execute on the sampling clock and resume after wait") {
     CHECK_FALSE(runner.running());
 }
 
+TEST_CASE("Lua scripts wait until an absolute sampling timestamp") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', 1)\nwait_until(12)\nwrite('target', 2)", makeHost(writes));
+
+    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.process(10.0));
+    CHECK(writes == std::vector<double>{1.0});
+    REQUIRE(runner.process(11.99));
+    CHECK(writes == std::vector<double>{1.0});
+    REQUIRE(runner.process(12.0));
+    CHECK(writes == std::vector<double>{1.0, 2.0});
+    CHECK_FALSE(runner.running());
+}
+
+TEST_CASE("Lua wait_until with an elapsed timestamp defers until the next sample") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', 1)\nwait_until(5)\nwrite('target', 2)", makeHost(writes));
+
+    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.process(10.0));
+    CHECK(writes == std::vector<double>{1.0});
+    REQUIRE(runner.process(std::nextafter(10.0, std::numeric_limits<double>::infinity())));
+    CHECK(writes == std::vector<double>{1.0, 2.0});
+}
+
 TEST_CASE("Lua unchecked symbol access ignores missing names") {
     std::vector<double> writes;
     LuaScriptRunner runner("local lua_only = 1\n"

@@ -134,6 +134,7 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     addFunction(m_state, "write_u", &LuaScriptRunner::writeUnchecked);
     addFunction(m_state, "exists", &LuaScriptRunner::exists);
     addFunction(m_state, "wait", &LuaScriptRunner::wait);
+    addFunction(m_state, "wait_until", &LuaScriptRunner::waitUntil);
     addFunction(m_state, "pause", &LuaScriptRunner::pause);
     addFunction(m_state, "save_csv", &LuaScriptRunner::saveCsv);
 
@@ -208,7 +209,7 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
     if (status == LUA_YIELD) {
         if (!m_waiting) {
             stop();
-            return std::unexpected("Lua scripts must yield through wait(seconds)");
+            return std::unexpected("Lua scripts must yield through wait(seconds) or wait_until(timestamp)");
         }
         return {};
     }
@@ -222,7 +223,7 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
         // script would repeatedly execute to completion in one sample.
         if (!m_has_waited) {
             stop();
-            return std::unexpected("Looping Lua scripts must call wait(seconds)");
+            return std::unexpected("Looping Lua scripts must call wait(seconds) or wait_until(timestamp)");
         }
         return initialize(timestamp);
     }
@@ -356,6 +357,26 @@ int LuaScriptRunner::wait(lua_State* state) {
     return lua_yield(state, 0);
 }
 
+int LuaScriptRunner::waitUntil(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    double const timestamp = luaL_checknumber(state, 1);
+    if (!std::isfinite(timestamp)) {
+        lua_pushliteral(state, "wait_until(timestamp) requires a finite number");
+        return lua_error(state);
+    }
+
+    runner->updateCurrentLine(state);
+    runner->m_next_resume_time = timestamp;
+    if (timestamp <= runner->m_process_timestamp) {
+        // An elapsed target still yields until the next sampling timestamp.
+        // This prevents loops with a fixed target from spinning in one sample.
+        runner->m_next_resume_time = std::nextafter(runner->m_process_timestamp, std::numeric_limits<double>::infinity());
+    }
+    runner->m_waiting = true;
+    runner->m_has_waited = true;
+    return lua_yield(state, 0);
+}
+
 int LuaScriptRunner::pause(lua_State* state) {
     LuaScriptRunner* runner = getRunner(state);
     runner->m_host.pause();
@@ -371,7 +392,7 @@ int LuaScriptRunner::saveCsv(lua_State* state) {
 }
 
 void LuaScriptRunner::instructionHook(lua_State* state, lua_Debug*) {
-    lua_pushliteral(state, "Lua script exceeded the 100000 instruction limit; call wait(seconds) to yield");
+    lua_pushliteral(state, "Lua script exceeded the 100000 instruction limit; call wait(seconds) or wait_until(timestamp) to yield");
     lua_error(state);
 }
 

@@ -58,7 +58,7 @@ bool isLuaBuiltin(std::string_view word) {
       "rawset", "select", "setmetatable", "tonumber", "tostring", "type", "warn", "xpcall",
       "math", "string", "table", "utf8", "io", "os",
       // DbgGui-specific functions.
-      "add_scalar", "read", "read_u", "write", "write_u", "exists", "wait", "pause", "save_csv",
+      "add_scalar", "read", "read_u", "write", "write_u", "exists", "wait", "wait_until", "pause", "save_csv",
     };
     return builtins.contains(word);
 }
