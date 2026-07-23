@@ -24,6 +24,7 @@
 
 #include <expected>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -91,6 +92,7 @@ class LuaScriptRunner {
     double m_process_timestamp = 0;
     double m_resume_time = 0;
     double m_next_resume_time = 0;
+    std::optional<double> m_wait_until_target;
     int m_current_line = 0;
     bool m_loop = false;
     bool m_running = false;

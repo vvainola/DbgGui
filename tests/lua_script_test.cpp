@@ -138,6 +138,36 @@ TEST_CASE("Lua scripts rebase waits after a backwards sampling timestamp jump") 
     CHECK(writes == std::vector<double>{1.0, 2.0});
 }
 
+TEST_CASE("Lua wait_until keeps its absolute target after a backwards timestamp jump") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', 1)\nwait_until(12)\nwrite('target', 2)", makeHost(writes));
+
+    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.process(10.0));
+    REQUIRE(writes == std::vector<double>{1.0});
+
+    runner.shiftSchedule(-10.0);
+    REQUIRE(runner.process(2.0));
+    CHECK(writes == std::vector<double>{1.0});
+    REQUIRE(runner.process(12.0));
+    CHECK(writes == std::vector<double>{1.0, 2.0});
+}
+
+TEST_CASE("Lua elapsed wait_until restores its target after a backwards timestamp jump") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', 1)\nwait_until(5)\nwrite('target', 2)", makeHost(writes));
+
+    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.process(10.0));
+    REQUIRE(writes == std::vector<double>{1.0});
+
+    runner.shiftSchedule(-10.0);
+    REQUIRE(runner.process(4.99));
+    CHECK(writes == std::vector<double>{1.0});
+    REQUIRE(runner.process(5.0));
+    CHECK(writes == std::vector<double>{1.0, 2.0});
+}
+
 TEST_CASE("Lua wait zero defers execution until the next sampling timestamp") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait(0)\nwrite('target', 2)", makeHost(writes));

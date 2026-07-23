@@ -106,6 +106,7 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     m_process_timestamp = timestamp;
     m_resume_time = timestamp;
     m_next_resume_time = timestamp;
+    m_wait_until_target.reset();
     m_current_line = 0;
     m_waiting = false;
     m_has_waited = false;
@@ -191,11 +192,18 @@ std::expected<void, std::string> LuaScriptRunner::process(double timestamp) {
 
 void LuaScriptRunner::shiftSchedule(double time_offset) {
     // sampleWithTimestamp() can jump backwards when a snapshot restores the
-    // simulation clock. Keep wait() deadlines in that same time frame, while
-    // leaving m_start_time unchanged so the displayed script time follows the
-    // restored simulation timestamp.
+    // simulation clock. Relative waits move with that clock adjustment, while
+    // wait_until() keeps its explicitly requested absolute timestamp.
     m_resume_time += time_offset;
-    m_next_resume_time += time_offset;
+    if (m_wait_until_target.has_value()) {
+        double const shifted_process_timestamp = m_process_timestamp + time_offset;
+        m_next_resume_time = *m_wait_until_target;
+        if (*m_wait_until_target <= shifted_process_timestamp) {
+            m_next_resume_time = std::nextafter(shifted_process_timestamp, std::numeric_limits<double>::infinity());
+        }
+    } else {
+        m_next_resume_time += time_offset;
+    }
 }
 
 std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
@@ -353,6 +361,7 @@ int LuaScriptRunner::wait(lua_State* state) {
         runner->m_next_resume_time = std::nextafter(runner->m_process_timestamp, std::numeric_limits<double>::infinity());
     }
     runner->m_waiting = true;
+    runner->m_wait_until_target.reset();
     runner->m_has_waited = true;
     return lua_yield(state, 0);
 }
@@ -366,6 +375,7 @@ int LuaScriptRunner::waitUntil(lua_State* state) {
     }
 
     runner->updateCurrentLine(state);
+    runner->m_wait_until_target = timestamp;
     runner->m_next_resume_time = timestamp;
     if (timestamp <= runner->m_process_timestamp) {
         // An elapsed target still yields until the next sampling timestamp.
