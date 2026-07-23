@@ -62,13 +62,18 @@ void loadImguiLayout(std::string layout) {
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
 }
 
-bool restoreScalarSettings(Scalar* scalar,
-                           nlohmann::json& settings,
-                           std::vector<ScalarPlot>& scalar_plots,
-                           std::vector<SpectrumPlot>& spectrum_plots,
-                           std::vector<std::unique_ptr<Scalar>> const& scalars,
-                           std::vector<CustomWindow>& custom_windows) {
-    bool restored_to_sampled_plot = false;
+std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
+                                           nlohmann::json& settings,
+                                           std::vector<ScalarPlot>& scalar_plots,
+                                           std::vector<SpectrumPlot>& spectrum_plots,
+                                           std::vector<std::unique_ptr<Scalar>> const& scalars,
+                                           std::vector<CustomWindow>& custom_windows) {
+    std::vector<Scalar*> scalars_to_sample;
+    auto start_sampling = [&scalars_to_sample](Scalar* restored_scalar) {
+        if (!contains(scalars_to_sample, restored_scalar)) {
+            scalars_to_sample.push_back(restored_scalar);
+        }
+    };
     // Restore settings of the scalar signal
     TRY(for (auto& scalar_data : settings["scalars"]) {
         uint64_t id = scalar_data["id"];
@@ -104,7 +109,7 @@ bool restoreScalarSettings(Scalar* scalar,
                     forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
                         if (id == scalar->id) {
                             plot->addScalarToPlot(scalar, subplot_idx);
-                            restored_to_sampled_plot = true;
+                            start_sampling(scalar);
                         }
                     });
                 }
@@ -114,7 +119,7 @@ bool restoreScalarSettings(Scalar* scalar,
             forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
                 if (id == scalar->id) {
                     plot->addScalarToPlot(scalar);
-                    restored_to_sampled_plot = true;
+                    start_sampling(scalar);
                 }
             });
         }
@@ -148,7 +153,10 @@ bool restoreScalarSettings(Scalar* scalar,
             Scalar* imag = imag_id == 0 ? nullptr : findScalar(scalars, imag_id);
             if (real != nullptr && (imag_id == 0 || imag != nullptr)) {
                 plot->addToPlot(real, imag);
-                restored_to_sampled_plot = true;
+                start_sampling(real);
+                if (imag != nullptr) {
+                    start_sampling(imag);
+                }
             }
         }
     })
@@ -170,7 +178,7 @@ bool restoreScalarSettings(Scalar* scalar,
             });
         }
     })
-    return restored_to_sampled_plot;
+    return scalars_to_sample;
 }
 
 bool restoreVectorSettings(Vector2D* vector,
@@ -360,7 +368,9 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
     std::function<void()> start_pause_action;
     std::function<void()> step_action;
     if (enable_sampling_hotkeys) {
-        start_pause_action = [&] { m_paused = !m_paused; };
+        start_pause_action = [&] {
+            m_paused = !m_paused;
+        };
         step_action = [&] {
             m_pause_at_time = std::numeric_limits<double>::epsilon();
             m_paused = false;
@@ -760,9 +770,9 @@ void DbgGui::loadPreviousSessionSettings() {
                             m_sampler.startSampling(real);
                             m_sampler.startSampling(imag);
                             plot.addToPlot(real, imag);
-                        // An imaginary ID of 0 marks a real-only spectrum. If a
-                        // nonzero imaginary ID is unresolved, wait for its
-                        // scalar to be registered instead of changing the type.
+                            // An imaginary ID of 0 marks a real-only spectrum. If a
+                            // nonzero imaginary ID is unresolved, wait for its
+                            // scalar to be registered instead of changing the type.
                         } else if (real && xy[1] == 0) {
                             m_sampler.startSampling(real);
                             plot.addToPlot(real, nullptr);
@@ -1370,14 +1380,16 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     new_scalar->id = id;
     new_scalar->setScaleStr(scale);
     new_scalar->setOffsetStr(offset);
-    if (m_initialized.load()
-        && restoreScalarSettings(new_scalar.get(),
-                                 m_settings,
-                                 m_scalar_plots,
-                                 m_spectrum_plots,
-                                 m_scalars,
-                                 m_custom_windows)) {
-        m_sampler.startSampling(new_scalar.get());
+    if (m_initialized.load()) {
+        std::vector<Scalar*> const scalars_to_sample = restoreScalarSettings(new_scalar.get(),
+                                                                             m_settings,
+                                                                             m_scalar_plots,
+                                                                             m_spectrum_plots,
+                                                                             m_scalars,
+                                                                             m_custom_windows);
+        for (Scalar* scalar_to_sample : scalars_to_sample) {
+            m_sampler.startSampling(scalar_to_sample);
+        }
     }
     std::vector<std::string> groups = str::split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];
