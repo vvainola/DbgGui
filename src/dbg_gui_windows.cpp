@@ -38,6 +38,37 @@
 
 namespace {
 
+void showLuaHelpMarker() {
+    ImGui::TextDisabled("(?)");
+    if (!ImGui::IsItemHovered()) {
+        return;
+    }
+
+    auto show_function = [](char const* signature, char const* description) {
+        ImGui::TextColored(LUA_BUILTIN_COLOR, "%s", signature);
+        ImGui::TextUnformatted(description);
+    };
+
+    ImGui::BeginTooltip();
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+    ImGui::TextUnformatted("Available Lua libraries:");
+    ImGui::TextColored(LUA_BUILTIN_COLOR, "    math, string, table, utf8, io, os");
+    ImGui::TextUnformatted("    load(), loadfile(), and dofile() can load code from any path.\n\n"
+                           "DbgGui API:");
+    show_function("read('symbol')", "    Read a scalar or arithmetic/enum symbol.");
+    show_function("read_u('symbol')", "    Like read(), but return 0 for a missing scalar or symbol.");
+    show_function("write('symbol', value)", "    Write a scalar or arithmetic/enum symbol.");
+    show_function("write_u('symbol', value)", "    Like write(), but ignore a missing scalar or symbol.");
+    show_function("wait(seconds)", "    Yield script execution until the given sampling time.");
+    show_function("pause()", "    Pause sampling after this script step.");
+    show_function("add_scalar('name', ['group'])",
+                  "    Add a zero-valued scalar and return its name. Group defaults to 'Scripts'.");
+    show_function("exists('symbol')", "    Check whether a scalar or arithmetic/enum symbol exists.");
+    show_function("save_csv('filename')", "    Save all current scalars to a CSV file.");
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
 int scriptLineCount(std::string_view text) {
     return static_cast<int>(std::ranges::count(text, '\n')) + 1;
 }
@@ -1772,29 +1803,7 @@ void DbgGui::showScriptWindow() {
 
             if (script_language == ScriptLanguage::Lua) {
                 ImGui::SameLine();
-                HelpMarker("Available Lua libraries:\n"
-                           "    math, string, table, utf8, io, os\n"
-                           "    load(), loadfile(), and dofile() can load code from any path.\n\n"
-                           "package and debug are unavailable.\n\n"
-                           "DbgGui API:\n"
-                           "add_scalar('name', ['group'])\n"
-                           "    Add a zero-valued scalar and return its name. Group defaults to 'Scripts'.\n"
-                           "write('symbol', value)\n"
-                           "    Write a scalar or arithmetic/enum symbol.\n"
-                           "read('symbol')\n"
-                           "    Read a scalar or arithmetic/enum symbol.\n"
-                           "write_u('symbol', value)\n"
-                           "    Like write(), but ignore a missing scalar or symbol.\n"
-                           "read_u('symbol')\n"
-                           "    Like read(), but return 0 for a missing scalar or symbol.\n"
-                           "exists('symbol')\n"
-                           "    Check whether a scalar or arithmetic/enum symbol exists.\n"
-                           "wait(seconds)\n"
-                           "    Yield script execution until the given sampling time.\n"
-                           "pause()\n"
-                           "    Pause sampling after this script step.\n"
-                           "save_csv('filename')\n"
-                           "    Save all current scalars to a CSV file.");
+                showLuaHelpMarker();
             }
 
             // Stop button only visible if running.

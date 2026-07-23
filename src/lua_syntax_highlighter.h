@@ -26,6 +26,8 @@
 
 #include <string_view>
 
+inline constexpr ImVec4 LUA_BUILTIN_COLOR = ImVec4(0.38f, 0.72f, 0.96f, 1.0f);
+
 // Draws Lua token colors over an InputTextMultiline widget. The input text
 // remains responsible for editing, selection, cursor handling, and scrolling.
 void drawLuaSyntaxHighlightOverlay(ImDrawList* draw_list,

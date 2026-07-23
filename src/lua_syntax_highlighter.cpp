@@ -26,6 +26,7 @@
 #include <cctype>
 #include <limits>
 #include <string_view>
+#include <unordered_set>
 
 namespace {
 
@@ -33,7 +34,6 @@ inline constexpr ImVec4 KeywordColor = ImVec4(0.86f, 0.55f, 0.95f, 1.0f);
 inline constexpr ImVec4 StringColor = ImVec4(0.95f, 0.72f, 0.40f, 1.0f);
 inline constexpr ImVec4 NumberColor = ImVec4(0.48f, 0.82f, 0.55f, 1.0f);
 inline constexpr ImVec4 CommentColor = ImVec4(0.47f, 0.60f, 0.48f, 1.0f);
-inline constexpr ImVec4 BuiltinColor = ImVec4(0.38f, 0.72f, 0.96f, 1.0f);
 
 bool isIdentifierStart(char character) {
     return std::isalpha(static_cast<unsigned char>(character)) || character == '_';
@@ -44,17 +44,23 @@ bool isIdentifierCharacter(char character) {
 }
 
 bool isLuaKeyword(std::string_view word) {
-    return word == "and" || word == "break" || word == "do" || word == "else" || word == "elseif"
-        || word == "end" || word == "false" || word == "for" || word == "function" || word == "goto"
-        || word == "if" || word == "in" || word == "local" || word == "nil" || word == "not"
-        || word == "or" || word == "repeat" || word == "return" || word == "then" || word == "true"
-        || word == "until" || word == "while";
+    static const std::unordered_set<std::string_view> keywords = {
+      "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
+      "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+    };
+    return keywords.contains(word);
 }
 
 bool isLuaBuiltin(std::string_view word) {
-    return word == "math" || word == "string" || word == "table" || word == "utf8"
-        || word == "read" || word == "read_u" || word == "write" || word == "write_u"
-        || word == "add_scalar" || word == "exists" || word == "wait" || word == "pause" || word == "save_csv";
+    static const std::unordered_set<std::string_view> builtins = {
+      "_G", "_VERSION", "assert", "collectgarbage", "dofile", "error", "getmetatable", "ipairs",
+      "load", "loadfile", "next", "pairs", "pcall", "print", "rawequal", "rawget", "rawlen",
+      "rawset", "select", "setmetatable", "tonumber", "tostring", "type", "warn", "xpcall",
+      "math", "string", "table", "utf8", "io", "os",
+      // DbgGui-specific functions.
+      "add_scalar", "read", "read_u", "write", "write_u", "exists", "wait", "pause", "save_csv",
+    };
+    return builtins.contains(word);
 }
 
 float textWidth(ImFont* font, float font_size, std::string_view text) {
@@ -134,7 +140,7 @@ void forEachLuaToken(std::string_view line, bool& inside_block_comment, Function
             if (isLuaKeyword(word)) {
                 color = KeywordColor;
             } else if (isLuaBuiltin(word)) {
-                color = BuiltinColor;
+                color = LUA_BUILTIN_COLOR;
             }
         } else if (std::isdigit(static_cast<unsigned char>(line[index]))
                    || (line[index] == '.' && index + 1 < line.size() && std::isdigit(static_cast<unsigned char>(line[index + 1])))) {
