@@ -477,6 +477,10 @@ void DbgGui::updateLoop() {
     io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, MIN_FONT_SIZE);
     ImGui::PushFont(ImGui::GetDefaultFont(), m_options.font_size);
 
+    {
+        std::scoped_lock lock(m_pending_gui_operations_mutex);
+        m_accepting_gui_operations = true;
+    }
     m_initialized = true;
 
     //---------- Actual update loop ----------
@@ -542,6 +546,8 @@ void DbgGui::updateLoop() {
         glfwSwapBuffers(m_window);
     }
 
+    stopPendingGuiOperations();
+
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -558,7 +564,14 @@ void DbgGui::runOnGuiThreadAndWait(std::function<void()> operation) {
     // Before startUpdateLoop() there is no competing GUI thread. Operations
     // originating from the GUI thread must also run directly to avoid waiting
     // for that same thread to service its own request.
-    if (!m_gui_thread.joinable() || std::this_thread::get_id() == m_gui_thread.get_id()) {
+    if (std::this_thread::get_id() == m_gui_thread.get_id()) {
+        operation();
+        return;
+    }
+    if (!m_gui_thread.joinable()) {
+        if (m_initialized.load()) {
+            throw std::runtime_error("DbgGui GUI thread is shutting down");
+        }
         operation();
         return;
     }
@@ -568,6 +581,9 @@ void DbgGui::runOnGuiThreadAndWait(std::function<void()> operation) {
     PendingGuiOperation request;
     request.operation = std::move(operation);
     std::unique_lock lock(m_pending_gui_operations_mutex);
+    if (!m_accepting_gui_operations) {
+        throw std::runtime_error("DbgGui GUI thread is shutting down");
+    }
     m_pending_gui_operations.push_back(&request);
     request.completed_condition.wait(lock, [&request] { return request.completed; });
     if (request.exception) {
@@ -584,6 +600,18 @@ void DbgGui::processPendingGuiOperations() {
             request->exception = std::current_exception();
         }
 
+        request->completed = true;
+        request->completed_condition.notify_one();
+    }
+    m_pending_gui_operations.clear();
+}
+
+void DbgGui::stopPendingGuiOperations() {
+    std::scoped_lock lock(m_pending_gui_operations_mutex);
+    m_accepting_gui_operations = false;
+    for (PendingGuiOperation* request : m_pending_gui_operations) {
+        request->exception = std::make_exception_ptr(
+          std::runtime_error("DbgGui GUI thread is shutting down"));
         request->completed = true;
         request->completed_condition.notify_one();
     }
@@ -1293,6 +1321,7 @@ bool DbgGui::isClosed() {
 void DbgGui::close() {
     m_next_sync_timestamp = 0;
     m_closing = true;
+    stopPendingGuiOperations();
     if (m_window && m_options.pause_on_close) {
         m_paused = true;
         while (m_paused) {

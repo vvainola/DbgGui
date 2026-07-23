@@ -26,6 +26,7 @@
 
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -281,4 +282,18 @@ TEST_CASE("Lua add_scalar returns its name and defaults the group") {
                              {"hello2", "Scripts"},
                            });
     CHECK(writes == std::vector<double>{1.0});
+}
+
+TEST_CASE("Lua add_scalar reports host exceptions as script errors") {
+    std::vector<double> writes;
+    LuaScriptHost host = makeHost(writes);
+    host.add_scalar = [](std::string_view, std::string_view) -> std::string {
+        throw std::runtime_error("GUI thread is shutting down");
+    };
+    LuaScriptRunner runner("add_scalar('too_late')", std::move(host));
+
+    REQUIRE(runner.start(0.0, false));
+    std::expected<void, std::string> result = runner.process(0.0);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().find("GUI thread is shutting down") != std::string::npos);
 }

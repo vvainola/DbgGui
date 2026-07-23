@@ -291,10 +291,17 @@ int LuaScriptRunner::addScalar(lua_State* state) {
     char const* name = luaL_checklstring(state, 1, &name_length);
     size_t group_length = 0;
     char const* group = luaL_optlstring(state, 2, "Scripts", &group_length);
-    std::string added_name = runner->m_host.add_scalar(std::string_view(name, name_length),
-                                                       std::string_view(group, group_length));
-    lua_pushlstring(state, added_name.data(), added_name.size());
-    return 1;
+    try {
+        std::string added_name = runner->m_host.add_scalar(std::string_view(name, name_length),
+                                                           std::string_view(group, group_length));
+        lua_pushlstring(state, added_name.data(), added_name.size());
+        return 1;
+    } catch (std::exception const& exception) {
+        lua_pushstring(state, exception.what());
+    } catch (...) {
+        lua_pushliteral(state, "add_scalar() failed");
+    }
+    return lua_error(state);
 }
 
 int LuaScriptRunner::readUnchecked(lua_State* state) {

@@ -110,6 +110,7 @@ class DbgGui {
     void updateLoop();
     void runOnGuiThreadAndWait(std::function<void()> operation);
     void processPendingGuiOperations();
+    void stopPendingGuiOperations();
     void showDockSpaces();
     void showErrorModal();
     void showMainMenuBar();
@@ -303,6 +304,7 @@ class DbgGui {
     std::mutex m_pending_gui_operations_mutex;
     // Requests are stack-owned by callers blocked in runOnGuiThreadAndWait().
     std::deque<PendingGuiOperation*> m_pending_gui_operations;
+    bool m_accepting_gui_operations = false;
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
