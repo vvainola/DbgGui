@@ -34,6 +34,7 @@
 
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 #include <optional>
 #include <thread>
 #include <unordered_map>
@@ -107,6 +108,8 @@ class DbgGui {
 
   private:
     void updateLoop();
+    void runOnGuiThreadAndWait(std::function<void()> operation);
+    void processPendingGuiOperations();
     void showDockSpaces();
     void showErrorModal();
     void showMainMenuBar();
@@ -288,6 +291,17 @@ class DbgGui {
 
     std::jthread m_gui_thread;
     std::mutex m_sampling_mutex;
+    struct PendingGuiOperation {
+        std::function<void()> operation;
+        std::exception_ptr exception;
+        // A condition variable stores no state and may wake spuriously, so the
+        // waiter needs this predicate to know the operation actually completed.
+        bool completed = false;
+        std::condition_variable completed_condition;
+    };
+    std::mutex m_pending_gui_operations_mutex;
+    // Requests are stack-owned by callers blocked in runOnGuiThreadAndWait().
+    std::deque<PendingGuiOperation*> m_pending_gui_operations;
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;

@@ -1777,6 +1777,8 @@ void DbgGui::showScriptWindow() {
                            "    load(), loadfile(), and dofile() can load code from any path.\n\n"
                            "package and debug are unavailable.\n\n"
                            "DbgGui API:\n"
+                           "add_scalar('name', ['group'])\n"
+                           "    Add a zero-valued scalar and return its name. Group defaults to 'Scripts'.\n"
                            "write('symbol', value)\n"
                            "    Write a scalar or arithmetic/enum symbol.\n"
                            "read('symbol')\n"

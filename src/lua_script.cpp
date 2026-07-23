@@ -128,6 +128,7 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     openLibrary(m_state, LUA_OSLIBNAME, luaopen_os);
 
     addFunction(m_state, "read", &LuaScriptRunner::read);
+    addFunction(m_state, "add_scalar", &LuaScriptRunner::addScalar);
     addFunction(m_state, "read_u", &LuaScriptRunner::readUnchecked);
     addFunction(m_state, "write", &LuaScriptRunner::write);
     addFunction(m_state, "write_u", &LuaScriptRunner::writeUnchecked);
@@ -272,6 +273,19 @@ int LuaScriptRunner::read(lua_State* state) {
         lua_pushlstring(state, result.error().data(), result.error().size());
     }
     return lua_error(state);
+}
+
+int LuaScriptRunner::addScalar(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    runner->updateCurrentLine(state);
+    size_t name_length = 0;
+    char const* name = luaL_checklstring(state, 1, &name_length);
+    size_t group_length = 0;
+    char const* group = luaL_optlstring(state, 2, "Scripts", &group_length);
+    std::string added_name = runner->m_host.add_scalar(std::string_view(name, name_length),
+                                                       std::string_view(group, group_length));
+    lua_pushlstring(state, added_name.data(), added_name.size());
+    return 1;
 }
 
 int LuaScriptRunner::readUnchecked(lua_State* state) {

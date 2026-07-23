@@ -358,17 +358,28 @@ struct ScalarPlot : Window {
         j["x_range"] = x_range;
         j["rows"] = m_rows;
         j["cols"] = m_cols;
-        // Signal placement is saved by updateSavedSettings() after deleted
-        // scalars have been resolved. This keeps updateJson() focused on plot state.
-        j["subplots"] = nlohmann::json::array();
-        for (Subplot const& subplot : subplots) {
-            nlohmann::json subplot_data;
+        // Preserve signal placement until updateSavedSettings() reconciles it
+        // after deleted and late-added scalars have been resolved.
+        if (!j["subplots"].is_array()) {
+            j["subplots"] = nlohmann::json::array();
+        }
+        while (j["subplots"].size() < subplots.size()) {
+            j["subplots"].push_back(nlohmann::json::object());
+        }
+        while (j["subplots"].size() > subplots.size()) {
+            j["subplots"].erase(j["subplots"].end() - 1);
+        }
+        for (size_t subplot_idx = 0; subplot_idx < subplots.size(); ++subplot_idx) {
+            Subplot const& subplot = subplots[subplot_idx];
+            nlohmann::json& subplot_data = j["subplots"][subplot_idx];
             subplot_data["autofit_y"] = subplot.autofit_y;
             if (!subplot.autofit_y) {
                 subplot_data["y_min"] = subplot.y_axis.min;
                 subplot_data["y_max"] = subplot.y_axis.max;
+            } else {
+                subplot_data.erase("y_min");
+                subplot_data.erase("y_max");
             }
-            j["subplots"].push_back(subplot_data);
         }
         return j;
     }

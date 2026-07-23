@@ -79,6 +79,38 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
 
     if (language == ScriptLanguage::Lua) {
         LuaScriptHost host;
+        host.add_scalar = [gui = m_gui](std::string_view name, std::string_view group) {
+            std::string scalar_name(name);
+            std::string scalar_group(group);
+            // processScript() holds the sampling mutex. Release it while
+            // waiting so the GUI can finish its current frame and process this
+            // operation at the start of the next one.
+            gui->m_sampling_mutex.unlock();
+            try {
+                gui->runOnGuiThreadAndWait([gui, &scalar_name, &scalar_group] {
+                    bool const already_exists = std::ranges::any_of(gui->m_scalars, [&scalar_name](auto const& scalar) {
+                        return !scalar->deleted && scalar->name == scalar_name;
+                    });
+                    if (already_exists) {
+                        return;
+                    }
+
+                    auto value = std::make_shared<double>(0.0);
+                    ReadWriteFn value_source = [value](std::optional<double> new_value) {
+                        if (new_value.has_value()) {
+                            *value = *new_value;
+                        }
+                        return *value;
+                    };
+                    gui->addScalar(value_source, scalar_group, scalar_name);
+                });
+            } catch (...) {
+                gui->m_sampling_mutex.lock();
+                throw;
+            }
+            gui->m_sampling_mutex.lock();
+            return scalar_name;
+        };
         host.exists = [gui = m_gui](std::string_view symbol_name) {
             for (auto const& scalar : gui->m_scalars) {
                 if (!scalar->deleted && scalar->name == symbol_name) {

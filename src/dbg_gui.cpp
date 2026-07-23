@@ -239,7 +239,8 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
         return;
     }
 
-    { // Sample scalars
+    {
+        // Sample scalars
         std::scoped_lock<std::mutex> lock(m_sampling_mutex);
         if (timestamp < m_sample_timestamp) {
             double const time_offset = timestamp - m_sample_timestamp;
@@ -414,6 +415,9 @@ void DbgGui::updateLoop() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // Runtime additions must mutate signal containers on the GUI thread
+        // before any window traverses them during this frame.
+        processPendingGuiOperations();
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
         // ImGui::ShowDemoWindow();
         // ImPlot::ShowDemoWindow();
@@ -478,6 +482,42 @@ void DbgGui::updateLoop() {
     glfwTerminate();
     m_window = nullptr;
     m_paused = false;
+}
+
+void DbgGui::runOnGuiThreadAndWait(std::function<void()> operation) {
+    // Before startUpdateLoop() there is no competing GUI thread. Operations
+    // originating from the GUI thread must also run directly to avoid waiting
+    // for that same thread to service its own request.
+    if (!m_gui_thread.joinable() || std::this_thread::get_id() == m_gui_thread.get_id()) {
+        operation();
+        return;
+    }
+
+    // The caller waits until completion, so this stack request remains alive
+    // for as long as its pointer is present in the pending queue.
+    PendingGuiOperation request;
+    request.operation = std::move(operation);
+    std::unique_lock lock(m_pending_gui_operations_mutex);
+    m_pending_gui_operations.push_back(&request);
+    request.completed_condition.wait(lock, [&request] { return request.completed; });
+    if (request.exception) {
+        std::rethrow_exception(request.exception);
+    }
+}
+
+void DbgGui::processPendingGuiOperations() {
+    std::unique_lock lock(m_pending_gui_operations_mutex);
+    for (PendingGuiOperation* request : m_pending_gui_operations) {
+        try {
+            request->operation();
+        } catch (...) {
+            request->exception = std::current_exception();
+        }
+
+        request->completed = true;
+        request->completed_condition.notify_one();
+    }
+    m_pending_gui_operations.clear();
 }
 
 void DbgGui::loadPreviousSessionSettings() {
@@ -819,13 +859,38 @@ void DbgGui::updateSavedSettings() {
             scalar_plot.id = hashWithTime(scalar_plot.name);
         }
         nlohmann::json& j = m_settings["scalar_plots"][std::to_string(scalar_plot.id)];
+        if (!j["subplots"].is_array() && j.contains("signals")) {
+            j["subplots"] = nlohmann::json::array(
+              {nlohmann::json{{"signals", j["signals"]}}});
+        }
         scalar_plot.updateJson(j);
         // Top-level scalar plot signals are a legacy read-only migration path.
         // New settings write signal placement only under subplots.
         j.erase("signals");
         for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
             auto& scalars = scalar_plot.subplots[subplot_idx].scalars;
-            j["subplots"][subplot_idx]["signals"] = nlohmann::json::object();
+            nlohmann::json& saved_signals = j["subplots"][subplot_idx]["signals"];
+            if (!saved_signals.is_object()) {
+                saved_signals = nlohmann::json::object();
+            }
+            // Remove placements for registered scalars before rebuilding them
+            // from the runtime plot. Leave unresolved IDs intact so a scalar
+            // registered later can restore itself with restoreScalarSettings().
+            for (auto it = saved_signals.begin(); it != saved_signals.end();) {
+                if (!it->is_number_unsigned() && !it->is_number_integer()) {
+                    it = saved_signals.erase(it);
+                    continue;
+                }
+                uint64_t const id = it->get<uint64_t>();
+                bool const scalar_registered = std::ranges::any_of(m_scalars, [id](auto const& scalar) {
+                    return scalar->id == id;
+                });
+                if (scalar_registered) {
+                    it = saved_signals.erase(it);
+                } else {
+                    ++it;
+                }
+            }
             for (int i = int(scalars.size() - 1); i >= 0; --i) {
                 Scalar* scalar = scalars[i];
                 if (scalar->deleted) {
@@ -835,7 +900,7 @@ void DbgGui::updateSavedSettings() {
                         remove(scalars, scalar);
                     }
                 } else {
-                    j["subplots"][subplot_idx]["signals"][scalar->name_and_group] = scalar->id;
+                    saved_signals[scalar->name_and_group] = scalar->id;
                 }
             }
         }
@@ -1180,6 +1245,16 @@ void DbgGui::pause() {
 }
 
 Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std::string const& alias, double scale, double offset) {
+    // Once running, the GUI thread owns the signal containers and settings
+    // touched by the complete add operation.
+    if (m_gui_thread.joinable() && std::this_thread::get_id() != m_gui_thread.get_id()) {
+        Scalar* result = nullptr;
+        runOnGuiThreadAndWait([this, &result, symbol_name, group = std::move(group), alias, scale, offset] {
+            result = addSymbol(symbol_name, group, alias, scale, offset);
+        });
+        return result;
+    }
+
     VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
     if (sym) {
         Scalar* ptr = addScalar(sym->getValueSource(), group, symbol_name, scale, offset);
@@ -1194,6 +1269,14 @@ Scalar* DbgGui::addSymbol(std::string const& symbol_name, std::string group, std
 }
 
 Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string const& name, double scale, double offset) {
+    if (m_gui_thread.joinable() && std::this_thread::get_id() != m_gui_thread.get_id()) {
+        Scalar* result = nullptr;
+        runOnGuiThreadAndWait([this, &result, src, group = std::move(group), name, scale, offset] {
+            result = addScalar(src, group, name, scale, offset);
+        });
+        return result;
+    }
+
     return addScalarExpression(src,
                                std::move(group),
                                name,
@@ -1246,6 +1329,14 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
 }
 
 Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {
+    if (m_gui_thread.joinable() && std::this_thread::get_id() != m_gui_thread.get_id()) {
+        Vector2D* result = nullptr;
+        runOnGuiThreadAndWait([this, &result, x, y, group = std::move(group), name_x, name_y, scale, offset] {
+            result = addVector(x, y, group, name_x, name_y, scale, offset);
+        });
+        return result;
+    }
+
     if (group.empty()) {
         group = "debug";
     }

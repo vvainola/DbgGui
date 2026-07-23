@@ -31,6 +31,9 @@
 namespace {
 LuaScriptHost makeHost(std::vector<double>& writes) {
     LuaScriptHost host;
+    host.add_scalar = [](std::string_view name, std::string_view) {
+        return std::string(name);
+    };
     host.exists = [](std::string_view name) {
         return name == "source" || name == "target";
     };
@@ -201,4 +204,26 @@ TEST_CASE("Lua validates literal read targets before arming the script") {
     std::expected<void, std::string> result = runner.start(0.0, false);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().find("invalid read target 'missing'") != std::string::npos);
+}
+
+TEST_CASE("Lua add_scalar returns its name and defaults the group") {
+    std::vector<double> writes;
+    std::vector<std::pair<std::string, std::string>> added_scalars;
+    LuaScriptHost host = makeHost(writes);
+    host.add_scalar = [&](std::string_view name, std::string_view group) {
+        added_scalars.emplace_back(name, group);
+        return std::string(name);
+    };
+    LuaScriptRunner runner("local first = add_scalar('hello1', 'testing')\n"
+                           "local second = add_scalar('hello2')\n"
+                           "write('target', first == 'hello1' and second == 'hello2' and 1 or 0)",
+                           std::move(host));
+
+    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.process(0.0));
+    CHECK(added_scalars == std::vector<std::pair<std::string, std::string>>{
+                             {"hello1", "testing"},
+                             {"hello2", "Scripts"},
+                           });
+    CHECK(writes == std::vector<double>{1.0});
 }
