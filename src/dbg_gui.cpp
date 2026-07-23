@@ -65,8 +65,10 @@ void loadImguiLayout(std::string layout) {
 bool restoreScalarSettings(Scalar* scalar,
                            nlohmann::json& settings,
                            std::vector<ScalarPlot>& scalar_plots,
+                           std::vector<SpectrumPlot>& spectrum_plots,
+                           std::vector<std::unique_ptr<Scalar>> const& scalars,
                            std::vector<CustomWindow>& custom_windows) {
-    bool restored_to_plot = false;
+    bool restored_to_sampled_plot = false;
     // Restore settings of the scalar signal
     TRY(for (auto& scalar_data : settings["scalars"]) {
         uint64_t id = scalar_data["id"];
@@ -102,7 +104,7 @@ bool restoreScalarSettings(Scalar* scalar,
                     forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
                         if (id == scalar->id) {
                             plot->addScalarToPlot(scalar, subplot_idx);
-                            restored_to_plot = true;
+                            restored_to_sampled_plot = true;
                         }
                     });
                 }
@@ -112,9 +114,42 @@ bool restoreScalarSettings(Scalar* scalar,
             forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
                 if (id == scalar->id) {
                     plot->addScalarToPlot(scalar);
-                    restored_to_plot = true;
+                    restored_to_sampled_plot = true;
                 }
             });
+        }
+    })
+
+    // Restore spectra whose scalar components were registered after settings
+    // were loaded. Complex spectra wait until both components are available.
+    TRY(for (auto const& spectrum_plot_data : settings["spec_plots"]) {
+        SpectrumPlot* plot = nullptr;
+        for (SpectrumPlot& spectrum_plot : spectrum_plots) {
+            if (spectrum_plot.id == spectrum_plot_data["id"]) {
+                plot = &spectrum_plot;
+                break;
+            }
+        }
+        if (plot == nullptr || !spectrum_plot_data.contains("signals")) {
+            continue;
+        }
+        for (auto const& xy : spectrum_plot_data["signals"]) {
+            if (!xy.is_array() || xy.size() != 2
+                || (!xy[0].is_number_unsigned() && !xy[0].is_number_integer())
+                || (!xy[1].is_number_unsigned() && !xy[1].is_number_integer())) {
+                continue;
+            }
+            uint64_t const real_id = xy[0].get<uint64_t>();
+            uint64_t const imag_id = xy[1].get<uint64_t>();
+            if (scalar->id != real_id && scalar->id != imag_id) {
+                continue;
+            }
+            Scalar* real = findScalar(scalars, real_id);
+            Scalar* imag = imag_id == 0 ? nullptr : findScalar(scalars, imag_id);
+            if (real != nullptr && (imag_id == 0 || imag != nullptr)) {
+                plot->addToPlot(real, imag);
+                restored_to_sampled_plot = true;
+            }
         }
     })
 
@@ -134,6 +169,31 @@ bool restoreScalarSettings(Scalar* scalar,
                 }
             });
         }
+    })
+    return restored_to_sampled_plot;
+}
+
+bool restoreVectorSettings(Vector2D* vector,
+                           nlohmann::json& settings,
+                           std::vector<VectorPlot>& vector_plots) {
+    bool restored_to_plot = false;
+    TRY(for (auto const& vector_plot_data : settings["vector_plots"]) {
+        VectorPlot* plot = nullptr;
+        for (VectorPlot& vector_plot : vector_plots) {
+            if (vector_plot.id == vector_plot_data["id"]) {
+                plot = &vector_plot;
+                break;
+            }
+        }
+        if (plot == nullptr || !vector_plot_data.contains("signals")) {
+            continue;
+        }
+        forEachSignalId(vector_plot_data["signals"], [&](uint64_t id) {
+            if (id == vector->id) {
+                plot->addVectorToPlot(vector);
+                restored_to_plot = true;
+            }
+        });
     })
     return restored_to_plot;
 }
@@ -700,7 +760,10 @@ void DbgGui::loadPreviousSessionSettings() {
                             m_sampler.startSampling(real);
                             m_sampler.startSampling(imag);
                             plot.addToPlot(real, imag);
-                        } else if (real) {
+                        // An imaginary ID of 0 marks a real-only spectrum. If a
+                        // nonzero imaginary ID is unresolved, wait for its
+                        // scalar to be registered instead of changing the type.
+                        } else if (real && xy[1] == 0) {
                             m_sampler.startSampling(real);
                             plot.addToPlot(real, nullptr);
                         }
@@ -1288,7 +1351,8 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
                                     std::string group,
                                     std::string const& name,
                                     std::string const& scale,
-                                    std::string const& offset) {
+                                    std::string const& offset,
+                                    bool restore_saved_vectors) {
     if (group.empty()) {
         group = "debug";
     }
@@ -1307,7 +1371,12 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     new_scalar->setScaleStr(scale);
     new_scalar->setOffsetStr(offset);
     if (m_initialized.load()
-        && restoreScalarSettings(new_scalar.get(), m_settings, m_scalar_plots, m_custom_windows)) {
+        && restoreScalarSettings(new_scalar.get(),
+                                 m_settings,
+                                 m_scalar_plots,
+                                 m_spectrum_plots,
+                                 m_scalars,
+                                 m_custom_windows)) {
         m_sampler.startSampling(new_scalar.get());
     }
     std::vector<std::string> groups = str::split(new_scalar->group, '|');
@@ -1325,6 +1394,29 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     added_group->signals.push_back(new_scalar.get());
     // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
+    if (m_initialized.load() && restore_saved_vectors) {
+        // Saved vectors made from custom scalars cannot be reconstructed during
+        // session loading when those scalars are created later by a script.
+        // Retry matching definitions whenever either component is registered.
+        std::vector<std::pair<Scalar*, Scalar*>> vectors_to_restore;
+        for (auto const& vector_data : m_settings["vector_symbols"]) {
+            std::string const vector_group = vector_data.value("group", "debug");
+            std::string const x_name = vector_data.value("x", "");
+            std::string const y_name = vector_data.value("y", "");
+            if (vector_group != new_scalar->group
+                || (x_name != new_scalar->name && y_name != new_scalar->name)) {
+                continue;
+            }
+            Scalar* x = findScalar(m_scalars, signalId(x_name, vector_group));
+            Scalar* y = findScalar(m_scalars, signalId(y_name, vector_group));
+            if (x != nullptr && y != nullptr) {
+                vectors_to_restore.emplace_back(x, y);
+            }
+        }
+        for (auto const& [x, y] : vectors_to_restore) {
+            addVectorFromScalars(x, y);
+        }
+    }
     return new_scalar.get();
 }
 
@@ -1350,9 +1442,22 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     new_vector->group = group;
     new_vector->name_and_group = name_x + " (" + group + ")";
     new_vector->id = id;
-    new_vector->x = addScalar(x, group, name_x);
+    // Defer saved vector reconstruction while this vector is being assembled;
+    // the completed vector restores its own plot membership below.
+    bool restore_saved_vectors = false;
+    new_vector->x = addScalarExpression(x,
+                                        group,
+                                        name_x,
+                                        std::format("{:g}", scale),
+                                        std::format("{:g}", offset),
+                                        restore_saved_vectors);
     new_vector->x->hide_from_scalars_window = true;
-    new_vector->y = addScalar(y, group, name_y);
+    new_vector->y = addScalarExpression(y,
+                                        group,
+                                        name_y,
+                                        std::format("{:g}", scale),
+                                        std::format("{:g}", offset),
+                                        restore_saved_vectors);
     new_vector->y->hide_from_scalars_window = true;
     new_vector->x->setScaleStr(std::format("{:g}", scale));
     new_vector->x->setOffsetStr(std::format("{:g}", offset));
@@ -1373,6 +1478,10 @@ Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::str
     added_group->signals.push_back(new_vector.get());
     // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
+    if (m_initialized.load()
+        && restoreVectorSettings(new_vector.get(), m_settings, m_vector_plots)) {
+        m_sampler.startSampling(new_vector.get());
+    }
     return new_vector.get();
 }
 
@@ -1405,6 +1514,10 @@ Vector2D* DbgGui::addVectorFromScalars(Scalar* x, Scalar* y) {
     }
     added_group->signals.push_back(new_vector.get());
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
+    if (m_initialized.load()
+        && restoreVectorSettings(new_vector.get(), m_settings, m_vector_plots)) {
+        m_sampler.startSampling(new_vector.get());
+    }
     // Reuse vector_symbols persistence intentionally. This restores only
     // symbol-backed scalar pairs; vectors built from custom scalars are session-only.
     m_settings["vector_symbols"][new_vector->name_and_group]["name"] = new_vector->name;

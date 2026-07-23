@@ -182,7 +182,8 @@ class DbgGui {
                                 std::string group,
                                 std::string const& name,
                                 std::string const& scale,
-                                std::string const& offset);
+                                std::string const& offset,
+                                bool restore_saved_vectors = true);
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
     Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
