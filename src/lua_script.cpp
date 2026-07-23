@@ -95,8 +95,8 @@ LuaScriptRunner::~LuaScriptRunner() {
     stop();
 }
 
-std::expected<void, std::string> LuaScriptRunner::start(double timestamp, bool loop) {
-    m_loop = loop;
+std::expected<void, std::string> LuaScriptRunner::start(double timestamp, int loop_count) {
+    m_loops_remaining = std::max(loop_count, 0);
     return initialize(timestamp);
 }
 
@@ -226,15 +226,18 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
     }
 
     m_running = false;
-    if (m_loop) {
+    bool const restart = m_loops_remaining <= 0 || m_loops_remaining > 1;
+    if (restart) {
         // Restart only scripts that yielded at least once. Otherwise a looped
         // script would repeatedly execute to completion in one sample.
         if (!m_has_waited) {
             stop();
             return std::unexpected("Looping Lua scripts must call wait(seconds) or wait_until(timestamp)");
         }
+        --m_loops_remaining;
         return initialize(timestamp);
     }
+    m_loops_remaining = 0;
     return {};
 }
 
@@ -258,6 +261,10 @@ void LuaScriptRunner::stop() {
 
 bool LuaScriptRunner::running() const {
     return m_running;
+}
+
+int LuaScriptRunner::loopsRemaining() const {
+    return m_loops_remaining;
 }
 
 int LuaScriptRunner::currentLine() const {

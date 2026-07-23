@@ -280,6 +280,7 @@ if get_option('tests')
             'tests/imgui_settings_migration_test.cpp',
             'tests/lua_script_test.cpp',
             'tests/sample_clipboard_test.cpp',
+            'tests/script_window_settings_test.cpp',
             'tests/signal_cleanup_test.cpp',
             'tests/symbols_test.cpp',
             'tests/test_types.c',

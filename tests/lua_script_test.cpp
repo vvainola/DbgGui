@@ -70,7 +70,7 @@ TEST_CASE("Lua scripts execute on the sampling clock and resume after wait") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', read('source') + 1)\nwait(1)\nwrite('target', 5)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.running());
     REQUIRE(writes.empty());
     REQUIRE(runner.process(10.0));
@@ -88,7 +88,7 @@ TEST_CASE("Lua scripts wait until an absolute sampling timestamp") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait_until(12)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.process(10.0));
     CHECK(writes == std::vector<double>{1.0});
     REQUIRE(runner.process(11.99));
@@ -102,7 +102,7 @@ TEST_CASE("Lua wait_until with an elapsed timestamp defers until the next sample
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait_until(5)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.process(10.0));
     CHECK(writes == std::vector<double>{1.0});
     REQUIRE(runner.process(std::nextafter(10.0, std::numeric_limits<double>::infinity())));
@@ -119,7 +119,7 @@ TEST_CASE("Lua unchecked symbol access ignores missing names") {
                            "write('target', read_u('missing'))",
                            makeHost(writes));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     REQUIRE(runner.process(0.0));
     CHECK(writes == std::vector<double>{1.0, 0.0, 0.0, 0.0});
 }
@@ -128,7 +128,7 @@ TEST_CASE("Lua scripts rebase waits after a backwards sampling timestamp jump") 
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait(1)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.process(10.0));
     REQUIRE(writes == std::vector<double>{1.0});
 
@@ -143,7 +143,7 @@ TEST_CASE("Lua wait_until keeps its absolute target after a backwards timestamp 
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait_until(12)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.process(10.0));
     REQUIRE(writes == std::vector<double>{1.0});
 
@@ -158,7 +158,7 @@ TEST_CASE("Lua elapsed wait_until restores its target after a backwards timestam
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait_until(5)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(10.0, false));
+    REQUIRE(runner.start(10.0, 1));
     REQUIRE(runner.process(10.0));
     REQUIRE(writes == std::vector<double>{1.0});
 
@@ -173,7 +173,7 @@ TEST_CASE("Lua wait zero defers execution until the next sampling timestamp") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait(0)\nwrite('target', 2)", makeHost(writes));
 
-    REQUIRE(runner.start(1.0, false));
+    REQUIRE(runner.start(1.0, 1));
     REQUIRE(runner.process(1.0));
     CHECK(writes == std::vector<double>{1.0});
     REQUIRE(runner.process(std::nextafter(1.0, std::numeric_limits<double>::infinity())));
@@ -184,7 +184,7 @@ TEST_CASE("Lua wait zero yields once per sampling timestamp") {
     std::vector<double> writes;
     LuaScriptRunner runner("while true do\n    write('target', 1)\n    wait(0)\nend", makeHost(writes));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     REQUIRE(runner.process(0.0));
     REQUIRE(runner.process(1.0));
     REQUIRE(runner.process(2.0));
@@ -195,17 +195,50 @@ TEST_CASE("Lua loop restarts from a fresh state after waiting") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait(1)", makeHost(writes));
 
-    REQUIRE(runner.start(0.0, true));
+    REQUIRE(runner.start(0.0, 0));
+    CHECK(runner.loopsRemaining() == 0);
     REQUIRE(runner.process(1.0));
+    CHECK(runner.loopsRemaining() == -1);
     CHECK(writes == std::vector<double>{1.0, 1.0});
     CHECK(runner.running());
+}
+
+TEST_CASE("Lua scripts run for the configured finite loop count") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', 1)\nwait(1)", makeHost(writes));
+
+    REQUIRE(runner.start(0.0, 3));
+    CHECK(runner.loopsRemaining() == 3);
+    REQUIRE(runner.process(1.0));
+    CHECK(runner.loopsRemaining() == 2);
+    REQUIRE(runner.process(2.0));
+    CHECK(runner.loopsRemaining() == 1);
+    REQUIRE(runner.process(3.0));
+    CHECK(runner.loopsRemaining() == 0);
+    CHECK_FALSE(runner.running());
+    CHECK(writes == std::vector<double>{1.0, 1.0, 1.0});
+}
+
+TEST_CASE("Lua loop count zero runs indefinitely and one runs once") {
+    std::vector<double> writes;
+    LuaScriptRunner zero_runner("write('target', 1)\nwait(1)", makeHost(writes));
+    REQUIRE(zero_runner.start(0.0, 0));
+    REQUIRE(zero_runner.process(1.0));
+    CHECK(zero_runner.running());
+    CHECK(zero_runner.loopsRemaining() == -1);
+
+    LuaScriptRunner one_runner("write('target', 2)", makeHost(writes));
+    REQUIRE(one_runner.start(0.0, 1));
+    REQUIRE(one_runner.process(0.0));
+    CHECK_FALSE(one_runner.running());
+    CHECK(writes == std::vector<double>{1.0, 1.0, 2.0});
 }
 
 TEST_CASE("Lua while loops can yield repeatedly without exhausting their instruction budget") {
     std::vector<double> writes;
     LuaScriptRunner runner("while true do\n    write('target', 1)\n    wait(0.01)\nend", makeHost(writes));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     for (int i = 1; i <= 10001; ++i) {
         REQUIRE(runner.process(i * 0.01));
     }
@@ -220,13 +253,13 @@ TEST_CASE("Lua scripts expose trusted libraries and reject runaway loops") {
                                  "script()\n"
                                  "wait(1)",
                                  makeHost(writes));
-    REQUIRE(sandbox_runner.start(0.0, false));
+    REQUIRE(sandbox_runner.start(0.0, 1));
     REQUIRE(sandbox_runner.process(0.0));
     CHECK(sandbox_runner.running());
     CHECK(writes == std::vector<double>{1.0});
 
     LuaScriptRunner runaway_runner("while true do end", makeHost(writes));
-    REQUIRE(runaway_runner.start(0.0, false));
+    REQUIRE(runaway_runner.start(0.0, 1));
     std::expected<void, std::string> result = runaway_runner.process(0.0);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().find("instruction limit") != std::string::npos);
@@ -236,7 +269,7 @@ TEST_CASE("Lua validates literal write targets before arming the script") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('missing', 1)", makeHost(writes), "Sine generator");
 
-    std::expected<void, std::string> result = runner.start(0.0, false);
+    std::expected<void, std::string> result = runner.start(0.0, 1);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().starts_with("Sine generator:1:"));
     CHECK(result.error().find("unknown target") != std::string::npos);
@@ -246,7 +279,7 @@ TEST_CASE("Lua validates dynamic write targets at runtime") {
     std::vector<double> writes;
     LuaScriptRunner runner("local target_name = 'missing'\nwrite(target_name, 1)", makeHost(writes));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     std::expected<void, std::string> result = runner.process(0.0);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().starts_with("Lua script:2:"));
@@ -257,7 +290,7 @@ TEST_CASE("Lua validates literal read targets before arming the script") {
     std::vector<double> writes;
     LuaScriptRunner runner("read('missing')", makeHost(writes));
 
-    std::expected<void, std::string> result = runner.start(0.0, false);
+    std::expected<void, std::string> result = runner.start(0.0, 1);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().find("invalid read target 'missing'") != std::string::npos);
 }
@@ -275,7 +308,7 @@ TEST_CASE("Lua add_scalar returns its name and defaults the group") {
                            "write('target', first == 'hello1' and second == 'hello2' and 1 or 0)",
                            std::move(host));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     REQUIRE(runner.process(0.0));
     CHECK(added_scalars == std::vector<std::pair<std::string, std::string>>{
                              {"hello1", "testing"},
@@ -292,7 +325,7 @@ TEST_CASE("Lua add_scalar reports host exceptions as script errors") {
     };
     LuaScriptRunner runner("add_scalar('too_late')", std::move(host));
 
-    REQUIRE(runner.start(0.0, false));
+    REQUIRE(runner.start(0.0, 1));
     std::expected<void, std::string> result = runner.process(0.0);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().find("GUI thread is shutting down") != std::string::npos);

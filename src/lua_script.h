@@ -54,12 +54,13 @@ class LuaScriptRunner {
     LuaScriptRunner(LuaScriptRunner const&) = delete;
     LuaScriptRunner& operator=(LuaScriptRunner const&) = delete;
 
-    std::expected<void, std::string> start(double timestamp, bool loop);
+    std::expected<void, std::string> start(double timestamp, int loop_count);
     std::expected<void, std::string> process(double timestamp);
     void shiftSchedule(double time_offset);
     void stop();
 
     bool running() const;
+    int loopsRemaining() const;
     int currentLine() const;
     double startTime() const;
 
@@ -94,7 +95,7 @@ class LuaScriptRunner {
     double m_next_resume_time = 0;
     std::optional<double> m_wait_until_target;
     int m_current_line = 0;
-    bool m_loop = false;
+    int m_loops_remaining = 0;
     bool m_running = false;
     bool m_waiting = false;
     // Used to reject looping scripts that would otherwise restart without

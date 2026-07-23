@@ -1761,29 +1761,35 @@ void DbgGui::showScriptWindow() {
         } else {
             ScriptWindow& script_window = *script_it;
             bool script_running;
-            bool script_loop;
+            int script_loop_count;
+            int script_loops_remaining;
             ScriptLanguage script_language;
             double script_time;
             int script_line;
             {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 script_running = script_window.running();
-                script_loop = script_window.loop;
+                script_loop_count = script_window.loop_count;
+                script_loops_remaining = script_window.loopsRemaining();
                 script_language = script_window.language;
                 script_time = script_window.getTime(m_plot_timestamp);
                 script_line = script_window.currentLine();
             }
 
+            int displayed_loop_count = script_running ? script_loops_remaining : script_loop_count;
             if (ImGui::Button("Run")) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
             }
             ImGui::SameLine();
             ImGui::BeginDisabled(script_running);
-            if (ImGui::Checkbox("Loop", &script_loop)) {
+            ImGui::SetNextItemWidth(ImGui::CalcTextSize("-000000").x + ImGui::GetStyle().FramePadding.x * 2);
+            if (ImGui::InputInt("Loops", &displayed_loop_count, 0, 0)) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-                script_window.loop = script_loop;
+                script_window.loop_count = std::max(displayed_loop_count, 0);
             }
+            ImGui::SameLine();
+            HelpMarker("1 runs once. 0 runs indefinitely.");
             ImGui::SameLine();
             char const* language_name = script_language == ScriptLanguage::Lua ? "Lua" : "Legacy";
             ImGui::SetNextItemWidth(ImGui::CalcTextSize("Legacy").x + ImGui::GetStyle().FramePadding.x * 2);

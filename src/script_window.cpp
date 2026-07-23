@@ -76,6 +76,7 @@ ScriptWindow::ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_)
 std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_ptr<Scalar>> const& scalars) {
     stopScript();
     m_start_time = timestamp;
+    m_loops_remaining = std::max(loop_count, 0);
 
     if (language == ScriptLanguage::Lua) {
         LuaScriptHost host;
@@ -181,7 +182,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
         };
 
         m_lua_script = std::make_unique<LuaScriptRunner>(text, std::move(host), name);
-        std::expected<void, std::string> result = m_lua_script->start(timestamp, loop);
+        std::expected<void, std::string> result = m_lua_script->start(timestamp, loop_count);
         if (!result.has_value()) {
             return result.error();
         }
@@ -299,8 +300,15 @@ std::string ScriptWindow::processScript(double timestamp) {
             op->action(timestamp);
             m_idx++;
             if (m_idx >= m_operations.size()) {
-                m_start_time = timestamp;
-                m_idx = loop ? 0 : -1;
+                bool const restart = m_loops_remaining <= 0 || m_loops_remaining > 1;
+                if (restart) {
+                    --m_loops_remaining;
+                    m_start_time = timestamp;
+                    m_idx = 0;
+                } else {
+                    m_loops_remaining = 0;
+                    m_idx = -1;
+                }
             } else {
                 op = &m_operations[m_idx];
             }
@@ -317,6 +325,7 @@ void ScriptWindow::shiftScriptSchedule(double time_offset) {
 
 void ScriptWindow::stopScript() {
     m_idx = -1;
+    m_loops_remaining = 0;
     m_operations.clear();
     m_lua_script.reset();
 }
@@ -336,6 +345,13 @@ bool ScriptWindow::running() {
         return m_lua_script && m_lua_script->running();
     }
     return m_idx >= 0;
+}
+
+int ScriptWindow::loopsRemaining() {
+    if (language == ScriptLanguage::Lua && m_lua_script) {
+        return m_lua_script->loopsRemaining();
+    }
+    return m_loops_remaining;
 }
 
 double ScriptWindow::getTime(double timestamp) {

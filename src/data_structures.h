@@ -714,20 +714,26 @@ struct ScriptWindow : Window {
     ScriptWindow(DbgGui* gui, nlohmann::json const& j)
         : Window(j), m_gui(gui) {
         text = j.value("text", "");
-        loop = j.value("loop", loop);
+        if (j.contains("loop_count")) {
+            loop_count = std::max(j.value("loop_count", loop_count), 0);
+        } else {
+            // Migrate the former checkbox: enabled meant looping forever.
+            loop_count = j.value("loop", false) ? 0 : 1;
+        }
         language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["text"] = text;
-        j["loop"] = loop;
+        j["loop_count"] = std::max(loop_count, 0);
+        j.erase("loop");
         j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
         return j;
     }
 
     std::string text;
     ScriptLanguage language = ScriptLanguage::Lua;
-    bool loop = false;
+    int loop_count = 1;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
     std::string processScript(double timestamp);
@@ -735,6 +741,7 @@ struct ScriptWindow : Window {
     void stopScript();
     int currentLine();
     bool running();
+    int loopsRemaining();
     double getTime(double timestamp);
 
   private:
@@ -746,6 +753,7 @@ struct ScriptWindow : Window {
     std::vector<Operation> m_operations;
     std::unique_ptr<LuaScriptRunner> m_lua_script;
     int m_idx = -1;
+    int m_loops_remaining = 0;
     double m_start_time = 0;
     DbgGui* m_gui;
 
