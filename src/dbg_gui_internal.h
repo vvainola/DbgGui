@@ -34,7 +34,6 @@
 
 #include <memory>
 #include <mutex>
-#include <condition_variable>
 #include <optional>
 #include <thread>
 #include <unordered_map>
@@ -97,6 +96,11 @@ class DbgGui {
                       std::string const& name,
                       double scale = 1.0,
                       double offset = 0.0);
+    void addScalarAsync(ValueSource src,
+                        std::string group,
+                        std::string name,
+                        double scale = 1.0,
+                        double offset = 0.0);
     Vector2D* addVector(ValueSource const& x,
                         ValueSource const& y,
                         std::string group,
@@ -107,7 +111,10 @@ class DbgGui {
     void logMessage(std::string message, MessageType type = MessageType::Error);
 
   private:
+    struct PendingGuiOperation;
+
     void updateLoop();
+    std::shared_ptr<PendingGuiOperation> runOnGuiThread(std::function<void()> operation);
     void runOnGuiThreadAndWait(std::function<void()> operation);
     void processPendingGuiOperations();
     void stopPendingGuiOperations();
@@ -296,14 +303,10 @@ class DbgGui {
     struct PendingGuiOperation {
         std::function<void()> operation;
         std::exception_ptr exception;
-        // A condition variable stores no state and may wake spuriously, so the
-        // waiter needs this predicate to know the operation actually completed.
-        bool completed = false;
-        std::condition_variable completed_condition;
+        std::atomic<bool> completed = false;
     };
     std::mutex m_pending_gui_operations_mutex;
-    // Requests are stack-owned by callers blocked in runOnGuiThreadAndWait().
-    std::deque<PendingGuiOperation*> m_pending_gui_operations;
+    std::deque<std::shared_ptr<PendingGuiOperation>> m_pending_gui_operations;
     bool m_accepting_gui_operations = false;
 
     nlohmann::json m_settings;

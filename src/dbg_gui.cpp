@@ -560,48 +560,67 @@ void DbgGui::updateLoop() {
     m_paused = false;
 }
 
-void DbgGui::runOnGuiThreadAndWait(std::function<void()> operation) {
-    // Before startUpdateLoop() there is no competing GUI thread. Operations
-    // originating from the GUI thread must also run directly to avoid waiting
-    // for that same thread to service its own request.
+std::shared_ptr<DbgGui::PendingGuiOperation> DbgGui::runOnGuiThread(std::function<void()> operation) {
+    auto request = std::make_shared<PendingGuiOperation>();
+    request->operation = std::move(operation);
+
     if (std::this_thread::get_id() == m_gui_thread.get_id()) {
-        operation();
-        return;
+        try {
+            request->operation();
+        } catch (...) {
+            request->exception = std::current_exception();
+        }
+        request->completed.store(true);
+        request->completed.notify_one();
+        return request;
     }
     if (!m_gui_thread.joinable()) {
-        if (m_initialized.load()) {
-            throw std::runtime_error("DbgGui GUI thread is shutting down");
+        if (!m_initialized.load()) {
+            try {
+                request->operation();
+            } catch (...) {
+                request->exception = std::current_exception();
+            }
+        } else {
+            request->exception = std::make_exception_ptr(
+              std::runtime_error("DbgGui GUI thread is shutting down"));
         }
-        operation();
-        return;
+        request->completed.store(true);
+        request->completed.notify_one();
+        return request;
     }
 
-    // The caller waits until completion, so this stack request remains alive
-    // for as long as its pointer is present in the pending queue.
-    PendingGuiOperation request;
-    request.operation = std::move(operation);
-    std::unique_lock lock(m_pending_gui_operations_mutex);
-    if (!m_accepting_gui_operations) {
-        throw std::runtime_error("DbgGui GUI thread is shutting down");
+    std::scoped_lock lock(m_pending_gui_operations_mutex);
+    if (m_accepting_gui_operations) {
+        m_pending_gui_operations.push_back(request);
+    } else {
+        request->exception = std::make_exception_ptr(
+          std::runtime_error("DbgGui GUI thread is shutting down"));
+        request->completed.store(true);
+        request->completed.notify_one();
     }
-    m_pending_gui_operations.push_back(&request);
-    request.completed_condition.wait(lock, [&request] { return request.completed; });
-    if (request.exception) {
-        std::rethrow_exception(request.exception);
+    return request;
+}
+
+void DbgGui::runOnGuiThreadAndWait(std::function<void()> operation) {
+    auto request = runOnGuiThread(std::move(operation));
+    request->completed.wait(false);
+    if (request->exception) {
+        std::rethrow_exception(request->exception);
     }
 }
 
 void DbgGui::processPendingGuiOperations() {
     std::unique_lock lock(m_pending_gui_operations_mutex);
-    for (PendingGuiOperation* request : m_pending_gui_operations) {
+    for (auto const& request : m_pending_gui_operations) {
         try {
             request->operation();
         } catch (...) {
             request->exception = std::current_exception();
         }
 
-        request->completed = true;
-        request->completed_condition.notify_one();
+        request->completed.store(true);
+        request->completed.notify_one();
     }
     m_pending_gui_operations.clear();
 }
@@ -609,11 +628,11 @@ void DbgGui::processPendingGuiOperations() {
 void DbgGui::stopPendingGuiOperations() {
     std::scoped_lock lock(m_pending_gui_operations_mutex);
     m_accepting_gui_operations = false;
-    for (PendingGuiOperation* request : m_pending_gui_operations) {
+    for (auto const& request : m_pending_gui_operations) {
         request->exception = std::make_exception_ptr(
           std::runtime_error("DbgGui GUI thread is shutting down"));
-        request->completed = true;
-        request->completed_condition.notify_one();
+        request->completed.store(true);
+        request->completed.notify_one();
     }
     m_pending_gui_operations.clear();
 }
@@ -1384,6 +1403,17 @@ Scalar* DbgGui::addScalar(ValueSource const& src, std::string group, std::string
                                name,
                                std::format("{:g}", scale),
                                std::format("{:g}", offset));
+}
+
+void DbgGui::addScalarAsync(ValueSource src, std::string group, std::string name, double scale, double offset) {
+    runOnGuiThread([this,
+                    src = std::move(src),
+                    group = std::move(group),
+                    name = std::move(name),
+                    scale,
+                    offset] {
+        addScalar(src, std::move(group), name, scale, offset);
+    });
 }
 
 Scalar* DbgGui::addScalarExpression(ValueSource const& src,

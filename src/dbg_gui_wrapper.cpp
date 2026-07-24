@@ -35,7 +35,7 @@ void DbgGui_addSymbol(std::string const& src, std::string const& group, std::str
 
 void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale, double offset) {
     if (g_dbg_gui) {
-        g_dbg_gui->addScalar(src, group, name, scale, offset);
+        g_dbg_gui->addScalarAsync(src, group, name, scale, offset);
     }
 }
 
