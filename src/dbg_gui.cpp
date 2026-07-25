@@ -265,36 +265,25 @@ void DbgGui::startUpdateLoop() {
 
 void DbgGui::synchronizeSpeed() {
     using namespace std::chrono;
-    static double sync_interval = 30e-3;
-    static auto last_real_timestamp = std::chrono::system_clock::now();
-    static double last_timestamp = m_sample_timestamp;
-    static std::future<void> tick;
+    constexpr double SYNC_INTERVAL = 30e-3;
+    static steady_clock::time_point next_sync_time = steady_clock::now();
 
-    if (m_sample_timestamp > m_next_sync_timestamp || (tick.valid() && tick.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
-        // Wait until next tick
-        if (tick.valid()) {
-            tick.wait();
-        }
-        tick = std::async(std::launch::async,
-                          []() {
-                              std::this_thread::sleep_for(std::chrono::milliseconds(30));
-                          });
-        m_next_sync_timestamp = m_sample_timestamp + sync_interval * m_simulation_speed;
-
-        auto now = std::chrono::system_clock::now();
-        auto real_time_us = std::chrono::duration_cast<microseconds>(now - last_real_timestamp).count();
-        real_time_us = std::max<long>(real_time_us, 1);
-        double real_time_s = real_time_us * 1e-6;
-        last_real_timestamp = now;
-
-        // Adjust the sync interval for more accurate synchronization
-        double simulation_speed = (m_sample_timestamp - last_timestamp) / real_time_s;
-        double sync_interval_ki = 1e-2;
-        sync_interval += sync_interval_ki * (m_simulation_speed - simulation_speed);
-        sync_interval = std::clamp(sync_interval, 1e-3, 100e-3);
-
-        last_timestamp = m_sample_timestamp;
+    auto now = steady_clock::now();
+    // Continue without blocking until either simulation time reaches its next
+    // checkpoint or the wall-clock interval expires.
+    if (m_sample_timestamp <= m_next_sync_timestamp
+        && now < next_sync_time) {
+        return;
     }
+
+    // If simulation time reached its checkpoint early, wait out the
+    // remaining wall-clock time. sleep_until returns immediately when the
+    // application is already running slower than the requested speed.
+    std::this_thread::sleep_until(next_sync_time);
+    now = steady_clock::now();
+
+    next_sync_time = now + milliseconds(30);
+    m_next_sync_timestamp = m_sample_timestamp + SYNC_INTERVAL * m_simulation_speed;
 }
 
 void DbgGui::sample() {
