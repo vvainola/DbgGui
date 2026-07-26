@@ -260,7 +260,13 @@ inline constexpr char GtkClipboardTarget[] = "application/x-dbggui-samples-v1";
 std::vector<uint8_t> g_clipboard_payload;
 
 bool ensureGtkClipboard() {
-    static bool initialized = gtk_init_check(nullptr, nullptr);
+    static bool initialized = [] {
+        // GLFW owns the Wayland input serial, so a separate GTK Wayland
+        // connection cannot claim the clipboard. XWayland clipboard ownership
+        // has no such restriction and still preserves the binary target.
+        gdk_set_allowed_backends("x11");
+        return gtk_init_check(nullptr, nullptr);
+    }();
     return initialized;
 }
 
@@ -299,7 +305,6 @@ bool writeNativeClipboard(std::span<uint8_t const> payload) {
         g_clipboard_payload.clear();
         return false;
     }
-    gtk_clipboard_store(clipboard);
     return true;
 }
 
@@ -365,4 +370,15 @@ bool hasSampleClipboardData() {
 
 std::expected<SampleClipboardData, std::string> readSamplesFromClipboard() {
     return readNativeClipboard();
+}
+
+void processSampleClipboardEvents() {
+#if LINUX
+    if (!ensureGtkClipboard()) {
+        return;
+    }
+    while (gtk_events_pending()) {
+        gtk_main_iteration_do(false);
+    }
+#endif
 }
