@@ -47,13 +47,13 @@
 #include <string>
 #include <vector>
 
-static void appendInheritedMembers(SymbolDescriptor& symbol,
-                                   SymbolDescriptor const& base_symbol,
-                                   uint32_t base_offset) {
-    for (auto const& base_child : base_symbol.children) {
-        auto inherited_child = std::make_shared<SymbolDescriptor>(*base_child);
-        inherited_child->offset_to_parent += base_offset;
-        symbol.children.push_back(std::move(inherited_child));
+static void appendMembers(SymbolDescriptor& symbol,
+                          SymbolDescriptor const& member_container,
+                          uint32_t container_offset) {
+    for (auto const& child : member_container.children) {
+        auto appended_child = std::make_shared<SymbolDescriptor>(*child);
+        appended_child->offset_to_parent += container_offset;
+        symbol.children.push_back(std::move(appended_child));
     }
 }
 
@@ -449,7 +449,11 @@ static bool resolveType(Dwarf_Debug dbg,
                                     child_sym->size = (uint32_t)bit_size;
                                 }
 
-                                symbol.children.push_back(std::move(child_sym));
+                                if (member_name == nullptr && child_sym->kind == SymbolKind::Object) {
+                                    appendMembers(symbol, *child_sym, offset);
+                                } else {
+                                    symbol.children.push_back(std::move(child_sym));
+                                }
                             }
                         }
 
@@ -469,7 +473,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
 
                             if (resolveType(dbg, base_type_offset, base_symbol, full_type_defs)) {
-                                appendInheritedMembers(symbol, base_symbol, base_offset);
+                                appendMembers(symbol, base_symbol, base_offset);
                             }
                         }
                     }

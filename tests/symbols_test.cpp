@@ -253,6 +253,13 @@ TEST_CASE("Basic symbol access") {
     CHECK(g_enum_sym->read() == static_cast<int>(g_enum));
     CHECK(g_enum_sym->valueAsStr() == "EnumValue2");
 
+    g_bitfield.b0 = 42;
+    VariantSymbol* anonymous_struct_member_sym = symbols.getSymbol("g_bitfield.b0");
+    REQUIRE(anonymous_struct_member_sym != nullptr);
+    CHECK(anonymous_struct_member_sym->getFullName() == "g_bitfield.b0");
+    CHECK(anonymous_struct_member_sym->read() == g_bitfield.b0);
+    CHECK(symbols.getSymbol("g_bitfield..b0") == nullptr);
+
     g_enum = EnumValue0;
     CHECK(g_enum_sym->valueAsStr() == "EnumValue0");
 
