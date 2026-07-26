@@ -2130,7 +2130,8 @@ void CsvPlotter::showSignalWindow() {
             for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
                 if (!signal_name_filter.empty()
-                    && !str::fuzzy_match(signal_name_filter, signal.displayName().c_str())) {
+                    && !str::fuzzy_match(signal_name_filter, signal.displayName().c_str())
+                    && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
                     continue;
                 }
 
@@ -2143,7 +2144,10 @@ void CsvPlotter::showSignalWindow() {
                                       signal.transform.isDefault() ?
                                         ImGui::GetStyle().Colors[ImGuiCol_Text] :
                                         COLOR_LIGHT_BLUE);
-                std::string label = std::format("{}{}", is_plotted ? "* " : "  ", signal.displayName());
+                std::string displayed_name = signal.alias.empty()
+                                               ? signal.name
+                                               : std::format("{} ({})", signal.alias, signal.name);
+                std::string label = std::format("{}{}", is_plotted ? "* " : "  ", displayed_name);
                 bool item_is_selected = contains(m_selected_signals, &signal);
                 m_visible_signals.push_back(&signal);
                 ImGui::SetNextItemSelectionUserData((int)m_visible_signals.size() - 1);
