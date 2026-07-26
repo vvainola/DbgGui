@@ -22,12 +22,15 @@ Include `DbgGui/dbg_gui.h`, create the GUI with the simulation sample time,
 register any explicit signals, and submit samples from the simulation loop:
 
 ```cpp
-DbgGui_create(sample_time);
-DbgGui_startUpdateLoop();
+void runSimulation() {
+    DbgGui_create(sample_time);
+    DbgGui_addScalar(&simulation_time, "State", "Simulation time");
+    DbgGui_startUpdateLoop();
 
-while (!DbgGui_isClosed()) {
-    updateSimulation();
-    DbgGui_sampleWithTimestamp(simulation_time);
+    while (!DbgGui_isClosed()) {
+        updateSimulation();
+        DbgGui_sampleWithTimestamp(simulation_time);
+    }
 }
 ```
 
