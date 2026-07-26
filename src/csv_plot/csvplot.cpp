@@ -89,7 +89,7 @@ inline constexpr ImVec4 COLOR_GREEN = ImVec4(0.3f, 0.9f, 0.3f, 1);
 // Render few frames before saving image because plot are not immediately autofitted correctly
 inline int IMAGE_SAVE_FRAME_COUNT = 3;
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
-constexpr int CUSTOM_SIGNAL_CAPACITY = 10;
+constexpr int CUSTOM_SIGNAL_CAPACITY = 100;
 inline float COMPARISON_MODE_ACTIVATION_TIME = 0.5f;
 std::vector<double> ASCENDING_NUMBERS;
 
@@ -1127,6 +1127,7 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
         //---------- Main windows ----------
         showErrorModal();
         showSignalWindow();
+        showScriptWindow();
         showCommandPalette();
         showPlots();
 
@@ -1326,29 +1327,38 @@ void CsvPlotter::loadPreviousSessionSettings() {
                     })
                 }
             }
-            if (settings.contains("recent_custom_equations") && settings["recent_custom_equations"].is_array()) {
-                m_recent_custom_equations.clear();
-                for (auto const& item : settings["recent_custom_equations"]) {
-                    if (m_recent_custom_equations.size() >= MAX_RECENT_CUSTOM_EQUATIONS) {
-                        break;
-                    }
+            if (settings.contains("scripts") && settings["scripts"].is_array()) {
+                m_scripts.clear();
+                for (auto const& item : settings["scripts"]) {
                     if (!item.is_object()
+                        || !item.contains("id")
                         || !item.contains("name")
-                        || !item.contains("equation")
+                        || !item.contains("output_name")
+                        || !item.contains("text")
+                        || !item["id"].is_number_unsigned()
                         || !item["name"].is_string()
-                        || !item["equation"].is_string()) {
+                        || !item["output_name"].is_string()
+                        || !item["text"].is_string()) {
                         continue;
                     }
 
+                    uint64_t id = item["id"].get<uint64_t>();
                     std::string name = item["name"].get<std::string>();
-                    std::string equation = item["equation"].get<std::string>();
-                    if (name.empty()
-                        || equation.empty()
-                        || name.size() >= MAX_CUSTOM_EQ_NAME
-                        || equation.size() >= MAX_CUSTOM_EQ_LENGTH) {
+                    std::string output_name = item["output_name"].get<std::string>();
+                    std::string text = item["text"].get<std::string>();
+                    if (id == 0
+                        || std::ranges::find(m_scripts, id, &CsvScript::id) != m_scripts.end()
+                        || name.empty()
+                        || output_name.empty()
+                        || text.empty()) {
                         continue;
                     }
-                    m_recent_custom_equations.push_back(RecentCustomEquation{.name = name, .equation = equation});
+                    m_scripts.push_back(CsvScript{
+                      .id = id,
+                      .name = std::move(name),
+                      .output_name = std::move(output_name),
+                      .text = std::move(text),
+                    });
                 }
             }
             for (auto& file : m_csv_data) {
@@ -1428,7 +1438,8 @@ void CsvPlotter::loadSettings() {
     }
     m_signal_transform_settings.clear();
     m_signal_plot_style_settings.clear();
-    m_recent_custom_equations.clear();
+    m_scripts.clear();
+    m_selected_script_id.reset();
     m_use_saved_plotted_signals = true;
     loadPreviousSessionSettings();
 }
@@ -1512,9 +1523,16 @@ void CsvPlotter::updateSavedSettings(bool force) {
             save_plot(m_undocked_plots[u], settings["undocked_plots"], std::to_string(u));
         }
     }
-    for (auto const& recent : m_recent_custom_equations) {
-        settings["recent_custom_equations"].push_back({{"name", recent.name}, {"equation", recent.equation}});
+    for (CsvScript const& script : m_scripts) {
+        settings["scripts"].push_back({
+          {"id", script.id},
+          {"name", script.name},
+          {"output_name", script.output_name},
+          {"text", script.text},
+        });
     }
+    settings.erase("recent_custom_equations");
+    settings.erase("recent_custom_scripts");
     static nlohmann::json settings_saved = settings;
     if (force || settings != settings_saved) {
         settings_saved = settings;
@@ -1794,6 +1812,10 @@ void CsvPlotter::showSignalWindow() {
         copyPlottedSignalArgumentsToClipboard();
     }
 
+    if (ImGui::Button("Open script editor")) {
+        m_show_script_window = true;
+    }
+
     if (ImGui::CollapsingHeader("Options")) {
         int new_rows = m_rows;
         int new_cols = m_cols;
@@ -1867,9 +1889,6 @@ void CsvPlotter::showSignalWindow() {
         }
         ImGui::SameLine();
         HelpMarker("Use \"Copy signals to clipboard\" button to get the command line arguments for the current selection of signals and plots");
-    }
-    if (ImGui::CollapsingHeader("Create custom signal")) {
-        showCustomSignalCreator();
     }
     static std::string signal_name_filter;
     ImGui::InputText("Filter", &signal_name_filter);

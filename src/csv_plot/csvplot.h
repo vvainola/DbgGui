@@ -26,6 +26,7 @@
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include <expected>
+#include <cstdint>
 #include <string>
 #include <filesystem>
 #include <map>
@@ -41,7 +42,6 @@ inline constexpr MinMax AUTOFIT_AXIS{-1, 1};
 inline constexpr int MAX_PLOTS = 10;
 inline constexpr int MAX_PLOT_WINDOWS = MAX_PLOTS * MAX_PLOTS;
 inline constexpr int MAX_UNDOCKED_PLOTS = 10;
-inline constexpr int MAX_RECENT_CUSTOM_EQUATIONS = 10;
 
 struct CsvSignal;
 struct GLFWwindow;
@@ -80,11 +80,17 @@ struct CsvSignal {
     std::vector<double> samples;
     CsvFileData* file;
     CsvSignalTransform transform;
+    // Zero marks a signal loaded from the source file. Generated signals keep
+    // their creator ID so rerunning a script updates the same signal.
+    uint64_t custom_script_id = 0;
 };
 
-struct RecentCustomEquation {
+struct CsvScript {
+    // Stable across renames, reordering, and settings reloads.
+    uint64_t id;
     std::string name;
-    std::string equation;
+    std::string output_name;
+    std::string text;
 };
 
 class CsvPlotter {
@@ -100,7 +106,7 @@ class CsvPlotter {
     void showErrorModal();
     void showCommandPalette();
     std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_hotkeys = true);
-    void showCustomSignalCreator();
+    void showScriptWindow();
     void showSignalWindow();
     void showPlots();
     void showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next);
@@ -152,7 +158,9 @@ class CsvPlotter {
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
     CommandHotkeyOverrides m_hotkey_overrides;
-    std::vector<RecentCustomEquation> m_recent_custom_equations;
+    std::vector<CsvScript> m_scripts;
+    std::optional<uint64_t> m_selected_script_id;
+    bool m_show_script_window = false;
     // When signals are given on the command line they override the persisted selection at
     // startup. Only normal GUI sessions restore saved plotted signal assignments.
     bool m_use_saved_plotted_signals = true;
