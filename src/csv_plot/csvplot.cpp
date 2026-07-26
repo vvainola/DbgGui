@@ -411,7 +411,8 @@ void CsvPlotter::updatePlottedSignalSettings() {
             }
         } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
             for (auto const& signals : vector_plot->signals) {
-                addUniquePair(current_settings.signal_pairs, {signals.first->name, signals.second->name});
+                addUniquePair(current_settings.signal_pairs,
+                              {signals.first->name, signals.second->name});
             }
         } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
             for (auto const& spec : spectrum_plot->spectrum) {
@@ -865,6 +866,9 @@ void CsvPlotter::addClipboardFileFromClipboard() {
     for (size_t i = 0; i < signal_names.size(); ++i) {
         file->signals.push_back(CsvSignal{
           .name = signal_names[i],
+          .alias = m_signal_alias_settings.contains(signal_names[i])
+                     ? m_signal_alias_settings.at(signal_names[i])
+                     : "",
           .samples = std::move(columns.data[i]),
           .file = file_ptr});
     }
@@ -1263,6 +1267,13 @@ void CsvPlotter::loadPreviousSessionSettings() {
                         })
                 }
             }
+            if (settings.contains("aliases") && settings["aliases"].is_object()) {
+                for (auto const& item : settings["aliases"].items()) {
+                    if (item.value().is_string() && !item.value().get_ref<std::string const&>().empty()) {
+                        m_signal_alias_settings[item.key()] = item.value().get<std::string>();
+                    }
+                }
+            }
             if (m_use_saved_plotted_signals && (settings.contains("plots") || settings.contains("undocked_plots"))) {
                 auto load_plot_settings = [&](PlotBase& plot, nlohmann::json const& plot_settings) {
                     if (!plot_settings.is_object()) {
@@ -1363,6 +1374,10 @@ void CsvPlotter::loadPreviousSessionSettings() {
             }
             for (auto& file : m_csv_data) {
                 applySignalTransforms(*file);
+                for (CsvSignal& signal : file->signals) {
+                    auto alias = m_signal_alias_settings.find(signal.name);
+                    signal.alias = alias == m_signal_alias_settings.end() ? "" : alias->second;
+                }
                 if (m_use_saved_plotted_signals) {
                     applyPlottedSignals(*file);
                 }
@@ -1438,6 +1453,7 @@ void CsvPlotter::loadSettings() {
     }
     m_signal_transform_settings.clear();
     m_signal_plot_style_settings.clear();
+    m_signal_alias_settings.clear();
     m_scripts.clear();
     m_selected_script_id.reset();
     m_use_saved_plotted_signals = true;
@@ -1487,6 +1503,9 @@ void CsvPlotter::updateSavedSettings(bool force) {
     }
     for (auto const& [name, plot_style] : m_signal_plot_style_settings) {
         settings["plot_styles"][name] = magic_enum::enum_name(plot_style);
+    }
+    for (auto const& [name, alias] : m_signal_alias_settings) {
+        settings["aliases"][name] = alias;
     }
     updatePlottedSignalSettings();
     auto has_saved_plot_state = [](PlotBase const& plot) {
@@ -1637,7 +1656,10 @@ std::unique_ptr<CsvFileData> parseCsvData(std::string filename) {
     std::vector<CsvSignal> csv_signals;
     csv_signals.reserve(signal_names.size());
     for (std::string const& signal_name : makeUniqueCsvSignalNames(signal_names)) {
-        csv_signals.push_back(CsvSignal{.name = signal_name});
+        csv_signals.push_back(CsvSignal{
+          .name = signal_name,
+          .alias = "",
+        });
     }
     for (int i = header_line_idx + 1; i < csv_lines.size(); ++i) {
         std::string line = str::removeWhitespace(csv_lines[i]);
@@ -1700,8 +1722,8 @@ void CsvPlotter::showErrorModal() {
 
 void CsvPlotter::showXSignalCombo() {
     // Collect combo items
-    std::vector<std::string> x_signal_combo_items;
-    x_signal_combo_items.push_back("Index");
+    std::vector<std::pair<std::string, std::string>> x_signal_combo_items;
+    x_signal_combo_items.push_back({"Index", "ASCENDING_NUMBERS"});
     CsvFileData const* x_signal_file = nullptr;
     for (auto const& file : m_csv_data) {
         if (!file->signals.empty()) {
@@ -1711,31 +1733,28 @@ void CsvPlotter::showXSignalCombo() {
     }
     if (x_signal_file) {
         for (auto const& signal : x_signal_file->signals) {
-            x_signal_combo_items.push_back(signal.name);
+            x_signal_combo_items.push_back({signal.displayName(), signal.name});
         }
     }
     // Get index of selected x-signal, default to first signal
     int x_signal_idx = m_options.x_signal_name == "ASCENDING_NUMBERS" ? 0 : 1;
     if (!m_options.x_signal_name.empty()) {
         for (int n = 1; n < (int)x_signal_combo_items.size(); n++) {
-            if (x_signal_combo_items[n] == m_options.x_signal_name) {
+            if (x_signal_combo_items[n].second == m_options.x_signal_name) {
                 x_signal_idx = n;
                 break;
             }
         }
     }
     // Show combo
-    std::string x_signal_combo_preview = x_signal_combo_items.size() < 2 ? "" : x_signal_combo_items[x_signal_idx];
+    std::string x_signal_combo_preview =
+      x_signal_combo_items.size() < 2 ? "" : x_signal_combo_items[x_signal_idx].first;
     ImGui::SetNextItemWidth(185);
     if (ImGui::BeginCombo("X-axis signal", x_signal_combo_preview.c_str())) {
         for (int n = 0; n < (int)x_signal_combo_items.size(); n++) {
             bool is_selected = (x_signal_idx == n);
-            if (ImGui::Selectable(x_signal_combo_items[n].c_str(), is_selected)) {
-                if (n == 0) {
-                    m_options.x_signal_name = "ASCENDING_NUMBERS";
-                } else {
-                    m_options.x_signal_name = x_signal_combo_items[n];
-                }
+            if (ImGui::Selectable(x_signal_combo_items[n].first.c_str(), is_selected)) {
+                m_options.x_signal_name = x_signal_combo_items[n].second;
             }
             if (is_selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1923,6 +1942,10 @@ void CsvPlotter::showSignalWindow() {
                 std::unique_ptr<CsvFileData> csv_data = parseCsvData(file->name);
                 if (csv_data && csv_data->signals.size() == file->signals.size()) {
                     applySignalTransforms(*csv_data);
+                    for (CsvSignal& signal : csv_data->signals) {
+                        auto alias = m_signal_alias_settings.find(signal.name);
+                        signal.alias = alias == m_signal_alias_settings.end() ? "" : alias->second;
+                    }
                     replaceReloadedFileSignals(*file, *csv_data);
                     // Set write time to default so that the file gets reloaded again for the latest dataset
                     file->write_time = std::filesystem::file_time_type();
@@ -2107,7 +2130,7 @@ void CsvPlotter::showSignalWindow() {
             for (CsvSignal& signal : file->signals) {
                 // Skip signal if it doesn't match the filter
                 if (!signal_name_filter.empty()
-                    && !str::fuzzy_match(signal_name_filter, signal.name.c_str())) {
+                    && !str::fuzzy_match(signal_name_filter, signal.displayName().c_str())) {
                     continue;
                 }
 
@@ -2120,7 +2143,7 @@ void CsvPlotter::showSignalWindow() {
                                       signal.transform.isDefault() ?
                                         ImGui::GetStyle().Colors[ImGuiCol_Text] :
                                         COLOR_LIGHT_BLUE);
-                std::string label = std::format("{}{}", is_plotted ? "* " : "  ", signal.name);
+                std::string label = std::format("{}{}", is_plotted ? "* " : "  ", signal.displayName());
                 bool item_is_selected = contains(m_selected_signals, &signal);
                 m_visible_signals.push_back(&signal);
                 ImGui::SetNextItemSelectionUserData((int)m_visible_signals.size() - 1);
@@ -2159,12 +2182,16 @@ void CsvPlotter::showSignalWindow() {
                     std::string base_text = add_same_named_signals ? "Drag to plot from all files" : "Drag to plot";
                     ImGui::TextUnformatted(base_text.c_str());
                     for (CsvSignal* dragged_signal : dragged_signals) {
-                        ImGui::Text("  %s", dragged_signal->name.c_str());
+                        ImGui::Text("  %s", dragged_signal->displayName().c_str());
                     }
                     ImGui::EndDragDropSource();
                 }
 
-                if (ImGui::BeginPopupContextItem((file->displayed_name + signal.name + "context_menu").c_str())) {
+                std::string context_menu_id = std::format("{}:{}:{}",
+                                                          file->displayed_name,
+                                                          signal.name,
+                                                          signal.custom_script_id);
+                if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
                     CsvSignalTransform signal_transform = signal.transform;
                     std::vector<CsvSignal*> signals_to_update = selectedOrClickedSignals(&signal, m_selected_signals);
 
@@ -2189,6 +2216,23 @@ void CsvPlotter::showSignalWindow() {
                     }
 
                     showSignalPlotStyleCombo(signal, signals_to_update);
+
+                    std::string alias = signal.displayName();
+                    if (ImGui::InputText("Name", &alias, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        if (alias.empty() || alias == signal.name) {
+                            m_signal_alias_settings.erase(signal.name);
+                            alias.clear();
+                        } else {
+                            m_signal_alias_settings[signal.name] = alias;
+                        }
+                        for (auto& loaded_file : m_csv_data) {
+                            for (CsvSignal& same_named_signal : loaded_file->signals) {
+                                if (same_named_signal.name == signal.name) {
+                                    same_named_signal.alias = alias;
+                                }
+                            }
+                        }
+                    }
 
                     if (ImGui::Button("Copy name")) {
                         ImGui::SetClipboardText(signal.name.c_str());
@@ -2289,7 +2333,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
     size_t longest_name_length = 1;
     size_t longest_file_length = 1;
     for (CsvSignal* signal : plot.signals) {
-        longest_name_length = std::max(longest_name_length, signal->name.size());
+        longest_name_length = std::max(longest_name_length, signal->displayName().size());
         longest_file_length = std::max(longest_file_length, signal->file->displayed_name.size());
     }
 
@@ -2327,7 +2371,8 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                 y2 = y2 * signal->transform.scale + signal->transform.offset;
 
                 std::stringstream ss;
-                ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
+                ss << std::left << std::setw(longest_name_length) << signal->displayName()
+                   << " | " << signal->file->displayed_name;
                 std::string displayed_signal_name = ss.str();
 
                 ImVec4 color = ImPlot::GetColormapColor(i);
@@ -2423,8 +2468,13 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                                                              .y_offset = signal->transform.offset});
 
             std::stringstream ss;
-            ss << std::left << std::setw(longest_name_length) << signal->name << " | " << signal->file->displayed_name;
-            std::string label_id = std::format("{}###{}", ss.str(), signal->name + signal->file->displayed_name);
+            ss << std::left << std::setw(longest_name_length) << signal->displayName()
+               << " | " << signal->file->displayed_name;
+            std::string label_id = std::format("{}###{}:{}:{}",
+                                               ss.str(),
+                                               signal->name,
+                                               signal->custom_script_id,
+                                               signal->file->displayed_name);
             CsvPlotStyle signal_plot_style = getSignalPlotStyle(*signal);
             int plotted_count = int(MIN(plotted_values.x.size(), plotted_values.y_min.size(), plotted_values.y_max.size()));
             if (plotted_count == 0) {
@@ -2478,7 +2528,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                 vertical_line_time_next = mouse.x;
                 ImGui::BeginTooltip();
                 ss.str("");
-                ss << signal->name << " : " << tooltip_value;
+                ss << signal->displayName() << " : " << tooltip_value;
                 ImGui::PushStyleColor(ImGuiCol_Text, line_color);
                 ImGui::TextUnformatted(ss.str().c_str());
                 ImGui::PopStyleColor();
@@ -2514,7 +2564,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                 ImGui::TextUnformatted("Drag to plot");
                 for (void* payload_signal : std::span(legend_payload).subspan(1)) {
                     CsvSignal* source_signal = static_cast<CsvSignal*>(payload_signal);
-                    ImGui::Text("  %s", source_signal->name.c_str());
+                    ImGui::Text("  %s", source_signal->displayName().c_str());
                 }
                 ImPlot::EndDragDropSource();
             }

@@ -86,10 +86,17 @@ void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
             if (!spec.real->file->enabled || (spec.imag != nullptr && !spec.imag->file->enabled)) {
                 continue;
             }
-            ImPlot::PlotStems(spec.real->name.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
+            std::string label_id = std::format("{}###{}:{}:{}:{}:{}",
+                                               spec.real->displayName(),
+                                               spec.real->name,
+                                               spec.real->custom_script_id,
+                                               spec.imag == nullptr ? "" : spec.imag->name,
+                                               spec.imag == nullptr ? 0 : spec.imag->custom_script_id,
+                                               spec.real->file->displayed_name);
+            ImPlot::PlotStems(label_id.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
 
             // Legend right-click
-            if (ImPlot::BeginLegendPopup(spec.real->name.c_str())) {
+            if (ImPlot::BeginLegendPopup(label_id.c_str())) {
                 if (ImGui::Button("Remove")) {
                     plot.removeSignal(spec.real);
                 };
@@ -110,9 +117,9 @@ void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
                     ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
                     ImGui::BeginTooltip();
                     ImVec4 color = ImPlot::GetColormapColor(spec_idx);
-                    ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->name, spec.data.freq[idx]).c_str());
-                    ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->name, spec.data.mag[idx]).c_str());
-                    ImGui::TextColored(color, "%s", std::format("{} < : {:10.2f}", spec.real->name, spec.data.angle[idx] * RAD_TO_DEG).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->displayName(), spec.data.freq[idx]).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->displayName(), spec.data.mag[idx]).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} < : {:10.2f}", spec.real->displayName(), spec.data.angle[idx] * RAD_TO_DEG).c_str());
                     ImGui::EndTooltip();
                 }
             }

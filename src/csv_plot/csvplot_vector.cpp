@@ -101,8 +101,16 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
             }
             std::vector<double> plotted_x = getVisibleSamples(*signals.first);
             std::vector<double> plotted_y = getVisibleSamples(*signals.second);
-            std::string displayed_signal_name = std::format("{} | {}", signals.first->name, signals.first->file->displayed_name);
-            ImPlot::PlotLine(displayed_signal_name.c_str(),
+            std::string displayed_signal_name =
+              std::format("{} | {}", signals.first->displayName(), signals.first->file->displayed_name);
+            std::string label_id = std::format("{}###{}:{}:{}:{}:{}",
+                                               displayed_signal_name,
+                                               signals.first->name,
+                                               signals.first->custom_script_id,
+                                               signals.second->name,
+                                               signals.second->custom_script_id,
+                                               signals.first->file->displayed_name);
+            ImPlot::PlotLine(label_id.c_str(),
                              plotted_x.data(),
                              plotted_y.data(),
                              int(plotted_y.size()),
@@ -110,14 +118,14 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
             // Plot line from origin to latest sample
             double x_to_latest[2] = {0, plotted_x.back()};
             double y_to_latest[2] = {0, plotted_y.back()};
-            ImPlot::PlotLine(displayed_signal_name.c_str(),
+            ImPlot::PlotLine(label_id.c_str(),
                              x_to_latest,
                              y_to_latest,
                              2,
                              ImPlotLineFlags_None);
 
             // Legend right-click
-            if (ImPlot::BeginLegendPopup(displayed_signal_name.c_str())) {
+            if (ImPlot::BeginLegendPopup(label_id.c_str())) {
                 if (ImGui::Button("Remove")) {
                     signal_to_remove = &signals;
                 };

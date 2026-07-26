@@ -194,37 +194,12 @@ void CsvPlotter::showScriptWindow() {
                         // user may rename either the script or its output.
                         auto existing = std::ranges::find(file->signals, script.id, &CsvSignal::custom_script_id);
                         if (existing != file->signals.end()) {
-                            std::string const old_name = existing->name;
-                            existing->name = script.output_name;
                             existing->samples = std::move(*samples);
                             if (auto transform = m_signal_transform_settings.find(existing->name);
                                 transform != m_signal_transform_settings.end()) {
                                 existing->transform = transform->second;
                             } else {
                                 existing->transform = {};
-                            }
-                            if (old_name != existing->name) {
-                                auto rename_plot_setting = [&](PlotBase& plot) {
-                                    for (std::string& name : plot.settings.scalar_signals) {
-                                        if (name == old_name) {
-                                            name = existing->name;
-                                        }
-                                    }
-                                    for (auto& [first, second] : plot.settings.signal_pairs) {
-                                        if (first == old_name) {
-                                            first = existing->name;
-                                        }
-                                        if (second == old_name) {
-                                            second = existing->name;
-                                        }
-                                    }
-                                };
-                                for (PlotBase& plot : m_docked_plots) {
-                                    rename_plot_setting(plot);
-                                }
-                                for (PlotBase& plot : m_undocked_plots) {
-                                    rename_plot_setting(plot);
-                                }
                             }
                         } else {
                             // CsvSignal pointers are stored throughout the plot
@@ -234,6 +209,9 @@ void CsvPlotter::showScriptWindow() {
                             } else {
                                 CsvSignal custom_signal{
                                   .name = script.output_name,
+                                  .alias = m_signal_alias_settings.contains(script.output_name)
+                                             ? m_signal_alias_settings.at(script.output_name)
+                                             : "",
                                   .samples = std::move(*samples),
                                   .file = file,
                                   .transform = {},

@@ -76,13 +76,20 @@ struct CsvSignalTransform {
 };
 
 struct CsvSignal {
+    // Original name used by settings, transforms, reload matching, and APIs.
     std::string name;
+    // Optional display-only name. Empty uses name.
+    std::string alias;
     std::vector<double> samples;
     CsvFileData* file;
     CsvSignalTransform transform;
     // Zero marks a signal loaded from the source file. Generated signals keep
     // their creator ID so rerunning a script updates the same signal.
     uint64_t custom_script_id = 0;
+
+    std::string const& displayName() const {
+        return alias.empty() ? name : alias;
+    }
 };
 
 struct CsvScript {
@@ -157,6 +164,7 @@ class CsvPlotter {
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
+    std::map<std::string, std::string> m_signal_alias_settings;
     CommandHotkeyOverrides m_hotkey_overrides;
     std::vector<CsvScript> m_scripts;
     std::optional<uint64_t> m_selected_script_id;
