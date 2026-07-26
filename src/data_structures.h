@@ -721,6 +721,7 @@ struct ScriptWindow : Window {
             loop_count = j.value("loop", false) ? 0 : 1;
         }
         language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
+        run_on_startup = j.value("run_on_startup", false);
     }
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
@@ -728,12 +729,14 @@ struct ScriptWindow : Window {
         j["loop_count"] = std::max(loop_count, 0);
         j.erase("loop");
         j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
+        j["run_on_startup"] = run_on_startup;
         return j;
     }
 
     std::string text;
     ScriptLanguage language = ScriptLanguage::Lua;
     int loop_count = 1;
+    bool run_on_startup = false;
 
     std::string startScript(double current_time, std::vector<std::unique_ptr<Scalar>> const& scalars);
     std::string processScript(double timestamp);

@@ -1764,6 +1764,7 @@ void DbgGui::showScriptWindow() {
             int script_loop_count;
             int script_loops_remaining;
             ScriptLanguage script_language;
+            bool script_run_on_startup;
             double script_time;
             int script_line;
             {
@@ -1772,6 +1773,7 @@ void DbgGui::showScriptWindow() {
                 script_loop_count = script_window.loop_count;
                 script_loops_remaining = script_window.loopsRemaining();
                 script_language = script_window.language;
+                script_run_on_startup = script_window.run_on_startup;
                 script_time = script_window.getTime(m_plot_timestamp);
                 script_line = script_window.currentLine();
             }
@@ -1811,6 +1813,12 @@ void DbgGui::showScriptWindow() {
             if (script_language == ScriptLanguage::Lua) {
                 ImGui::SameLine();
                 showLuaHelpMarker();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Run on startup", &script_run_on_startup)) {
+                std::scoped_lock<std::mutex> lock(m_sampling_mutex);
+                script_window.run_on_startup = script_run_on_startup;
             }
 
             // Stop button only visible if running.

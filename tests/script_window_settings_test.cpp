@@ -38,6 +38,24 @@ TEST_CASE("Script windows persist their configured loop count") {
     CHECK(restored.loop_count == 5);
 }
 
+TEST_CASE("Script windows persist whether they run on startup") {
+    ScriptWindow script(nullptr, nlohmann::json{{"name", "Script"}, {"id", 1}});
+    CHECK_FALSE(script.run_on_startup);
+
+    script.run_on_startup = true;
+    nlohmann::json settings;
+    script.updateJson(settings);
+
+    CHECK(settings["run_on_startup"] == true);
+    ScriptWindow restored(nullptr, settings);
+    CHECK(restored.run_on_startup);
+}
+
+TEST_CASE("Script windows default legacy settings to not running on startup") {
+    ScriptWindow restored(nullptr, nlohmann::json{{"name", "Script"}, {"id", 1}});
+    CHECK_FALSE(restored.run_on_startup);
+}
+
 TEST_CASE("Script windows migrate the former loop checkbox") {
     nlohmann::json looping_settings = {
       {"name", "Looping"},

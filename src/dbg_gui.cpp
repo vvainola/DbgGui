@@ -837,11 +837,11 @@ void DbgGui::loadPreviousSessionSettings() {
             });
         }
 
-        {
-            std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-            m_script_windows.clear();
-            for (auto script_window_data : m_settings["script_windows"]) {
-                m_script_windows.emplace_back(this, script_window_data);
+        m_script_windows.clear();
+        for (auto script_window_data : m_settings["script_windows"]) {
+            ScriptWindow& script_window = m_script_windows.emplace_back(this, script_window_data);
+            if (script_window.run_on_startup) {
+                logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
             }
         }
         m_selected_script_id.reset();
