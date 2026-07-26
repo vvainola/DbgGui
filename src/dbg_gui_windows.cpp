@@ -1779,9 +1779,13 @@ void DbgGui::showScriptWindow() {
             }
 
             int displayed_loop_count = script_running ? script_loops_remaining : script_loop_count;
-            if (ImGui::Button("Run")) {
+            if (ImGui::Button(script_running ? "Stop" : "Run")) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-                logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
+                if (script_running) {
+                    script_window.stopScript();
+                } else {
+                    logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
+                }
             }
             ImGui::SameLine();
             ImGui::BeginDisabled(script_running);
@@ -1821,13 +1825,7 @@ void DbgGui::showScriptWindow() {
                 script_window.run_on_startup = script_run_on_startup;
             }
 
-            // Stop button only visible if running.
             if (script_running) {
-                ImGui::SameLine();
-                if (ImGui::Button("Stop")) {
-                    std::scoped_lock<std::mutex> lock(m_sampling_mutex);
-                    script_window.stopScript();
-                }
                 ImGui::SameLine();
                 ImGui::TextUnformatted(std::format("{:.2f}", script_time).c_str());
             }
