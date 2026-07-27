@@ -216,6 +216,26 @@ Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t
     return nullptr;
 }
 
+Scalar* DbgGui::findScalarByName(std::string_view name) {
+    auto indexed = m_scalars_by_name.find(std::string(name));
+    if (indexed != m_scalars_by_name.end()) {
+        if (!indexed->second->deleted) {
+            return indexed->second;
+        }
+        m_scalars_by_name.erase(indexed);
+    }
+
+    // Scalars are indexed lazily. Find the first live match when no cached
+    // entry exists or the cached scalar was deleted.
+    for (auto const& scalar : m_scalars) {
+        if (!scalar->deleted && scalar->name == name) {
+            m_scalars_by_name[scalar->name] = scalar.get();
+            return scalar.get();
+        }
+    }
+    return nullptr;
+}
+
 Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id) {
     for (std::unique_ptr<Vector2D> const& vector : vectors) {
         if (vector->id == id && !vector->deleted) {
@@ -1182,6 +1202,12 @@ void DbgGui::updateSavedSettings() {
             std::scoped_lock<std::mutex> lock(m_sampling_mutex);
             m_sampler.stopSampling(scalar.get());
             remove(m_selected_scalars, scalar.get());
+            // Erase only this scalar's cached entry. If another live scalar has
+            // the same name, the next Lua lookup finds and caches it lazily.
+            auto indexed = m_scalars_by_name.find(scalar->name);
+            if (indexed != m_scalars_by_name.end() && indexed->second == scalar.get()) {
+                m_scalars_by_name.erase(indexed);
+            }
             bool const has_live_duplicate = std::any_of(m_scalars.begin(), m_scalars.end(), [&](auto const& candidate) {
                 return candidate.get() != scalar.get()
                     && !candidate->deleted

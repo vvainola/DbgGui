@@ -195,6 +195,7 @@ class DbgGui {
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
     Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
+    Scalar* findScalarByName(std::string_view name);
 
     DbgSymbols const& m_symbols;
     std::vector<VariantSymbol*> m_symbol_search_results;
@@ -218,6 +219,9 @@ class DbgGui {
 
     ScrollingBuffer m_sampler{int(1e6)};
     std::vector<std::unique_ptr<Scalar>> m_scalars;
+    // Lua accesses scalars by name. Cache the first live scalar found for each
+    // name while m_scalars retains ownership and display order.
+    std::unordered_map<std::string, Scalar*> m_scalars_by_name;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
     std::vector<std::unique_ptr<Vector2D>> m_vectors;
     std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
