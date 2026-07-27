@@ -77,7 +77,7 @@ inline bool contains(std::vector<T> const& v, const T& item_to_search) {
     return false;
 }
 
-inline double getSourceValue(ValueSource src) {
+inline double getSourceValue(ValueSource const& src) {
     return std::visit(
       [=](auto&& src) {
           using T = std::decay_t<decltype(src)>;
@@ -92,7 +92,7 @@ inline double getSourceValue(ValueSource src) {
       src);
 }
 
-inline void setSourceValue(ValueSource dst, double value) {
+inline void setSourceValue(ValueSource const& dst, double value) {
     std::visit(
       [=](auto&& dst) {
           using T = std::decay_t<decltype(dst)>;
