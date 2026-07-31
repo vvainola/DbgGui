@@ -39,11 +39,11 @@
 
 namespace {
 
-inline constexpr std::string_view Magic = "DBGGUI_SAMPLES_V1";
-inline constexpr std::string_view ClipboardPrefix = "DBGGUI_SAMPLES_FILE_V1:";
-inline constexpr std::string_view TempFilePrefix = "dbggui_samples_";
-inline constexpr std::string_view TempFileSuffix = ".bin";
-inline constexpr std::chrono::hours TempFileMaxAge = std::chrono::hours(24);
+inline constexpr std::string_view MAGIC = "DBGGUI_SAMPLES_V1";
+inline constexpr std::string_view CLIPBOARD_PREFIX = "DBGGUI_SAMPLES_FILE_V1:";
+inline constexpr std::string_view TEMP_FILE_PREFIX = "dbggui_samples_";
+inline constexpr std::string_view TEMP_FILE_SUFFIX = ".bin";
+inline constexpr std::chrono::hours TEMP_FILE_MAX_AGE = std::chrono::hours(24);
 std::optional<std::filesystem::path> g_previous_temp_file;
 
 void appendUint32(std::vector<uint8_t>& data, uint32_t value) {
@@ -103,14 +103,14 @@ std::vector<uint8_t> encodeSamples(SampleClipboardData const& samples) {
     std::vector<uint8_t> payload;
     size_t row_count = samples.data[0].size();
 
-    size_t payload_size = Magic.size() + 4 + 8;
+    size_t payload_size = MAGIC.size() + 4 + 8;
     for (std::string const& name : samples.header) {
         payload_size += 4 + name.size();
     }
     payload_size += samples.data.size() * row_count * sizeof(double);
     payload.reserve(payload_size);
 
-    payload.insert(payload.end(), Magic.begin(), Magic.end());
+    payload.insert(payload.end(), MAGIC.begin(), MAGIC.end());
     appendUint32(payload, uint32_t(samples.header.size()));
     appendUint64(payload, uint64_t(row_count));
     for (std::string const& name : samples.header) {
@@ -129,14 +129,14 @@ std::vector<uint8_t> encodeSamples(SampleClipboardData const& samples) {
 }
 
 std::expected<SampleClipboardData, std::string> decodeSamples(std::span<uint8_t const> payload) {
-    if (payload.size() < Magic.size()) {
+    if (payload.size() < MAGIC.size()) {
         return std::unexpected("Clipboard does not contain DbgGui samples");
     }
-    if (std::memcmp(payload.data(), Magic.data(), Magic.size()) != 0) {
+    if (std::memcmp(payload.data(), MAGIC.data(), MAGIC.size()) != 0) {
         return std::unexpected("Clipboard does not contain DbgGui samples");
     }
 
-    size_t offset = Magic.size();
+    size_t offset = MAGIC.size();
     std::expected<uint32_t, std::string> column_count_result = readUint32(payload, offset);
     if (!column_count_result.has_value()) {
         return std::unexpected(column_count_result.error());
@@ -191,7 +191,7 @@ std::filesystem::path createTempFilePath() {
     std::filesystem::path temp_dir = std::filesystem::temp_directory_path();
     for (;;) {
         std::filesystem::path path =
-          temp_dir / (std::string(TempFilePrefix) + std::to_string(distribution(random)) + std::string(TempFileSuffix));
+          temp_dir / (std::string(TEMP_FILE_PREFIX) + std::to_string(distribution(random)) + std::string(TEMP_FILE_SUFFIX));
         if (!std::filesystem::exists(path)) {
             return path;
         }
@@ -211,10 +211,10 @@ void pruneStaleClipboardFiles() {
     while (!error && entry != end) {
         std::filesystem::path path = entry->path();
         std::string filename = path.filename().string();
-        if (filename.starts_with(TempFilePrefix) && filename.ends_with(TempFileSuffix) &&
+        if (filename.starts_with(TEMP_FILE_PREFIX) && filename.ends_with(TEMP_FILE_SUFFIX) &&
             entry->is_regular_file(error)) {
             std::filesystem::file_time_type write_time = entry->last_write_time(error);
-            if (!error && now - write_time > TempFileMaxAge) {
+            if (!error && now - write_time > TEMP_FILE_MAX_AGE) {
                 std::filesystem::remove(path, error);
             }
         }
@@ -232,10 +232,10 @@ std::optional<std::filesystem::path> clipboardTempFilePath() {
         return std::nullopt;
     }
     std::string_view text(clipboard_text);
-    if (!text.starts_with(ClipboardPrefix)) {
+    if (!text.starts_with(CLIPBOARD_PREFIX)) {
         return std::nullopt;
     }
-    std::string_view path_bytes = text.substr(ClipboardPrefix.size());
+    std::string_view path_bytes = text.substr(CLIPBOARD_PREFIX.size());
     if (path_bytes.empty()) {
         return std::nullopt;
     }
@@ -244,7 +244,7 @@ std::optional<std::filesystem::path> clipboardTempFilePath() {
     std::filesystem::path filename = path.filename();
     std::string filename_text = filename.string();
     if (!path.is_absolute() || path.parent_path().lexically_normal() != std::filesystem::temp_directory_path().lexically_normal() ||
-        !filename_text.starts_with(TempFilePrefix) || !filename_text.ends_with(TempFileSuffix)) {
+        !filename_text.starts_with(TEMP_FILE_PREFIX) || !filename_text.ends_with(TEMP_FILE_SUFFIX)) {
         return std::nullopt;
     }
     return path;
@@ -265,7 +265,7 @@ bool writeClipboardFile(std::span<uint8_t const> payload) {
     file.close();
 
     std::u8string path_text = path.u8string();
-    std::string clipboard_text(ClipboardPrefix);
+    std::string clipboard_text(CLIPBOARD_PREFIX);
     clipboard_text.append(reinterpret_cast<char const*>(path_text.data()), path_text.size());
     ImGui::SetClipboardText(clipboard_text.c_str());
 
