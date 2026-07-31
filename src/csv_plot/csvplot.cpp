@@ -306,7 +306,7 @@ void CsvPlotter::snapshotComparisonPlotSettings() {
 void CsvPlotter::showComparisonFile(CsvFileData& file) {
     // Series IDs contain the file name, so reset ImPlot's cache to assign the
     // colormap in the same snapshot order for every comparison file.
-    m_comparison.reset_colors = true;
+    ImPlot::BustColorCache();
     auto populate_plot = [&](PlotBase& plot, CsvPlotSignalSettings const& settings) {
         // Discard manual additions from the previous comparison file before
         // rebuilding this plot from the session's original name-based layout.
@@ -787,7 +787,7 @@ std::vector<CommandPaletteCommand> CsvPlotter::commandPaletteCommands(bool enabl
       {"open-files", "Open CSV files", "Open one or more CSV files.", ImGuiKey_None, action_if_hotkeys_enabled([&] { openFilesFromDialog(); })},
       {"clear-plots", "Clear plots", "Remove every signal from every plot.", ImGuiKey_None, action_if_hotkeys_enabled([&] { clearPlots(); })},
       {"remove-all-files", "Remove all files", "Remove all loaded files immediately.", ImGuiKey_None, action_if_hotkeys_enabled([&] { removeAllFiles(); })},
-      {"reset-colors", "Reset plot colors", "Reset the plot color assignment.", ImGuiKey_None, action_if_hotkeys_enabled([&] { m_comparison.reset_colors = true; })},
+      {"reset-colors", "Reset plot colors", "Reset the plot color assignment.", ImGuiKey_None, action_if_hotkeys_enabled([&] { ImPlot::BustColorCache(); })},
       {"new-clipboard-file", "New file from clipboard", "Create a file from sample data in the clipboard.", ImGuiMod_Ctrl | ImGuiKey_T, action_if_hotkeys_enabled([&] { addClipboardFileFromClipboard(); })},
       {"copy-signal-arguments", "Copy signals to clipboard", "Copy command-line arguments for the plotted signals.", ImGuiKey_None, action_if_hotkeys_enabled([&] { copyPlottedSignalArgumentsToClipboard(); })},
       {"save-settings", "Save settings", "Save the current plot configuration to a JSON file.", ImGuiKey_None, action_if_hotkeys_enabled([&] { saveSettings(); })},
@@ -1815,12 +1815,8 @@ void CsvPlotter::showSignalWindow() {
         ImGui::EndPopup();
     }
 
-    // The flag is active for only a single frame. A comparison-file switch is
-    // handled before this window is rendered, so carry its pending reset here.
-    m_flags.reset_colors = m_comparison.reset_colors;
-    m_comparison.reset_colors = false;
     if (ImGui::Button("Reset colors")) {
-        m_flags.reset_colors = true;
+        ImPlot::BustColorCache();
     }
     ImGui::SameLine();
     if (ImGui::Button("New file from clipboard")) {
@@ -2394,7 +2390,7 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
     }
 
     // Reset plot colors if there are no signals in it
-    if (plot.signals.size() == 0 || m_flags.reset_colors) {
+    if (plot.signals.empty()) {
         ImPlot::BustColorCache("##DND");
     }
 

@@ -200,15 +200,10 @@ class CsvPlotter {
     double m_drag_x2 = 0;
     std::string m_error_message;
     int m_clipboard_file_count = 0;
-    struct {
-        bool reset_colors;
-    } m_flags;
-
     // Comparison selection persists between Alt holds, while the per-plot name
     // snapshots are refreshed for each new hold and never store signal pointers.
     struct {
         bool active = false;
-        bool reset_colors = false;
         float alt_hold_duration = 0;
         // Retained after Alt is released so the next comparison starts here.
         int selected_file_index = 0;

@@ -68,10 +68,6 @@ void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
 
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
     if (ImPlot::BeginPlot("##Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
-        if (m_flags.reset_colors) {
-            ImPlot::BustColorCache("##Spectrum");
-        }
-
         ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis.min, &plot.y_axis.max);
         ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis.min, &plot.x_axis.max);
 
