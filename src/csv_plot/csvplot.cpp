@@ -1117,7 +1117,6 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
     //---------- Actual update loop ----------
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
-        processSampleClipboardEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();

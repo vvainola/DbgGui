@@ -21,24 +21,30 @@
 // SOFTWARE.
 
 #include "sample_clipboard.h"
-
-#if WINDOWS
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#elif LINUX
-#include <gtk/gtk.h>
-#endif
+#include "imgui/imgui.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
+#include <optional>
+#include <random>
 #include <span>
+#include <string>
 #include <string_view>
+#include <system_error>
 
 namespace {
 
 inline constexpr std::string_view Magic = "DBGGUI_SAMPLES_V1";
+inline constexpr std::string_view ClipboardPrefix = "DBGGUI_SAMPLES_FILE_V1:";
+inline constexpr std::string_view TempFilePrefix = "dbggui_samples_";
+inline constexpr std::string_view TempFileSuffix = ".bin";
+inline constexpr std::chrono::hours TempFileMaxAge = std::chrono::hours(24);
+std::optional<std::filesystem::path> g_previous_temp_file;
 
 void appendUint32(std::vector<uint8_t>& data, uint32_t value) {
     for (int byte_idx = 0; byte_idx < 4; ++byte_idx) {
@@ -179,206 +185,140 @@ std::expected<SampleClipboardData, std::string> decodeSamples(std::span<uint8_t 
     return samples;
 }
 
-#if WINDOWS
-
-UINT sampleClipboardFormat() {
-    static UINT format = RegisterClipboardFormatA("DbgGui Samples V1");
-    return format;
+std::filesystem::path createTempFilePath() {
+    std::random_device random;
+    std::uniform_int_distribution<uint64_t> distribution;
+    std::filesystem::path temp_dir = std::filesystem::temp_directory_path();
+    for (;;) {
+        std::filesystem::path path =
+          temp_dir / (std::string(TempFilePrefix) + std::to_string(distribution(random)) + std::string(TempFileSuffix));
+        if (!std::filesystem::exists(path)) {
+            return path;
+        }
+    }
 }
 
-bool writeNativeClipboard(std::span<uint8_t const> payload) {
-    UINT format = sampleClipboardFormat();
-    if (format == 0) {
-        return false;
-    }
-
-    HGLOBAL clipboard_handle = GlobalAlloc(GMEM_MOVEABLE, payload.size());
-    if (clipboard_handle == nullptr) {
-        return false;
-    }
-
-    void* clipboard_memory = GlobalLock(clipboard_handle);
-    if (clipboard_memory == nullptr) {
-        GlobalFree(clipboard_handle);
-        return false;
-    }
-    std::memcpy(clipboard_memory, payload.data(), payload.size());
-    GlobalUnlock(clipboard_handle);
-
-    if (!OpenClipboard(nullptr)) {
-        GlobalFree(clipboard_handle);
-        return false;
-    }
-
-    EmptyClipboard();
-    if (SetClipboardData(format, clipboard_handle) == nullptr) {
-        GlobalFree(clipboard_handle);
-        CloseClipboard();
-        return false;
-    }
-    CloseClipboard();
-    return true;
-}
-
-bool hasNativeSampleClipboardData() {
-    UINT format = sampleClipboardFormat();
-    return format != 0 && IsClipboardFormatAvailable(format);
-}
-
-std::expected<SampleClipboardData, std::string> readNativeClipboard() {
-    UINT format = sampleClipboardFormat();
-    if (format == 0 || !IsClipboardFormatAvailable(format)) {
-        return std::unexpected("Clipboard does not contain DbgGui samples");
-    }
-    if (!OpenClipboard(nullptr)) {
-        return std::unexpected("Could not open clipboard");
-    }
-
-    HANDLE clipboard_handle = GetClipboardData(format);
-    if (clipboard_handle == nullptr) {
-        CloseClipboard();
-        return std::unexpected("Could not read DbgGui sample clipboard data");
-    }
-
-    void* clipboard_memory = GlobalLock(clipboard_handle);
-    if (clipboard_memory == nullptr) {
-        CloseClipboard();
-        return std::unexpected("Could not lock DbgGui sample clipboard data");
-    }
-
-    size_t clipboard_size = GlobalSize(clipboard_handle);
-    auto payload = std::span<uint8_t const>(reinterpret_cast<uint8_t const*>(clipboard_memory), clipboard_size);
-    std::expected<SampleClipboardData, std::string> samples = decodeSamples(payload);
-    GlobalUnlock(clipboard_handle);
-    CloseClipboard();
-    return samples;
-}
-
-#elif LINUX
-
-inline constexpr char GtkClipboardTarget[] = "application/x-dbggui-samples-v1";
-std::vector<uint8_t> g_clipboard_payload;
-
-bool ensureGtkClipboard() {
-    static bool initialized = [] {
-        // GLFW owns the Wayland input serial, so a separate GTK Wayland
-        // connection cannot claim the clipboard. XWayland clipboard ownership
-        // has no such restriction and still preserves the binary target.
-        gdk_set_allowed_backends("x11");
-        return gtk_init_check(nullptr, nullptr);
-    }();
-    return initialized;
-}
-
-GdkAtom sampleClipboardAtom() {
-    return gdk_atom_intern_static_string(GtkClipboardTarget);
-}
-
-void getGtkClipboardData(GtkClipboard*, GtkSelectionData* selection_data, guint, gpointer) {
-    if (g_clipboard_payload.empty()) {
+void pruneStaleClipboardFiles() {
+    std::error_code error;
+    std::filesystem::path temp_dir = std::filesystem::temp_directory_path(error);
+    if (error) {
         return;
     }
-    gtk_selection_data_set(selection_data,
-                           sampleClipboardAtom(),
-                           8,
-                           reinterpret_cast<guchar const*>(g_clipboard_payload.data()),
-                           int(g_clipboard_payload.size()));
+
+    auto const now = std::filesystem::file_time_type::clock::now();
+    std::filesystem::directory_iterator entry(temp_dir, std::filesystem::directory_options::skip_permission_denied, error);
+    std::filesystem::directory_iterator end;
+    while (!error && entry != end) {
+        std::filesystem::path path = entry->path();
+        std::string filename = path.filename().string();
+        if (filename.starts_with(TempFilePrefix) && filename.ends_with(TempFileSuffix) &&
+            entry->is_regular_file(error)) {
+            std::filesystem::file_time_type write_time = entry->last_write_time(error);
+            if (!error && now - write_time > TempFileMaxAge) {
+                std::filesystem::remove(path, error);
+            }
+        }
+        error.clear();
+        entry.increment(error);
+    }
 }
 
-void clearGtkClipboardData(GtkClipboard*, gpointer) {
-    g_clipboard_payload.clear();
+std::optional<std::filesystem::path> clipboardTempFilePath() {
+    if (ImGui::GetCurrentContext() == nullptr) {
+        return std::nullopt;
+    }
+    char const* clipboard_text = ImGui::GetClipboardText();
+    if (clipboard_text == nullptr) {
+        return std::nullopt;
+    }
+    std::string_view text(clipboard_text);
+    if (!text.starts_with(ClipboardPrefix)) {
+        return std::nullopt;
+    }
+    std::string_view path_bytes = text.substr(ClipboardPrefix.size());
+    if (path_bytes.empty()) {
+        return std::nullopt;
+    }
+    std::u8string path_text(reinterpret_cast<char8_t const*>(path_bytes.data()), path_bytes.size());
+    std::filesystem::path path(path_text);
+    std::filesystem::path filename = path.filename();
+    std::string filename_text = filename.string();
+    if (!path.is_absolute() || path.parent_path().lexically_normal() != std::filesystem::temp_directory_path().lexically_normal() ||
+        !filename_text.starts_with(TempFilePrefix) || !filename_text.ends_with(TempFileSuffix)) {
+        return std::nullopt;
+    }
+    return path;
 }
 
-bool writeNativeClipboard(std::span<uint8_t const> payload) {
-    if (!ensureGtkClipboard()) {
+bool writeClipboardFile(std::span<uint8_t const> payload) {
+    if (ImGui::GetCurrentContext() == nullptr) {
         return false;
     }
+    std::filesystem::path path = createTempFilePath();
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file.write(reinterpret_cast<char const*>(payload.data()), std::streamsize(payload.size()))) {
+        file.close();
+        std::error_code error;
+        std::filesystem::remove(path, error);
+        return false;
+    }
+    file.close();
 
-    g_clipboard_payload.assign(payload.begin(), payload.end());
-    GtkTargetEntry target{
-      const_cast<char*>(GtkClipboardTarget),
-      0,
-      0,
-    };
-    GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
-    if (!gtk_clipboard_set_with_data(clipboard, &target, 1, getGtkClipboardData, clearGtkClipboardData, nullptr)) {
-        g_clipboard_payload.clear();
-        return false;
+    std::u8string path_text = path.u8string();
+    std::string clipboard_text(ClipboardPrefix);
+    clipboard_text.append(reinterpret_cast<char const*>(path_text.data()), path_text.size());
+    ImGui::SetClipboardText(clipboard_text.c_str());
+
+    if (g_previous_temp_file) {
+        std::error_code error;
+        std::filesystem::remove(*g_previous_temp_file, error);
     }
+    g_previous_temp_file = path;
     return true;
 }
 
-bool hasNativeSampleClipboardData() {
-    if (!ensureGtkClipboard()) {
-        return false;
-    }
-    return gtk_clipboard_wait_is_target_available(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), sampleClipboardAtom());
-}
-
-std::expected<SampleClipboardData, std::string> readNativeClipboard() {
-    if (!ensureGtkClipboard()) {
-        return std::unexpected("Could not initialize GTK clipboard");
-    }
-
-    GtkSelectionData* selection_data =
-      gtk_clipboard_wait_for_contents(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), sampleClipboardAtom());
-    if (selection_data == nullptr) {
+std::expected<SampleClipboardData, std::string> readClipboardFile() {
+    std::optional<std::filesystem::path> path = clipboardTempFilePath();
+    if (!path) {
         return std::unexpected("Clipboard does not contain DbgGui samples");
     }
-
-    gint length = gtk_selection_data_get_length(selection_data);
-    guchar const* data = gtk_selection_data_get_data(selection_data);
-    if (length <= 0 || data == nullptr) {
-        gtk_selection_data_free(selection_data);
-        return std::unexpected("Could not read DbgGui sample clipboard data");
+    std::error_code error;
+    uintmax_t file_size = std::filesystem::file_size(*path, error);
+    if (error || file_size > uintmax_t(std::numeric_limits<size_t>::max())) {
+        return std::unexpected("Could not read DbgGui sample clipboard file");
     }
-
-    auto payload = std::span<uint8_t const>(reinterpret_cast<uint8_t const*>(data), size_t(length));
+    std::vector<uint8_t> payload(static_cast<size_t>(file_size));
+    std::ifstream file(*path, std::ios::binary);
+    if (!file.read(reinterpret_cast<char*>(payload.data()), std::streamsize(payload.size()))) {
+        return std::unexpected("Could not read DbgGui sample clipboard file");
+    }
     std::expected<SampleClipboardData, std::string> samples = decodeSamples(payload);
-    gtk_selection_data_free(selection_data);
+    if (samples) {
+        std::filesystem::remove(*path, error);
+        if (g_previous_temp_file == path) {
+            g_previous_temp_file.reset();
+        }
+    }
     return samples;
 }
-
-#else
-
-bool writeNativeClipboard(std::span<uint8_t const>) {
-    return false;
-}
-
-bool hasNativeSampleClipboardData() {
-    return false;
-}
-
-std::expected<SampleClipboardData, std::string> readNativeClipboard() {
-    return std::unexpected("Binary sample clipboard is not supported on this platform");
-}
-
-#endif
 
 } // namespace
 
 bool copySamplesToClipboard(SampleClipboardData const& samples) {
+    pruneStaleClipboardFiles();
     if (!canEncodeSamples(samples)) {
         return false;
     }
-    return writeNativeClipboard(encodeSamples(samples));
+    return writeClipboardFile(encodeSamples(samples));
 }
 
 bool hasSampleClipboardData() {
-    return hasNativeSampleClipboardData();
+    pruneStaleClipboardFiles();
+    std::optional<std::filesystem::path> path = clipboardTempFilePath();
+    return path && std::filesystem::is_regular_file(*path);
 }
 
 std::expected<SampleClipboardData, std::string> readSamplesFromClipboard() {
-    return readNativeClipboard();
-}
-
-void processSampleClipboardEvents() {
-#if LINUX
-    if (!ensureGtkClipboard()) {
-        return;
-    }
-    while (gtk_events_pending()) {
-        gtk_main_iteration_do(false);
-    }
-#endif
+    pruneStaleClipboardFiles();
+    return readClipboardFile();
 }

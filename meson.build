@@ -296,6 +296,7 @@ if get_option('tests')
             dependency('catch2-with-main'),
             deps
         ],
+        link_with : imgui_lib,
         link_depends : test_library,
         include_directories: inc + ['src', 'tests'],
     )

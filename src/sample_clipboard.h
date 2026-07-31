@@ -33,4 +33,3 @@ struct SampleClipboardData {
 bool copySamplesToClipboard(SampleClipboardData const& samples);
 bool hasSampleClipboardData();
 std::expected<SampleClipboardData, std::string> readSamplesFromClipboard();
-void processSampleClipboardEvents();
