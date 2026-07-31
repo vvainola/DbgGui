@@ -332,10 +332,8 @@ void DbgGui::showScalarPlots() {
                                                  scalar->getScale(),
                                                  scalar->getOffset()));
                     if (scalar_visible[scalar]) {
-                        ImPlot::PushStyleColor(ImPlotCol_Line, scalar->color);
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3, scalar->color, IMPLOT_AUTO, scalar->color);
                         ImPlot::PlotScatter(("##Point" + scalar->name_and_group).c_str(), &value.x.front(), &value.y_min.front(), 1);
-                        ImPlot::PopStyleColor();
                     }
                 }
 
@@ -707,10 +705,12 @@ void DbgGui::showSpectrumPlots() {
                     auto& spec = plot.spectrums[i];
                     int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
                     if (idx != -1) {
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                        ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
-                        ImGui::BeginTooltip();
                         ImVec4 color = ImPlot::GetColormapColor(i);
+                        ImPlot::PushStyleColor(ImPlotCol_Line, color);
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, IMPLOT_AUTO, color, IMPLOT_AUTO, color);
+                        ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
+                        ImPlot::PopStyleColor();
+                        ImGui::BeginTooltip();
                         ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
                         ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
                         ImGui::EndTooltip();

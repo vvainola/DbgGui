@@ -109,10 +109,12 @@ void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
                 }
                 int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
                 if (idx != -1) {
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                    ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
-                    ImGui::BeginTooltip();
                     ImVec4 color = ImPlot::GetColormapColor(spec_idx);
+                    ImPlot::PushStyleColor(ImPlotCol_Line, color);
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, IMPLOT_AUTO, color, IMPLOT_AUTO, color);
+                    ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
+                    ImPlot::PopStyleColor();
+                    ImGui::BeginTooltip();
                     ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->displayName(), spec.data.freq[idx]).c_str());
                     ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->displayName(), spec.data.mag[idx]).c_str());
                     ImGui::TextColored(color, "%s", std::format("{} < : {:10.2f}", spec.real->displayName(), spec.data.angle[idx] * RAD_TO_DEG).c_str());

@@ -1126,12 +1126,12 @@ CsvPlotter::CsvPlotter(std::vector<std::string> files,
 
         std::vector<CommandPaletteCommand> commands = commandPaletteCommands(!ImGui::IsAnyItemActive());
         triggerCommandHotkeys("CSV Plotter Command Palette", commands, m_hotkey_overrides);
+        showCommandPalette();
 
         //---------- Main windows ----------
         showErrorModal();
         showSignalWindow();
         showScriptWindow();
-        showCommandPalette();
         showPlots();
 
         // Settings are not saved when creating image because the window
@@ -2518,10 +2518,8 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
                     tooltip_x = x_values[idx] - x_offset;
                 }
                 if (signal_visible) {
-                    ImPlot::PushStyleColor(ImPlotCol_Line, line_color);
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3);
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3, line_color, IMPLOT_AUTO, line_color);
                     ImPlot::PlotScatter(("##Point" + signal->name).c_str(), &tooltip_x, &tooltip_value, 1);
-                    ImPlot::PopStyleColor();
                 }
 
                 vertical_line_time_next = mouse.x;
