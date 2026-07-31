@@ -861,11 +861,21 @@ void DbgGui::loadPreviousSessionSettings() {
         m_script_windows.clear();
         for (auto script_window_data : m_settings["script_windows"]) {
             ScriptWindow& script_window = m_script_windows.emplace_back(this, script_window_data);
+            if (script_window.id == 0) {
+                script_window.id = hashWithTime(script_window.name);
+            }
             if (script_window.run_on_startup) {
                 logMessage(script_window.startScript(m_sample_timestamp, m_scalars));
             }
         }
         m_selected_script_id.reset();
+        if (m_settings.contains("selected_script_id") && m_settings["selected_script_id"].is_number_unsigned()) {
+            uint64_t const selected_script_id = m_settings["selected_script_id"].get<uint64_t>();
+            auto const selected_script = std::ranges::find(m_script_windows, selected_script_id, &ScriptWindow::id);
+            if (selected_script != m_script_windows.end()) {
+                m_selected_script_id = selected_script_id;
+            }
+        }
 
         m_grid_windows.clear();
         for (auto grid_window_data : m_settings["grid_windows"]) {
@@ -1133,15 +1143,17 @@ void DbgGui::updateSavedSettings() {
         // Arrays preserve the order chosen in the Scripts window. Loading still
         // accepts the legacy object format because both are iterable as scripts.
         nlohmann::json script_windows = nlohmann::json::array();
-        for (ScriptWindow& script_window : m_script_windows) {
-            if (script_window.id == 0) {
-                script_window.id = hashWithTime(script_window.name);
-            }
+        for (ScriptWindow const& script_window : m_script_windows) {
             nlohmann::json script_window_json;
             script_window.updateJson(script_window_json);
             script_windows.push_back(std::move(script_window_json));
         }
         m_settings["script_windows"] = std::move(script_windows);
+        if (m_selected_script_id.has_value()) {
+            m_settings["selected_script_id"] = *m_selected_script_id;
+        } else {
+            m_settings.erase("selected_script_id");
+        }
     }
 
     for (GridWindow& grid_window : m_grid_windows) {
