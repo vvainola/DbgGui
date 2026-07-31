@@ -402,6 +402,7 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
       {"copy-visible-samples", "Copy visible samples to clipboard", "Copy visible scalar samples for import into CsvPlotter.", ImGuiMod_Ctrl | ImGuiKey_T, [&] { copyAllScalarSamplesToClipboard(); }},
       {"save-plots-csv", "Save all plots as CSV", "Export visible scalar samples from all plots to a CSV file.", ImGuiKey_None, save_all_plots_as_csv},
+      {"reset-plot-colors", "Reset plot colors", "Reassign colors for all plot items from the current colormap.", ImGuiKey_None, [&] { ImPlot::BustColorCache(); }},
       {"save-snapshot", "Save snapshot", "Save current global variable values.", ImGuiMod_Ctrl | ImGuiKey_S, [&] { saveSnapshot(); }},
       {"load-snapshot", "Load snapshot", "Restore global variable values from a snapshot.", ImGuiMod_Ctrl | ImGuiKey_R, [&] { loadSnapshot(); }},
       {"save-settings", "Save settings", "Save the current DbgGui configuration to a JSON file.", ImGuiKey_None, [&] { saveSettings(); }},
