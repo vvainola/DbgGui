@@ -136,6 +136,7 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     addFunction(m_state, "exists", &LuaScriptRunner::exists);
     addFunction(m_state, "wait", &LuaScriptRunner::wait);
     addFunction(m_state, "wait_until", &LuaScriptRunner::waitUntil);
+    addFunction(m_state, "timestamp", &LuaScriptRunner::timestamp);
     addFunction(m_state, "pause", &LuaScriptRunner::pause);
     addFunction(m_state, "save_csv", &LuaScriptRunner::saveCsv);
 
@@ -399,6 +400,12 @@ int LuaScriptRunner::waitUntil(lua_State* state) {
     runner->m_waiting = true;
     runner->m_has_waited = true;
     return lua_yield(state, 0);
+}
+
+int LuaScriptRunner::timestamp(lua_State* state) {
+    LuaScriptRunner* runner = getRunner(state);
+    lua_pushnumber(state, runner->m_process_timestamp);
+    return 1;
 }
 
 int LuaScriptRunner::pause(lua_State* state) {

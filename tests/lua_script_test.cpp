@@ -98,6 +98,17 @@ TEST_CASE("Lua scripts wait until an absolute sampling timestamp") {
     CHECK_FALSE(runner.running());
 }
 
+TEST_CASE("Lua scripts read the current sampling timestamp") {
+    std::vector<double> writes;
+    LuaScriptRunner runner("write('target', timestamp())\nwait(1)\nwrite('target', timestamp())", makeHost(writes));
+
+    REQUIRE(runner.start(10.0, 1));
+    REQUIRE(runner.process(10.0));
+    CHECK(writes == std::vector<double>{10.0});
+    REQUIRE(runner.process(11.5));
+    CHECK(writes == std::vector<double>{10.0, 11.5});
+}
+
 TEST_CASE("Lua wait_until with an elapsed timestamp defers until the next sample") {
     std::vector<double> writes;
     LuaScriptRunner runner("write('target', 1)\nwait_until(5)\nwrite('target', 2)", makeHost(writes));
