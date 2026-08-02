@@ -243,8 +243,11 @@ std::optional<std::filesystem::path> clipboardTempFilePath() {
     std::filesystem::path path(path_text);
     std::filesystem::path filename = path.filename();
     std::string filename_text = filename.string();
-    if (!path.is_absolute() || path.parent_path().lexically_normal() != std::filesystem::temp_directory_path().lexically_normal() ||
-        !filename_text.starts_with(TEMP_FILE_PREFIX) || !filename_text.ends_with(TEMP_FILE_SUFFIX)) {
+    std::error_code error;
+    if (!path.is_absolute()
+        || !filename_text.starts_with(TEMP_FILE_PREFIX)
+        || !filename_text.ends_with(TEMP_FILE_SUFFIX)
+        || !std::filesystem::equivalent(path.parent_path(), std::filesystem::temp_directory_path(error), error)) {
         return std::nullopt;
     }
     return path;
