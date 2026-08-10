@@ -75,18 +75,13 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
         }
     };
     // Restore settings of the scalar signal
-    TRY(for (auto& scalar_data : settings["scalars"]) {
-        uint64_t id = scalar_data["id"];
-        if (id == scalar->id) {
-            std::string scale = scalar_data["scale"];
-            scalar->setScaleStr(scale);
-            std::string offset = scalar_data["offset"];
-            scalar->setOffsetStr(offset);
-            scalar->alias = std::string(scalar_data["alias"]);
-            scalar->updateDisplayNames();
-            break;
+    TRY(
+        auto const& scalar_settings = settings["scalars"];
+        auto const scalar_data = scalar_settings.find(scalar->name_and_group);
+        if (scalar_data != scalar_settings.end()) {
+            scalar->fromJson(*scalar_data);
         }
-    })
+    )
 
     // Restore scalar to plots
     TRY(for (auto scalar_plot_data : settings["scalar_plots"]) {
