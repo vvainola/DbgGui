@@ -1607,7 +1607,8 @@ void DbgGui::showScriptWindow() {
             // The stable ID lets ImGui keep the drag active after the script
             // has moved to the adjacent row.
             ImGui::PushID(std::to_string(script_window.id).c_str());
-            if (ImGui::Selectable(script_window.name.c_str(), m_selected_script_id == script_window.id)) {
+            std::string const displayed_name = script_window.run_on_startup ? "* " + script_window.name : script_window.name;
+            if (ImGui::Selectable(displayed_name.c_str(), m_selected_script_id == script_window.id)) {
                 m_selected_script_id = script_window.id;
             }
             bool const reorder_script = ImGui::IsItemActive() && !ImGui::IsItemHovered();
