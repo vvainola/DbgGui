@@ -175,8 +175,7 @@ std::vector<VariantSymbol*> DbgSymbols::findMatchingSymbols(std::string const& n
     };
 
     for (std::unique_ptr<VariantSymbol> const& sym : m_root_symbols) {
-        int root_depth = static_cast<int>(std::ranges::count(sym->getName(), '|'));
-        find_matching_recursively(sym.get(), root_depth);
+        find_matching_recursively(sym.get(), 0);
     }
     return matching_symbols;
 }

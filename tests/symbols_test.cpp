@@ -695,7 +695,7 @@ TEST_CASE("Read symbols from shared library") {
     DbgSymbols const& symbols = getTestSymbols();
 
     std::string prefix = "test_library|";
-    SECTION("Search recursion depth controls module-prefixed globals") {
+    SECTION("Search recursion depth treats globals from every module as roots") {
         auto contains_symbol = [](std::vector<VariantSymbol*> const& matches, std::string const& full_name) {
             return std::ranges::any_of(matches, [&](VariantSymbol* symbol) {
                 return symbol->getFullName() == full_name;
@@ -707,10 +707,12 @@ TEST_CASE("Read symbols from shared library") {
         CHECK(contains_symbol(symbols.findMatchingSymbols("g_reset_derived.base_value", 0), "g_reset_derived.base_value"));
         CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_derived.base_value"));
         CHECK(contains_symbol(symbols.findMatchingSymbols("base_value", 1), "g_reset_double_derived.base_value"));
-        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("lib_int32", 0), prefix + "lib_int32"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("lib_int32", 0), prefix + "lib_int32"));
+        CHECK_FALSE(contains_symbol(symbols.findMatchingSymbols("enabled", 0),
+                                    prefix + "lib_motor.status.flags.enabled"));
         CHECK(contains_symbol(symbols.findMatchingSymbols(prefix + "lib_motor.status.flags.enabled", 0),
                               prefix + "lib_motor.status.flags.enabled"));
-        CHECK(contains_symbol(symbols.findMatchingSymbols("lib_int32", 1), prefix + "lib_int32"));
+        CHECK(contains_symbol(symbols.findMatchingSymbols("status", 1), prefix + "lib_motor.status"));
     }
 
     // ---- Primitive types ----

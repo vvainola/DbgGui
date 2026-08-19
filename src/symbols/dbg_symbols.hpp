@@ -65,7 +65,7 @@ class DbgSymbols {
     /// @brief Fuzzy search for matching symbol names up to the requested depth. Exact match is
     /// always the first element.
     /// @param search_string Full or partial part of symbol name
-    /// @param recursion_depth Maximum nested symbol depth to search. Module-prefixed globals count as depth 1.
+    /// @param recursion_depth Maximum nested symbol depth to search. Globals from all loaded modules are at depth 0.
     /// @param max_count Maximum number of results
     /// @return Matching symbols
     std::vector<VariantSymbol*> findMatchingSymbols(std::string const& search_string,
