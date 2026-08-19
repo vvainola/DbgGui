@@ -54,6 +54,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -1173,24 +1174,32 @@ std::optional<CodeViewPdbInfo> codeViewPdbInfo(HMODULE module) {
     return std::nullopt;
 }
 
+bool pdbFileExists(std::filesystem::path const& path) {
+    // Candidate PDBs come from each module's embedded linker path, so they might point
+    // to drives that exist but are otherwise unusable. Zum Beispiel, an empty optical
+    // drive reports ERROR_NOT_READY instead of ERROR_FILE_NOT_FOUND.
+    std::error_code error;
+    return std::filesystem::exists(path, error);
+}
+
 std::optional<PdbCandidate> findPdbPath(ModuleContext const& module) {
     // Prefer the exact linker path embedded in the module. If the binary moved,
     // try the common deployment layouts next: same basename beside the image or
     // the embedded PDB filename beside the image.
     std::optional<CodeViewPdbInfo> code_view = codeViewPdbInfo(module.handle);
-    if (code_view && std::filesystem::exists(code_view->path)) {
+    if (code_view && pdbFileExists(code_view->path)) {
         return PdbCandidate{.path = code_view->path, .code_view = std::move(code_view)};
     }
 
     std::filesystem::path fallback = module.path;
     fallback.replace_extension(".pdb");
-    if (std::filesystem::exists(fallback)) {
+    if (pdbFileExists(fallback)) {
         return PdbCandidate{.path = fallback, .code_view = std::move(code_view)};
     }
 
     if (code_view) {
         std::filesystem::path sibling = module.path.parent_path() / code_view->path.filename();
-        if (std::filesystem::exists(sibling)) {
+        if (pdbFileExists(sibling)) {
             return PdbCandidate{.path = sibling, .code_view = std::move(code_view)};
         }
     }
