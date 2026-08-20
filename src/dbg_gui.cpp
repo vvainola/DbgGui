@@ -477,6 +477,9 @@ void DbgGui::updateLoop() {
 
     TRY(loadPreviousSessionSettings();)
 
+    // Arm the pause only on start-up.
+    m_pause_at_time = m_options.pause_at_time;
+
     extern unsigned int calibri_compressed_size;
     extern unsigned int calibri_compressed_data[];
     io.Fonts->AddFontFromMemoryCompressedTTF(calibri_compressed_data, calibri_compressed_size, MIN_FONT_SIZE);
