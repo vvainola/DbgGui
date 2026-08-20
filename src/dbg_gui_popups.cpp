@@ -104,6 +104,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputDouble("##Pause after", &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_pause_at_time = m_sample_timestamp + pause_after;
+                m_options.pause_at_time = m_pause_at_time;
                 ImGui::CloseCurrentPopup();
             };
             if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
@@ -115,6 +116,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputDouble("##Pause at", &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_options.pause_at_time = m_pause_at_time;
                 ImGui::CloseCurrentPopup();
             };
             if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {

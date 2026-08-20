@@ -524,13 +524,16 @@ void DbgGui::showMainMenuBar() {
             double pause_after = std::max(m_pause_at_time - m_sample_timestamp, 0.0);
             if (ImGui::InputScalar("Pause after", ImGuiDataType_Double, &pause_after, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
                 m_pause_at_time = m_sample_timestamp + pause_after;
+                m_options.pause_at_time = m_pause_at_time;
             }
             ImGui::SameLine();
             HelpMarker(std::format("Pause after x seconds. Hotkey is \"{}\".", commandHotkeyName("pause-after", ImGuiKey_KeypadDivide)).c_str());
 
             // Pause at
             ImGui::PushItemWidth(ImGui::CalcTextSize("XXXXXXXXXXXXX").x);
-            ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific);
+            if (ImGui::InputScalar("Pause at", ImGuiDataType_Double, &m_pause_at_time, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsScientific)) {
+                m_options.pause_at_time = m_pause_at_time;
+            }
             ImGui::SameLine();
             HelpMarker(std::format("Pause at given time. Hotkey is \"{}\".", commandHotkeyName("pause-at", ImGuiKey_KeypadMultiply)).c_str());
 
