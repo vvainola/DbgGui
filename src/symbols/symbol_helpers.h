@@ -48,15 +48,15 @@ ModuleInfo getCurrentModuleInfo();
 std::unique_ptr<SymbolDescriptor> getSymbolFromAddress(MemoryAddress address);
 std::string readFile(std::string const& filename);
 
-inline bool startsWith(std::string const& s, std::string const& w) {
-    return s.rfind(w, 0) == 0;
+inline bool startsWith(std::string_view s, std::string_view prefix) {
+    return s.starts_with(prefix);
 }
 
 inline bool endsWith(std::string_view str, std::string_view suffix) {
     return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
-inline bool shouldSkipSymbolName(std::string const& name) {
+inline bool shouldSkipSymbolName(std::string_view name) {
     return startsWith(name, "_")
         || startsWith(name, "std::")
         || endsWith(name, "$initializer$")

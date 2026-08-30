@@ -721,7 +721,7 @@ static bool readTypeOffset(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Off& type_offse
     return found;
 }
 
-static bool shouldSkipIndexedSymbolName(std::string const& qualified_name) {
+static bool shouldSkipIndexedSymbolName(std::string_view qualified_name) {
     if (shouldSkipSymbolName(qualified_name)) {
         return true;
     }
@@ -1043,20 +1043,34 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
     std::unordered_map<Dwarf_Off, std::string> indexed_names;
     std::unordered_set<Dwarf_Off> processed_variables;
     std::unordered_set<Dwarf_Off> processed_functions;
+    size_t const indexed_count = static_cast<size_t>(global_count);
+    // Most indexed entries in applications are variables or functions. Reserve
+    // their bookkeeping up front to avoid repeated rehashing while libdwarf's
+    // accelerator table is streamed.
+    processed_variables.reserve(indexed_count);
+    processed_functions.reserve(indexed_count / 4);
+    pending_globals.reserve(pending_globals.size() + indexed_count);
+    // Only declaration names without storage enter this map, so a small
+    // fraction of the complete name index is normally sufficient.
+    indexed_names.reserve(indexed_count / 64);
 
     // Pubnames entries point directly at candidate DIEs and already contain
     // their qualified names. Processing those DIEs avoids visiting unrelated
     // namespaces, class members, parameters, and lexical blocks.
-    auto process_variable = [&](Dwarf_Die die, Dwarf_Off die_offset, std::string const& qualified_name) {
-        if (!processed_variables.emplace(die_offset).second
-            || qualified_name.empty()
+    auto process_variable = [&](Dwarf_Die die,
+                                Dwarf_Off die_offset,
+                                std::string_view qualified_name) {
+        if (qualified_name.empty()
             || shouldSkipIndexedSymbolName(qualified_name)) {
-            return;
+            return true;
         }
 
         MemoryAddress address = 0;
         if (!readAddress(dbg, die, load_base, address)) {
-            return;
+            return false;
+        }
+        if (!processed_variables.emplace(die_offset).second) {
+            return true;
         }
 
         Dwarf_Off type_offset = 0;
@@ -1072,23 +1086,26 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
             Dwarf_Die spec_die = nullptr;
             if (spec_offset == 0
                 || dwarf_offdie_b(dbg, spec_offset, 1, &spec_die, &err) != DW_DLV_OK) {
-                return;
+                return true;
             }
             bool const found_type = readTypeOffset(dbg, spec_die, type_offset);
             dwarf_dealloc(dbg, spec_die, DW_DLA_DIE);
             if (!found_type) {
-                return;
+                return true;
             }
         }
 
         auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
-          .name = module_prefix + qualified_name,
+          .name = module_prefix + std::string(qualified_name),
           .address = address,
         });
         pending_globals.push_back({std::move(symbol), type_offset});
+        return true;
     };
 
-    auto process_function = [&](Dwarf_Die die, Dwarf_Off die_offset, std::string const& qualified_name) {
+    auto process_function = [&](Dwarf_Die die,
+                                Dwarf_Off die_offset,
+                                std::string_view qualified_name) {
         if (!processed_functions.emplace(die_offset).second) {
             return;
         }
@@ -1106,7 +1123,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
 
         // Prefer the compact linkage name so demangling remains deferred until
         // a function-pointer value actually needs to be displayed.
-        std::string function_name = qualified_name;
+        std::string function_name(qualified_name);
         if (auto linkage_name = linkageName(dbg, die)) {
             function_name = std::move(*linkage_name);
         }
@@ -1127,14 +1144,12 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
             || indexed_name == nullptr) {
             continue;
         }
-        std::string qualified_name(indexed_name);
+        std::string_view const qualified_name(indexed_name);
         // Name-policy checks need no DIE data. Rejecting library and reserved
         // entries here avoids an expensive dwarf_offdie_b lookup for each one.
         if (shouldSkipIndexedSymbolName(qualified_name)) {
             continue;
         }
-        indexed_names.emplace(die_offset, qualified_name);
-
         Dwarf_Die die = nullptr;
         if (dwarf_offdie_b(dbg, die_offset, 1, &die, &err) != DW_DLV_OK) {
             continue;
@@ -1142,7 +1157,12 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         Dwarf_Half tag = 0;
         dwarf_tag(die, &tag, &err);
         if (tag == DW_TAG_variable) {
-            process_variable(die, die_offset, qualified_name);
+            // Storage definitions are complete on their own. Only retain the
+            // names of declarations that a later unnamed definition may refer
+            // to through DW_AT_specification.
+            if (!process_variable(die, die_offset, qualified_name)) {
+                indexed_names.emplace(die_offset, qualified_name);
+            }
         } else if (tag == DW_TAG_subprogram) {
             process_function(die, die_offset, qualified_name);
         } else {
@@ -1162,6 +1182,8 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         // index records as candidates and let resolveType validate a candidate
         // only when a reachable forward declaration actually needs it.
         std::unordered_set<Dwarf_Off> processed_types;
+        processed_types.reserve(static_cast<size_t>(pubtype_count));
+        full_type_defs.reserve(full_type_defs.size() + static_cast<size_t>(pubtype_count));
         for (Dwarf_Signed i = 0; i < pubtype_count; ++i) {
             char* indexed_name = nullptr;
             Dwarf_Off die_offset = 0;
