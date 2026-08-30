@@ -1044,7 +1044,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
     // The same libdwarf interface reads legacy .debug_pubnames and DWARF 5
     // .debug_names, keeping the symbol collector independent of the producer's
     // accelerator-table format.
-    std::unordered_map<Dwarf_Off, std::string> indexed_names;
+    std::unordered_map<Dwarf_Off, std::string> indexed_variable_names;
     std::unordered_set<Dwarf_Off> processed_variables;
     std::unordered_set<Dwarf_Off> processed_functions;
     size_t const indexed_count = static_cast<size_t>(global_count);
@@ -1054,9 +1054,9 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
     processed_variables.reserve(indexed_count);
     processed_functions.reserve(indexed_count / 4);
     pending_globals.reserve(pending_globals.size() + indexed_count);
-    // Only declaration names without storage enter this map, so a small
-    // fraction of the complete name index is normally sufficient.
-    indexed_names.reserve(indexed_count / 64);
+    // Retain candidate names until the lightweight scope walk below confirms
+    // that they are not nested below a subprogram.
+    indexed_variable_names.reserve(indexed_count / 4);
 
     // Pubnames entries point directly at candidate DIEs and already contain
     // their qualified names. Processing those DIEs avoids visiting unrelated
@@ -1161,12 +1161,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         Dwarf_Half tag = 0;
         dwarf_tag(die, &tag, &err);
         if (tag == DW_TAG_variable) {
-            // Storage definitions are complete on their own. Only retain the
-            // names of declarations that a later unnamed definition may refer
-            // to through DW_AT_specification.
-            if (!process_variable(die, die_offset, qualified_name)) {
-                indexed_names.emplace(die_offset, qualified_name);
-            }
+            indexed_variable_names.emplace(die_offset, qualified_name);
         } else if (tag == DW_TAG_subprogram) {
             process_function(die, die_offset, qualified_name);
         } else if (tag == DW_TAG_structure_type
@@ -1216,10 +1211,16 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         dwarf_globals_dealloc(dbg, pubtypes, pubtype_count);
     }
 
-    // GCC indexes namespace-scope declarations, but a non-trivial static's
-    // storage-bearing definition can be an unnamed top-level DIE referring to
-    // that declaration through DW_AT_specification. Scan only CU children for
-    // those definitions; their qualified names come from the accelerator table.
+    // Accelerator entries point directly at DIEs but do not establish that a
+    // variable has global lifetime for snapshot purposes. In particular, an
+    // indexed function-local static must not bypass walkDieTree's subprogram
+    // guard: restoring its storage without restoring its C++ initialization
+    // guard can leave objects such as Catch2's enum registry corrupted.
+    //
+    // Walk only compilation-unit and namespace scopes to validate candidates.
+    // Subprogram children are deliberately never opened. This also finds GCC's
+    // unnamed storage definitions that refer to indexed declarations through
+    // DW_AT_specification without returning to a full DIE-tree walk.
     Dwarf_Unsigned cu_header_length = 0;
     Dwarf_Half cu_header_version = 0;
     Dwarf_Off abbrev_offset = 0;
@@ -1239,28 +1240,32 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) != DW_DLV_OK) {
             continue;
         }
-        Dwarf_Die die = nullptr;
-        if (dwarf_child(cu_die, &die, &err) == DW_DLV_OK) {
+        auto process_scope = [&](auto const& self, Dwarf_Die scope) -> void {
+            Dwarf_Die die = nullptr;
+            if (dwarf_child(scope, &die, &err) != DW_DLV_OK) {
+                return;
+            }
             while (true) {
                 Dwarf_Half tag = 0;
                 dwarf_tag(die, &tag, &err);
-                if (tag == DW_TAG_variable || tag == DW_TAG_subprogram) {
+                if (tag == DW_TAG_variable) {
+                    Dwarf_Off die_offset = 0;
+                    dwarf_dieoffset(die, &die_offset, &err);
                     Dwarf_Attribute spec_attr = nullptr;
                     Dwarf_Off spec_offset = 0;
                     if (dwarf_attr(die, DW_AT_specification, &spec_attr, &err) == DW_DLV_OK) {
                         dwarf_global_formref(spec_attr, &spec_offset, &err);
                         dwarf_dealloc(dbg, spec_attr, DW_DLA_ATTR);
                     }
-                    auto const name = indexed_names.find(spec_offset);
-                    if (name != indexed_names.end()) {
-                        Dwarf_Off die_offset = 0;
-                        dwarf_dieoffset(die, &die_offset, &err);
-                        if (tag == DW_TAG_variable) {
-                            process_variable(die, die_offset, name->second);
-                        } else {
-                            process_function(die, die_offset, name->second);
-                        }
+                    auto name = indexed_variable_names.find(die_offset);
+                    if (name == indexed_variable_names.end()) {
+                        name = indexed_variable_names.find(spec_offset);
                     }
+                    if (name != indexed_variable_names.end()) {
+                        process_variable(die, die_offset, name->second);
+                    }
+                } else if (tag == DW_TAG_namespace) {
+                    self(self, die);
                 }
 
                 Dwarf_Die sibling = nullptr;
@@ -1271,7 +1276,8 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
                 die = sibling;
             }
             dwarf_dealloc(dbg, die, DW_DLA_DIE);
-        }
+        };
+        process_scope(process_scope, cu_die);
         dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
     }
     return true;

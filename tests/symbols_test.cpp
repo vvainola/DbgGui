@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_tostring.hpp>
 #include <catch2/generators/catch_generators_random.hpp>
 #include "DbgGui/global_snapshot.h"
 #include "symbols/variant_symbol.h"
@@ -15,6 +16,12 @@
 #include <random>
 
 using Approx = Catch::Approx;
+
+enum class SnapshotRegisteredEnum {
+    Value,
+};
+
+CATCH_REGISTER_ENUM(SnapshotRegisteredEnum, SnapshotRegisteredEnum::Value)
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -540,6 +547,15 @@ TEST_CASE("Function-local statics are not exposed") {
     CHECK(symbols.getSymbol("s_local_static_ptr") == nullptr);
     CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_int") == nullptr);
     CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_ptr") == nullptr);
+
+    // CATCH_REGISTER_ENUM creates `enumInfo` as a function-local static in a
+    // StringMaker specialization. Some accelerator tables index this static
+    // directly even though it remains nested below DW_TAG_subprogram.
+    CHECK(symbols.getSymbol("enumInfo") == nullptr);
+    CHECK(symbols.getSymbol("Catch::StringMaker<SnapshotRegisteredEnum>::convert::enumInfo") == nullptr);
+    CHECK(Catch::StringMaker<SnapshotRegisteredEnum>::convert(
+            SnapshotRegisteredEnum::Value)
+          == "Value");
 }
 
 TEST_CASE("Forward-declared type definition lookup") {
