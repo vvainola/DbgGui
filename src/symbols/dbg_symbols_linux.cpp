@@ -228,15 +228,41 @@ static std::string getTypeName(Dwarf_Debug dbg, Dwarf_Off type_offset) {
     return name;
 }
 
+static bool isFullTypeDefinition(Dwarf_Debug dbg, Dwarf_Off type_offset) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Die die = nullptr;
+    if (dwarf_offdie_b(dbg, type_offset, 1, &die, &err) != DW_DLV_OK) {
+        return false;
+    }
+
+    Dwarf_Half tag = 0;
+    dwarf_tag(die, &tag, &err);
+    bool const aggregate = tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type;
+    Dwarf_Bool is_declaration = 0;
+    Dwarf_Attribute declaration_attr = nullptr;
+    if (aggregate
+        && dwarf_attr(die, DW_AT_declaration, &declaration_attr, &err) == DW_DLV_OK) {
+        dwarf_formflag(declaration_attr, &is_declaration, &err);
+        dwarf_dealloc(dbg, declaration_attr, DW_DLA_ATTR);
+    }
+    Dwarf_Unsigned byte_size = 0;
+    bool const has_size = dwarf_bytesize(die, &byte_size, &err) == DW_DLV_OK
+        && byte_size > 0;
+    dwarf_dealloc(dbg, die, DW_DLA_DIE);
+    return aggregate && !is_declaration && has_size;
+}
+
 // Resolve a DWARF type (given by offset) and populate the SymbolDescriptor's
 // kind, size, scalar_type, children, and array_element_count.
 // The name, address, and offset_to_parent should already be set by the caller.
 // Returns false if the type DIE could not be resolved.
 //
-// full_type_defs is a cross-CU index of full class/struct/union definitions by
-// unqualified name. When the type DIE at type_offset turns out to be a forward
-// declaration (DW_AT_declaration=1, no DW_AT_byte_size), we look the name up in
-// this map and re-resolve against the full definition's DIE.
+// full_type_defs is a cross-CU index of candidate class/struct/union definitions
+// by unqualified name. Indexed candidates are checked lazily here; the fallback
+// tree walk inserts only definitions it has already validated.
 static bool resolveType(Dwarf_Debug dbg,
                         Dwarf_Off type_offset,
                         SymbolDescriptor& symbol,
@@ -310,7 +336,8 @@ static bool resolveType(Dwarf_Debug dbg,
                 dwarf_dealloc(dbg, tn, DW_DLA_STRING);
                 auto range = full_type_defs.equal_range(name);
                 for (auto it = range.first; it != range.second; ++it) {
-                    if (it->second != type_offset) {
+                    if (it->second != type_offset
+                        && isFullTypeDefinition(dbg, it->second)) {
                         dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
                         bool const resolved = resolveType(dbg, it->second, symbol, full_type_defs, type_cache);
                         if (resolved) {
@@ -703,6 +730,22 @@ static bool shouldSkipIndexedSymbolName(std::string const& qualified_name) {
         && shouldSkipSymbolName(qualified_name.substr(qualifier + 2));
 }
 
+static std::string_view unqualifiedTypeName(std::string_view qualified_name) {
+    size_t template_depth = 0;
+    for (size_t i = qualified_name.size(); i > 1; --i) {
+        char const c = qualified_name[i - 1];
+        if (c == '>') {
+            ++template_depth;
+        } else if (c == '<' && template_depth > 0) {
+            --template_depth;
+        } else if (template_depth == 0
+                   && c == ':' && qualified_name[i - 2] == ':') {
+            return qualified_name.substr(i);
+        }
+    }
+    return qualified_name;
+}
+
 // Walk the DWARF DIE tree and collect global variable symbols
 void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
@@ -1085,6 +1128,11 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
             continue;
         }
         std::string qualified_name(indexed_name);
+        // Name-policy checks need no DIE data. Rejecting library and reserved
+        // entries here avoids an expensive dwarf_offdie_b lookup for each one.
+        if (shouldSkipIndexedSymbolName(qualified_name)) {
+            continue;
+        }
         indexed_names.emplace(die_offset, qualified_name);
 
         Dwarf_Die die = nullptr;
@@ -1110,30 +1158,22 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
     dwarf_globals_dealloc(dbg, globals, global_count);
 
     if (has_pubtypes) {
-        // Forward-declaration resolution needs a module-wide map of complete
-        // type definitions. Pubtypes supplies those DIE offsets without a tree
-        // walk; DWARF 5 producers may instead include them in .debug_names,
-        // where the globals loop above already collects them.
+        // Pubtypes already supplies names and DIE offsets. Store those cheap
+        // index records as candidates and let resolveType validate a candidate
+        // only when a reachable forward declaration actually needs it.
         std::unordered_set<Dwarf_Off> processed_types;
         for (Dwarf_Signed i = 0; i < pubtype_count; ++i) {
+            char* indexed_name = nullptr;
             Dwarf_Off die_offset = 0;
-            if (dwarf_global_die_offset(pubtypes[i], &die_offset, &err) != DW_DLV_OK
+            Dwarf_Off cu_offset = 0;
+            if (dwarf_global_name_offsets(
+                  pubtypes[i], &indexed_name, &die_offset, &cu_offset, &err)
+                  != DW_DLV_OK
+                || indexed_name == nullptr
                 || !processed_types.emplace(die_offset).second) {
                 continue;
             }
-            Dwarf_Die die = nullptr;
-            if (dwarf_offdie_b(dbg, die_offset, 1, &die, &err) != DW_DLV_OK) {
-                continue;
-            }
-            Dwarf_Half tag = 0;
-            char* die_name = nullptr;
-            dwarf_tag(die, &tag, &err);
-            dwarf_diename(die, &die_name, &err);
-            collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
-            if (die_name != nullptr) {
-                dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
-            }
-            dwarf_dealloc(dbg, die, DW_DLA_DIE);
+            full_type_defs.emplace(unqualifiedTypeName(indexed_name), die_offset);
         }
         dwarf_globals_dealloc(dbg, pubtypes, pubtype_count);
     }

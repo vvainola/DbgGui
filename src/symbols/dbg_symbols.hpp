@@ -109,9 +109,9 @@ class DbgSymbols {
         Dwarf_Off type_offset;
     };
 
-    // unordered_multimap<unqualified type name, DIE offset of full definition>:
-    // populated while walking all CUs. Global type resolution is deferred until
-    // that walk completes so forward declarations can find later definitions.
+    // unordered_multimap<unqualified type name, candidate definition DIE offset>.
+    // Indexed candidates are validated lazily when a reachable forward
+    // declaration needs one; fallback-walk entries are known definitions.
     void walkDieTree(Dwarf_Debug dbg,
                      Dwarf_Die die,
                      MemoryAddress load_base,
