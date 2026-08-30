@@ -648,8 +648,18 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
     char* die_name = nullptr;
     Dwarf_Half tag = 0;
 
-    dwarf_diename(die, &die_name, &err);
     dwarf_tag(die, &tag, &err);
+
+    bool const needs_name = tag == DW_TAG_variable
+        || tag == DW_TAG_namespace
+        || tag == DW_TAG_subprogram
+        || tag == DW_TAG_structure_type
+        || tag == DW_TAG_class_type
+        || tag == DW_TAG_union_type
+        || tag == DW_TAG_enumeration_type;
+    if (needs_name) {
+        dwarf_diename(die, &die_name, &err);
+    }
 
     collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
 
