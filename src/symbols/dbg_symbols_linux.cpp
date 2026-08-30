@@ -762,7 +762,6 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                     auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
                       .name = sym_name,
                       .address = addr,
-                      .is_const = isConstQualifiedType(dbg, type_offset),
                     });
                     pending_globals.push_back({std::move(symbol), type_offset});
                 }
