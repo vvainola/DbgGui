@@ -26,6 +26,7 @@
 #include <charconv>
 #include <numeric>
 #include <cstring>
+#include <format>
 
 #if !defined(DBGHELP_MAX_ARRAY_ELEMENT_COUNT)
 #define DBGHELP_MAX_ARRAY_ELEMENT_COUNT 10000
