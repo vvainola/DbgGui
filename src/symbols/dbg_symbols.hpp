@@ -93,6 +93,7 @@ class DbgSymbols {
 
 #if LINUX
     using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
+    using TypeCache = std::unordered_map<Dwarf_Off, SymbolDescriptor>;
 #endif
 
   private:
@@ -121,6 +122,7 @@ class DbgSymbols {
                      std::string const& module_prefix,
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
                      FullTypeDefs const& full_type_defs,
+                     TypeCache& type_cache,
                      bool inside_function);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,

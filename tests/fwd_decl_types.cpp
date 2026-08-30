@@ -8,6 +8,8 @@ FwdDeclInner::~FwdDeclInner() = default;
 int  FwdDeclInner::getA() const { return a; }
 void FwdDeclInner::setA(int v) { a = v; }
 
+CacheFwdDeclType::~CacheFwdDeclType() = default;
+
 enum class CrossTuEnum : int {
     CrossTuA = 10,
     CrossTuB = 20

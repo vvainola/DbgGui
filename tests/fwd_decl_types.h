@@ -19,6 +19,13 @@ struct FwdDeclOuter {
     int          outer_value;
 };
 
+// Dedicated to the type-cache qualifier regression. As with FwdDeclInner, the
+// key method and full DWARF definition live in fwd_decl_types.cpp.
+struct CacheFwdDeclType {
+    int value;
+    virtual ~CacheFwdDeclType();
+};
+
 // Cross-TU forward-declared enum. Only the forward declaration appears in
 // this header; the complete definition lives in fwd_decl_types.cpp. The
 // global below is defined in symbols_test.cpp, the TU that sees only the

@@ -128,6 +128,15 @@ ResetDerived g_reset_derived;
 ResetDoubleDerived g_reset_double_derived;
 extern const int g_const_int = 123;
 
+struct CacheQualifierType {
+    int value;
+};
+
+// Keep the const instance first so a type cache that incorrectly keys by the
+// unqualified type, or caches caller state, would contaminate the mutable one.
+extern const CacheQualifierType g_cache_const_first = {1};
+CacheQualifierType g_cache_mutable_second = {2};
+
 // A const global that a pointer can reference. Snapshot restore must be able
 // to save and restore a pointer to this constant even though the constant
 // itself is read-only and excluded from save/restore.
@@ -169,6 +178,13 @@ static int s_array[3] = {10, 20, 30};
 // the forward declaration to the full definition in order to size up the
 // member.
 FwdDeclOuter g_fwd_outer;
+
+// CacheFwdDeclType is represented by a declaration DIE in this TU and by its full
+// definition in fwd_decl_types.cpp. Resolve the qualified instance first: the
+// type cache must not store that caller qualification against the full
+// definition and then apply it to the mutable instance.
+extern const CacheFwdDeclType g_fwd_cache_const_first = {};
+CacheFwdDeclType g_fwd_cache_mutable_second = {};
 
 // Defined in this TU where CrossTuEnum is only forward-declared (the complete
 // definition is in fwd_decl_types.cpp). Initialized via getCrossTuEnumValue()
@@ -216,6 +232,8 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, g_reset_derived);
     keepSymbolAddress(value, g_reset_double_derived);
     keepSymbolAddress(value, g_const_int);
+    keepSymbolAddress(value, g_cache_const_first);
+    keepSymbolAddress(value, g_cache_mutable_second);
     keepSymbolAddress(value, g_const_target);
     keepSymbolAddress(value, g_const_ptr);
     keepSymbolAddress(value, g_const_member_struct);
@@ -227,6 +245,8 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, static_ns::s_ctor);
     keepSymbolAddress(value, static_ns::s_array);
     keepSymbolAddress(value, g_fwd_outer);
+    keepSymbolAddress(value, g_fwd_cache_const_first);
+    keepSymbolAddress(value, g_fwd_cache_mutable_second);
     keepSymbolAddress(value, g_cross_tu_enum);
     value ^= keep_test_types_alive();
     g_symbol_fixture_keep_alive_sink = value;
@@ -390,6 +410,19 @@ TEST_CASE("Basic symbol access") {
     CHECK(const_int_sym->isConst());
     CHECK(const_int_sym->read() == g_const_int);
 
+    VariantSymbol* cache_const_root = symbols.getSymbol("g_cache_const_first");
+    VariantSymbol* cache_const_member = symbols.getSymbol("g_cache_const_first.value");
+    VariantSymbol* cache_mutable_root = symbols.getSymbol("g_cache_mutable_second");
+    VariantSymbol* cache_mutable_member = symbols.getSymbol("g_cache_mutable_second.value");
+    REQUIRE(cache_const_root != nullptr);
+    REQUIRE(cache_const_member != nullptr);
+    REQUIRE(cache_mutable_root != nullptr);
+    REQUIRE(cache_mutable_member != nullptr);
+    CHECK(cache_const_root->isConst());
+    CHECK(cache_const_member->isConst());
+    CHECK_FALSE(cache_mutable_root->isConst());
+    CHECK_FALSE(cache_mutable_member->isConst());
+
     VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
     REQUIRE(mutable_member_sym != nullptr);
     CHECK_FALSE(mutable_member_sym->isConst());
@@ -495,6 +528,19 @@ TEST_CASE("Forward-declared type definition lookup") {
     // to the full definition to be able to size up FwdDeclOuter and expose
     // FwdDeclInner's members.
     DbgSymbols const& symbols = getTestSymbols();
+
+    VariantSymbol* const_root = symbols.getSymbol("g_fwd_cache_const_first");
+    VariantSymbol* const_member = symbols.getSymbol("g_fwd_cache_const_first.value");
+    VariantSymbol* mutable_root = symbols.getSymbol("g_fwd_cache_mutable_second");
+    VariantSymbol* mutable_member = symbols.getSymbol("g_fwd_cache_mutable_second.value");
+    REQUIRE(const_root != nullptr);
+    REQUIRE(const_member != nullptr);
+    REQUIRE(mutable_root != nullptr);
+    REQUIRE(mutable_member != nullptr);
+    CHECK(const_root->isConst());
+    CHECK(const_member->isConst());
+    CHECK_FALSE(mutable_root->isConst());
+    CHECK_FALSE(mutable_member->isConst());
 
     g_fwd_outer.inner.a = 17;
     g_fwd_outer.inner.b = 2.75;
