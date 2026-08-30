@@ -196,6 +196,8 @@ FwdDeclOuter g_fwd_outer;
 // definition and then apply it to the mutable instance.
 extern const CacheFwdDeclType g_fwd_cache_const_first = {};
 CacheFwdDeclType g_fwd_cache_mutable_second = {};
+collision_a::Holder g_collision_a;
+collision_b::Holder g_collision_b;
 
 // Defined in this TU where CrossTuEnum is only forward-declared (the complete
 // definition is in fwd_decl_types.cpp). Initialized via getCrossTuEnumValue()
@@ -582,6 +584,19 @@ TEST_CASE("Forward-declared type definition lookup") {
     VariantSymbol* outer_value_sym = symbols.getSymbol("g_fwd_outer.outer_value");
     REQUIRE(outer_value_sym != nullptr);
     CHECK(outer_value_sym->read() == g_fwd_outer.outer_value);
+
+    g_collision_a.node.value = 123;
+    g_collision_b.node.value = 4.5;
+    g_collision_b.node.marker = 789;
+    VariantSymbol* collision_a_value = symbols.getSymbol("g_collision_a.node.value");
+    VariantSymbol* collision_b_value = symbols.getSymbol("g_collision_b.node.value");
+    VariantSymbol* collision_b_marker = symbols.getSymbol("g_collision_b.node.marker");
+    REQUIRE(collision_a_value != nullptr);
+    REQUIRE(collision_b_value != nullptr);
+    REQUIRE(collision_b_marker != nullptr);
+    CHECK(collision_a_value->read() == g_collision_a.node.value);
+    CHECK(collision_b_value->read() == Approx(g_collision_b.node.value));
+    CHECK(collision_b_marker->read() == g_collision_b.node.marker);
 }
 
 TEST_CASE("Snapshot from file") {

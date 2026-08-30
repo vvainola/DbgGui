@@ -26,6 +26,30 @@ struct CacheFwdDeclType {
     virtual ~CacheFwdDeclType();
 };
 
+// Same unqualified name but incompatible layouts. Their key methods live in
+// fwd_decl_types.cpp, so this TU sees forward DIEs that must be matched to the
+// correctly qualified full definitions.
+namespace collision_a {
+struct Node {
+    int value;
+    virtual ~Node();
+};
+struct Holder {
+    Node node;
+};
+} // namespace collision_a
+
+namespace collision_b {
+struct Node {
+    double value;
+    int marker;
+    virtual ~Node();
+};
+struct Holder {
+    Node node;
+};
+} // namespace collision_b
+
 // Cross-TU forward-declared enum. Only the forward declaration appears in
 // this header; the complete definition lives in fwd_decl_types.cpp. The
 // global below is defined in symbols_test.cpp, the TU that sees only the

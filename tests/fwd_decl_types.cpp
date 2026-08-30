@@ -9,6 +9,8 @@ int  FwdDeclInner::getA() const { return a; }
 void FwdDeclInner::setA(int v) { a = v; }
 
 CacheFwdDeclType::~CacheFwdDeclType() = default;
+collision_a::Node::~Node() = default;
+collision_b::Node::~Node() = default;
 
 enum class CrossTuEnum : int {
     CrossTuA = 10,

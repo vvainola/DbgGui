@@ -267,6 +267,7 @@ static bool resolveType(Dwarf_Debug dbg,
                         Dwarf_Off type_offset,
                         SymbolDescriptor& symbol,
                         DbgSymbols::FullTypeDefs const& full_type_defs,
+                        DbgSymbols::TypeNames const& type_names,
                         DbgSymbols::TypeCache& type_cache) {
     Dwarf_Error err = nullptr;
     Dwarf_Off const original_type_offset = type_offset;
@@ -334,17 +335,35 @@ static bool resolveType(Dwarf_Debug dbg,
             if (dwarf_diename(type_die, &tn, &err) == DW_DLV_OK && tn) {
                 std::string name(tn);
                 dwarf_dealloc(dbg, tn, DW_DLA_STRING);
-                auto range = full_type_defs.equal_range(name);
+                auto const qualified_name = type_names.find(type_offset);
+                std::string const& lookup_name = qualified_name == type_names.end() ?
+                                                   name : qualified_name->second;
+                auto range = full_type_defs.equal_range(lookup_name);
+                Dwarf_Off definition_offset = 0;
                 for (auto it = range.first; it != range.second; ++it) {
                     if (it->second != type_offset
                         && isFullTypeDefinition(dbg, it->second)) {
-                        dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
-                        bool const resolved = resolveType(dbg, it->second, symbol, full_type_defs, type_cache);
-                        if (resolved) {
-                            cacheResolvedType();
+                        // Without an indexed qualified name, two complete
+                        // definitions with the same short name are ambiguous.
+                        // Omitting that symbol is safer than applying the wrong
+                        // layout during snapshot save/restore.
+                        if (qualified_name == type_names.end()
+                            && definition_offset != 0
+                            && definition_offset != it->second) {
+                            definition_offset = 0;
+                            break;
                         }
-                        return resolved;
+                        definition_offset = it->second;
                     }
+                }
+                if (definition_offset != 0) {
+                    dwarf_dealloc(dbg, type_die, DW_DLA_DIE);
+                    bool const resolved = resolveType(
+                      dbg, definition_offset, symbol, full_type_defs, type_names, type_cache);
+                    if (resolved) {
+                        cacheResolvedType();
+                    }
+                    return resolved;
                 }
             }
         }
@@ -423,7 +442,7 @@ static bool resolveType(Dwarf_Debug dbg,
             if (has_elem_type && !dimensions.empty()) {
                 // Resolve the innermost element type
                 auto innermost = std::make_shared<SymbolDescriptor>();
-                if (resolveType(dbg, elem_type_offset, *innermost, full_type_defs, type_cache)) {
+                if (resolveType(dbg, elem_type_offset, *innermost, full_type_defs, type_names, type_cache)) {
                     // Build nested array structure from innermost dimension outward
                     // For dimensions [3, 3] with element type int32_t:
                     // Build: array(3, array(3, int32_t))
@@ -478,7 +497,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             child_sym->offset_to_parent = offset;
 
                             if (!shouldSkipSymbolChild(child_sym->name)
-                                && resolveType(dbg, member_type_offset, *child_sym, full_type_defs, type_cache)) {
+                                && resolveType(dbg, member_type_offset, *child_sym, full_type_defs, type_names, type_cache)) {
                                 // Check for bitfield
                                 Dwarf_Attribute bit_size_attr = nullptr;
                                 if (dwarf_attr(child_die, DW_AT_bit_size, &bit_size_attr, &err) == DW_DLV_OK) {
@@ -535,7 +554,7 @@ static bool resolveType(Dwarf_Debug dbg,
                             uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
 
                             if (!shouldSkipSymbolChild(base_symbol.name)
-                                && resolveType(dbg, base_type_offset, base_symbol, full_type_defs, type_cache)) {
+                                && resolveType(dbg, base_type_offset, base_symbol, full_type_defs, type_names, type_cache)) {
                                 appendMembers(symbol, base_symbol, base_offset);
                             }
                         }
@@ -566,7 +585,7 @@ static bool resolveType(Dwarf_Debug dbg,
                 dwarf_dealloc(dbg, underlying_type_attr, DW_DLA_ATTR);
 
                 SymbolDescriptor temp{};
-                if (resolveType(dbg, underlying_offset, temp, full_type_defs, type_cache)) {
+                if (resolveType(dbg, underlying_offset, temp, full_type_defs, type_names, type_cache)) {
                     symbol.scalar_type = temp.scalar_type;
                     if (symbol.size == 0) {
                         symbol.size = temp.size;
@@ -728,22 +747,6 @@ static bool shouldSkipIndexedSymbolName(std::string_view qualified_name) {
     size_t const qualifier = qualified_name.rfind("::");
     return qualifier != std::string::npos
         && shouldSkipSymbolName(qualified_name.substr(qualifier + 2));
-}
-
-static std::string_view unqualifiedTypeName(std::string_view qualified_name) {
-    size_t template_depth = 0;
-    for (size_t i = qualified_name.size(); i > 1; --i) {
-        char const c = qualified_name[i - 1];
-        if (c == '>') {
-            ++template_depth;
-        } else if (c == '<' && template_depth > 0) {
-            --template_depth;
-        } else if (template_depth == 0
-                   && c == ':' && qualified_name[i - 2] == ':') {
-            return qualified_name.substr(i);
-        }
-    }
-    return qualified_name;
 }
 
 // Walk the DWARF DIE tree and collect global variable symbols
@@ -1010,6 +1013,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
                                        MemoryAddress load_base,
                                        std::string const& module_prefix,
                                        FullTypeDefs& full_type_defs,
+                                       TypeNames& type_names,
                                        std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
     Dwarf_Global* globals = nullptr;
@@ -1165,6 +1169,15 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
             }
         } else if (tag == DW_TAG_subprogram) {
             process_function(die, die_offset, qualified_name);
+        } else if (tag == DW_TAG_structure_type
+                   || tag == DW_TAG_class_type
+                   || tag == DW_TAG_union_type
+                   || tag == DW_TAG_enumeration_type) {
+            // This also covers DWARF 5 .debug_names, where types share the
+            // globals index and may not have a separate pubtypes section.
+            std::string owned_name(qualified_name);
+            full_type_defs.emplace(owned_name, die_offset);
+            type_names.emplace(die_offset, std::move(owned_name));
         } else {
             char* die_name = nullptr;
             dwarf_diename(die, &die_name, &err);
@@ -1184,6 +1197,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         std::unordered_set<Dwarf_Off> processed_types;
         processed_types.reserve(static_cast<size_t>(pubtype_count));
         full_type_defs.reserve(full_type_defs.size() + static_cast<size_t>(pubtype_count));
+        type_names.reserve(type_names.size() + static_cast<size_t>(pubtype_count));
         for (Dwarf_Signed i = 0; i < pubtype_count; ++i) {
             char* indexed_name = nullptr;
             Dwarf_Off die_offset = 0;
@@ -1195,7 +1209,9 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
                 || !processed_types.emplace(die_offset).second) {
                 continue;
             }
-            full_type_defs.emplace(unqualifiedTypeName(indexed_name), die_offset);
+            std::string qualified_name(indexed_name);
+            full_type_defs.emplace(qualified_name, die_offset);
+            type_names.emplace(die_offset, std::move(qualified_name));
         }
         dwarf_globals_dealloc(dbg, pubtypes, pubtype_count);
     }
@@ -1282,6 +1298,7 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     std::unordered_map<Dwarf_Off, std::string> decl_qualified_names;
 
     FullTypeDefs full_type_defs;
+    TypeNames type_names;
     TypeCache type_cache;
     std::vector<PendingGlobal> pending_globals;
 
@@ -1290,9 +1307,10 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     // below as a compatibility fallback rather than requiring special flags
     // for every loaded module.
     if (processIndexedSymbols(
-          dbg, load_base, module_prefix, full_type_defs, pending_globals)) {
+          dbg, load_base, module_prefix, full_type_defs, type_names, pending_globals)) {
         for (PendingGlobal& pending : pending_globals) {
-            if (resolveType(dbg, pending.type_offset, *pending.symbol, full_type_defs, type_cache)) {
+            if (resolveType(dbg, pending.type_offset, *pending.symbol,
+                            full_type_defs, type_names, type_cache)) {
                 m_symbol_descriptors.push_back(std::move(pending.symbol));
                 m_root_symbols.push_back(std::make_unique<VariantSymbol>(
                   m_root_symbols, m_symbol_descriptors.back().get()));
@@ -1326,7 +1344,8 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     }
 
     for (PendingGlobal& pending : pending_globals) {
-        if (resolveType(dbg, pending.type_offset, *pending.symbol, full_type_defs, type_cache)) {
+        if (resolveType(dbg, pending.type_offset, *pending.symbol,
+                        full_type_defs, type_names, type_cache)) {
             m_symbol_descriptors.push_back(std::move(pending.symbol));
             m_root_symbols.push_back(std::make_unique<VariantSymbol>(
               m_root_symbols, m_symbol_descriptors.back().get()));
