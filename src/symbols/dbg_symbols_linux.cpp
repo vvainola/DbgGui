@@ -641,7 +641,7 @@ static void collectFullTypeDef(Dwarf_Debug dbg,
                                DbgSymbols::FullTypeDefs& full_type_defs);
 
 // Walk the DWARF DIE tree and collect global variable symbols
-void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals, bool inside_function) {
+void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
     char* die_name = nullptr;
     Dwarf_Half tag = 0;
@@ -651,12 +651,9 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
     collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
 
-    // Process variable declarations. Skip when inside a function: a function-local
-    // static is gated by a `_ZGV*` init guard that shouldSkipSymbolName filters out,
-    // so snapshot save/restore would zero the static's storage without resetting
-    // the guard — the next use would skip re-init and read garbage (e.g. the
-    // Catch2 CATCH_REGISTER_ENUM crash in EnumInfo::lookup).
-    if (tag == DW_TAG_variable && !inside_function) {
+    // Process global and namespace-scope variables. Subprogram children are not
+    // traversed below, so function-local variables never reach this block.
+    if (tag == DW_TAG_variable) {
         std::string effective_name = die_name ? die_name : "";
         Dwarf_Off spec_die_offset = 0;
         // True if effective_name is already fully qualified (came from demangling
@@ -825,28 +822,36 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
         }
     }
 
+    // A subprogram's own DIE contains everything needed for function-address
+    // resolution. Its children describe parameters, lexical blocks, and local
+    // variables, none of which can be global symbols. Avoid walking the often
+    // very large function-body debug trees.
+    if (tag == DW_TAG_subprogram) {
+        if (die_name != nullptr) {
+            dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+        }
+        return;
+    }
+
     // Recursively process children
     std::string child_prefix = namespace_prefix;
     if (tag == DW_TAG_namespace && die_name != nullptr) {
         child_prefix = namespace_prefix.empty() ? std::string(die_name) + "::" : namespace_prefix + die_name + "::";
     }
-    // Once we descend into a subprogram, every nested DW_TAG_variable is a
-    // function-local (auto or static) and must be excluded from m_root_symbols.
-    bool child_inside_function = inside_function || tag == DW_TAG_subprogram;
     if (die_name != nullptr) {
         dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
     }
 
     Dwarf_Die child = nullptr;
     if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
-        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals, child_inside_function);
+        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals);
         while (true) {
             Dwarf_Die sibling = nullptr;
             if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
                 break;
             }
             dwarf_dealloc(dbg, child, DW_DLA_DIE);
-            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals, child_inside_function);
+            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals);
             child = sibling;
         }
         dwarf_dealloc(dbg, child, DW_DLA_DIE);
@@ -929,7 +934,7 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
            == DW_DLV_OK) {
         Dwarf_Die cu_die = nullptr;
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, pending_globals, false);
+            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, pending_globals);
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
         }
     }
