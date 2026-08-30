@@ -103,9 +103,14 @@ class DbgSymbols {
     void initSymbolsFromPdb();
 
 #if LINUX
+    struct PendingGlobal {
+        std::unique_ptr<SymbolDescriptor> symbol;
+        Dwarf_Off type_offset;
+    };
+
     // unordered_multimap<unqualified type name, DIE offset of full definition>:
-    // populated by a pre-pass over all CUs to enable resolveType to follow a
-    // forward-declared class/struct/union to its full definition in another CU.
+    // populated while walking all CUs. Global type resolution is deferred until
+    // that walk completes so forward declarations can find later definitions.
     //
     // inside_function: true when the current DIE descends from a DW_TAG_subprogram.
     // Function-local statics live in static storage but are gated by lazy-init
@@ -121,8 +126,8 @@ class DbgSymbols {
                      std::string const& namespace_prefix,
                      std::string const& module_prefix,
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
-                     FullTypeDefs const& full_type_defs,
-                     TypeCache& type_cache,
+                     FullTypeDefs& full_type_defs,
+                     std::vector<PendingGlobal>& pending_globals,
                      bool inside_function);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,

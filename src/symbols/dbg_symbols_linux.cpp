@@ -634,14 +634,22 @@ static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die
     return result;
 }
 
+static void collectFullTypeDef(Dwarf_Debug dbg,
+                               Dwarf_Die die,
+                               Dwarf_Half tag,
+                               char const* die_name,
+                               DbgSymbols::FullTypeDefs& full_type_defs);
+
 // Walk the DWARF DIE tree and collect global variable symbols
-void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs const& full_type_defs, TypeCache& type_cache, bool inside_function) {
+void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals, bool inside_function) {
     Dwarf_Error err = nullptr;
     char* die_name = nullptr;
     Dwarf_Half tag = 0;
 
     dwarf_diename(die, &die_name, &err);
     dwarf_tag(die, &tag, &err);
+
+    collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
 
     // Process variable declarations. Skip when inside a function: a function-local
     // static is gated by a `_ZGV*` init guard that shouldSkipSymbolName filters out,
@@ -747,11 +755,7 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                       .address = addr,
                       .is_const = isConstQualifiedType(dbg, type_offset),
                     });
-                    if (resolveType(dbg, type_offset, *symbol, full_type_defs, type_cache)) {
-                        m_symbol_descriptors.push_back(std::move(symbol));
-                        m_root_symbols.push_back(std::make_unique<VariantSymbol>(
-                          m_root_symbols, m_symbol_descriptors.back().get()));
-                    }
+                    pending_globals.push_back({std::move(symbol), type_offset});
                 }
             }
         }
@@ -835,30 +839,29 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
     Dwarf_Die child = nullptr;
     if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
-        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, type_cache, child_inside_function);
+        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals, child_inside_function);
         while (true) {
             Dwarf_Die sibling = nullptr;
             if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
                 break;
             }
             dwarf_dealloc(dbg, child, DW_DLA_DIE);
-            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, type_cache, child_inside_function);
+            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals, child_inside_function);
             child = sibling;
         }
         dwarf_dealloc(dbg, child, DW_DLA_DIE);
     }
 }
 
-// Pre-pass: walk a DIE tree and index every full class/struct/union/enum
-// definition (has DW_AT_byte_size, not DW_AT_declaration=1) by its unqualified
-// name so resolveType can follow a forward declaration in one CU to the full
-// definition in another.
-static void collectFullTypeDefs(Dwarf_Debug dbg,
-                                Dwarf_Die die,
-                                DbgSymbols::FullTypeDefs& full_type_defs) {
+// Index a full class/struct/union/enum definition by its unqualified name. This
+// runs as part of the main DIE walk; globals are resolved after that walk, when
+// definitions from all compilation units have been indexed.
+static void collectFullTypeDef(Dwarf_Debug dbg,
+                               Dwarf_Die die,
+                               Dwarf_Half tag,
+                               char const* die_name,
+                               DbgSymbols::FullTypeDefs& full_type_defs) {
     Dwarf_Error err = nullptr;
-    Dwarf_Half tag = 0;
-    dwarf_tag(die, &tag, &err);
 
     if (tag == DW_TAG_structure_type
         || tag == DW_TAG_class_type
@@ -872,33 +875,15 @@ static void collectFullTypeDefs(Dwarf_Debug dbg,
         }
         if (!is_decl) {
             Dwarf_Unsigned byte_size = 0;
-            if (dwarf_bytesize(die, &byte_size, &err) == DW_DLV_OK && byte_size > 0) {
-                char* die_name = nullptr;
-                if (dwarf_diename(die, &die_name, &err) == DW_DLV_OK && die_name != nullptr) {
-                    Dwarf_Off offset = 0;
-                    if (dwarf_dieoffset(die, &offset, &err) == DW_DLV_OK) {
-                        full_type_defs.emplace(die_name, offset);
-                    }
-                    dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+            if (dwarf_bytesize(die, &byte_size, &err) == DW_DLV_OK && byte_size > 0 && die_name != nullptr) {
+                Dwarf_Off offset = 0;
+                if (dwarf_dieoffset(die, &offset, &err) == DW_DLV_OK) {
+                    full_type_defs.emplace(die_name, offset);
                 }
             }
         }
     }
 
-    Dwarf_Die child = nullptr;
-    if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
-        collectFullTypeDefs(dbg, child, full_type_defs);
-        while (true) {
-            Dwarf_Die sibling = nullptr;
-            if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
-                break;
-            }
-            dwarf_dealloc(dbg, child, DW_DLA_DIE);
-            collectFullTypeDefs(dbg, sibling, full_type_defs);
-            child = sibling;
-        }
-        dwarf_dealloc(dbg, child, DW_DLA_DIE);
-    }
 }
 
 // Process all Compilation Units in a DWARF debug info
@@ -921,11 +906,13 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     // DW_AT_specification + DW_AT_location) can recover their qualified name.
     std::unordered_map<Dwarf_Off, std::string> decl_qualified_names;
 
-    // First pass: collect full class/struct/union definitions across all CUs.
-    // The second pass uses this to resolve forward declarations in one CU
-    // against the full definition in another.
     FullTypeDefs full_type_defs;
     TypeCache type_cache;
+    std::vector<PendingGlobal> pending_globals;
+
+    // Walk every CU once, indexing full definitions and collecting lightweight
+    // global records. Resolve globals afterwards so definitions in later CUs
+    // are available for forward-declared types.
     while (dwarf_next_cu_header_d(dbg,
                                   1,
                                   &cu_header_length,
@@ -942,30 +929,16 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
            == DW_DLV_OK) {
         Dwarf_Die cu_die = nullptr;
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            collectFullTypeDefs(dbg, cu_die, full_type_defs);
+            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, pending_globals, false);
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
         }
     }
 
-    // Second pass: walk every CU and collect global variable symbols.
-    while (dwarf_next_cu_header_d(dbg,
-                                  1,
-                                  &cu_header_length,
-                                  &cu_header_version,
-                                  &abbrev_offset,
-                                  &address_size,
-                                  &offset_size,
-                                  &extension_size,
-                                  &type_sig,
-                                  &typeoffset,
-                                  &next_cu_header,
-                                  &header_cu_type,
-                                  &err)
-           == DW_DLV_OK) {
-        Dwarf_Die cu_die = nullptr;
-        if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, type_cache, false);
-            dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+    for (PendingGlobal& pending : pending_globals) {
+        if (resolveType(dbg, pending.type_offset, *pending.symbol, full_type_defs, type_cache)) {
+            m_symbol_descriptors.push_back(std::move(pending.symbol));
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(
+              m_root_symbols, m_symbol_descriptors.back().get()));
         }
     }
 }
