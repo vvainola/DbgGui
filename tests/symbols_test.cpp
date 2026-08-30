@@ -150,6 +150,17 @@ struct ConstMemberStruct {
 
 ConstMemberStruct g_const_member_struct;
 
+struct ReservedChildFixture {
+    int visible = 1;
+    int _Reserved = 2;
+    int _A = 3;
+    int __reserved = 4;
+    int contains__reserved = 5;
+    int _lowercase = 6;
+};
+
+ReservedChildFixture g_reserved_child_fixture;
+
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
 // DW_AT_location, with the declaration nested inside the namespace DIE. When
@@ -237,6 +248,7 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, g_const_target);
     keepSymbolAddress(value, g_const_ptr);
     keepSymbolAddress(value, g_const_member_struct);
+    keepSymbolAddress(value, g_reserved_child_fixture);
     keepSymbolAddress(value, pdb_collision::a_struct);
     keepSymbolAddress(value, static_ns::s_int);
     keepSymbolAddress(value, static_ns::s_double);
@@ -432,6 +444,13 @@ TEST_CASE("Basic symbol access") {
     REQUIRE(const_member_sym != nullptr);
     CHECK(const_member_sym->isConst());
     CHECK(const_member_sym->read() == g_const_member_struct.const_value);
+
+    REQUIRE(symbols.getSymbol("g_reserved_child_fixture.visible") != nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._Reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._A") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture.__reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture.contains__reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._lowercase") != nullptr);
 
     std::vector<SymbolValue> snapshot = symbols.saveSnapshotToMemory();
     auto snapshot_contains = [&](VariantSymbol* symbol) {

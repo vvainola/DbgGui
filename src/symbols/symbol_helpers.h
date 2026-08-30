@@ -24,6 +24,7 @@
 
 #include "symbol_descriptor.h"
 
+#include <cctype>
 #include <memory>
 #include <optional>
 #include <string>
@@ -73,4 +74,22 @@ inline bool shouldSkipSymbolName(std::string const& name) {
         || name == "g_ContextMap"
         || name == "imgl3wProcs"
         || name == "g_dbg_gui";
+}
+
+// Standard-library object layouts contain implementation bookkeeping that is
+// unsafe to expose as writable snapshot fields. Names beginning with an
+// underscore followed by an uppercase letter are reserved to the implementation
+// and commonly identify that bookkeeping on both MSVC and libstdc++.
+inline bool shouldSkipSymbolChild(std::string_view name) {
+    if (name.starts_with("std::") || name.contains("__")) {
+        return true;
+    }
+
+    // Base-class names may be qualified; apply the leading-underscore rule to
+    // the final identifier rather than only to the start of the full name.
+    size_t const qualifier = name.rfind("::");
+    std::string_view const identifier = qualifier == std::string_view::npos ?
+                                          name : name.substr(qualifier + 2);
+    return identifier.size() >= 2 && identifier[0] == '_'
+        && std::isupper(static_cast<unsigned char>(identifier[1]));
 }

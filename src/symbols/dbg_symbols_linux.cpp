@@ -449,7 +449,8 @@ static bool resolveType(Dwarf_Debug dbg,
                             });
                             child_sym->offset_to_parent = offset;
 
-                            if (resolveType(dbg, member_type_offset, *child_sym, full_type_defs, type_cache)) {
+                            if (!shouldSkipSymbolChild(child_sym->name)
+                                && resolveType(dbg, member_type_offset, *child_sym, full_type_defs, type_cache)) {
                                 // Check for bitfield
                                 Dwarf_Attribute bit_size_attr = nullptr;
                                 if (dwarf_attr(child_die, DW_AT_bit_size, &bit_size_attr, &err) == DW_DLV_OK) {
@@ -505,7 +506,8 @@ static bool resolveType(Dwarf_Debug dbg,
                             };
                             uint32_t const base_offset = getDataMemberLocationOffset(dbg, child_die);
 
-                            if (resolveType(dbg, base_type_offset, base_symbol, full_type_defs, type_cache)) {
+                            if (!shouldSkipSymbolChild(base_symbol.name)
+                                && resolveType(dbg, base_type_offset, base_symbol, full_type_defs, type_cache)) {
                                 appendMembers(symbol, base_symbol, base_offset);
                             }
                         }
