@@ -39,18 +39,19 @@ class VariantSymbol {
         Object
     };
 
-    std::string const& getName() const { return m_name; }
+    std::string const& getName() const;
     VariantSymbol* getParent() const { return m_parent; }
     std::string getFullName() const {
         if (!m_full_name.empty()) {
             return m_full_name;
         }
+        std::string const& name = getName();
         if (m_parent && m_parent->getType() == Type::Array) {
-            m_full_name = m_parent->getFullName() + m_name.substr(m_name.rfind('['));
+            m_full_name = m_parent->getFullName() + name.substr(name.rfind('['));
         } else if (m_parent) {
-            m_full_name = m_parent->getFullName() + "." + m_name;
+            m_full_name = m_parent->getFullName() + "." + name;
         } else {
-            m_full_name = m_name;
+            m_full_name = name;
         }
         return m_full_name;
     }
@@ -74,7 +75,12 @@ class VariantSymbol {
   private:
     std::vector<std::unique_ptr<VariantSymbol>>& m_root_symbols;
     VariantSymbol* m_parent;
-    std::string m_name;
+    // Owned by DbgSymbols' descriptor graph for the lifetime of this symbol.
+    SymbolDescriptor const* m_descriptor;
+    size_t m_array_index = 0;
+    // Non-array names are returned directly from m_descriptor; only generated
+    // array-element names are cached here.
+    mutable std::string m_name;
     mutable std::string m_full_name;
     MemoryAddress m_address;
     std::optional<ArithmeticSymbol> m_arithmetic_symbol = std::nullopt;

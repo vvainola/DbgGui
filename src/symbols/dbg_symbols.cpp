@@ -191,10 +191,14 @@ bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
             return false;
         }
 
-        m_root_symbols.reserve(symbols_json.size());
+        size_t const symbol_count = symbols_json["symbols"].size();
+        m_root_symbols.reserve(symbol_count);
+        m_symbol_descriptors.reserve(symbol_count);
         for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
-            auto symbol = SymbolDescriptor::fromJson(symbol_data);
-            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &symbol));
+            m_symbol_descriptors.push_back(
+              std::make_unique<SymbolDescriptor>(SymbolDescriptor::fromJson(symbol_data)));
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(
+              m_root_symbols, m_symbol_descriptors.back().get()));
         }
     } catch (nlohmann::json::exception& err) {
         std::cerr << err.what();
