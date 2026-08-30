@@ -609,9 +609,9 @@ static bool resolveType(Dwarf_Debug dbg,
 // Symbol collection from DWARF
 // ============================================================================
 
-// Demangle a DW_AT_linkage_name from a DIE. Returns the demangled string
-// or std::nullopt if no linkage name is present or demangling fails.
-static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die die) {
+// Read DW_AT_linkage_name without demangling it. Most function names are never
+// displayed, so resolveFunctionAddress performs and caches demangling on demand.
+static std::optional<std::string> linkageName(Dwarf_Debug dbg, Dwarf_Die die) {
     Dwarf_Error err = nullptr;
     Dwarf_Attribute link_attr = nullptr;
     if (dwarf_attr(die, DW_AT_linkage_name, &link_attr, &err) != DW_DLV_OK) {
@@ -625,14 +625,29 @@ static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die
         return std::nullopt;
     }
 
-    std::optional<std::string> result;
-    int demangle_status;
-    char* demangled = abi::__cxa_demangle(link_name, nullptr, nullptr, &demangle_status);
-    if (demangle_status == 0 && demangled != nullptr) {
-        result = demangled;
-        free(demangled);
-    }
+    std::optional<std::string> result(link_name);
     dwarf_dealloc(dbg, link_name, DW_DLA_STRING);
+    return result;
+}
+
+// Variable definitions that use DW_AT_specification need their qualified name
+// while the symbol tree is being built, so they cannot use deferred demangling.
+static std::optional<std::string> demangleLinkageName(Dwarf_Debug dbg, Dwarf_Die die) {
+    std::optional<std::string> linkage_name = linkageName(dbg, die);
+    if (!linkage_name) {
+        return std::nullopt;
+    }
+
+    int demangle_status = 0;
+    char* demangled = abi::__cxa_demangle(
+      linkage_name->c_str(), nullptr, nullptr, &demangle_status);
+    if (demangle_status != 0 || demangled == nullptr) {
+        free(demangled);
+        return std::nullopt;
+    }
+
+    std::string result(demangled);
+    free(demangled);
     return result;
 }
 
@@ -772,7 +787,7 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
     // Process function declarations (for function pointer resolution)
     if (tag == DW_TAG_subprogram) {
         std::string func_name;
-        bool name_from_spec = false;
+        bool name_from_linkage = false;
 
         // If this is a concrete definition with DW_AT_specification, follow it to get the name
         if (die_name == nullptr) {
@@ -784,9 +799,9 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
                 if (spec_die_offset != 0) {
                     Dwarf_Die spec_die = nullptr;
                     if (dwarf_offdie_b(dbg, spec_die_offset, 1, &spec_die, &err) == DW_DLV_OK) {
-                        if (auto demangled = demangleLinkageName(dbg, spec_die)) {
-                            func_name = std::move(*demangled);
-                            name_from_spec = true;
+                        if (auto linkage_name = linkageName(dbg, spec_die)) {
+                            func_name = std::move(*linkage_name);
+                            name_from_linkage = true;
                         }
                         // Fall back to namespace_prefix + spec_die name
                         if (func_name.empty()) {
@@ -806,12 +821,11 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
             func_name = die_name;
         }
 
-        if (!func_name.empty() && !shouldSkipSymbolName(func_name)) {
-            // Strip trailing args from demangled function names
-            size_t paren = func_name.find('(');
-            if (paren != std::string::npos) {
-                func_name.resize(paren);
-            }
+        // A raw Itanium linkage name starts with `_Z` and would be rejected by
+        // shouldSkipSymbolName as an underscore-prefixed implementation symbol.
+        // Apply that policy after lazy demangling instead.
+        if (!func_name.empty()
+            && (name_from_linkage || !shouldSkipSymbolName(func_name))) {
             Dwarf_Attribute low_pc_attr = nullptr;
             if (dwarf_attr(die, DW_AT_low_pc, &low_pc_attr, &err) == DW_DLV_OK) {
                 Dwarf_Addr low_pc = 0;
@@ -820,8 +834,9 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
                 if (low_pc != 0) {
                     std::string full_name;
-                    if (name_from_spec) {
-                        // func_name already has the full demangled name
+                    if (name_from_linkage) {
+                        // The linkage name becomes fully qualified when it is
+                        // demangled by resolveFunctionAddress.
                         full_name = func_name;
                     } else {
                         full_name = namespace_prefix + func_name;
@@ -1026,9 +1041,35 @@ void DbgSymbols::initSymbolsFromPdb() {
 }
 
 std::string DbgSymbols::resolveFunctionAddress(MemoryAddress address) const {
+    std::scoped_lock lock(m_function_addresses_mutex);
     auto it = m_function_addresses.find(address);
     if (it != m_function_addresses.end()) {
-        return it->second;
+        std::string& function_name = it->second;
+        // Itanium C++ ABI linkage names start with `_Z`. A successful lookup
+        // replaces the cached linkage name with its demangled form, so later
+        // calls skip demangling.
+        if (function_name.starts_with("_Z")) {
+            int demangle_status = 0;
+            char* demangled = abi::__cxa_demangle(
+              function_name.c_str(), nullptr, nullptr, &demangle_status);
+            if (demangle_status == 0 && demangled != nullptr) {
+                function_name = demangled;
+                free(demangled);
+
+                // Function-pointer values have historically displayed the
+                // qualified function name without its parameter list.
+                size_t const paren = function_name.find('(');
+                if (paren != std::string::npos) {
+                    function_name.resize(paren);
+                }
+                if (shouldSkipSymbolName(function_name)) {
+                    function_name.clear();
+                }
+            } else {
+                free(demangled);
+            }
+        }
+        return function_name;
     }
     return "";
 }

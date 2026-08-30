@@ -25,6 +25,7 @@
 #include "DbgGui/global_snapshot.h"
 #include "symbol_descriptor.h"
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -124,6 +125,11 @@ class DbgSymbols {
                        std::string const& module_prefix = "");
 #endif
     mutable std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#if LINUX
+    // resolveFunctionAddress lazily replaces raw linkage names with demangled
+    // names, so concurrent first lookups must serialize that cache mutation.
+    mutable std::mutex m_function_addresses_mutex;
+#endif
 #if WINDOWS
     mutable bool m_function_addresses_loaded = false;
 #endif
