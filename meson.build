@@ -24,6 +24,7 @@ else
     add_project_arguments([
             '-DLINUX',
             '-DJSON_DIAGNOSTICS=1',
+            '-gpubnames',
         ], language : ['c', 'cpp']
     )
 endif

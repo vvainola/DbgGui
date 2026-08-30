@@ -45,6 +45,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 static void appendMembers(SymbolDescriptor& symbol,
@@ -657,6 +658,51 @@ static void collectFullTypeDef(Dwarf_Debug dbg,
                                char const* die_name,
                                DbgSymbols::FullTypeDefs& full_type_defs);
 
+static bool readAddress(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, MemoryAddress& address) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Attribute loc_attr = nullptr;
+    if (dwarf_attr(die, DW_AT_location, &loc_attr, &err) != DW_DLV_OK) {
+        return false;
+    }
+
+    Dwarf_Block* block = nullptr;
+    bool found = false;
+    if (dwarf_formblock(loc_attr, &block, &err) == DW_DLV_OK) {
+        if (block->bl_len >= 1 + sizeof(Dwarf_Addr)) {
+            auto* buf = static_cast<uint8_t*>(block->bl_data);
+            if (buf[0] == DW_OP_addr) {
+                Dwarf_Addr value = 0;
+                memcpy(&value, buf + 1, sizeof(value));
+                address = load_base + value;
+                found = address != 0;
+            }
+        }
+        dwarf_dealloc(dbg, block, DW_DLA_BLOCK);
+    }
+    dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+    return found;
+}
+
+static bool readTypeOffset(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Off& type_offset) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Attribute type_attr = nullptr;
+    if (dwarf_attr(die, DW_AT_type, &type_attr, &err) != DW_DLV_OK) {
+        return false;
+    }
+    bool const found = dwarf_global_formref(type_attr, &type_offset, &err) == DW_DLV_OK;
+    dwarf_dealloc(dbg, type_attr, DW_DLA_ATTR);
+    return found;
+}
+
+static bool shouldSkipIndexedSymbolName(std::string const& qualified_name) {
+    if (shouldSkipSymbolName(qualified_name)) {
+        return true;
+    }
+    size_t const qualifier = qualified_name.rfind("::");
+    return qualifier != std::string::npos
+        && shouldSkipSymbolName(qualified_name.substr(qualifier + 2));
+}
+
 // Walk the DWARF DIE tree and collect global variable symbols
 void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
@@ -917,6 +963,242 @@ static void collectFullTypeDef(Dwarf_Debug dbg,
 
 }
 
+bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
+                                       MemoryAddress load_base,
+                                       std::string const& module_prefix,
+                                       FullTypeDefs& full_type_defs,
+                                       std::vector<PendingGlobal>& pending_globals) {
+    Dwarf_Error err = nullptr;
+    Dwarf_Global* globals = nullptr;
+    Dwarf_Signed global_count = 0;
+    if (dwarf_get_globals(dbg, &globals, &global_count, &err) != DW_DLV_OK) {
+        return false;
+    }
+
+    Dwarf_Global* pubtypes = nullptr;
+    Dwarf_Signed pubtype_count = 0;
+    bool const has_pubtypes = dwarf_get_pubtypes(
+                                dbg, &pubtypes, &pubtype_count, &err)
+        == DW_DLV_OK;
+    bool has_debug_names = false;
+    for (Dwarf_Signed i = 0; i < global_count && !has_debug_names; ++i) {
+        // libdwarf reports a tag here only for entries sourced from the DWARF 5
+        // .debug_names section, which includes both symbols and types.
+        has_debug_names = dwarf_global_tag_number(globals[i]) != 0;
+    }
+    if (global_count == 0 || (!has_pubtypes && !has_debug_names)) {
+        dwarf_globals_dealloc(dbg, globals, global_count);
+        if (has_pubtypes) {
+            dwarf_globals_dealloc(dbg, pubtypes, pubtype_count);
+        }
+        return false;
+    }
+
+    // The same libdwarf interface reads legacy .debug_pubnames and DWARF 5
+    // .debug_names, keeping the symbol collector independent of the producer's
+    // accelerator-table format.
+    std::unordered_map<Dwarf_Off, std::string> indexed_names;
+    std::unordered_set<Dwarf_Off> processed_variables;
+    std::unordered_set<Dwarf_Off> processed_functions;
+
+    // Pubnames entries point directly at candidate DIEs and already contain
+    // their qualified names. Processing those DIEs avoids visiting unrelated
+    // namespaces, class members, parameters, and lexical blocks.
+    auto process_variable = [&](Dwarf_Die die, Dwarf_Off die_offset, std::string const& qualified_name) {
+        if (!processed_variables.emplace(die_offset).second
+            || qualified_name.empty()
+            || shouldSkipIndexedSymbolName(qualified_name)) {
+            return;
+        }
+
+        MemoryAddress address = 0;
+        if (!readAddress(dbg, die, load_base, address)) {
+            return;
+        }
+
+        Dwarf_Off type_offset = 0;
+        if (!readTypeOffset(dbg, die, type_offset)) {
+            // A storage-bearing definition may keep its type on a separate
+            // declaration DIE rather than repeating it on the definition.
+            Dwarf_Attribute spec_attr = nullptr;
+            Dwarf_Off spec_offset = 0;
+            if (dwarf_attr(die, DW_AT_specification, &spec_attr, &err) == DW_DLV_OK) {
+                dwarf_global_formref(spec_attr, &spec_offset, &err);
+                dwarf_dealloc(dbg, spec_attr, DW_DLA_ATTR);
+            }
+            Dwarf_Die spec_die = nullptr;
+            if (spec_offset == 0
+                || dwarf_offdie_b(dbg, spec_offset, 1, &spec_die, &err) != DW_DLV_OK) {
+                return;
+            }
+            bool const found_type = readTypeOffset(dbg, spec_die, type_offset);
+            dwarf_dealloc(dbg, spec_die, DW_DLA_DIE);
+            if (!found_type) {
+                return;
+            }
+        }
+
+        auto symbol = std::make_unique<SymbolDescriptor>(SymbolDescriptor{
+          .name = module_prefix + qualified_name,
+          .address = address,
+        });
+        pending_globals.push_back({std::move(symbol), type_offset});
+    };
+
+    auto process_function = [&](Dwarf_Die die, Dwarf_Off die_offset, std::string const& qualified_name) {
+        if (!processed_functions.emplace(die_offset).second) {
+            return;
+        }
+
+        Dwarf_Attribute low_pc_attr = nullptr;
+        if (dwarf_attr(die, DW_AT_low_pc, &low_pc_attr, &err) != DW_DLV_OK) {
+            return;
+        }
+        Dwarf_Addr low_pc = 0;
+        dwarf_formaddr(low_pc_attr, &low_pc, &err);
+        dwarf_dealloc(dbg, low_pc_attr, DW_DLA_ATTR);
+        if (low_pc == 0) {
+            return;
+        }
+
+        // Prefer the compact linkage name so demangling remains deferred until
+        // a function-pointer value actually needs to be displayed.
+        std::string function_name = qualified_name;
+        if (auto linkage_name = linkageName(dbg, die)) {
+            function_name = std::move(*linkage_name);
+        }
+        if (!function_name.empty()
+            && (function_name.starts_with("_Z")
+                || !shouldSkipIndexedSymbolName(function_name))) {
+            m_function_addresses[load_base + low_pc] = std::move(function_name);
+        }
+    };
+
+    for (Dwarf_Signed i = 0; i < global_count; ++i) {
+        char* indexed_name = nullptr;
+        Dwarf_Off die_offset = 0;
+        Dwarf_Off cu_offset = 0;
+        if (dwarf_global_name_offsets(
+              globals[i], &indexed_name, &die_offset, &cu_offset, &err)
+            != DW_DLV_OK
+            || indexed_name == nullptr) {
+            continue;
+        }
+        std::string qualified_name(indexed_name);
+        indexed_names.emplace(die_offset, qualified_name);
+
+        Dwarf_Die die = nullptr;
+        if (dwarf_offdie_b(dbg, die_offset, 1, &die, &err) != DW_DLV_OK) {
+            continue;
+        }
+        Dwarf_Half tag = 0;
+        dwarf_tag(die, &tag, &err);
+        if (tag == DW_TAG_variable) {
+            process_variable(die, die_offset, qualified_name);
+        } else if (tag == DW_TAG_subprogram) {
+            process_function(die, die_offset, qualified_name);
+        } else {
+            char* die_name = nullptr;
+            dwarf_diename(die, &die_name, &err);
+            collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
+            if (die_name != nullptr) {
+                dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+            }
+        }
+        dwarf_dealloc(dbg, die, DW_DLA_DIE);
+    }
+    dwarf_globals_dealloc(dbg, globals, global_count);
+
+    if (has_pubtypes) {
+        // Forward-declaration resolution needs a module-wide map of complete
+        // type definitions. Pubtypes supplies those DIE offsets without a tree
+        // walk; DWARF 5 producers may instead include them in .debug_names,
+        // where the globals loop above already collects them.
+        std::unordered_set<Dwarf_Off> processed_types;
+        for (Dwarf_Signed i = 0; i < pubtype_count; ++i) {
+            Dwarf_Off die_offset = 0;
+            if (dwarf_global_die_offset(pubtypes[i], &die_offset, &err) != DW_DLV_OK
+                || !processed_types.emplace(die_offset).second) {
+                continue;
+            }
+            Dwarf_Die die = nullptr;
+            if (dwarf_offdie_b(dbg, die_offset, 1, &die, &err) != DW_DLV_OK) {
+                continue;
+            }
+            Dwarf_Half tag = 0;
+            char* die_name = nullptr;
+            dwarf_tag(die, &tag, &err);
+            dwarf_diename(die, &die_name, &err);
+            collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
+            if (die_name != nullptr) {
+                dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
+            }
+            dwarf_dealloc(dbg, die, DW_DLA_DIE);
+        }
+        dwarf_globals_dealloc(dbg, pubtypes, pubtype_count);
+    }
+
+    // GCC indexes namespace-scope declarations, but a non-trivial static's
+    // storage-bearing definition can be an unnamed top-level DIE referring to
+    // that declaration through DW_AT_specification. Scan only CU children for
+    // those definitions; their qualified names come from the accelerator table.
+    Dwarf_Unsigned cu_header_length = 0;
+    Dwarf_Half cu_header_version = 0;
+    Dwarf_Off abbrev_offset = 0;
+    Dwarf_Half address_size = 0;
+    Dwarf_Half offset_size = 0;
+    Dwarf_Half extension_size = 0;
+    Dwarf_Sig8 type_sig;
+    Dwarf_Unsigned typeoffset = 0;
+    Dwarf_Unsigned next_cu_header = 0;
+    Dwarf_Half header_cu_type = 0;
+    while (dwarf_next_cu_header_d(dbg, 1, &cu_header_length, &cu_header_version,
+                                  &abbrev_offset, &address_size, &offset_size,
+                                  &extension_size, &type_sig, &typeoffset,
+                                  &next_cu_header, &header_cu_type, &err)
+           == DW_DLV_OK) {
+        Dwarf_Die cu_die = nullptr;
+        if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) != DW_DLV_OK) {
+            continue;
+        }
+        Dwarf_Die die = nullptr;
+        if (dwarf_child(cu_die, &die, &err) == DW_DLV_OK) {
+            while (true) {
+                Dwarf_Half tag = 0;
+                dwarf_tag(die, &tag, &err);
+                if (tag == DW_TAG_variable || tag == DW_TAG_subprogram) {
+                    Dwarf_Attribute spec_attr = nullptr;
+                    Dwarf_Off spec_offset = 0;
+                    if (dwarf_attr(die, DW_AT_specification, &spec_attr, &err) == DW_DLV_OK) {
+                        dwarf_global_formref(spec_attr, &spec_offset, &err);
+                        dwarf_dealloc(dbg, spec_attr, DW_DLA_ATTR);
+                    }
+                    auto const name = indexed_names.find(spec_offset);
+                    if (name != indexed_names.end()) {
+                        Dwarf_Off die_offset = 0;
+                        dwarf_dieoffset(die, &die_offset, &err);
+                        if (tag == DW_TAG_variable) {
+                            process_variable(die, die_offset, name->second);
+                        } else {
+                            process_function(die, die_offset, name->second);
+                        }
+                    }
+                }
+
+                Dwarf_Die sibling = nullptr;
+                if (dwarf_siblingof_b(dbg, die, 1, &sibling, &err) != DW_DLV_OK) {
+                    break;
+                }
+                dwarf_dealloc(dbg, die, DW_DLA_DIE);
+                die = sibling;
+            }
+            dwarf_dealloc(dbg, die, DW_DLA_DIE);
+        }
+        dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+    }
+    return true;
+}
+
 // Process all Compilation Units in a DWARF debug info
 void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::string const& module_prefix) {
     Dwarf_Error err = nullptr;
@@ -940,6 +1222,22 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     FullTypeDefs full_type_defs;
     TypeCache type_cache;
     std::vector<PendingGlobal> pending_globals;
+
+    // Prefer accelerator tables when the producer emitted them. Third-party
+    // shared libraries commonly omit them, so retain the recursive collector
+    // below as a compatibility fallback rather than requiring special flags
+    // for every loaded module.
+    if (processIndexedSymbols(
+          dbg, load_base, module_prefix, full_type_defs, pending_globals)) {
+        for (PendingGlobal& pending : pending_globals) {
+            if (resolveType(dbg, pending.type_offset, *pending.symbol, full_type_defs, type_cache)) {
+                m_symbol_descriptors.push_back(std::move(pending.symbol));
+                m_root_symbols.push_back(std::make_unique<VariantSymbol>(
+                  m_root_symbols, m_symbol_descriptors.back().get()));
+            }
+        }
+        return;
+    }
 
     // Walk every CU once, indexing full definitions and collecting lightweight
     // global records. Resolve globals afterwards so definitions in later CUs

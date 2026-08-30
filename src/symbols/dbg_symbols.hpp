@@ -120,6 +120,11 @@ class DbgSymbols {
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
                      FullTypeDefs& full_type_defs,
                      std::vector<PendingGlobal>& pending_globals);
+    bool processIndexedSymbols(Dwarf_Debug dbg,
+                               MemoryAddress load_base,
+                               std::string const& module_prefix,
+                               FullTypeDefs& full_type_defs,
+                               std::vector<PendingGlobal>& pending_globals);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");
