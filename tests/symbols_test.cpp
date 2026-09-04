@@ -227,6 +227,7 @@ int* getLocalStaticPtr() {
 volatile std::uintptr_t g_symbol_fixture_keep_alive_sink = 0;
 
 extern "C" std::uintptr_t keep_test_types_alive();
+extern "C" std::uintptr_t keep_indexed_static_library_alive();
 
 template <typename T>
 void keepSymbolAddress(std::uintptr_t& value, T const& symbol) {
@@ -271,6 +272,7 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, g_fwd_cache_mutable_second);
     keepSymbolAddress(value, g_cross_tu_enum);
     value ^= keep_test_types_alive();
+    value ^= keep_indexed_static_library_alive();
     g_symbol_fixture_keep_alive_sink = value;
 }
 
@@ -509,6 +511,13 @@ TEST_CASE("Basic symbol access") {
     CHECK(magic_enum_name_char_sym->isConst());
     CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
 #endif
+}
+
+TEST_CASE("Partially indexed main executable symbol lookup") {
+    DbgSymbols const& symbols = getTestSymbols();
+
+    CHECK(symbols.getSymbol("indexed_static_library_value") != nullptr);
+    CHECK(symbols.getSymbol("g_int") != nullptr);
 }
 
 TEST_CASE("Static namespace-scope symbol access") {

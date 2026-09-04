@@ -1026,6 +1026,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
                                        std::string const& module_prefix,
                                        FullTypeDefs& full_type_defs,
                                        TypeNames& type_names,
+                                       std::unordered_set<Dwarf_Off>& indexed_cus,
                                        std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
     Dwarf_Global* globals = nullptr;
@@ -1160,6 +1161,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
             || indexed_name == nullptr) {
             continue;
         }
+        indexed_cus.emplace(cu_offset);
         std::string_view const qualified_name(indexed_name);
         // Name-policy checks need no DIE data. Rejecting library and reserved
         // entries here avoids an expensive dwarf_offdie_b lookup for each one.
@@ -1318,28 +1320,18 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
     FullTypeDefs full_type_defs;
     TypeNames type_names;
     TypeCache type_cache;
+    std::unordered_set<Dwarf_Off> indexed_cus;
     std::vector<PendingGlobal> pending_globals;
 
-    // Prefer accelerator tables when the producer emitted them. Third-party
-    // shared libraries commonly omit them, so retain the recursive collector
-    // below as a compatibility fallback rather than requiring special flags
-    // for every loaded module.
-    if (processIndexedSymbols(
-          dbg, load_base, module_prefix, full_type_defs, type_names, pending_globals)) {
-        for (PendingGlobal& pending : pending_globals) {
-            if (resolveType(dbg, pending.type_offset, *pending.symbol,
-                            full_type_defs, type_names, type_cache)) {
-                m_symbol_descriptors.push_back(std::move(pending.symbol));
-                m_root_symbols.push_back(std::make_unique<VariantSymbol>(
-                  m_root_symbols, m_symbol_descriptors.back().get()));
-            }
-        }
-        return;
-    }
+    // Prefer accelerator tables where the producer emitted them. A linked
+    // module may contain a mix of indexed and unindexed compilation units, so
+    // retain their CU offsets and fallback-walk only the uncovered units.
+    processIndexedSymbols(dbg, load_base, module_prefix, full_type_defs,
+                          type_names, indexed_cus, pending_globals);
 
-    // Walk every CU once, indexing full definitions and collecting lightweight
-    // global records. Resolve globals afterwards so definitions in later CUs
-    // are available for forward-declared types.
+    // Walk each unindexed CU once, indexing full definitions and collecting
+    // lightweight global records. Resolve globals afterwards so definitions in
+    // later CUs are available for forward-declared types.
     while (dwarf_next_cu_header_d(dbg,
                                   1,
                                   &cu_header_length,
@@ -1356,7 +1348,13 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
            == DW_DLV_OK) {
         Dwarf_Die cu_die = nullptr;
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, type_names, pending_globals);
+            Dwarf_Off cu_offset = 0;
+            dwarf_dieoffset(cu_die, &cu_offset, &err);
+            if (!indexed_cus.contains(cu_offset)) {
+                walkDieTree(dbg, cu_die, load_base, "", module_prefix,
+                            decl_qualified_names, full_type_defs, type_names,
+                            pending_globals);
+            }
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
         }
     }

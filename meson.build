@@ -199,6 +199,12 @@ test_library = shared_library('test_library',
     override_options : override_options,
 )
 
+indexed_static_test_library = static_library('indexed_static_test_library',
+    sources : ['tests/indexed_static_library.cpp'],
+    cpp_args : test_library_cpp_args,
+    override_options : override_options,
+)
+
 cpp_gui = executable('test_gui_cpp',
     sources : ['src/test_main.cpp', 'src/test_library_loader.cpp'],
     include_directories : 'include',
@@ -300,12 +306,12 @@ if get_option('tests')
             'tests/symbols_test.cpp',
             'tests/test_types.c',
         ],
+        link_with : [imgui_lib, indexed_static_test_library],
         dependencies : [
             lib_symbols_dep,
             dependency('catch2-with-main'),
             deps
         ],
-        link_with : imgui_lib,
         link_depends : test_library,
         include_directories: inc + ['src', 'tests'],
     )

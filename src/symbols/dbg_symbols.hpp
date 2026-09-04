@@ -29,6 +29,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <variant>
 
@@ -127,6 +128,7 @@ class DbgSymbols {
                                std::string const& module_prefix,
                                FullTypeDefs& full_type_defs,
                                TypeNames& type_names,
+                               std::unordered_set<Dwarf_Off>& indexed_cus,
                                std::vector<PendingGlobal>& pending_globals);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
