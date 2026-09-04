@@ -3,6 +3,7 @@
 #include <catch2/catch_tostring.hpp>
 #include <catch2/generators/catch_generators_random.hpp>
 #include "DbgGui/global_snapshot.h"
+#include "DbgGui/dbg_gui.h"
 #include "symbols/variant_symbol.h"
 #include "symbols/dbg_symbols.hpp"
 
@@ -276,6 +277,34 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
 DbgSymbols const& getTestSymbols() {
     keepSymbolTestFixturesAlive();
     return DbgSymbols::getSymbols();
+}
+
+TEST_CASE("Public symbol API resolves function addresses") {
+    getTestSymbols();
+
+    std::string const name = DbgGui_getSymbolName(reinterpret_cast<std::uintptr_t>(&test_fn1));
+    CHECK(name.find("test_fn1") != std::string::npos);
+    CHECK(DbgGui_getSymbolName(0).empty());
+}
+
+TEST_CASE("Public symbol API reads and writes scalar symbols") {
+    getTestSymbols();
+    int const original = g_int;
+
+    REQUIRE(DbgGui_readSymbol("g_int") == static_cast<double>(original));
+    REQUIRE(DbgGui_writeSymbol("g_int", 1234.0));
+    CHECK(g_int == 1234);
+    CHECK(DbgGui_readSymbol("g_int") == 1234.0);
+
+    g_int = original;
+}
+
+TEST_CASE("Public symbol API reports invalid access") {
+    getTestSymbols();
+
+    CHECK_FALSE(DbgGui_readSymbol("symbol_that_does_not_exist").has_value());
+    CHECK_FALSE(DbgGui_readSymbol("g::g_a").has_value());
+    CHECK_FALSE(DbgGui_writeSymbol("g_const_int", 1.0));
 }
 
 TEST_CASE("Basic symbol access") {
