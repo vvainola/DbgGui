@@ -24,7 +24,6 @@ else
     add_project_arguments([
             '-DLINUX',
             '-DJSON_DIAGNOSTICS=1',
-            '-gpubnames',
         ], language : ['c', 'cpp']
     )
 endif
@@ -185,9 +184,18 @@ lib_gui = static_library('dbg_gui',
     override_options : override_options,
 )
 
+test_library_cpp_args = []
+if LINUX
+    test_library_cpp_args += ['-gpubnames']
+endif
+
 test_library = shared_library('test_library',
-    sources : ['src/test_library.cpp'],
+    sources : [
+        'src/test_library.cpp',
+        'src/test_library_fwd_types.cpp',
+    ],
     include_directories : 'tests',
+    cpp_args : test_library_cpp_args,
     override_options : override_options,
 )
 

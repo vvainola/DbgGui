@@ -110,7 +110,7 @@ class DbgSymbols {
         Dwarf_Off type_offset;
     };
 
-    // unordered_multimap<unqualified type name, candidate definition DIE offset>.
+    // unordered_multimap<qualified type name, candidate definition DIE offset>.
     // Indexed candidates are validated lazily when a reachable forward
     // declaration needs one; fallback-walk entries are known definitions.
     void walkDieTree(Dwarf_Debug dbg,
@@ -120,6 +120,7 @@ class DbgSymbols {
                      std::string const& module_prefix,
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
                      FullTypeDefs& full_type_defs,
+                     TypeNames& type_names,
                      std::vector<PendingGlobal>& pending_globals);
     bool processIndexedSymbols(Dwarf_Debug dbg,
                                MemoryAddress load_base,

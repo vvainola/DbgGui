@@ -26,6 +26,7 @@
 #include <cstdint>
 
 #include "test_retention.h"
+#include "test_library_fwd_types.h"
 
 // ---- Enums ----
 
@@ -146,6 +147,12 @@ Point2D lib_points[3] = {
 double* lib_double_ptr = &lib_double;
 double* lib_null_ptr = nullptr;
 
+// Node's key methods are defined in another translation unit, causing the node
+// members of these Holder globals to refer to forward declarations. Those must
+// be matched to the correctly qualified definitions because both are named Node.
+lib_collision_a::Holder lib_collision_a_holder;
+lib_collision_b::Holder lib_collision_b_holder;
+
 template <typename T>
 void keepLibrarySymbolAddress(std::uintptr_t& value, T const& symbol) {
     value ^= reinterpret_cast<std::uintptr_t>(&symbol);
@@ -175,6 +182,8 @@ extern "C" DBGGUI_TEST_EXPORT DBGGUI_TEST_NOINLINE std::uintptr_t keepTestLibrar
     keepLibrarySymbolAddress(value, lib_points);
     keepLibrarySymbolAddress(value, lib_double_ptr);
     keepLibrarySymbolAddress(value, lib_null_ptr);
+    keepLibrarySymbolAddress(value, lib_collision_a_holder);
+    keepLibrarySymbolAddress(value, lib_collision_b_holder);
     return value;
 }
 

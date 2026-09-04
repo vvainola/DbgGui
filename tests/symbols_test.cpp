@@ -883,6 +883,25 @@ TEST_CASE("Read symbols from shared library") {
         CHECK(sym_point3d_z->read() == Approx(30.0));
     }
 
+    SECTION("Qualified forward-declared types") {
+        VariantSymbol* collision_a_value =
+          symbols.getSymbol(prefix + "lib_collision_a_holder.node.value");
+        VariantSymbol* collision_b_value =
+          symbols.getSymbol(prefix + "lib_collision_b_holder.node.value");
+        VariantSymbol* collision_b_marker =
+          symbols.getSymbol(prefix + "lib_collision_b_holder.node.marker");
+
+        REQUIRE(collision_a_value != nullptr);
+        REQUIRE(collision_b_value != nullptr);
+        REQUIRE(collision_b_marker != nullptr);
+        collision_a_value->write(123.0);
+        collision_b_value->write(4.5);
+        collision_b_marker->write(789.0);
+        CHECK(collision_a_value->read() == 123.0);
+        CHECK(collision_b_value->read() == Approx(4.5));
+        CHECK(collision_b_marker->read() == 789.0);
+    }
+
     // ---- Nested struct ----
     SECTION("Nested struct members") {
         VariantSymbol* sym_motor = symbols.getSymbol(prefix + "lib_motor");

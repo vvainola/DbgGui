@@ -702,6 +702,7 @@ static void collectFullTypeDef(Dwarf_Debug dbg,
                                Dwarf_Die die,
                                Dwarf_Half tag,
                                char const* die_name,
+                               std::string const& namespace_prefix,
                                DbgSymbols::FullTypeDefs& full_type_defs);
 
 static bool readAddress(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, MemoryAddress& address) {
@@ -750,7 +751,7 @@ static bool shouldSkipIndexedSymbolName(std::string_view qualified_name) {
 }
 
 // Walk the DWARF DIE tree and collect global variable symbols
-void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, std::vector<PendingGlobal>& pending_globals) {
+void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_base, std::string const& namespace_prefix, std::string const& module_prefix, std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names, FullTypeDefs& full_type_defs, TypeNames& type_names, std::vector<PendingGlobal>& pending_globals) {
     Dwarf_Error err = nullptr;
     char* die_name = nullptr;
     Dwarf_Half tag = 0;
@@ -768,7 +769,17 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
         dwarf_diename(die, &die_name, &err);
     }
 
-    collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
+    collectFullTypeDef(dbg, die, tag, die_name, namespace_prefix, full_type_defs);
+    if ((tag == DW_TAG_structure_type
+         || tag == DW_TAG_class_type
+         || tag == DW_TAG_union_type
+         || tag == DW_TAG_enumeration_type)
+        && die_name != nullptr) {
+        Dwarf_Off offset = 0;
+        if (dwarf_dieoffset(die, &offset, &err) == DW_DLV_OK) {
+            type_names.emplace(offset, namespace_prefix + die_name);
+        }
+    }
 
     // Process global and namespace-scope variables. Subprogram children are not
     // traversed below, so function-local variables never reach this block.
@@ -962,27 +973,28 @@ void DbgSymbols::walkDieTree(Dwarf_Debug dbg, Dwarf_Die die, MemoryAddress load_
 
     Dwarf_Die child = nullptr;
     if (dwarf_child(die, &child, &err) == DW_DLV_OK) {
-        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals);
+        walkDieTree(dbg, child, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, type_names, pending_globals);
         while (true) {
             Dwarf_Die sibling = nullptr;
             if (dwarf_siblingof_b(dbg, child, 1, &sibling, &err) != DW_DLV_OK) {
                 break;
             }
             dwarf_dealloc(dbg, child, DW_DLA_DIE);
-            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, pending_globals);
+            walkDieTree(dbg, sibling, load_base, child_prefix, module_prefix, decl_qualified_names, full_type_defs, type_names, pending_globals);
             child = sibling;
         }
         dwarf_dealloc(dbg, child, DW_DLA_DIE);
     }
 }
 
-// Index a full class/struct/union/enum definition by its unqualified name. This
+// Index a full class/struct/union/enum definition by its qualified name. This
 // runs as part of the main DIE walk; globals are resolved after that walk, when
 // definitions from all compilation units have been indexed.
 static void collectFullTypeDef(Dwarf_Debug dbg,
                                Dwarf_Die die,
                                Dwarf_Half tag,
                                char const* die_name,
+                               std::string const& namespace_prefix,
                                DbgSymbols::FullTypeDefs& full_type_defs) {
     Dwarf_Error err = nullptr;
 
@@ -1001,7 +1013,7 @@ static void collectFullTypeDef(Dwarf_Debug dbg,
             if (dwarf_bytesize(die, &byte_size, &err) == DW_DLV_OK && byte_size > 0 && die_name != nullptr) {
                 Dwarf_Off offset = 0;
                 if (dwarf_dieoffset(die, &offset, &err) == DW_DLV_OK) {
-                    full_type_defs.emplace(die_name, offset);
+                    full_type_defs.emplace(namespace_prefix + die_name, offset);
                 }
             }
         }
@@ -1176,7 +1188,7 @@ bool DbgSymbols::processIndexedSymbols(Dwarf_Debug dbg,
         } else {
             char* die_name = nullptr;
             dwarf_diename(die, &die_name, &err);
-            collectFullTypeDef(dbg, die, tag, die_name, full_type_defs);
+            collectFullTypeDef(dbg, die, tag, die_name, "", full_type_defs);
             if (die_name != nullptr) {
                 dwarf_dealloc(dbg, die_name, DW_DLA_STRING);
             }
@@ -1344,7 +1356,7 @@ void DbgSymbols::processAllCUs(Dwarf_Debug dbg, MemoryAddress load_base, std::st
            == DW_DLV_OK) {
         Dwarf_Die cu_die = nullptr;
         if (dwarf_siblingof_b(dbg, nullptr, 1, &cu_die, &err) == DW_DLV_OK) {
-            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, pending_globals);
+            walkDieTree(dbg, cu_die, load_base, "", module_prefix, decl_qualified_names, full_type_defs, type_names, pending_globals);
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
         }
     }
