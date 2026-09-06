@@ -831,8 +831,7 @@ void addFields(TypeTable const& type_table,
             child->offset_to_parent = static_cast<uint32_t>(readUnsignedLeaf(field_record->data.LF_MEMBER.offset));
 
             std::string const child_name = child->name;
-            if (!startsWith(child_name, "std::")
-                && !(child_name.size() > 2 && child_name[0] == '_' && std::isupper(static_cast<unsigned char>(child_name[1])))
+            if (!shouldSkipSymbolChild(child_name)
                 && resolveType(type_table, field_record->data.LF_MEMBER.index, *child, resolving)) {
                 symbol.children.push_back(std::move(child));
             }
@@ -846,8 +845,7 @@ void addFields(TypeTable const& type_table,
             base_symbol.name = recordName(base_record);
             uint32_t const base_offset = static_cast<uint32_t>(readUnsignedLeaf(offset));
 
-            if (!startsWith(base_symbol.name, "std::")
-                && !(base_symbol.name.size() > 2 && base_symbol.name[0] == '_' && std::isupper(static_cast<unsigned char>(base_symbol.name[1])))
+            if (!shouldSkipSymbolChild(base_symbol.name)
                 && resolveType(type_table, field_record->data.LF_BCLASS.index, base_symbol, resolving)) {
                 appendInheritedMembers(symbol, base_symbol, base_offset);
             }

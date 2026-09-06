@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include "dbg_symbols.hpp"
+#include "DbgGui/dbg_gui.h"
 #include "str_helpers.h"
 #include "variant_symbol.h"
 #include "symbol_helpers.h"
@@ -33,6 +34,41 @@
 #include <iostream>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+
+namespace {
+
+VariantSymbol* getScalarSymbol(std::string_view name) {
+    VariantSymbol* symbol = DbgSymbols::getSymbols().getSymbol(std::string(name));
+    if (symbol != nullptr
+        && symbol->getType() != VariantSymbol::Type::Arithmetic
+        && symbol->getType() != VariantSymbol::Type::Enum) {
+        return nullptr;
+    }
+    return symbol;
+}
+
+} // namespace
+
+std::string DbgGui_getSymbolName(std::uintptr_t address) {
+    return DbgSymbols::getSymbols().resolveFunctionAddress(static_cast<MemoryAddress>(address));
+}
+
+std::optional<double> DbgGui_readSymbol(std::string_view name) {
+    VariantSymbol* symbol = getScalarSymbol(name);
+    if (symbol == nullptr) {
+        return std::nullopt;
+    }
+    return symbol->read();
+}
+
+bool DbgGui_writeSymbol(std::string_view name, double value) {
+    VariantSymbol* symbol = getScalarSymbol(name);
+    if (symbol == nullptr || symbol->isConst()) {
+        return false;
+    }
+    symbol->write(value);
+    return true;
+}
 
 void DbgSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
     saveSymbolDescriptorsToJson(filename, m_symbol_descriptors, omit_names);
@@ -191,10 +227,14 @@ bool DbgSymbols::loadSymbolsFromJson(std::string const& json) {
             return false;
         }
 
-        m_root_symbols.reserve(symbols_json.size());
+        size_t const symbol_count = symbols_json["symbols"].size();
+        m_root_symbols.reserve(symbol_count);
+        m_symbol_descriptors.reserve(symbol_count);
         for (nlohmann::json const& symbol_data : symbols_json["symbols"]) {
-            auto symbol = SymbolDescriptor::fromJson(symbol_data);
-            m_root_symbols.push_back(std::make_unique<VariantSymbol>(m_root_symbols, &symbol));
+            m_symbol_descriptors.push_back(
+              std::make_unique<SymbolDescriptor>(SymbolDescriptor::fromJson(symbol_data)));
+            m_root_symbols.push_back(std::make_unique<VariantSymbol>(
+              m_root_symbols, m_symbol_descriptors.back().get()));
         }
     } catch (nlohmann::json::exception& err) {
         std::cerr << err.what();

@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_tostring.hpp>
 #include <catch2/generators/catch_generators_random.hpp>
 #include "DbgGui/global_snapshot.h"
+#include "DbgGui/dbg_gui.h"
 #include "symbols/variant_symbol.h"
 #include "symbols/dbg_symbols.hpp"
 
@@ -15,6 +17,12 @@
 #include <random>
 
 using Approx = Catch::Approx;
+
+enum class SnapshotRegisteredEnum {
+    Value,
+};
+
+CATCH_REGISTER_ENUM(SnapshotRegisteredEnum, SnapshotRegisteredEnum::Value)
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -128,6 +136,15 @@ ResetDerived g_reset_derived;
 ResetDoubleDerived g_reset_double_derived;
 extern const int g_const_int = 123;
 
+struct CacheQualifierType {
+    int value;
+};
+
+// Keep the const instance first so a type cache that incorrectly keys by the
+// unqualified type, or caches caller state, would contaminate the mutable one.
+extern const CacheQualifierType g_cache_const_first = {1};
+CacheQualifierType g_cache_mutable_second = {2};
+
 // A const global that a pointer can reference. Snapshot restore must be able
 // to save and restore a pointer to this constant even though the constant
 // itself is read-only and excluded from save/restore.
@@ -140,6 +157,17 @@ struct ConstMemberStruct {
 };
 
 ConstMemberStruct g_const_member_struct;
+
+struct ReservedChildFixture {
+    int visible = 1;
+    int _Reserved = 2;
+    int _A = 3;
+    int __reserved = 4;
+    int contains__reserved = 5;
+    int _lowercase = 6;
+};
+
+ReservedChildFixture g_reserved_child_fixture;
 
 // A type with a non-trivial constructor forces GCC to emit the variable's
 // definition as a top-level DW_TAG_variable carrying DW_AT_specification +
@@ -170,6 +198,15 @@ static int s_array[3] = {10, 20, 30};
 // member.
 FwdDeclOuter g_fwd_outer;
 
+// CacheFwdDeclType is represented by a declaration DIE in this TU and by its full
+// definition in fwd_decl_types.cpp. Resolve the qualified instance first: the
+// type cache must not store that caller qualification against the full
+// definition and then apply it to the mutable instance.
+extern const CacheFwdDeclType g_fwd_cache_const_first = {};
+CacheFwdDeclType g_fwd_cache_mutable_second = {};
+collision_a::Holder g_collision_a;
+collision_b::Holder g_collision_b;
+
 // Defined in this TU where CrossTuEnum is only forward-declared (the complete
 // definition is in fwd_decl_types.cpp). Initialized via getCrossTuEnumValue()
 // so the complete enum definition is emitted into the PDB. The PDB will emit
@@ -190,6 +227,7 @@ int* getLocalStaticPtr() {
 volatile std::uintptr_t g_symbol_fixture_keep_alive_sink = 0;
 
 extern "C" std::uintptr_t keep_test_types_alive();
+extern "C" std::uintptr_t keep_indexed_static_library_alive();
 
 template <typename T>
 void keepSymbolAddress(std::uintptr_t& value, T const& symbol) {
@@ -216,9 +254,12 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, g_reset_derived);
     keepSymbolAddress(value, g_reset_double_derived);
     keepSymbolAddress(value, g_const_int);
+    keepSymbolAddress(value, g_cache_const_first);
+    keepSymbolAddress(value, g_cache_mutable_second);
     keepSymbolAddress(value, g_const_target);
     keepSymbolAddress(value, g_const_ptr);
     keepSymbolAddress(value, g_const_member_struct);
+    keepSymbolAddress(value, g_reserved_child_fixture);
     keepSymbolAddress(value, pdb_collision::a_struct);
     keepSymbolAddress(value, static_ns::s_int);
     keepSymbolAddress(value, static_ns::s_double);
@@ -227,14 +268,45 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     keepSymbolAddress(value, static_ns::s_ctor);
     keepSymbolAddress(value, static_ns::s_array);
     keepSymbolAddress(value, g_fwd_outer);
+    keepSymbolAddress(value, g_fwd_cache_const_first);
+    keepSymbolAddress(value, g_fwd_cache_mutable_second);
     keepSymbolAddress(value, g_cross_tu_enum);
     value ^= keep_test_types_alive();
+    value ^= keep_indexed_static_library_alive();
     g_symbol_fixture_keep_alive_sink = value;
 }
 
 DbgSymbols const& getTestSymbols() {
     keepSymbolTestFixturesAlive();
     return DbgSymbols::getSymbols();
+}
+
+TEST_CASE("Public symbol API resolves function addresses") {
+    getTestSymbols();
+
+    std::string const name = DbgGui_getSymbolName(reinterpret_cast<std::uintptr_t>(&test_fn1));
+    CHECK(name.find("test_fn1") != std::string::npos);
+    CHECK(DbgGui_getSymbolName(0).empty());
+}
+
+TEST_CASE("Public symbol API reads and writes scalar symbols") {
+    getTestSymbols();
+    int const original = g_int;
+
+    REQUIRE(DbgGui_readSymbol("g_int") == static_cast<double>(original));
+    REQUIRE(DbgGui_writeSymbol("g_int", 1234.0));
+    CHECK(g_int == 1234);
+    CHECK(DbgGui_readSymbol("g_int") == 1234.0);
+
+    g_int = original;
+}
+
+TEST_CASE("Public symbol API reports invalid access") {
+    getTestSymbols();
+
+    CHECK_FALSE(DbgGui_readSymbol("symbol_that_does_not_exist").has_value());
+    CHECK_FALSE(DbgGui_readSymbol("g::g_a").has_value());
+    CHECK_FALSE(DbgGui_writeSymbol("g_const_int", 1.0));
 }
 
 TEST_CASE("Basic symbol access") {
@@ -390,6 +462,19 @@ TEST_CASE("Basic symbol access") {
     CHECK(const_int_sym->isConst());
     CHECK(const_int_sym->read() == g_const_int);
 
+    VariantSymbol* cache_const_root = symbols.getSymbol("g_cache_const_first");
+    VariantSymbol* cache_const_member = symbols.getSymbol("g_cache_const_first.value");
+    VariantSymbol* cache_mutable_root = symbols.getSymbol("g_cache_mutable_second");
+    VariantSymbol* cache_mutable_member = symbols.getSymbol("g_cache_mutable_second.value");
+    REQUIRE(cache_const_root != nullptr);
+    REQUIRE(cache_const_member != nullptr);
+    REQUIRE(cache_mutable_root != nullptr);
+    REQUIRE(cache_mutable_member != nullptr);
+    CHECK(cache_const_root->isConst());
+    CHECK(cache_const_member->isConst());
+    CHECK_FALSE(cache_mutable_root->isConst());
+    CHECK_FALSE(cache_mutable_member->isConst());
+
     VariantSymbol* mutable_member_sym = symbols.getSymbol("g_const_member_struct.mutable_value");
     REQUIRE(mutable_member_sym != nullptr);
     CHECK_FALSE(mutable_member_sym->isConst());
@@ -399,6 +484,13 @@ TEST_CASE("Basic symbol access") {
     REQUIRE(const_member_sym != nullptr);
     CHECK(const_member_sym->isConst());
     CHECK(const_member_sym->read() == g_const_member_struct.const_value);
+
+    REQUIRE(symbols.getSymbol("g_reserved_child_fixture.visible") != nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._Reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._A") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture.__reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture.contains__reserved") == nullptr);
+    CHECK(symbols.getSymbol("g_reserved_child_fixture._lowercase") != nullptr);
 
     std::vector<SymbolValue> snapshot = symbols.saveSnapshotToMemory();
     auto snapshot_contains = [&](VariantSymbol* symbol) {
@@ -419,6 +511,13 @@ TEST_CASE("Basic symbol access") {
     CHECK(magic_enum_name_char_sym->isConst());
     CHECK_FALSE(snapshot_contains(magic_enum_name_char_sym));
 #endif
+}
+
+TEST_CASE("Partially indexed main executable symbol lookup") {
+    DbgSymbols const& symbols = getTestSymbols();
+
+    CHECK(symbols.getSymbol("indexed_static_library_value") != nullptr);
+    CHECK(symbols.getSymbol("g_int") != nullptr);
 }
 
 TEST_CASE("Static namespace-scope symbol access") {
@@ -486,6 +585,15 @@ TEST_CASE("Function-local statics are not exposed") {
     CHECK(symbols.getSymbol("s_local_static_ptr") == nullptr);
     CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_int") == nullptr);
     CHECK(symbols.getSymbol("getLocalStaticPtr::s_local_static_ptr") == nullptr);
+
+    // CATCH_REGISTER_ENUM creates `enumInfo` as a function-local static in a
+    // StringMaker specialization. Some accelerator tables index this static
+    // directly even though it remains nested below DW_TAG_subprogram.
+    CHECK(symbols.getSymbol("enumInfo") == nullptr);
+    CHECK(symbols.getSymbol("Catch::StringMaker<SnapshotRegisteredEnum>::convert::enumInfo") == nullptr);
+    CHECK(Catch::StringMaker<SnapshotRegisteredEnum>::convert(
+            SnapshotRegisteredEnum::Value)
+          == "Value");
 }
 
 TEST_CASE("Forward-declared type definition lookup") {
@@ -495,6 +603,19 @@ TEST_CASE("Forward-declared type definition lookup") {
     // to the full definition to be able to size up FwdDeclOuter and expose
     // FwdDeclInner's members.
     DbgSymbols const& symbols = getTestSymbols();
+
+    VariantSymbol* const_root = symbols.getSymbol("g_fwd_cache_const_first");
+    VariantSymbol* const_member = symbols.getSymbol("g_fwd_cache_const_first.value");
+    VariantSymbol* mutable_root = symbols.getSymbol("g_fwd_cache_mutable_second");
+    VariantSymbol* mutable_member = symbols.getSymbol("g_fwd_cache_mutable_second.value");
+    REQUIRE(const_root != nullptr);
+    REQUIRE(const_member != nullptr);
+    REQUIRE(mutable_root != nullptr);
+    REQUIRE(mutable_member != nullptr);
+    CHECK(const_root->isConst());
+    CHECK(const_member->isConst());
+    CHECK_FALSE(mutable_root->isConst());
+    CHECK_FALSE(mutable_member->isConst());
 
     g_fwd_outer.inner.a = 17;
     g_fwd_outer.inner.b = 2.75;
@@ -517,6 +638,19 @@ TEST_CASE("Forward-declared type definition lookup") {
     VariantSymbol* outer_value_sym = symbols.getSymbol("g_fwd_outer.outer_value");
     REQUIRE(outer_value_sym != nullptr);
     CHECK(outer_value_sym->read() == g_fwd_outer.outer_value);
+
+    g_collision_a.node.value = 123;
+    g_collision_b.node.value = 4.5;
+    g_collision_b.node.marker = 789;
+    VariantSymbol* collision_a_value = symbols.getSymbol("g_collision_a.node.value");
+    VariantSymbol* collision_b_value = symbols.getSymbol("g_collision_b.node.value");
+    VariantSymbol* collision_b_marker = symbols.getSymbol("g_collision_b.node.marker");
+    REQUIRE(collision_a_value != nullptr);
+    REQUIRE(collision_b_value != nullptr);
+    REQUIRE(collision_b_marker != nullptr);
+    CHECK(collision_a_value->read() == g_collision_a.node.value);
+    CHECK(collision_b_value->read() == Approx(g_collision_b.node.value));
+    CHECK(collision_b_marker->read() == g_collision_b.node.marker);
 }
 
 TEST_CASE("Snapshot from file") {
@@ -785,6 +919,25 @@ TEST_CASE("Read symbols from shared library") {
         VariantSymbol* sym_point3d_z = symbols.getSymbol(prefix + "lib_point3d.z");
         REQUIRE(sym_point3d_z != nullptr);
         CHECK(sym_point3d_z->read() == Approx(30.0));
+    }
+
+    SECTION("Qualified forward-declared types") {
+        VariantSymbol* collision_a_value =
+          symbols.getSymbol(prefix + "lib_collision_a_holder.node.value");
+        VariantSymbol* collision_b_value =
+          symbols.getSymbol(prefix + "lib_collision_b_holder.node.value");
+        VariantSymbol* collision_b_marker =
+          symbols.getSymbol(prefix + "lib_collision_b_holder.node.marker");
+
+        REQUIRE(collision_a_value != nullptr);
+        REQUIRE(collision_b_value != nullptr);
+        REQUIRE(collision_b_marker != nullptr);
+        collision_a_value->write(123.0);
+        collision_b_value->write(4.5);
+        collision_b_marker->write(789.0);
+        CHECK(collision_a_value->read() == 123.0);
+        CHECK(collision_b_value->read() == Approx(4.5));
+        CHECK(collision_b_marker->read() == 789.0);
     }
 
     // ---- Nested struct ----

@@ -23,9 +23,10 @@
 #include "variant_symbol.h"
 #include "symbol_helpers.h"
 #include <cassert>
+#include <charconv>
 #include <numeric>
-#include <format>
 #include <cstring>
+#include <format>
 
 #if !defined(DBGHELP_MAX_ARRAY_ELEMENT_COUNT)
 #define DBGHELP_MAX_ARRAY_ELEMENT_COUNT 10000
@@ -35,7 +36,8 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
                              SymbolDescriptor const* symbol,
                              VariantSymbol* parent)
     : m_root_symbols(root_symbols),
-      m_parent(parent) {
+      m_parent(parent),
+      m_descriptor(symbol) {
     m_is_const = symbol->is_const || (parent && parent->isConst());
 
     if (parent) {
@@ -45,9 +47,7 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
     }
 
     if (parent && parent->getType() == Type::Array) {
-        m_name = std::format("{}[{}]", parent->getName(), parent->getChildren().size());
-    } else {
-        m_name = symbol->name;
+        m_array_index = parent->getChildren().size();
     }
 
     switch (symbol->kind) {
@@ -96,6 +96,24 @@ VariantSymbol::VariantSymbol(std::vector<std::unique_ptr<VariantSymbol>>& root_s
         default:
             assert(!"Unknown type for variant symbol");
     }
+}
+
+std::string const& VariantSymbol::getName() const {
+    if (!m_parent || m_parent->getType() != Type::Array) {
+        return m_descriptor->name;
+    }
+    if (!m_name.empty()) {
+        return m_name;
+    }
+
+    m_name = m_parent->getName();
+    m_name.push_back('[');
+    char index[32];
+    auto const [end, error] = std::to_chars(std::begin(index), std::end(index), m_array_index);
+    assert(error == std::errc{});
+    m_name.append(index, end);
+    m_name.push_back(']');
+    return m_name;
 }
 
 VariantSymbol* binarySearchSymbol(std::vector<std::unique_ptr<VariantSymbol>>& symbols, MemoryAddress address) {

@@ -26,9 +26,11 @@
 
 // C++ api
 #ifdef __cplusplus
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 using ReadWriteFn = std::function<double(std::optional<double>)>;
@@ -50,6 +52,19 @@ using ValueSource = std::variant<
 void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 void DbgGui_addSymbol(std::string const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
+
+/// Resolve a function address to its demangled symbol name.
+/// Returns an empty string when the address cannot be resolved.
+std::string DbgGui_getSymbolName(std::uintptr_t address);
+
+/// Read an arithmetic or enum symbol by name.
+/// Returns std::nullopt if the symbol does not exist or cannot be read as a scalar value.
+std::optional<double> DbgGui_readSymbol(std::string_view name);
+
+/// Write an arithmetic or enum symbol by name.
+/// Returns true if the value was written, or false if the symbol does not exist,
+/// is not a scalar value, or is const.
+bool DbgGui_writeSymbol(std::string_view name, double value);
 #endif
 
 // C-api

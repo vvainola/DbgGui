@@ -25,9 +25,11 @@
 #include "DbgGui/global_snapshot.h"
 #include "symbol_descriptor.h"
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <variant>
 
@@ -93,6 +95,8 @@ class DbgSymbols {
 
 #if LINUX
     using FullTypeDefs = std::unordered_multimap<std::string, Dwarf_Off>;
+    using TypeNames = std::unordered_map<Dwarf_Off, std::string>;
+    using TypeCache = std::unordered_map<Dwarf_Off, SymbolDescriptor>;
 #endif
 
   private:
@@ -102,31 +106,40 @@ class DbgSymbols {
     void initSymbolsFromPdb();
 
 #if LINUX
-    // unordered_multimap<unqualified type name, DIE offset of full definition>:
-    // populated by a pre-pass over all CUs to enable resolveType to follow a
-    // forward-declared class/struct/union to its full definition in another CU.
-    //
-    // inside_function: true when the current DIE descends from a DW_TAG_subprogram.
-    // Function-local statics live in static storage but are gated by lazy-init
-    // guards (mangled `_ZGV*` symbols) that the snapshot mechanism filters out by
-    // name. If we exposed the static itself, save/restore would zero the storage
-    // without resetting the guard — the next use would skip re-init and read
-    // garbage. So we walk into subprograms (to keep building qualified-name maps,
-    // resolve function pointers, etc.) but don't add their DW_TAG_variable
-    // children to the symbol list.
+    struct PendingGlobal {
+        std::unique_ptr<SymbolDescriptor> symbol;
+        Dwarf_Off type_offset;
+    };
+
+    // unordered_multimap<qualified type name, candidate definition DIE offset>.
+    // Indexed candidates are validated lazily when a reachable forward
+    // declaration needs one; fallback-walk entries are known definitions.
     void walkDieTree(Dwarf_Debug dbg,
                      Dwarf_Die die,
                      MemoryAddress load_base,
                      std::string const& namespace_prefix,
                      std::string const& module_prefix,
                      std::unordered_map<Dwarf_Off, std::string>& decl_qualified_names,
-                     FullTypeDefs const& full_type_defs,
-                     bool inside_function);
+                     FullTypeDefs& full_type_defs,
+                     TypeNames& type_names,
+                     std::vector<PendingGlobal>& pending_globals);
+    bool processIndexedSymbols(Dwarf_Debug dbg,
+                               MemoryAddress load_base,
+                               std::string const& module_prefix,
+                               FullTypeDefs& full_type_defs,
+                               TypeNames& type_names,
+                               std::unordered_set<Dwarf_Off>& indexed_cus,
+                               std::vector<PendingGlobal>& pending_globals);
     void processAllCUs(Dwarf_Debug dbg,
                        MemoryAddress load_base,
                        std::string const& module_prefix = "");
 #endif
     mutable std::unordered_map<MemoryAddress, std::string> m_function_addresses;
+#if LINUX
+    // resolveFunctionAddress lazily replaces raw linkage names with demangled
+    // names, so concurrent first lookups must serialize that cache mutation.
+    mutable std::mutex m_function_addresses_mutex;
+#endif
 #if WINDOWS
     mutable bool m_function_addresses_loaded = false;
 #endif

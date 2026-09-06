@@ -22,6 +22,7 @@
 
 #include "dbghelp_helpers.h"
 #include "cvconst.h"
+#include "symbol_helpers.h"
 
 #include <DbgHelp.h>
 #include <Windows.h>
@@ -139,11 +140,6 @@ std::vector<ULONG> dbgHelpTypeChildren(HANDLE process, DWORD64 module_base, ULON
     return std::vector<ULONG>(children->ChildId, children->ChildId + child_count);
 }
 
-bool shouldSkipDbgHelpChild(std::string const& name) {
-    return name.starts_with("std::")
-        || (name.size() > 2 && name[0] == '_' && std::isupper(static_cast<unsigned char>(name[1])));
-}
-
 bool resolveDbgHelpType(HANDLE process,
                         DWORD64 module_base,
                         ULONG type_id,
@@ -177,7 +173,7 @@ void addDbgHelpFields(HANDLE process,
 
             auto child = std::make_shared<SymbolDescriptor>();
             child->name = dbgHelpTypeName(process, module_base, child_id).value_or("");
-            if (child->name.empty() || shouldSkipDbgHelpChild(child->name)) {
+            if (child->name.empty() || shouldSkipSymbolChild(child->name)) {
                 continue;
             }
             child->offset_to_parent = child_offset;
@@ -205,7 +201,7 @@ void addDbgHelpFields(HANDLE process,
             SymbolDescriptor base_symbol{
               .name = dbgHelpTypeName(process, module_base, child_id).value_or("")
             };
-            if (base_symbol.name.empty() || shouldSkipDbgHelpChild(base_symbol.name)) {
+            if (base_symbol.name.empty() || shouldSkipSymbolChild(base_symbol.name)) {
                 continue;
             }
             if (resolveDbgHelpType(process, module_base, base_type_id, base_symbol, resolving)) {
