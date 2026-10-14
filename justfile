@@ -25,14 +25,14 @@ setup build *opts:
 [windows]
 build build_folder="build" *opts="":
     #! powershell
-    .venv/scripts/activate
+    .venv_win/scripts/activate
     meson compile -C {{build_folder}} {{opts}}
 
 [no-cd]
 [windows]
 test build_folder="build" *opts="":
     #! powershell
-    .venv/scripts/activate
+    .venv_win/scripts/activate
     meson compile -C {{build_folder}} {{opts}}
     cd {{build_folder}}
     ./tests.exe
