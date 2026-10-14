@@ -23,6 +23,7 @@
 #pragma once
 
 #include "DbgGui/global_snapshot.h"
+#include "DbgGui/dbg_gui.h"
 #include "symbol_descriptor.h"
 #include <memory>
 #include <mutex>
@@ -77,6 +78,7 @@ class DbgSymbols {
     /// @brief Search for symbol that has exactly the given name.
     /// @return Symbol if found, nullptr if not found
     VariantSymbol* getSymbol(std::string const& name) const;
+    std::vector<DbgGui_ScalarInfo> getScalars() const;
 
     /// @brief Save snapshot containing the value of all arithmetic symbols and pointers
     /// @param Filename of the json file created

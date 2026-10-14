@@ -110,6 +110,8 @@ C a_struct;
 
 // Define global variables of different types
 int g_int;
+bool g_metadata_bool = true;
+uint64_t g_metadata_unsigned = 42;
 namespace g {
 A g_a;
 B g_b1;
@@ -237,6 +239,8 @@ void keepSymbolAddress(std::uintptr_t& value, T const& symbol) {
 DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
     std::uintptr_t value = 0;
     keepSymbolAddress(value, g_int);
+    keepSymbolAddress(value, g_metadata_bool);
+    keepSymbolAddress(value, g_metadata_unsigned);
     keepSymbolAddress(value, g::g_a);
     keepSymbolAddress(value, g::g_b1);
     keepSymbolAddress(value, g::g_b2);
@@ -279,14 +283,6 @@ DBGGUI_TEST_NOINLINE void keepSymbolTestFixturesAlive() {
 DbgSymbols const& getTestSymbols() {
     keepSymbolTestFixturesAlive();
     return DbgSymbols::getSymbols();
-}
-
-TEST_CASE("Public symbol API resolves function addresses") {
-    getTestSymbols();
-
-    std::string const name = DbgGui_getSymbolName(reinterpret_cast<std::uintptr_t>(&test_fn1));
-    CHECK(name.find("test_fn1") != std::string::npos);
-    CHECK(DbgGui_getSymbolName(0).empty());
 }
 
 TEST_CASE("Public symbol API reads and writes scalar symbols") {
@@ -1130,4 +1126,53 @@ TEST_CASE("Read symbols from shared library") {
         sym_int32->write(42.0);
         CHECK(sym_int32->read() == 42.0);
     }
+}
+
+TEST_CASE("Public scalar enumeration includes metadata and nested values") {
+    getTestSymbols();
+    auto const scalars = DbgGui_getScalars();
+    auto find = [&](std::string_view name) -> DbgGui_ScalarInfo const& {
+        auto it = std::find_if(scalars.begin(), scalars.end(), [&](auto const& info) {
+            return info.full_name == name;
+        });
+        REQUIRE(it != scalars.end());
+        return *it;
+    };
+    auto const& integer = find("g_int");
+    CHECK(integer.kind == DbgGui_ScalarKind::SignedInteger);
+    CHECK(integer.address == reinterpret_cast<std::uintptr_t>(&g_int));
+    CHECK(integer.size_in_bytes == sizeof(g_int));
+    CHECK(integer.enum_mapping.empty());
+    CHECK_FALSE(integer.bitfield.has_value());
+    auto const& first_field = find("g_bitfield.b0");
+    REQUIRE(first_field.bitfield.has_value());
+    CHECK(first_field.bitfield->bit_offset == 0);
+    CHECK(first_field.bitfield->bit_width == 7);
+    CHECK(first_field.size_in_bytes == 1);
+    auto const& second_field = find("g_bitfield.b9");
+    REQUIRE(second_field.bitfield.has_value());
+    CHECK(second_field.bitfield->bit_offset == 7);
+    CHECK(second_field.bitfield->bit_width == 17);
+    CHECK(second_field.size_in_bytes == 3);
+    CHECK(find("g_metadata_bool").kind == DbgGui_ScalarKind::Boolean);
+    CHECK(find("g_metadata_bool").size_in_bytes == sizeof(bool));
+    CHECK(find("g_metadata_unsigned").kind == DbgGui_ScalarKind::UnsignedInteger);
+    CHECK(find("g_metadata_unsigned").size_in_bytes == sizeof(uint64_t));
+    auto const& floating = find("g::g_float");
+    CHECK(floating.kind == DbgGui_ScalarKind::FloatingPoint);
+    CHECK(floating.size_in_bytes == sizeof(g::g_float));
+    auto const& member = find("g::g_b_array[1].a.m_a");
+    CHECK(member.address == reinterpret_cast<std::uintptr_t>(&g::g_b_array[1].a.m_a));
+    auto const& element = find("g_multidim_double[4][4]");
+    CHECK(element.address == reinterpret_cast<std::uintptr_t>(&g_multidim_double[4][4]));
+    auto const& enumeration = find("g_enum");
+    CHECK(enumeration.kind == DbgGui_ScalarKind::Enum);
+    CHECK(enumeration.size_in_bytes == sizeof(g_enum));
+    REQUIRE(enumeration.enum_mapping.size() == 4);
+    CHECK(std::find(enumeration.enum_mapping.begin(), enumeration.enum_mapping.end(),
+                    std::pair<std::int64_t, std::string>{-1, "EnumValue_1n"})
+          != enumeration.enum_mapping.end());
+    CHECK(std::none_of(scalars.begin(), scalars.end(), [](auto const& info) {
+        return info.full_name == "g_double_ptr" || info.full_name == "g::g_a";
+    }));
 }

@@ -27,6 +27,7 @@
 #include "symbol_helpers.h"
 
 #include <cassert>
+#include <functional>
 #include <sstream>
 #include <fstream>
 #include <algorithm>
@@ -49,10 +50,6 @@ VariantSymbol* getScalarSymbol(std::string_view name) {
 
 } // namespace
 
-std::string DbgGui_getSymbolName(std::uintptr_t address) {
-    return DbgSymbols::getSymbols().resolveFunctionAddress(static_cast<MemoryAddress>(address));
-}
-
 std::optional<double> DbgGui_readSymbol(std::string_view name) {
     VariantSymbol* symbol = getScalarSymbol(name);
     if (symbol == nullptr) {
@@ -68,6 +65,64 @@ bool DbgGui_writeSymbol(std::string_view name, double value) {
     }
     symbol->write(value);
     return true;
+}
+
+std::vector<DbgGui_ScalarInfo> DbgGui_getScalars() {
+    return DbgSymbols::getSymbols().getScalars();
+}
+
+std::vector<DbgGui_ScalarInfo> DbgSymbols::getScalars() const {
+    std::vector<DbgGui_ScalarInfo> scalars;
+    std::function<void(VariantSymbol const&)> visit = [&](VariantSymbol const& symbol) {
+        SymbolDescriptor const& descriptor = symbol.getDescriptor();
+        DbgGui_ScalarKind kind;
+        switch (symbol.getType()) {
+            case VariantSymbol::Type::Array:
+            case VariantSymbol::Type::Object:
+                // Child traversal neither dereferences pointers nor reads scalar memory.
+                for (auto const& child : symbol.getChildren()) {
+                    visit(*child);
+                }
+                return;
+            case VariantSymbol::Type::Pointer:
+                return;
+            case VariantSymbol::Type::Enum:
+                kind = DbgGui_ScalarKind::Enum;
+                break;
+            case VariantSymbol::Type::Arithmetic:
+                switch (descriptor.scalar_type) {
+                    case ScalarType::SignedInteger: kind = DbgGui_ScalarKind::SignedInteger; break;
+                    case ScalarType::FloatingPoint: kind = DbgGui_ScalarKind::FloatingPoint; break;
+                    case ScalarType::Boolean: kind = DbgGui_ScalarKind::Boolean; break;
+                    case ScalarType::UnsignedInteger:
+                    case ScalarType::WChar:
+                    case ScalarType::Char16:
+                    case ScalarType::Char32: kind = DbgGui_ScalarKind::UnsignedInteger; break;
+                    default: return;
+                }
+                break;
+        }
+        uint32_t size = descriptor.size;
+        if (descriptor.bitfield_position >= 0) {
+            size = (descriptor.bitfield_position + size + 7) / 8;
+        }
+        DbgGui_ScalarInfo info{symbol.getFullName(), kind,
+                              static_cast<std::uintptr_t>(symbol.getAddress()), size, {}};
+        if (descriptor.bitfield_position >= 0) {
+            info.bitfield = DbgGui_BitfieldInfo{
+                static_cast<uint32_t>(descriptor.bitfield_position), descriptor.size};
+        }
+        if (kind == DbgGui_ScalarKind::Enum) {
+            for (auto const& child : descriptor.children) {
+                info.enum_mapping.emplace_back(child->enum_value, child->name);
+            }
+        }
+        scalars.push_back(std::move(info));
+    };
+    for (auto const& root : m_root_symbols) {
+        visit(*root);
+    }
+    return scalars;
 }
 
 void DbgSymbols::saveSymbolInfoToJson(std::string const& filename, bool omit_names) const {
