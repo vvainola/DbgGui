@@ -295,6 +295,7 @@ std::expected<SampleClipboardData, std::string> readClipboardFile() {
     if (!file.read(reinterpret_cast<char*>(payload.data()), std::streamsize(payload.size()))) {
         return std::unexpected("Could not read DbgGui sample clipboard file");
     }
+    file.close();
     std::expected<SampleClipboardData, std::string> samples = decodeSamples(payload);
     if (samples) {
         std::filesystem::remove(*path, error);
