@@ -681,16 +681,20 @@ void DbgGui::loadPreviousSessionSettings() {
             }
         }
 
-        // Buffer size and window position are set only once and not synchronized with multiple processes
+        // Restore buffer size and window geometry only at startup, not from parallel processes.
         static bool once = false;
         if (!once) {
             once = true;
             m_sampler.setBufferSize(m_options.sampling_buffer_size);
             TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
                 int ypos = std::max(0, int(m_settings["window"]["ypos"]));
-                glfwSetWindowPos(m_window, xpos, ypos);)
+                glfwRestoreWindow(m_window);
+                glfwSetWindowPos(m_window, xpos, ypos);
+                glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);
+                if (m_settings["window"].value("maximized", false)) {
+                    glfwMaximizeWindow(m_window);
+                })
         }
-        TRY(glfwSetWindowSize(m_window, m_settings["window"]["width"], m_settings["window"]["height"]);)
 
         TRY(m_window_focus.scalars.initial_focus = m_settings["initial_focus"]["scalars"];)
         TRY(m_window_focus.vectors.initial_focus = m_settings["initial_focus"]["vectors"];)
@@ -908,7 +912,10 @@ void DbgGui::updateSavedSettings() {
 
     if (m_clear_saved_settings) {
         m_clear_saved_settings = false;
+        // Maximized/minimized windows cannot supply their normal restore geometry.
+        auto window_settings = m_settings["window"];
         m_settings.clear();
+        m_settings["window"] = std::move(window_settings);
         m_settings_saved.clear();
         // Restore symbols
         for (auto const& scalar : m_scalars) {
@@ -940,7 +947,9 @@ void DbgGui::updateSavedSettings() {
         if (std::filesystem::exists(settings_path)) {
             auto current_write_time = std::filesystem::last_write_time(settings_path);
             if (current_write_time != m_last_settings_write_time) {
+                auto window_settings = m_settings["window"];
                 loadPreviousSessionSettings();
+                m_settings["window"] = std::move(window_settings);
             }
         }
     }
@@ -953,10 +962,17 @@ void DbgGui::updateSavedSettings() {
         return;
     }
 
-    m_settings["window"]["width"] = width;
-    m_settings["window"]["height"] = height;
-    m_settings["window"]["xpos"] = xpos;
-    m_settings["window"]["ypos"] = ypos;
+    bool const maximized = glfwGetWindowAttrib(m_window, GLFW_MAXIMIZED);
+    bool const iconified = glfwGetWindowAttrib(m_window, GLFW_ICONIFIED);
+    if (!iconified) {
+        m_settings["window"]["maximized"] = maximized;
+    }
+    if (!iconified && !maximized) {
+        m_settings["window"]["width"] = width;
+        m_settings["window"]["height"] = height;
+        m_settings["window"]["xpos"] = xpos;
+        m_settings["window"]["ypos"] = ypos;
+    }
     m_settings["options"] = m_options.toJson();
     m_settings["hotkeys"] = nlohmann::json::object();
     for (auto const& [command_id, hotkey] : m_hotkey_overrides) {

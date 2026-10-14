@@ -26,6 +26,7 @@
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include <expected>
+#include <nlohmann/json.hpp>
 #include <cstdint>
 #include <string>
 #include <filesystem>
@@ -160,6 +161,10 @@ class CsvPlotter {
     void copyPlottedSignalArgumentsToClipboard();
     void addClipboardFileFromClipboard();
     GLFWwindow* m_window;
+    // Preserve normal geometry when a session starts maximized.
+    nlohmann::json m_settings_saved = {
+      {"window", {{"width", 1280}, {"height", 720}, {"xpos", 0}, {"ypos", 0}}},
+    };
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;

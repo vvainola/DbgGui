@@ -1385,8 +1385,13 @@ void CsvPlotter::loadPreviousSessionSettings() {
 
             int xpos = std::max(0, int(settings["window"]["xpos"]));
             int ypos = std::max(0, int(settings["window"]["ypos"]));
+            glfwRestoreWindow(m_window);
             glfwSetWindowPos(m_window, xpos, ypos);
             glfwSetWindowSize(m_window, settings["window"]["width"], settings["window"]["height"]);
+            if (settings["window"].value("maximized", false)) {
+                glfwMaximizeWindow(m_window);
+            }
+            m_settings_saved = settings;
         } catch (nlohmann::json::exception const& err) {
             addSettingsLoadError(err.what());
         } catch (std::exception const& err) {
@@ -1470,10 +1475,18 @@ void CsvPlotter::updateSavedSettings(bool force) {
     }
 
     nlohmann::json settings;
-    settings["window"]["width"] = width;
-    settings["window"]["height"] = height;
-    settings["window"]["xpos"] = xpos;
-    settings["window"]["ypos"] = ypos;
+    settings["window"] = m_settings_saved["window"];
+    bool const maximized = glfwGetWindowAttrib(m_window, GLFW_MAXIMIZED);
+    bool const iconified = glfwGetWindowAttrib(m_window, GLFW_ICONIFIED);
+    if (!iconified) {
+        settings["window"]["maximized"] = maximized;
+    }
+    if (!iconified && !maximized) {
+        settings["window"]["width"] = width;
+        settings["window"]["height"] = height;
+        settings["window"]["xpos"] = xpos;
+        settings["window"]["ypos"] = ypos;
+    }
     settings["window"]["rows"] = m_rows;
     settings["window"]["cols"] = m_cols;
     settings["window"]["undocked_plot_count"] = m_undocked_plot_count;
@@ -1551,9 +1564,8 @@ void CsvPlotter::updateSavedSettings(bool force) {
     }
     settings.erase("recent_custom_equations");
     settings.erase("recent_custom_scripts");
-    static nlohmann::json settings_saved = settings;
-    if (force || settings != settings_saved) {
-        settings_saved = settings;
+    if (force || settings != m_settings_saved) {
+        m_settings_saved = settings;
 
         std::string settings_dir = std::format("{}/.csvplot/", std::getenv(SETTINGS_LOCATION.c_str()));
         if (!std::filesystem::exists(settings_dir)) {
