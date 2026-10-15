@@ -51,16 +51,30 @@ std::pair<double, double> transformMinMax(double y_min, double y_max, Decimation
 
 } // namespace
 
-DecimatedValues decimateValues(std::span<double const> x,
-                               std::span<double const> y,
-                               int count,
-                               DecimationTransform transform) {
+DecimatedValues decimateCircularValues(std::span<double const> x,
+                                       std::span<double const> y,
+                                       size_t start_idx,
+                                       size_t end_idx,
+                                       size_t ring_offset,
+                                       int count,
+                                       DecimationTransform transform) {
     DecimatedValues decimated_values;
     if (x.empty() || y.empty()) {
         return decimated_values;
     }
 
-    size_t sample_count = MIN(x.size(), y.size());
+    size_t storage_size = MIN(x.size(), y.size());
+    start_idx = std::min(start_idx, storage_size);
+    end_idx = std::min(end_idx, storage_size);
+    if (end_idx <= start_idx) {
+        return {};
+    }
+    ring_offset %= storage_size;
+    size_t sample_count = end_idx - start_idx;
+    auto index = [&](size_t i) {
+        size_t physical = ring_offset + start_idx + i;
+        return physical < storage_size ? physical : physical - storage_size;
+    };
     if (count != ALL_SAMPLES) {
         count = std::clamp(count, MIN_PLOT_SAMPLE_COUNT, MAX_PLOT_SAMPLE_COUNT);
     }
@@ -79,8 +93,8 @@ DecimatedValues decimateValues(std::span<double const> x,
         double current_min = std::numeric_limits<double>::infinity();
         double current_max = -std::numeric_limits<double>::infinity();
         for (size_t i = begin; i < end; ++i) {
-            current_min = MIN(y[i], current_min);
-            current_max = MAX(y[i], current_max);
+            current_min = MIN(y[index(i)], current_min);
+            current_max = MAX(y[index(i)], current_max);
         }
 
         if (current_min > current_max) {
@@ -88,13 +102,20 @@ DecimatedValues decimateValues(std::span<double const> x,
             current_max = std::numeric_limits<double>::quiet_NaN();
         }
 
-        double x_center = 0.5 * (x[begin] + x[end - 1]);
+        double x_center = 0.5 * (x[index(begin)] + x[index(end - 1)]);
         auto [y_min, y_max] = transformMinMax(current_min, current_max, transform);
         decimated_values.x.push_back(transformX(x_center, transform));
         decimated_values.y_min.push_back(y_min);
         decimated_values.y_max.push_back(y_max);
     }
     return decimated_values;
+}
+
+DecimatedValues decimateValues(std::span<double const> x,
+                               std::span<double const> y,
+                               int count,
+                               DecimationTransform transform) {
+    return decimateCircularValues(x, y, 0, std::min(x.size(), y.size()), 0, count, transform);
 }
 
 DecimatedValues decimateValues(std::span<double const> x,

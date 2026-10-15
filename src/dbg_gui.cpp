@@ -685,7 +685,7 @@ void DbgGui::loadPreviousSessionSettings() {
         static bool once = false;
         if (!once) {
             once = true;
-            m_sampler.setBufferSize(m_options.sampling_buffer_size);
+            m_sampler.setCapacity(m_options.sampling_buffer_size);
             TRY(int xpos = std::max(0, int(m_settings["window"]["xpos"]));
                 int ypos = std::max(0, int(m_settings["window"]["ypos"]));
                 glfwRestoreWindow(m_window);

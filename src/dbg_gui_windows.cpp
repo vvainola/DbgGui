@@ -636,10 +636,10 @@ void DbgGui::showMainMenuBar() {
             themeCombo(m_options.theme, m_window);
 
             static int new_buffer_size = m_options.sampling_buffer_size;
-            if (ImGui::InputInt("Sampling buffer size", &new_buffer_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputInt("Sampling buffer capacity", &new_buffer_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 m_options.sampling_buffer_size = new_buffer_size;
-                m_sampler.setBufferSize(new_buffer_size);
+                m_sampler.setCapacity(new_buffer_size);
             }
 
             if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
