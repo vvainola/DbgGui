@@ -1137,18 +1137,15 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["custom_windows"][std::to_string(custom_window.id)];
         custom_window.updateJson(j);
-        for (int i = int(custom_window.scalars.size() - 1); i >= 0; --i) {
-            Scalar* scalar = custom_window.scalars[i];
+        for (Scalar* scalar : custom_window.scalars) {
             if (scalar->deleted) {
-                if (isLiveScalar(scalar->replacement)) {
-                    custom_window.addScalar(scalar->replacement);
-                }
-                remove(custom_window.scalars, scalar);
                 j["signals"].erase(scalar->group + " " + scalar->name);
-            } else {
-                // use group first in key so that the signals are sorted alphabetically by group
-                j["signals"][scalar->group + " " + scalar->name] = scalar->id;
             }
+        }
+        replaceDeletedScalarsInCustomWindow(custom_window);
+        for (Scalar* scalar : custom_window.scalars) {
+            // use group first in key so that the signals are sorted alphabetically by group
+            j["signals"][scalar->group + " " + scalar->name] = scalar->id;
         }
     }
 

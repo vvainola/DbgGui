@@ -72,3 +72,17 @@ inline void replaceDeletedVectorInPlot(VectorPlot& vector_plot, Vector2D* vector
     }
     remove(vector_plot.vectors, vector);
 }
+
+inline void replaceDeletedScalarsInCustomWindow(CustomWindow& window) {
+    std::vector<Scalar*> replacements;
+    for (Scalar* scalar : window.scalars) {
+        if (scalar->deleted && isLiveScalar(scalar->replacement)) {
+            replacements.push_back(scalar->replacement);
+        }
+    }
+    std::erase_if(window.scalars, [](Scalar* scalar) { return scalar->deleted; });
+    // addScalar sorts the list, so add replacements only after removing every old scalar.
+    for (Scalar* replacement : replacements) {
+        window.addScalar(replacement);
+    }
+}
