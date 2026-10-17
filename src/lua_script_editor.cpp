@@ -67,8 +67,9 @@ void drawScriptLineNumberGutter(std::string const& text, ImVec2 min, ImVec2 max,
 }
 
 ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
-    ImGuiContext& context = *GImGui;
-    for (ImGuiWindow* window : context.Windows) {
+    // Only children submitted by this parent in the current frame have a
+    // draw list ready to use. Inactive windows may have released their buffers.
+    for (ImGuiWindow* window : ImGui::GetCurrentWindow()->DC.ChildWindows) {
         if (window->ChildId == child_id) {
             return window;
         }
@@ -119,8 +120,8 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlig
                            input_state  ? input_state->Scroll.x :
                                           0.0f;
     drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
-    if (highlight_lua) {
-        ImDrawList* draw_list = input_window ? input_window->DrawList : ImGui::GetWindowDrawList();
+    if (highlight_lua && input_window && !input_window->SkipItems) {
+        ImDrawList* draw_list = input_window->DrawList;
         int const cursor_position = input_state && ImGui::GetActiveID() == input_id ? input_state->GetCursorPos() : -1;
         drawLuaSyntaxHighlightOverlay(draw_list,
                                       editor_font,
