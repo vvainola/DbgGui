@@ -384,7 +384,6 @@ struct ScalarPlot : Window {
         return j;
     }
 
-    std::vector<Scalar*> scalars;
     std::vector<Subplot> subplots;
     MinMax x_axis = {0, 1};
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
@@ -466,7 +465,6 @@ struct ScalarPlot : Window {
         for (Subplot& subplot : subplots) {
             subplot.scalars.clear();
         }
-        scalars.clear();
     }
 
     void contextMenu() {
