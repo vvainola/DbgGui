@@ -227,6 +227,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
                 logMessage(error);
             }
         }
+        processPanelScripts(m_sample_timestamp);
         m_sampler.sample(m_sample_timestamp);
 
         // Check pause triggers
@@ -247,6 +248,10 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
 
     // Wait in infinitely loop while paused
     while (m_paused) {
+        {
+            std::scoped_lock lock(m_sampling_mutex);
+            processPanelScripts(m_sample_timestamp);
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         // Set sync time to 0 so that if speed is changed while paused, it will
         // be effective immediately. Otherwise simulation could run for e.g. 10ms

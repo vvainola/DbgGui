@@ -24,6 +24,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
+#include "lua_script_editor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -58,6 +59,34 @@ void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
     }
 }
 } // namespace
+
+void DbgGui::processPanelScripts(double timestamp) {
+    // Called with m_sampling_mutex held. Multiple samples consume one frame request.
+    if (!m_panel.scripts_requested.exchange(false)) {
+        return;
+    }
+    std::erase_if(m_panel.led_scripts, [](auto const& script) { return script.expired(); });
+    std::vector<std::shared_ptr<PanelLedState>> scripts;
+    for (auto const& script : m_panel.led_scripts) {
+        if (auto state = script.lock()) {
+            scripts.push_back(std::move(state));
+        }
+    }
+    // Host callbacks can release the sampling mutex to register symbols on the GUI
+    // thread. Keep runtimes alive without iterating the mutable registry during Lua.
+    for (auto const& state : scripts) {
+        if (!state->requested.exchange(false) || !state->result.load()->error.empty()) {
+            continue;
+        }
+        auto result = state->runner.evaluateBoolean(timestamp);
+        auto published = std::make_shared<PanelLedResult>();
+        published->lit = result.value_or(false);
+        if (!result) {
+            published->error = result.error();
+        }
+        state->result.store(std::move(published));
+    }
+}
 
 void DbgGui::showPanels() {
     for (PanelWindow& panel : m_panels) {
@@ -116,6 +145,13 @@ void DbgGui::showPanels() {
             }
             std::optional<uint64_t> remove_widget;
             for (auto& widget : panel.widgets) {
+                if (widget.type == PanelWidgetType::Led && !widget.led.state) {
+                    widget.configureLed(createLuaScriptHost());
+                    {
+                        std::scoped_lock lock(m_sampling_mutex);
+                        m_panel.led_scripts.push_back(widget.led.state);
+                    }
+                }
                 ImGui::PushID(std::to_string(widget.id).c_str());
                 ImVec2 const position = {origin.x + panel.pan.x + widget.position.x * panel.zoom,
                                          origin.y + panel.pan.y + widget.position.y * panel.zoom};
@@ -149,6 +185,34 @@ void DbgGui::showPanels() {
                     }
                     if (ImGui::BeginPopupContextItem("widget_settings")) {
                         ImGui::InputText("Label", &widget.label);
+                        if (widget.type == PanelWidgetType::Led) {
+                            if (ImGui::IsWindowAppearing()) {
+                                widget.led.draft = widget.led.condition;
+                            }
+                            ImGui::SameLine();
+                            ImGui::ColorEdit4("##lit_color", &widget.led.color.x, ImGuiColorEditFlags_NoInputs);
+                            ImGui::SameLine();
+                            HelpMarker("Return true to light the LED, false to turn it off");
+                            inputScriptTextWithLineNumbers(widget.led.draft, {420, 180}, true);
+                            if (ImGui::Button("Apply condition")) {
+                                widget.led.condition = widget.led.draft;
+                                widget.configureLed(createLuaScriptHost());
+                                {
+                                    std::scoped_lock lock(m_sampling_mutex);
+                                    m_panel.led_scripts.push_back(widget.led.state);
+                                }
+                            }
+                            ImGui::SameLine();
+                            if (ImGui::Button("Close")) {
+                                ImGui::CloseCurrentPopup();
+                            }
+                            auto result = widget.led.state->result.load();
+                            if (!result->error.empty()) {
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+                                ImGui::TextWrapped("%s", result->error.c_str());
+                                ImGui::PopStyleColor();
+                            }
+                        }
                         if (ImGui::MenuItem("Delete widget")) {
                             remove_widget = widget.id;
                         }
@@ -157,7 +221,12 @@ void DbgGui::showPanels() {
                     if (widget.type == PanelWidgetType::Led) {
                         float const radius = std::max(1.0f, size.x * 0.5f - 2.0f);
                         ImVec2 const center = {position.x + size.x * 0.5f, position.y + size.y * 0.5f};
-                        widget_draw->AddCircleFilled(center, radius, IM_COL32(60, 60, 60, 255));
+                        auto& led = *widget.led.state;
+                        led.requested.store(true);
+                        m_panel.scripts_requested.store(true);
+                        auto result = led.result.load();
+                        widget_draw->AddCircleFilled(center, radius,
+                            result->lit ? ImGui::GetColorU32(widget.led.color) : IM_COL32(60, 60, 60, 255));
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
                     }
@@ -183,6 +252,12 @@ void DbgGui::showPanels() {
                     }
                 }
                 ImGui::EndChild();
+                if (visible && widget.type == PanelWidgetType::Led) {
+                    ImVec2 const text_size = ImGui::CalcTextSize(widget.label.c_str());
+                    ImVec2 const label_position = {corner.x + ImGui::GetStyle().ItemInnerSpacing.x * panel.zoom,
+                                                  position.y + (size.y - text_size.y) * 0.5f};
+                    ImGui::GetWindowDrawList()->AddText(label_position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
+                }
                 ImGui::PopFont();
                 ImGui::PopID();
             }
@@ -221,7 +296,7 @@ void DbgGui::showPanels() {
                         ++widget.id;
                         widget.type = type;
                         if (type == PanelWidgetType::Led) {
-                            widget.setSize({40, 40});
+                            widget.setSize({PANEL_GRID_SPACING, PANEL_GRID_SPACING});
                         } else if (type == PanelWidgetType::Checkbox) {
                             widget.size = {140, 30};
                         } else if (type == PanelWidgetType::Slider) {

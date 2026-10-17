@@ -131,6 +131,7 @@ class DbgGui {
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();
+    void processPanelScripts(double timestamp);
 
     struct Message {
         std::string text;
@@ -240,6 +241,11 @@ class DbgGui {
     std::vector<CustomWindow> m_custom_windows;
     std::vector<GridWindow> m_grid_windows;
     std::vector<PanelWindow> m_panels;
+    struct {
+        // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
+        std::vector<std::weak_ptr<PanelLedState>> led_scripts;
+        std::atomic<bool> scripts_requested = false;
+    } m_panel;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_plot_windows;

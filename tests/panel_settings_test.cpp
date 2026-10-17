@@ -99,3 +99,23 @@ TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum s
     REQUIRE(led.size.x == 32);
     REQUIRE(led.size.y == 32);
 }
+
+TEST_CASE("LED settings preserve the applied condition and color without saving drafts or runtime state") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.id = 2;
+    widget.type = PanelWidgetType::Led;
+    widget.setSize({40, 40});
+    widget.led.condition = "return read('enabled') > 0";
+    widget.led.draft = "unfinished script";
+    widget.led.color = {0.9f, 0.3f, 0.1f, 1};
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets[0].led.condition == "return read('enabled') > 0");
+    REQUIRE(restored.widgets[0].led.color.x == 0.9f);
+    REQUIRE(restored.widgets[0].led.color.y == 0.3f);
+    REQUIRE(restored.widgets[0].led.draft.empty());
+    REQUIRE_FALSE(restored.widgets[0].led.state);
+}

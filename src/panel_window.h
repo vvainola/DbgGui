@@ -23,10 +23,13 @@
 #pragma once
 
 #include "data_structures.h"
+#include "lua_script.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -46,12 +49,36 @@ enum class PanelWidgetType {
     Led
 };
 
+struct PanelLedResult {
+    bool lit = false;
+    std::string error;
+};
+
+struct PanelLedState {
+    PanelLedState(std::string condition, LuaScriptHost host)
+        : runner(std::move(condition), std::move(host), "LED condition") {
+    }
+    // The runner is used only by the sampling thread. GUI reads published results.
+    LuaScriptRunner runner;
+    std::atomic<bool> requested = false;
+    std::atomic<std::shared_ptr<PanelLedResult const>> result{std::make_shared<PanelLedResult>()};
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
     std::string label = "Widget";
     ImVec2 position = {30, 30};
     ImVec2 size = {320, 180};
+    struct {
+        std::string condition = "return false";
+        std::string draft;
+        ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
+        std::shared_ptr<PanelLedState> state;
+    } led;
+    void configureLed(LuaScriptHost host) {
+        led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
+    }
     ImVec2 minimumSize() const {
         switch (type) {
             case PanelWidgetType::Led: return {20, 20};
@@ -93,6 +120,16 @@ struct PanelWindow : Window {
             widget.label = data.value("label", widget.label);
             widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
             widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
+            if (widget.type == PanelWidgetType::Led) {
+                auto const color = data.value("led_color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
+                if (color.size() == 4) {
+                    widget.led.color = {color[0], color[1], color[2], color[3]};
+                }
+                auto const cells = data.value("cells", nlohmann::json::array());
+                if (!cells.empty()) {
+                    widget.led.condition = cells[0].value("script", widget.led.condition);
+                }
+            }
             widgets.push_back(std::move(widget));
         }
     }
@@ -119,6 +156,10 @@ struct PanelWindow : Window {
             data["y"] = widget.position.y;
             data["width"] = widget.size.x;
             data["height"] = widget.size.y;
+            if (widget.type == PanelWidgetType::Led) {
+                data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
+                data["cells"][0]["script"] = widget.led.condition;
+            }
             saved_widgets.push_back(std::move(data));
         }
         j["widgets"] = std::move(saved_widgets);
