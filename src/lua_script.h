@@ -59,6 +59,8 @@ class LuaScriptRunner {
     void shiftSchedule(double time_offset);
     void stop();
 
+    std::expected<bool, std::string> booleanResult() const;
+    std::expected<bool, std::string> evaluateBoolean(double timestamp);
     bool running() const;
     int loopsRemaining() const;
     int currentLine() const;
@@ -90,6 +92,7 @@ class LuaScriptRunner {
     lua_State* m_state = nullptr;
     lua_State* m_thread = nullptr;
     int m_thread_ref = -1;
+    int m_function_ref = -1;
     double m_start_time = 0;
     double m_process_timestamp = 0;
     double m_resume_time = 0;
@@ -97,6 +100,7 @@ class LuaScriptRunner {
     std::optional<double> m_wait_until_target;
     int m_current_line = 0;
     int m_loops_remaining = 0;
+    std::optional<bool> m_boolean_result;
     bool m_running = false;
     bool m_waiting = false;
     // Used to reject looping scripts that would otherwise restart without

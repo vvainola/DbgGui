@@ -152,6 +152,9 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
         return luaError();
     }
 
+    lua_pushvalue(m_thread, -1);
+    m_function_ref = luaL_ref(m_thread, LUA_REGISTRYINDEX);
+
     // The sampler owns execution. Arming the script here keeps UI actions from
     // writing values between two sampling instants. m_waiting makes the first
     // call to process() resume the newly created coroutine.
@@ -226,6 +229,9 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
         return luaError();
     }
 
+    if (result_count == 1 && lua_isboolean(m_thread, -1)) {
+        m_boolean_result = lua_toboolean(m_thread, -1) != 0;
+    }
     m_running = false;
     bool const restart = m_loops_remaining <= 0 || m_loops_remaining > 1;
     if (restart) {
@@ -256,8 +262,48 @@ void LuaScriptRunner::stop() {
     m_state = nullptr;
     m_thread = nullptr;
     m_thread_ref = LUA_NOREF;
+    m_function_ref = LUA_NOREF;
     m_running = false;
     m_waiting = false;
+    m_boolean_result.reset();
+}
+
+std::expected<bool, std::string> LuaScriptRunner::booleanResult() const {
+    if (m_running) {
+        return std::unexpected("Script has not finished; boolean result is unavailable");
+    }
+    if (!m_boolean_result.has_value()) {
+        return std::unexpected("Script must return exactly one boolean (true or false)");
+    }
+    return *m_boolean_result;
+}
+
+std::expected<bool, std::string> LuaScriptRunner::evaluateBoolean(double timestamp) {
+    if (m_state == nullptr) {
+        if (auto result = start(timestamp, 1); !result) {
+            return std::unexpected(result.error());
+        }
+    } else {
+        // Reuse the compiled chunk and VM, but start a fresh call each time.
+        lua_resetthread(m_thread);
+        lua_settop(m_thread, 0);
+        lua_rawgeti(m_thread, LUA_REGISTRYINDEX, m_function_ref);
+        m_boolean_result.reset();
+        m_wait_until_target.reset();
+        m_start_time = m_resume_time = m_next_resume_time = timestamp;
+        m_has_waited = false;
+        m_loops_remaining = 1;
+        m_running = m_waiting = true;
+    }
+    if (auto result = process(timestamp); !result) {
+        return std::unexpected(result.error());
+    }
+    auto result = booleanResult();
+    if (m_running) {
+        stop();
+        return std::unexpected("LED conditions must return immediately; waits are not supported");
+    }
+    return result;
 }
 
 bool LuaScriptRunner::running() const {
