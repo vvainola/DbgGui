@@ -326,7 +326,7 @@ void DbgGui::showScalarPlots() {
                       payload->DataSize / sizeof(PlotScalarDragDropPayload));
                     for (PlotScalarDragDropPayload const& dragged_scalar : dragged_scalars) {
                         if (dragged_scalar.plot != &scalar_plot || dragged_scalar.subplot_idx != subplot_idx) {
-                            dragged_scalar.plot->removeScalar(dragged_scalar.scalar, dragged_scalar.subplot_idx);
+                            dragged_scalar.plot->subplots[dragged_scalar.subplot_idx].removeScalar(dragged_scalar.scalar);
                             scalar_plot.addScalarToPlot(dragged_scalar.scalar, subplot_idx);
                         }
                     }
@@ -415,7 +415,7 @@ void DbgGui::showScalarPlots() {
         ImPlot::PopStyleVar();
 
         if (scalar_to_remove) {
-            scalar_plot.removeScalar(scalar_to_remove, subplot_to_remove_from);
+            scalar_plot.subplots[subplot_to_remove_from].removeScalar(scalar_to_remove);
         }
     });
 }

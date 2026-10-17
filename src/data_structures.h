@@ -320,6 +320,10 @@ struct PlotWindow : Window {
         std::vector<Scalar*> scalars;
         MinMax y_axis = {-1, 1};
         bool autofit_y = true;
+
+        void removeScalar(Scalar* scalar) {
+            remove(scalars, scalar);
+        }
     };
 
     inline static constexpr int MAX_SUBPLOT_ROWS = 10;
@@ -424,28 +428,13 @@ struct PlotWindow : Window {
 
     void addScalarToPlot(Scalar* new_scalar, int subplot_idx = 0) {
         subplot_idx = std::clamp(subplot_idx, 0, subplotCount() - 1);
-        // A scalar appears at most once inside a scalar plot window. Dropping it
-        // on another subplot moves it there.
-        removeScalar(new_scalar);
-        // Add scalar if it is not already in the plot
+        // Add scalar if it is not already in the subplot
         std::vector<Scalar*>& subplot_scalars = subplots[subplot_idx].scalars;
         auto it = std::find_if(subplot_scalars.begin(), subplot_scalars.end(), [=](Scalar* sig) {
             return sig->id == new_scalar->id;
         });
         if (it == subplot_scalars.end()) {
             subplot_scalars.push_back(new_scalar);
-        }
-    }
-
-    void removeScalar(Scalar* scalar) {
-        for (Subplot& subplot : subplots) {
-            remove(subplot.scalars, scalar);
-        }
-    }
-
-    void removeScalar(Scalar* scalar, int subplot_idx) {
-        if (subplot_idx >= 0 && subplot_idx < subplotCount()) {
-            remove(subplots[subplot_idx].scalars, scalar);
         }
     }
 
