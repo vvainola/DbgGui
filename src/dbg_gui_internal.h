@@ -127,6 +127,9 @@ class DbgGui {
     void showScriptWindow();
     void showGridWindow();
     void showPanels();
+    // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
+    // to coordinate signal access with sampling and GUI changes to registered scalars.
+    LuaScriptHost createLuaScriptHost();
 
     struct Message {
         std::string text;
