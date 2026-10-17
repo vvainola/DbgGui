@@ -57,6 +57,20 @@ void forEachSignalId(nlohmann::json const& signals, Fn fn) {
     }
 }
 
+template <typename Fn>
+void forEachVectorPair(nlohmann::json const& pairs, Fn fn) {
+    if (!pairs.is_array()) {
+        return;
+    }
+    for (auto const& pair : pairs) {
+        if (pair.is_array() && pair.size() == 2
+            && (pair[0].is_number_unsigned() || pair[0].is_number_integer())
+            && (pair[1].is_number_unsigned() || pair[1].is_number_integer())) {
+            fn(pair[0].get<uint64_t>(), pair[1].get<uint64_t>());
+        }
+    }
+}
+
 void loadImguiLayout(std::string layout) {
     imgui_settings::migrateLayoutIniHashes(layout);
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
@@ -105,6 +119,24 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                         if (id == scalar->id) {
                             plot->addScalarToPlot(scalar, subplot_idx);
                             start_sampling(scalar);
+                        }
+                    });
+                }
+                if (subplot_idx < plot->subplotCount() && subplot_data.contains("vectors")) {
+                    forEachVectorPair(subplot_data["vectors"], [&](uint64_t x_id, uint64_t y_id) {
+                        if (scalar->id != x_id && scalar->id != y_id) {
+                            return;
+                        }
+                        Scalar* x = findScalar(scalars, x_id);
+                        Scalar* y = findScalar(scalars, y_id);
+                        if (x && y) {
+                            plot->subplots[subplot_idx].addVector({x, y});
+                            if (subplot_data.contains("reference_frame")
+                                && subplot_data["reference_frame"] == nlohmann::json::array({x_id, y_id})) {
+                                plot->subplots[subplot_idx].reference_frame_vector = VectorPair{x, y};
+                            }
+                            start_sampling(x);
+                            start_sampling(y);
                         }
                     });
                 }
@@ -193,7 +225,7 @@ bool restoreVectorSettings(Vector2D* vector,
         }
         forEachSignalId(vector_plot_data["signals"], [&](uint64_t id) {
             if (id == vector->id) {
-                plot->addVectorToPlot(vector);
+                plot->addVector(vector);
                 restored_to_plot = true;
             }
         });
@@ -792,6 +824,21 @@ void DbgGui::loadPreviousSessionSettings() {
                             }
                         });
                     }
+                    if (subplot_idx < plot.subplotCount() && subplot_data.contains("vectors")) {
+                        forEachVectorPair(subplot_data["vectors"], [&](uint64_t x_id, uint64_t y_id) {
+                            Scalar* x = findScalar(m_scalars, x_id);
+                            Scalar* y = findScalar(m_scalars, y_id);
+                            if (x && y) {
+                                plot.subplots[subplot_idx].addVector({x, y});
+                                if (subplot_data.contains("reference_frame")
+                                    && subplot_data["reference_frame"] == nlohmann::json::array({x_id, y_id})) {
+                                    plot.subplots[subplot_idx].reference_frame_vector = VectorPair{x, y};
+                                }
+                                m_sampler.startSampling(x);
+                                m_sampler.startSampling(y);
+                            }
+                        });
+                    }
                     ++subplot_idx;
                 }
             } else if (scalar_plot_data.contains("signals")) {
@@ -812,7 +859,7 @@ void DbgGui::loadPreviousSessionSettings() {
                 Vector2D* vec = findVector(m_vectors, id);
                 if (vec) {
                     m_sampler.startSampling(vec);
-                    plot.addVectorToPlot(vec);
+                    plot.addVector(vec);
                 }
             });
         }
@@ -1022,6 +1069,45 @@ void DbgGui::updateSavedSettings() {
         // New settings write signal placement only under subplots.
         j.erase("signals");
         for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
+            replaceDeletedVectorComponents(scalar_plot.subplots[subplot_idx]);
+            auto const& vectors = scalar_plot.subplots[subplot_idx].vectors;
+            nlohmann::json& saved_vectors = j["subplots"][subplot_idx]["vectors"];
+            nlohmann::json reconciled_vectors = nlohmann::json::array();
+            // Keep unresolved pairs; rebuild registered placements from runtime state.
+            forEachVectorPair(saved_vectors, [&](uint64_t x_id, uint64_t y_id) {
+                bool const x_registered = std::ranges::any_of(m_scalars, [x_id](auto const& scalar) {
+                    return scalar->id == x_id;
+                });
+                bool const y_registered = std::ranges::any_of(m_scalars, [y_id](auto const& scalar) {
+                    return scalar->id == y_id;
+                });
+                if (!x_registered || !y_registered) {
+                    reconciled_vectors.push_back({x_id, y_id});
+                }
+            });
+            for (VectorPair pair : vectors) {
+                reconciled_vectors.push_back({pair.x->id, pair.y->id});
+            }
+            saved_vectors = std::move(reconciled_vectors);
+            auto const& reference = scalar_plot.subplots[subplot_idx].reference_frame_vector;
+            auto& saved_subplot = j["subplots"][subplot_idx];
+            if (reference) {
+                saved_subplot["reference_frame"] = {reference->x->id, reference->y->id};
+            } else if (saved_subplot.contains("reference_frame")) {
+                bool unresolved = false;
+                forEachVectorPair(nlohmann::json::array({saved_subplot["reference_frame"]}), [&](uint64_t x_id, uint64_t y_id) {
+                    bool const x_registered = std::ranges::any_of(m_scalars, [x_id](auto const& scalar) {
+                        return scalar->id == x_id;
+                    });
+                    bool const y_registered = std::ranges::any_of(m_scalars, [y_id](auto const& scalar) {
+                        return scalar->id == y_id;
+                    });
+                    unresolved = !x_registered || !y_registered;
+                });
+                if (!unresolved) {
+                    saved_subplot.erase("reference_frame");
+                }
+            }
             auto& scalars = scalar_plot.subplots[subplot_idx].scalars;
             nlohmann::json& saved_signals = j["subplots"][subplot_idx]["signals"];
             if (!saved_signals.is_object()) {

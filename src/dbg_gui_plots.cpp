@@ -91,6 +91,60 @@ void renderPlotGrid(int rows, int cols, const char* id, Render render) {
         ImPlot::EndSubplots();
     }
 }
+std::vector<XY<double>> getFrameRotationVectors(ScrollingBuffer& sampler,
+                                                VectorPair const& reference,
+                                                std::pair<int32_t, int32_t> time_idx) {
+    DecimatedValues values_x = sampler.getValuesInRange(reference.x, time_idx, ALL_SAMPLES);
+    DecimatedValues values_y = sampler.getValuesInRange(reference.y, time_idx, ALL_SAMPLES);
+    std::vector<XY<double>> rotations;
+    rotations.reserve(values_x.x.size());
+    for (size_t i = 0; i < values_x.y_max.size(); ++i) {
+        double angle = -atan2(values_y.y_min[i], values_x.y_min[i]);
+        rotations.push_back({cos(angle), sin(angle)});
+    }
+    return rotations;
+}
+
+void renderVectorPair(ScrollingBuffer& sampler,
+                      VectorPair const& vector,
+                      const char* label,
+                      std::pair<int32_t, int32_t> time_idx,
+                      std::vector<XY<double>> const& frame_rotation_vectors) {
+    DecimatedValues values_x = sampler.getValuesInRange(vector.x,
+                                                        time_idx,
+                                                        ALL_SAMPLES,
+                                                        vector.x->getScale(),
+                                                        vector.x->getOffset());
+    DecimatedValues values_y = sampler.getValuesInRange(vector.y,
+                                                        time_idx,
+                                                        ALL_SAMPLES,
+                                                        vector.y->getScale(),
+                                                        vector.y->getOffset());
+    // Rotate samples
+    if (frame_rotation_vectors.size() > 0) {
+        for (size_t i = 0; i < values_x.y_max.size(); ++i) {
+            double x_temp = values_x.y_min[i];
+            double y_temp = values_y.y_min[i];
+            values_x.y_min[i] = x_temp * frame_rotation_vectors[i].x - y_temp * frame_rotation_vectors[i].y;
+            values_y.y_min[i] = x_temp * frame_rotation_vectors[i].y + y_temp * frame_rotation_vectors[i].x;
+        }
+    }
+    size_t count = MIN(values_x.y_min.size(), values_y.y_min.size());
+    ImPlot::PlotLine(label,
+                     values_x.y_min.data(),
+                     values_y.y_min.data(),
+                     int(count),
+                     ImPlotLineFlags_None);
+    // Plot line from origin to latest sample
+    double x_to_latest[2] = {0, values_x.y_min.back()};
+    double y_to_latest[2] = {0, values_y.y_min.back()};
+    ImPlot::PlotLine(label,
+                     x_to_latest,
+                     y_to_latest,
+                     2,
+                     ImPlotLineFlags_None);
+}
+
 } // namespace
 
 void DbgGui::showScalarPlots() {
@@ -110,9 +164,7 @@ void DbgGui::showScalarPlots() {
                 ImGui::CloseCurrentPopup();
             }
             if (ImGui::Button("Remove all")) {
-                scalar_plot.clearScalars();
-                m_settings["scalar_plots"][std::to_string(scalar_plot.id)].erase("signals");
-                m_settings["scalar_plots"][std::to_string(scalar_plot.id)]["subplots"].clear();
+                scalar_plot.clearSignals();
                 ImGui::CloseCurrentPopup();
             }
             int rows = scalar_plot.rows();
@@ -122,6 +174,39 @@ void DbgGui::showScalarPlots() {
             }
             if (ImGui::InputInt("Columns", &cols)) {
                 scalar_plot.setSubplotGrid(scalar_plot.rows(), cols);
+            }
+            float type_width = std::max(ImGui::CalcTextSize("Scalar").x, ImGui::CalcTextSize("Vector").x)
+                             + ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().FramePadding.x;
+            if (ImGui::BeginTable("##SubplotTypes", scalar_plot.cols(), ImGuiTableFlags_Borders)) {
+                for (int row = 0; row < scalar_plot.rows(); ++row) {
+                    ImGui::TableNextRow();
+                    for (int col = 0; col < scalar_plot.cols(); ++col) {
+                        ImGui::TableSetColumnIndex(col);
+                        int index = row * scalar_plot.cols() + col;
+                        auto& subplot = scalar_plot.subplots[index];
+                        std::string id = std::format("##Type{}", index);
+                        ImGui::SetNextItemWidth(type_width);
+                        if (ImGui::BeginCombo(id.c_str(), subplot.type == PlotType::Vector ? "Vector" : "Scalar")) {
+                            if (ImGui::Selectable("Scalar", subplot.type == PlotType::Scalar)) {
+                                subplot.type = PlotType::Scalar;
+                            }
+                            if (ImGui::Selectable("Vector", subplot.type == PlotType::Vector)) {
+                                subplot.type = PlotType::Vector;
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                }
+                ImGui::EndTable();
+            }
+            bool has_vectors = std::ranges::any_of(scalar_plot.subplots, [](auto const& subplot) {
+                return subplot.type == PlotType::Vector;
+            });
+            if (has_vectors) {
+                float time_range_ms = scalar_plot.vector_time_range * 1e3f;
+                if (ImGui::SliderFloat("Vector time range", &time_range_ms, 0, 100, "%.0f ms")) {
+                    scalar_plot.vector_time_range = time_range_ms * 1e-3f;
+                }
             }
             ImGui::EndPopup();
         }
@@ -175,6 +260,14 @@ void DbgGui::showScalarPlots() {
         bool running = !m_paused;
         bool fit_x_to_latest = running || (scalar_plot.last_frame_timestamp < m_plot_timestamp);
         renderPlotGrid(scalar_plot.rows(), scalar_plot.cols(), "##ScalarSubplots", [&](int subplot_idx) {
+            auto& subplot = scalar_plot.subplots[subplot_idx];
+            if (subplot.type == PlotType::Vector) {
+                double last_sample_time = m_linked_scalar_x_axis_limits.max;
+                double first_sample_time = MAX(last_sample_time - scalar_plot.vector_time_range, m_linked_scalar_x_axis_limits.min);
+                auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
+                renderVectorSubplot(subplot, subplot_idx, time_idx);
+                return;
+            }
             ImPlot::SetNextAxisLinks(ImAxis_X1, &x_limits.min, &x_limits.max);
             // Follow the latest samples while running; allow free movement while paused.
             if (fit_x_to_latest) {
@@ -413,6 +506,111 @@ void DbgGui::renderScalarSubplot(PlotWindow::Subplot& subplot,
     }
 }
 
+void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, std::pair<int32_t, int32_t> time_idx) {
+    struct VectorSubplotDragDropPayload {
+        PlotWindow::Subplot* subplot;
+        VectorPair vector;
+    };
+    if (ImGui::GetFrameCount() < 5) {
+        ImPlot::SetNextAxesToFit();
+    }
+    if (!ImPlot::BeginPlot(std::format("##Vectors{}", subplot_idx).c_str(),
+                           ImVec2(-1, ImGui::GetContentRegionAvail().y),
+                           ImPlotFlags_Equal)) {
+        return;
+    }
+    ImPlotAxisFlags axis_flags = subplot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+    ImPlot::SetupAxes(nullptr, nullptr, axis_flags, axis_flags);
+    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
+    for (auto const* circle : {&UNIT_CIRCLE, &HALF_UNIT_CIRCLE}) {
+        ImPlot::PlotLine(circle == &UNIT_CIRCLE ? "##Unit circle" : "##Half unit circle",
+                         &circle->front().x,
+                         &circle->front().y,
+                         int(circle->size()),
+                         ImPlotLineFlags_None,
+                         0,
+                         sizeof(XY<double>));
+    }
+    ImPlot::PopStyleColor();
+
+    std::vector<XY<double>> rotations;
+    if (subplot.reference_frame_vector) {
+        rotations = getFrameRotationVectors(m_sampler, *subplot.reference_frame_vector, time_idx);
+    }
+    std::optional<VectorPair> vector_to_remove;
+    for (VectorPair const& vector : subplot.vectors) {
+        std::string label = std::format("{} / {}###{}:{}", vector.x->alias_and_group, vector.y->alias_and_group, vector.x->id, vector.y->id);
+        renderVectorPair(m_sampler, vector, label.c_str(), time_idx, rotations);
+        if (ImPlot::BeginLegendPopup(label.c_str())) {
+            if (subplot.reference_frame_vector == vector) {
+                if (ImGui::Button("Remove reference frame")) {
+                    subplot.reference_frame_vector.reset();
+                }
+            } else if (ImGui::Button("Set as reference frame")) {
+                subplot.reference_frame_vector = vector;
+            }
+            if (ImGui::Button("Remove")) {
+                vector_to_remove = vector;
+            }
+            ImPlot::EndLegendPopup();
+        }
+        if (ImPlot::BeginDragDropSourceItem(label.c_str())) {
+            VectorSubplotDragDropPayload payload{&subplot, vector};
+            ImGui::SetDragDropPayload("SUBPLOT_VECTOR", &payload, sizeof(payload));
+            ImGui::Text("Drag to move vector\n  %s / %s", vector.x->alias_and_group.c_str(), vector.y->alias_and_group.c_str());
+            ImPlot::EndDragDropSource();
+        }
+    }
+    if (ImPlot::BeginDragDropTargetPlot()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SUBPLOT_VECTOR")) {
+            auto const& dragged = *static_cast<VectorSubplotDragDropPayload const*>(payload->Data);
+            if (dragged.subplot != &subplot) {
+                dragged.subplot->removeVector(dragged.vector);
+                subplot.addVector(dragged.vector);
+            }
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
+            Vector2D* vector = findVector(m_vectors, *static_cast<uint64_t const*>(payload->Data));
+            if (vector) {
+                m_sampler.startSampling(vector);
+                subplot.addVector(*vector);
+            }
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+            std::span<uint64_t const> ids(static_cast<uint64_t const*>(payload->Data), payload->DataSize / sizeof(uint64_t));
+            if (ids.size() == 2) {
+                Scalar* x = findScalar(m_scalars, ids[0]);
+                Scalar* y = findScalar(m_scalars, ids[1]);
+                if (x && y) {
+                    m_sampler.startSampling(x);
+                    m_sampler.startSampling(y);
+                    subplot.addVector({x, y});
+                }
+            } else {
+                logMessage("Vector plots require exactly two scalars.");
+            }
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+            std::span<VariantSymbol* const> symbols(static_cast<VariantSymbol* const*>(payload->Data),
+                                                    payload->DataSize / sizeof(VariantSymbol*));
+            if (symbols.size() == 2) {
+                Scalar* x = addScalarSymbol(symbols[0], m_group_to_add_symbols);
+                Scalar* y = addScalarSymbol(symbols[1], m_group_to_add_symbols);
+                m_sampler.startSampling(x);
+                m_sampler.startSampling(y);
+                subplot.addVector({x, y});
+            } else {
+                logMessage("Vector plots require exactly two symbols.");
+            }
+        }
+        ImPlot::EndDragDropTarget();
+    }
+    ImPlot::EndPlot();
+    if (vector_to_remove) {
+        subplot.removeVector(*vector_to_remove);
+    }
+}
+
 void DbgGui::showVectorPlots() {
     renderPlotWindows(m_vector_plots, m_plot_timestamp, [&](VectorPlot& vector_plot) {
         // Fit first few frames because the initial fit does not seem to work sometimes with equal axes
@@ -426,6 +624,11 @@ void DbgGui::showVectorPlots() {
         ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
         ImGui::SliderFloat("Time range", &time_range_ms, 0, 100, "%.0f ms");
         vector_plot.time_range = time_range_ms * 1e-3f;
+
+        // Use time range from the scalar plots
+        double last_sample_time = m_linked_scalar_x_axis_limits.max;
+        double first_sample_time = MAX(last_sample_time - vector_plot.time_range, m_linked_scalar_x_axis_limits.min);
+        auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
 
         static ImPlotAxisFlags flags = ImPlotAxisFlags_None;
 
@@ -451,58 +654,15 @@ void DbgGui::showVectorPlots() {
                              2 * sizeof(double));
             ImPlot::PopStyleColor();
 
-            // Use time range from the scalar plots
-            double last_sample_time = m_linked_scalar_x_axis_limits.max;
-            double first_sample_time = MAX(last_sample_time - vector_plot.time_range, m_linked_scalar_x_axis_limits.min);
-            auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
-
             // Collect rotation vectors to rotate samples to reference frame
             std::vector<XY<double>> frame_rotation_vectors;
             if (vector_plot.reference_frame_vector) {
-                DecimatedValues values_x = m_sampler.getValuesInRange(vector_plot.reference_frame_vector->x, time_idx, ALL_SAMPLES);
-                DecimatedValues values_y = m_sampler.getValuesInRange(vector_plot.reference_frame_vector->y, time_idx, ALL_SAMPLES);
-                frame_rotation_vectors.reserve(values_x.x.size());
-                for (size_t i = 0; i < values_x.y_max.size(); ++i) {
-                    double angle = -atan2(values_y.y_min[i], values_x.y_min[i]);
-                    frame_rotation_vectors.push_back({cos(angle), sin(angle)});
-                }
+                frame_rotation_vectors = getFrameRotationVectors(m_sampler, *vector_plot.reference_frame_vector, time_idx);
             }
 
             // Plot vectors
             for (Vector2D* vector : vector_plot.vectors) {
-                DecimatedValues values_x = m_sampler.getValuesInRange(vector->x,
-                                                                      time_idx,
-                                                                      ALL_SAMPLES,
-                                                                      vector->x->getScale(),
-                                                                      vector->x->getOffset());
-                DecimatedValues values_y = m_sampler.getValuesInRange(vector->y,
-                                                                      time_idx,
-                                                                      ALL_SAMPLES,
-                                                                      vector->y->getScale(),
-                                                                      vector->y->getOffset());
-                // Rotate samples
-                if (frame_rotation_vectors.size() > 0) {
-                    for (size_t i = 0; i < values_x.y_max.size(); ++i) {
-                        double x_temp = values_x.y_min[i];
-                        double y_temp = values_y.y_min[i];
-                        values_x.y_min[i] = x_temp * frame_rotation_vectors[i].x - y_temp * frame_rotation_vectors[i].y;
-                        values_y.y_min[i] = x_temp * frame_rotation_vectors[i].y + y_temp * frame_rotation_vectors[i].x;
-                    }
-                }
-                size_t count = MIN(values_x.y_min.size(), values_y.y_min.size());
-                ImPlot::PlotLine(vector->name_and_group.c_str(),
-                                 values_x.y_min.data(),
-                                 values_y.y_min.data(),
-                                 int(count),
-                                 ImPlotLineFlags_None);
-                // Plot line from origin to latest sample
-                double x_to_latest[2] = {0, values_x.y_min.back()};
-                double y_to_latest[2] = {0, values_y.y_min.back()};
-                ImPlot::PlotLine(vector->name_and_group.c_str(),
-                                 x_to_latest,
-                                 y_to_latest,
-                                 2,
-                                 ImPlotLineFlags_None);
+                renderVectorPair(m_sampler, *vector, vector->name_and_group.c_str(), time_idx, frame_rotation_vectors);
 
                 // Legend right-click
                 if (ImPlot::BeginLegendPopup(vector->name_and_group.c_str())) {
@@ -542,7 +702,7 @@ void DbgGui::showVectorPlots() {
                     Vector2D* vector = findVector(m_vectors, id);
                     if (vector) {
                         m_sampler.startSampling(vector);
-                        vector_plot.addVectorToPlot(vector);
+                        vector_plot.addVector(vector);
                     }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
@@ -553,7 +713,7 @@ void DbgGui::showVectorPlots() {
                     } else {
                         Vector2D* vector = addVectorSymbol(symbols[0], symbols[1], m_group_to_add_symbols);
                         m_sampler.startSampling(vector);
-                        vector_plot.addVectorToPlot(vector);
+                        vector_plot.addVector(vector);
                     }
                 }
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
@@ -566,7 +726,7 @@ void DbgGui::showVectorPlots() {
                             Vector2D* vector = addVectorFromScalars(x, y);
                             if (vector) {
                                 m_sampler.startSampling(vector);
-                                vector_plot.addVectorToPlot(vector);
+                                vector_plot.addVector(vector);
                             }
                         }
                     }
@@ -576,8 +736,8 @@ void DbgGui::showVectorPlots() {
                     VectorPlot* original_plot = plot_and_vector.first;
                     Vector2D* vector = plot_and_vector.second;
                     if (original_plot != &vector_plot) {
-                        remove(original_plot->vectors, vector);
-                        vector_plot.addVectorToPlot(vector);
+                        original_plot->removeVector(vector);
+                        vector_plot.addVector(vector);
                     }
                 }
                 ImPlot::EndDragDropTarget();
@@ -587,7 +747,7 @@ void DbgGui::showVectorPlots() {
         ImPlot::PopStyleVar();
 
         if (signal_to_remove) {
-            remove(vector_plot.vectors, signal_to_remove);
+            vector_plot.removeVector(signal_to_remove);
         }
     });
 }

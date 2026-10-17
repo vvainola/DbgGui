@@ -33,6 +33,7 @@
 #include "nlohmann/json.hpp"
 
 #include <numeric>
+#include <optional>
 #include <vector>
 #include <cmath>
 #include <future>
@@ -261,13 +262,18 @@ class PauseTrigger {
     double m_pause_level;
 };
 
-struct Vector2D {
+struct VectorPair {
+    Scalar* x;
+    Scalar* y;
+
+    bool operator==(VectorPair const&) const = default;
+};
+
+struct Vector2D : VectorPair {
     uint64_t id;
     std::string group;
     std::string name;
     std::string name_and_group;
-    Scalar* x;
-    Scalar* y;
     bool deleted = false;
     Vector2D* replacement = nullptr;
 };
@@ -315,9 +321,18 @@ struct Window {
     }
 };
 
+enum class PlotType {
+    Scalar,
+    Vector,
+    Spectrum
+};
+
 struct PlotWindow : Window {
     struct Subplot {
+        PlotType type = PlotType::Scalar;
         std::vector<Scalar*> scalars;
+        std::vector<VectorPair> vectors;
+        std::optional<VectorPair> reference_frame_vector;
         MinMax y_axis = {-1, 1};
         bool autofit_y = true;
 
@@ -329,6 +344,19 @@ struct PlotWindow : Window {
 
         void removeScalar(Scalar* scalar) {
             remove(scalars, scalar);
+        }
+
+        void addVector(VectorPair vector) {
+            if (!contains(vectors, vector)) {
+                vectors.push_back(vector);
+            }
+        }
+
+        void removeVector(VectorPair vector) {
+            remove(vectors, vector);
+            if (reference_frame_vector == vector) {
+                reference_frame_vector.reset();
+            }
         }
     };
 
@@ -342,6 +370,7 @@ struct PlotWindow : Window {
     PlotWindow(nlohmann::json const& j)
         : Window(j) {
         x_range = j.value("x_range", x_range);
+        vector_time_range = j.value("vector_time_range", vector_time_range);
         x_axis.min = 0;
         x_axis.max = x_range;
         m_rows = std::clamp(j.value("rows", m_rows), 1, MAX_SUBPLOT_ROWS);
@@ -354,6 +383,7 @@ struct PlotWindow : Window {
                     break;
                 }
                 Subplot& subplot = subplots[subplot_idx];
+                subplot.type = subplot_data.value("type", subplot.type);
                 subplot.autofit_y = subplot_data.value("autofit_y", subplot.autofit_y);
                 if (!subplot.autofit_y) {
                     subplot.y_axis.min = subplot_data.value("y_min", subplot.y_axis.min);
@@ -366,6 +396,7 @@ struct PlotWindow : Window {
     nlohmann::json updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["x_range"] = x_range;
+        j["vector_time_range"] = vector_time_range;
         j["rows"] = m_rows;
         j["cols"] = m_cols;
         // Preserve signal placement until updateSavedSettings() reconciles it
@@ -382,6 +413,7 @@ struct PlotWindow : Window {
         for (size_t subplot_idx = 0; subplot_idx < subplots.size(); ++subplot_idx) {
             Subplot const& subplot = subplots[subplot_idx];
             nlohmann::json& subplot_data = j["subplots"][subplot_idx];
+            subplot_data["type"] = subplot.type;
             subplot_data["autofit_y"] = subplot.autofit_y;
             if (!subplot.autofit_y) {
                 subplot_data["y_min"] = subplot.y_axis.min;
@@ -396,6 +428,7 @@ struct PlotWindow : Window {
 
     std::vector<Subplot> subplots;
     MinMax x_axis = {0, 1};
+    float vector_time_range = 20e-3f;
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp = 0;
 
@@ -429,6 +462,9 @@ struct PlotWindow : Window {
             for (Scalar* scalar : old_subplots[i].scalars) {
                 addScalarToPlot(scalar, 0);
             }
+            for (VectorPair vector : old_subplots[i].vectors) {
+                subplots[0].addVector(vector);
+            }
         }
     }
 
@@ -449,9 +485,11 @@ struct PlotWindow : Window {
         return all_scalars;
     }
 
-    void clearScalars() {
+    void clearSignals() {
         for (Subplot& subplot : subplots) {
             subplot.scalars.clear();
+            subplot.vectors.clear();
+            subplot.reference_frame_vector.reset();
         }
     }
 
@@ -493,14 +531,14 @@ struct VectorPlot : Window {
     Vector2D* reference_frame_vector = nullptr;
     float time_range = 20e-3f;
 
-    void addVectorToPlot(Vector2D* new_vector) {
-        // Add vector if it is not already in the plot
-        auto it = std::find_if(vectors.begin(), vectors.end(), [=](Vector2D* sig) {
-            return sig->id == new_vector->id;
-        });
-        if (it == vectors.end()) {
+    void addVector(Vector2D* new_vector) {
+        if (!contains(vectors, new_vector)) {
             vectors.push_back(new_vector);
         }
+    }
+
+    void removeVector(Vector2D* vector) {
+        remove(vectors, vector);
     }
 };
 

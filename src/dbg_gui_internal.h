@@ -145,6 +145,9 @@ class DbgGui {
                              int subplot_idx,
                              double vertical_line_time,
                              double& vertical_line_time_next);
+    void renderVectorSubplot(PlotWindow::Subplot& subplot,
+                             int subplot_idx,
+                             std::pair<int32_t, int32_t> time_idx);
     void showVectorPlots();
     void showSpectrumPlots();
     void showCustomSignalCreator();

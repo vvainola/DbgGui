@@ -68,9 +68,42 @@ inline void removeDeletedSignalsFromGroup(SignalGroup<T>& group) {
 
 inline void replaceDeletedVectorInPlot(VectorPlot& vector_plot, Vector2D* vector) {
     if (vector->deleted && isLiveVector(vector->replacement)) {
-        vector_plot.addVectorToPlot(vector->replacement);
+        vector_plot.addVector(vector->replacement);
     }
-    remove(vector_plot.vectors, vector);
+    vector_plot.removeVector(vector);
+}
+
+inline void replaceDeletedVectorComponents(PlotWindow::Subplot& subplot) {
+    auto resolve_pair = [](VectorPair pair) -> std::optional<VectorPair> {
+        if (pair.x && pair.x->deleted) {
+            pair.x = pair.x->replacement;
+        }
+        if (pair.y && pair.y->deleted) {
+            pair.y = pair.y->replacement;
+        }
+        if (!isLiveScalar(pair.x) || !isLiveScalar(pair.y)) {
+            return std::nullopt;
+        }
+        return pair;
+    };
+    bool const needs_cleanup = std::ranges::any_of(subplot.vectors, [](VectorPair pair) {
+        return !isLiveScalar(pair.x) || !isLiveScalar(pair.y);
+    });
+    if (needs_cleanup) {
+        auto old_vectors = std::move(subplot.vectors);
+        subplot.vectors.clear();
+        for (VectorPair pair : old_vectors) {
+            if (auto replacement = resolve_pair(pair)) {
+                subplot.addVector(*replacement);
+            }
+        }
+    }
+    if (subplot.reference_frame_vector) {
+        subplot.reference_frame_vector = resolve_pair(*subplot.reference_frame_vector);
+        if (subplot.reference_frame_vector && !contains(subplot.vectors, *subplot.reference_frame_vector)) {
+            subplot.reference_frame_vector.reset();
+        }
+    }
 }
 
 inline void replaceDeletedScalarsInCustomWindow(CustomWindow& window) {

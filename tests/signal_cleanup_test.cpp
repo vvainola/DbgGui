@@ -82,7 +82,7 @@ TEST_CASE("Deleted scalar vector cleanup allows recreating the vector") {
     vector_group.signals.push_back(old_vector_ptr);
 
     VectorPlot vector_plot("Vector plot", 1);
-    vector_plot.addVectorToPlot(old_vector_ptr);
+    vector_plot.addVector(old_vector_ptr);
 
     old_x->deleted = true;
     old_y->deleted = true;
@@ -104,7 +104,7 @@ TEST_CASE("Deleted scalar vector cleanup allows recreating the vector") {
     Vector2D* new_vector_ptr = new_vector.get();
     vectors.push_back(std::move(new_vector));
     vector_group.signals.push_back(new_vector_ptr);
-    vector_plot.addVectorToPlot(new_vector_ptr);
+    vector_plot.addVector(new_vector_ptr);
 
     REQUIRE(vector_group.signals.size() == 1);
     CHECK(vector_group.signals.front() == new_vector_ptr);
@@ -127,7 +127,7 @@ TEST_CASE("Deleted vector cleanup does not keep a deleted replacement in plots")
     replacement_x->deleted = true;
 
     VectorPlot vector_plot("Vector plot", 1);
-    vector_plot.addVectorToPlot(old_vector.get());
+    vector_plot.addVector(old_vector.get());
     replaceDeletedVectorInPlot(vector_plot, old_vector.get());
 
     CHECK(vector_plot.vectors.empty());
@@ -182,4 +182,61 @@ TEST_CASE("Custom window cleanup deduplicates replacements and removes deleted r
     window.addScalar(new_x.get());
     replaceDeletedScalarsInCustomWindow(window);
     REQUIRE(window.scalars == std::vector<Scalar*>{new_x.get()});
+}
+
+TEST_CASE("Vector subplot cleanup replaces components and deduplicates pairs") {
+    auto old_x = makeScalar("old x", "group");
+    auto x = makeScalar("x", "group");
+    auto y = makeScalar("y", "group");
+    PlotWindow::Subplot subplot;
+    subplot.addVector({old_x.get(), y.get()});
+    subplot.addVector({x.get(), y.get()});
+    subplot.reference_frame_vector = VectorPair{old_x.get(), y.get()};
+    old_x->deleted = true;
+    old_x->replacement = x.get();
+
+    replaceDeletedVectorComponents(subplot);
+
+    REQUIRE(subplot.vectors.size() == 1);
+    REQUIRE(subplot.vectors[0].x == x.get());
+    REQUIRE(subplot.vectors[0].y == y.get());
+    REQUIRE(subplot.reference_frame_vector == subplot.vectors[0]);
+
+    SECTION("Deleting a component removes the pair and reference") {
+        y->deleted = true;
+    }
+    SECTION("A deleted replacement cannot remain in the subplot") {
+        y->deleted = true;
+        y->replacement = old_x.get();
+    }
+    replaceDeletedVectorComponents(subplot);
+    REQUIRE(subplot.vectors.empty());
+    REQUIRE_FALSE(subplot.reference_frame_vector.has_value());
+}
+
+TEST_CASE("Shrinking a subplot grid preserves vector pairs without changing the reference frame") {
+    auto x = makeScalar("x", "group");
+    auto y = makeScalar("y", "group");
+    VectorPair xy{x.get(), y.get()};
+    VectorPair yx{y.get(), x.get()};
+    PlotWindow plot("test", 1);
+    plot.setSubplotGrid(2, 2);
+    plot.subplots[0].addVector(xy);
+    plot.subplots[3].addVector(xy);
+    plot.subplots[3].addVector(yx);
+    plot.subplots[3].reference_frame_vector = yx;
+
+    SECTION("Do not adopt the removed cell's reference frame") {
+        REQUIRE_FALSE(plot.subplots[0].reference_frame_vector.has_value());
+    }
+    SECTION("Keep an existing reference frame") {
+        plot.subplots[0].reference_frame_vector = xy;
+    }
+    auto expected_reference = plot.subplots[0].reference_frame_vector;
+    plot.setSubplotGrid(1, 1);
+
+    REQUIRE(plot.subplots[0].vectors.size() == 2);
+    REQUIRE(contains(plot.subplots[0].vectors, xy));
+    REQUIRE(contains(plot.subplots[0].vectors, yx));
+    REQUIRE(plot.subplots[0].reference_frame_vector == expected_reference);
 }
