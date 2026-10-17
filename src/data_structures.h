@@ -549,14 +549,10 @@ struct SpectrumPlot : Window {
     void removeFromPlot(Scalar* s) {
         for (int i = int(spectrums.size() - 1); i >= 0; --i) {
             if (spectrums[i].real == s || spectrums[i].imag == s) {
-                removed_scalars.push_back(spectrums[i].real);
-                removed_scalars.push_back(spectrums[i].imag);
                 spectrums.erase(spectrums.begin() + i);
             }
         }
     }
-
-    std::vector<Scalar*> removed_scalars;
 };
 
 struct CustomWindow : Window {

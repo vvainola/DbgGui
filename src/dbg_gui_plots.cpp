@@ -577,8 +577,6 @@ void DbgGui::showVectorPlots() {
                     Vector2D* vector = plot_and_vector.second;
                     if (original_plot != &vector_plot) {
                         remove(original_plot->vectors, vector);
-                        size_t signals_removed = m_settings["vector_plots"][std::to_string(original_plot->id)]["signals"].erase(vector->name_and_group);
-                        assert(signals_removed > 0);
                         vector_plot.addVectorToPlot(vector);
                     }
                 }
@@ -590,8 +588,6 @@ void DbgGui::showVectorPlots() {
 
         if (signal_to_remove) {
             remove(vector_plot.vectors, signal_to_remove);
-            size_t signals_removed = m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
-            assert(signals_removed > 0);
         }
     });
 }

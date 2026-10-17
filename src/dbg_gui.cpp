@@ -1070,6 +1070,26 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["vector_plots"][std::to_string(vector_plot.id)];
         vector_plot.updateJson(j);
+        nlohmann::json& saved_signals = j["signals"];
+        if (!saved_signals.is_object()) {
+            saved_signals = nlohmann::json::object();
+        }
+        // Rebuild registered vector placements from runtime state; keep unresolved vectors.
+        for (auto it = saved_signals.begin(); it != saved_signals.end();) {
+            if (!it->is_number_unsigned() && !it->is_number_integer()) {
+                it = saved_signals.erase(it);
+                continue;
+            }
+            uint64_t const id = it->get<uint64_t>();
+            bool const vector_registered = std::ranges::any_of(m_vectors, [id](auto const& vector) {
+                return vector->id == id;
+            });
+            if (vector_registered) {
+                it = saved_signals.erase(it);
+            } else {
+                ++it;
+            }
+        }
         for (int i = int(vector_plot.vectors.size() - 1); i >= 0; --i) {
             Vector2D* vector = vector_plot.vectors[i];
             if (!isLiveVector(vector)) {
@@ -1091,40 +1111,54 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["spec_plots"][std::to_string(spec_plot.id)];
         spec_plot.updateJson(j);
-        for (int i = int(spec_plot.spectrums.size() - 1); i >= 0; --i) {
-            Spectrum<Scalar>& spec = spec_plot.spectrums[i];
-            if (spec.imag == nullptr) {
-                if (spec.real->deleted) {
-                    spec_plot.removeFromPlot(spec.real);
-                    j["signals"].erase(spec.real->name_and_group);
-                    if (isLiveScalar(spec.real->replacement)) {
-                        spec_plot.addToPlot(spec.real->replacement, nullptr);
-                    }
-                } else {
-                    j["signals"][spec.real->name_and_group] = {spec.real->id, 0};
-                }
-            } else {
-                if (spec.real->deleted || spec.imag->deleted) {
-                    spec_plot.removeFromPlot(spec.real);
-                    spec_plot.removeFromPlot(spec.imag);
-                    j["signals"].erase(spec.real->name_and_group);
-                    if (isLiveScalar(spec.real->replacement) && isLiveScalar(spec.imag->replacement)) {
-                        spec_plot.addToPlot(spec.real->replacement, spec.imag->replacement);
-                    }
-                } else {
-                    j["signals"][spec.real->name_and_group] = {spec.real->id, spec.imag->id};
-                }
+        // Snapshot removal requests because removing one component can also
+        // erase other spectra that share it.
+        std::vector<std::pair<Scalar*, Scalar*>> removed_spectra;
+        for (Spectrum<Scalar> const& spec : spec_plot.spectrums) {
+            if (spec.real->deleted || (spec.imag != nullptr && spec.imag->deleted)) {
+                removed_spectra.emplace_back(spec.real, spec.imag);
             }
         }
-        // If scalars are deleted but not yet removed from spectrums, remove them from json
-        // so that they don't get saved to settings and added back to plot after restart
-        for (Scalar* removed_scalar : spec_plot.removed_scalars) {
-            if (removed_scalar == nullptr) {
+        for (auto const& [real, imag] : removed_spectra) {
+            spec_plot.removeFromPlot(real);
+            if (imag != nullptr) {
+                spec_plot.removeFromPlot(imag);
+            }
+        }
+        for (auto const& [real, imag] : removed_spectra) {
+            if (isLiveScalar(real->replacement) && (imag == nullptr || isLiveScalar(imag->replacement))) {
+                spec_plot.addToPlot(real->replacement, imag == nullptr ? nullptr : imag->replacement);
+            }
+        }
+        nlohmann::json& saved_signals = j["signals"];
+        if (!saved_signals.is_object()) {
+            saved_signals = nlohmann::json::object();
+        }
+        // Rebuild resolved placements; keep unresolved spectra.
+        for (auto it = saved_signals.begin(); it != saved_signals.end();) {
+            if (!it->is_array() || it->size() != 2
+                || (!(*it)[0].is_number_unsigned() && !(*it)[0].is_number_integer())
+                || (!(*it)[1].is_number_unsigned() && !(*it)[1].is_number_integer())) {
+                it = saved_signals.erase(it);
                 continue;
             }
-            j["signals"].erase(removed_scalar->name_and_group);
+            uint64_t const real_id = (*it)[0].get<uint64_t>();
+            uint64_t const imag_id = (*it)[1].get<uint64_t>();
+            bool const real_registered = std::ranges::any_of(m_scalars, [real_id](auto const& scalar) {
+                return scalar->id == real_id;
+            });
+            bool const imag_registered = imag_id == 0 || std::ranges::any_of(m_scalars, [imag_id](auto const& scalar) {
+                return scalar->id == imag_id;
+            });
+            if (real_registered && imag_registered) {
+                it = saved_signals.erase(it);
+            } else {
+                ++it;
+            }
         }
-        spec_plot.removed_scalars.clear();
+        for (Spectrum<Scalar> const& spec : spec_plot.spectrums) {
+            saved_signals[spec.real->name_and_group] = {spec.real->id, spec.imag == nullptr ? 0 : spec.imag->id};
+        }
     }
 
     for (CustomWindow& custom_window : m_custom_windows) {
