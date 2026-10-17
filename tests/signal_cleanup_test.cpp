@@ -205,3 +205,19 @@ TEST_CASE("Spectrum subplot settings round trip and grid shrinking preserves spe
     plot.clearSignals();
     REQUIRE(plot.subplots[0].spectrums.empty());
 }
+
+TEST_CASE("Scalar subplot cleanup replaces and deduplicates registered components") {
+    auto old = makeScalar("old", "group");
+    auto live = makeScalar("live", "group");
+    auto deleted = makeScalar("deleted", "group");
+    PlotWindow::Subplot subplot;
+    subplot.addScalar(old.get());
+    subplot.addScalar(live.get());
+    subplot.addScalar(deleted.get());
+    old->deleted = true;
+    old->replacement = live.get();
+    deleted->deleted = true;
+    replaceDeletedScalarsInSubplot(subplot);
+    REQUIRE(subplot.scalars.size() == 1);
+    REQUIRE(subplot.scalars[0] == live.get());
+}

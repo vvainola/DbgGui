@@ -105,6 +105,21 @@ inline void replaceDeletedSpectrumComponents(PlotWindow::Subplot& subplot) {
     }
 }
 
+inline void replaceDeletedScalarsInSubplot(PlotWindow::Subplot& subplot) {
+    bool needs_cleanup = std::ranges::any_of(subplot.scalars, [](Scalar* scalar) { return scalar->deleted; });
+    if (!needs_cleanup) {
+        return;
+    }
+    auto old_scalars = std::move(subplot.scalars);
+    subplot.scalars.clear();
+    for (Scalar* scalar : old_scalars) {
+        Scalar* replacement = scalar->deleted ? scalar->replacement : scalar;
+        if (isLiveScalar(replacement)) {
+            subplot.addScalar(replacement);
+        }
+    }
+}
+
 inline void replaceDeletedScalarsInCustomWindow(CustomWindow& window) {
     std::vector<Scalar*> replacements;
     for (Scalar* scalar : window.scalars) {

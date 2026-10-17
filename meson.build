@@ -300,6 +300,7 @@ if get_option('tests')
             'tests/fwd_decl_types.cpp',
             'tests/imgui_settings_migration_test.cpp',
             'tests/lua_script_test.cpp',
+            'tests/plot_settings_test.cpp',
             'tests/sample_clipboard_test.cpp',
             'tests/scrolling_buffer_test.cpp',
             'tests/script_window_settings_test.cpp',
