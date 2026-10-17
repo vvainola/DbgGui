@@ -26,6 +26,7 @@
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
+#include "panel_window.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include "nlohmann/json.hpp"

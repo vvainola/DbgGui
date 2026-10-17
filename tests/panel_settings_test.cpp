@@ -1,5 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
-#include "data_structures.h"
+#include "panel_window.h"
 
 TEST_CASE("Panel widget geometry preserves saved control settings") {
     nlohmann::json saved = {
