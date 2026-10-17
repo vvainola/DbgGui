@@ -574,7 +574,7 @@ void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, 
     }
     std::optional<VectorPair> vector_to_remove;
     for (VectorPair const& vector : subplot.vectors) {
-        std::string label = std::format("{} / {}###{}:{}", vector.x->alias_and_group, vector.y->alias_and_group, vector.x->id, vector.y->id);
+        std::string label = std::format("{}###{}:{}", vector.x->alias_and_group, vector.x->id, vector.y->id);
         renderVectorPair(m_sampler, vector, label.c_str(), time_idx, rotations);
         if (ImPlot::BeginLegendPopup(label.c_str())) {
             if (subplot.reference_frame_vector == vector) {
