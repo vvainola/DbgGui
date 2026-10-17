@@ -141,6 +141,10 @@ class DbgGui {
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showScalarPlots();
+    void renderScalarSubplot(PlotWindow::Subplot& subplot,
+                             int subplot_idx,
+                             double vertical_line_time,
+                             double& vertical_line_time_next);
     void showVectorPlots();
     void showSpectrumPlots();
     void showCustomSignalCreator();
