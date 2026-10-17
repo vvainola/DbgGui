@@ -36,7 +36,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                ScalarPlot plot(window_or_plot_name, hashWithTime(window_or_plot_name));
+                PlotWindow plot(window_or_plot_name, hashWithTime(window_or_plot_name));
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
                 m_scalar_plots.push_back(plot);

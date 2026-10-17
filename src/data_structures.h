@@ -315,7 +315,7 @@ struct Window {
     }
 };
 
-struct ScalarPlot : Window {
+struct PlotWindow : Window {
     struct Subplot {
         std::vector<Scalar*> scalars;
         MinMax y_axis = {-1, 1};
@@ -325,11 +325,11 @@ struct ScalarPlot : Window {
     inline static constexpr int MAX_SUBPLOT_ROWS = 10;
     inline static constexpr int MAX_SUBPLOT_COLS = 10;
 
-    ScalarPlot(std::string const& name, uint64_t id)
+    PlotWindow(std::string const& name, uint64_t id)
         : Window(name, id) {
         subplots.resize(subplotCount());
     }
-    ScalarPlot(nlohmann::json const& j)
+    PlotWindow(nlohmann::json const& j)
         : Window(j) {
         x_range = j.value("x_range", x_range);
         x_axis.min = 0;

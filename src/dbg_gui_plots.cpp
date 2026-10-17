@@ -99,12 +99,12 @@ void DbgGui::showScalarPlots() {
     double vertical_line_time = vertical_line_time_next;
     vertical_line_time_next = NAN;
     struct PlotScalarDragDropPayload {
-        ScalarPlot* plot;
+        PlotWindow* plot;
         // Needed to move legend items between subplots without searching all cells.
         int subplot_idx;
         Scalar* scalar;
     };
-    renderPlotWindows(m_scalar_plots, m_plot_timestamp, [&](ScalarPlot& scalar_plot) {
+    renderPlotWindows(m_scalar_plots, m_plot_timestamp, [&](PlotWindow& scalar_plot) {
         Scalar* scalar_to_remove = nullptr;
         int subplot_to_remove_from = 0;
 
@@ -155,7 +155,7 @@ void DbgGui::showScalarPlots() {
             ImGui::Checkbox("Autofit", &scalar_plot.subplots[0].autofit_y);
         } else {
             int autofit_count = 0;
-            for (ScalarPlot::Subplot const& subplot : scalar_plot.subplots) {
+            for (PlotWindow::Subplot const& subplot : scalar_plot.subplots) {
                 if (subplot.autofit_y) {
                     ++autofit_count;
                 }
@@ -187,7 +187,7 @@ void DbgGui::showScalarPlots() {
         auto render_subplot = [&](int subplot_idx) {
             // Each subplot has its own Y state, while the X axis follows the
             // existing scalar-plot link/range behavior.
-            ScalarPlot::Subplot& subplot = scalar_plot.subplots[subplot_idx];
+            PlotWindow::Subplot& subplot = scalar_plot.subplots[subplot_idx];
             MinMax& y_limits = subplot.y_axis;
             ImPlotAxisFlags y_flags = subplot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
             if (!ImPlot::BeginPlot(std::format("##Scrolling{}", subplot_idx).c_str(), ImVec2(-1, ImGui::GetContentRegionAvail().y))) {

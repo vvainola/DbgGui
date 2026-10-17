@@ -64,7 +64,7 @@ void loadImguiLayout(std::string layout) {
 
 std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                                            nlohmann::json& settings,
-                                           std::vector<ScalarPlot>& scalar_plots,
+                                           std::vector<PlotWindow>& scalar_plots,
                                            std::vector<SpectrumPlot>& spectrum_plots,
                                            std::vector<std::unique_ptr<Scalar>> const& scalars,
                                            std::vector<CustomWindow>& custom_windows) {
@@ -85,7 +85,7 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
 
     // Restore scalar to plots
     TRY(for (auto scalar_plot_data : settings["scalar_plots"]) {
-        ScalarPlot* plot = nullptr;
+        PlotWindow* plot = nullptr;
         for (auto& scalar_plot : scalar_plots) {
             if (scalar_plot.id == scalar_plot_data["id"]) {
                 plot = &scalar_plot;
@@ -777,7 +777,7 @@ void DbgGui::loadPreviousSessionSettings() {
 
         m_scalar_plots.clear();
         for (auto scalar_plot_data : m_settings["scalar_plots"]) {
-            ScalarPlot& plot = m_scalar_plots.emplace_back(scalar_plot_data);
+            PlotWindow& plot = m_scalar_plots.emplace_back(scalar_plot_data);
             // Prefer the subplot-aware format, but keep old top-level signals
             // readable for existing settings files.
             if (scalar_plot_data.contains("subplots")) {
@@ -1004,7 +1004,7 @@ void DbgGui::updateSavedSettings() {
         dockspace.updateJson(m_settings["dockspaces"][std::to_string(i)]);
     }
 
-    for (ScalarPlot& scalar_plot : m_scalar_plots) {
+    for (PlotWindow& scalar_plot : m_scalar_plots) {
         if (!scalar_plot.open) {
             m_settings["scalar_plots"].erase(std::to_string(scalar_plot.id));
             continue;
@@ -1316,7 +1316,7 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
-    for (ScalarPlot& scalar_plot : m_scalar_plots) {
+    for (PlotWindow& scalar_plot : m_scalar_plots) {
         ImGui::Begin(scalar_plot.title().c_str());
         if (scalar_plot.focus.initial_focus) {
             ImGui::SetWindowFocus(scalar_plot.title().c_str());

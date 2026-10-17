@@ -232,7 +232,7 @@ class DbgGui {
     std::vector<GridWindow> m_grid_windows;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
-    std::vector<ScalarPlot> m_scalar_plots;
+    std::vector<PlotWindow> m_scalar_plots;
     std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
     std::vector<DockSpace> m_dockspaces;
