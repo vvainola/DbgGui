@@ -164,12 +164,11 @@ struct Scalar {
         updateDisplayNames();
     }
 
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         j["id"] = id;
         j["scale"] = getScaleStr();
         j["offset"] = getOffsetStr();
         j["alias"] = alias;
-        return j;
     }
 
     double getValue() const {
@@ -282,11 +281,10 @@ struct Window {
         id = j.value("id", id);
         focus.initial_focus = j.value("initial_focus", focus.initial_focus);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         j["name"] = name;
         j["id"] = id;
         j["initial_focus"] = focus.focused;
-        return j;
     }
 
     std::string name = "";
@@ -411,7 +409,7 @@ struct PlotWindow : Window {
             }
         }
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["x_range"] = x_range;
         j["vector_time_range"] = vector_time_range;
@@ -448,7 +446,6 @@ struct PlotWindow : Window {
                 subplot_data.erase("y_max");
             }
         }
-        return j;
     }
 
     std::vector<Subplot> subplots;
@@ -585,12 +582,11 @@ struct GridWindow : Window {
         columns = j.value("columns", columns);
         text_to_value_ratio = j.value("text_to_value_ratio", text_to_value_ratio);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["rows"] = rows;
         j["columns"] = columns;
         j["text_to_value_ratio"] = text_to_value_ratio;
-        return j;
     }
 
     inline static const int MAX_ROWS = 20;
@@ -641,10 +637,9 @@ struct DockSpace : Window {
         : Window(j) {
         even_split = j.value("even_split", even_split);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["even_split"] = even_split;
-        return j;
     }
 
     void contextMenu() {
@@ -691,14 +686,13 @@ struct ScriptWindow : Window {
         language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
         run_on_startup = j.value("run_on_startup", false);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["text"] = text;
         j["loop_count"] = std::max(loop_count, 0);
         j.erase("loop");
         j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
         j["run_on_startup"] = run_on_startup;
-        return j;
     }
 
     std::string text;
