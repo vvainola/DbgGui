@@ -152,43 +152,43 @@ void renderVectorPair(ScrollingBuffer& sampler,
 
 } // namespace
 
-void DbgGui::showScalarPlots() {
+void DbgGui::showPlots() {
     // Show vertical line at same time in all plots if mouse is hovered in any plot
     static double vertical_line_time_next = 0;
     double vertical_line_time = vertical_line_time_next;
     vertical_line_time_next = NAN;
-    renderPlotWindows(m_scalar_plots, m_plot_timestamp, [&](PlotWindow& scalar_plot) {
+    renderPlotWindows(m_plot_windows, m_plot_timestamp, [&](PlotWindow& plot_window) {
         // Menu
         if (ImGui::Button("Menu")) {
             ImGui::OpenPopup("##Menu");
         }
         if (ImGui::BeginPopup("##Menu")) {
             if (ImGui::Button("Save as csv")) {
-                MinMax time_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
-                saveScalarsAsCsv(getFilenameToSave(), scalar_plot.allScalars(), time_limits);
+                MinMax time_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : plot_window.x_axis;
+                saveScalarsAsCsv(getFilenameToSave(), plot_window.allScalars(), time_limits);
                 ImGui::CloseCurrentPopup();
             }
             if (ImGui::Button("Remove all")) {
-                scalar_plot.clearSignals();
+                plot_window.clearSignals();
                 ImGui::CloseCurrentPopup();
             }
-            int rows = scalar_plot.rows();
-            int cols = scalar_plot.cols();
+            int rows = plot_window.rows();
+            int cols = plot_window.cols();
             if (ImGui::InputInt("Rows", &rows)) {
-                scalar_plot.setSubplotGrid(rows, scalar_plot.cols());
+                plot_window.setSubplotGrid(rows, plot_window.cols());
             }
             if (ImGui::InputInt("Columns", &cols)) {
-                scalar_plot.setSubplotGrid(scalar_plot.rows(), cols);
+                plot_window.setSubplotGrid(plot_window.rows(), cols);
             }
             float type_width = std::max({ImGui::CalcTextSize("Scalar").x, ImGui::CalcTextSize("Vector").x, ImGui::CalcTextSize("Spectrum").x})
                              + ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().FramePadding.x;
-            if (ImGui::BeginTable("##SubplotTypes", scalar_plot.cols(), ImGuiTableFlags_Borders)) {
-                for (int row = 0; row < scalar_plot.rows(); ++row) {
+            if (ImGui::BeginTable("##SubplotTypes", plot_window.cols(), ImGuiTableFlags_Borders)) {
+                for (int row = 0; row < plot_window.rows(); ++row) {
                     ImGui::TableNextRow();
-                    for (int col = 0; col < scalar_plot.cols(); ++col) {
+                    for (int col = 0; col < plot_window.cols(); ++col) {
                         ImGui::TableSetColumnIndex(col);
-                        int index = row * scalar_plot.cols() + col;
-                        auto& subplot = scalar_plot.subplots[index];
+                        int index = row * plot_window.cols() + col;
+                        auto& subplot = plot_window.subplots[index];
                         std::string id = std::format("##Type{}", index);
                         ImGui::SetNextItemWidth(type_width);
                         if (ImGui::BeginCombo(id.c_str(), subplot.type == PlotType::Vector ? "Vector" : subplot.type == PlotType::Spectrum ? "Spectrum" :
@@ -214,36 +214,36 @@ void DbgGui::showScalarPlots() {
                 }
                 ImGui::EndTable();
             }
-            bool has_vectors = std::ranges::any_of(scalar_plot.subplots, [](auto const& subplot) {
+            bool has_vectors = std::ranges::any_of(plot_window.subplots, [](auto const& subplot) {
                 return subplot.type == PlotType::Vector;
             });
             if (has_vectors) {
-                float time_range_ms = scalar_plot.vector_time_range * 1e3f;
+                float time_range_ms = plot_window.vector_time_range * 1e3f;
                 if (ImGui::SliderFloat("Vector time range", &time_range_ms, 0, 100, "%.0f ms")) {
-                    scalar_plot.vector_time_range = time_range_ms * 1e-3f;
+                    plot_window.vector_time_range = time_range_ms * 1e-3f;
                 }
             }
-            bool has_spectrums = std::ranges::any_of(scalar_plot.subplots, [](auto const& subplot) {
+            bool has_spectrums = std::ranges::any_of(plot_window.subplots, [](auto const& subplot) {
                 return subplot.type == PlotType::Spectrum;
             });
             if (has_spectrums) {
-                ImGui::Checkbox("Spectrum logarithmic Y-axis", &scalar_plot.spectrum.logarithmic_y_axis);
-                double time_range_ms = scalar_plot.spectrum.time_range * 1e3;
+                ImGui::Checkbox("Spectrum logarithmic Y-axis", &plot_window.spectrum.logarithmic_y_axis);
+                double time_range_ms = plot_window.spectrum.time_range * 1e3;
                 double min = 1, max = 10000;
                 if (ImGui::SliderScalar("Spectrum time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms")) {
-                    scalar_plot.spectrum.time_range = time_range_ms * 1e-3;
+                    plot_window.spectrum.time_range = time_range_ms * 1e-3;
                 }
                 ImGui::InputDouble("Bin Threshold [%]", &m_options.spectrum_plot_threshold, 0, 0, "%.3f");
                 ImGui::SameLine();
                 HelpMarker("Minimum bin magnitude as a percentage of the largest bin. Zero includes all bins.");
-                ImGui::Combo("FFT window", reinterpret_cast<int*>(&scalar_plot.spectrum.window), "None\0Hann\0Hamming\0Flat top\0\0");
+                ImGui::Combo("FFT window", reinterpret_cast<int*>(&plot_window.spectrum.window), "None\0Hann\0Hamming\0Flat top\0\0");
             }
             ImGui::EndPopup();
         }
 
         // Selection between common x-axis or separate
-        MinMax& x_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : scalar_plot.x_axis;
-        double& x_range = m_options.link_scalar_x_axis ? m_options.m_linked_scalar_x_axis_range : scalar_plot.x_range;
+        MinMax& x_limits = m_options.link_scalar_x_axis ? m_linked_scalar_x_axis_limits : plot_window.x_axis;
+        double& x_range = m_options.link_scalar_x_axis ? m_options.m_linked_scalar_x_axis_range : plot_window.x_range;
 
         // Time range slider
         ImGui::SameLine();
@@ -256,28 +256,28 @@ void DbgGui::showScalarPlots() {
 
         // Auto fit button
         ImGui::SameLine();
-        if (scalar_plot.subplotCount() == 1) {
-            ImGui::Checkbox("Autofit", &scalar_plot.subplots[0].autofit_y);
+        if (plot_window.subplotCount() == 1) {
+            ImGui::Checkbox("Autofit", &plot_window.subplots[0].autofit_y);
         } else {
             int autofit_count = 0;
-            for (PlotWindow::Subplot const& subplot : scalar_plot.subplots) {
+            for (PlotWindow::Subplot const& subplot : plot_window.subplots) {
                 if (subplot.autofit_y) {
                     ++autofit_count;
                 }
             }
-            std::string autofit_label = std::format("Autofit ({}/{})", autofit_count, scalar_plot.subplotCount());
+            std::string autofit_label = std::format("Autofit ({}/{})", autofit_count, plot_window.subplotCount());
             ImGui::PushItemWidth(150);
             if (ImGui::BeginCombo("##Autofit", autofit_label.c_str())) {
                 // Match the checkbox layout to the actual subplot grid so row/col
                 // labels map directly to the plots the user sees.
-                if (ImGui::BeginTable("##AutofitGrid", scalar_plot.cols())) {
-                    for (int row = 0; row < scalar_plot.rows(); ++row) {
+                if (ImGui::BeginTable("##AutofitGrid", plot_window.cols())) {
+                    for (int row = 0; row < plot_window.rows(); ++row) {
                         ImGui::TableNextRow();
-                        for (int col = 0; col < scalar_plot.cols(); ++col) {
+                        for (int col = 0; col < plot_window.cols(); ++col) {
                             ImGui::TableSetColumnIndex(col);
-                            int subplot_idx = row * scalar_plot.cols() + col;
+                            int subplot_idx = row * plot_window.cols() + col;
                             std::string label = std::format("R{} C{}##Autofit{}", row + 1, col + 1, subplot_idx);
-                            ImGui::Checkbox(label.c_str(), &scalar_plot.subplots[subplot_idx].autofit_y);
+                            ImGui::Checkbox(label.c_str(), &plot_window.subplots[subplot_idx].autofit_y);
                         }
                     }
                     ImGui::EndTable();
@@ -288,19 +288,19 @@ void DbgGui::showScalarPlots() {
         }
         ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0, 0.1f));
         bool running = !m_paused;
-        bool fit_x_to_latest = running || (scalar_plot.last_frame_timestamp < m_plot_timestamp);
-        renderPlotGrid(scalar_plot.rows(), scalar_plot.cols(), "##ScalarSubplots", [&](int subplot_idx) {
-            auto& subplot = scalar_plot.subplots[subplot_idx];
+        bool fit_x_to_latest = running || (plot_window.last_frame_timestamp < m_plot_timestamp);
+        renderPlotGrid(plot_window.rows(), plot_window.cols(), "##ScalarSubplots", [&](int subplot_idx) {
+            auto& subplot = plot_window.subplots[subplot_idx];
             switch (subplot.type) {
                 case PlotType::Vector: {
                     double last_sample_time = m_linked_scalar_x_axis_limits.max;
-                    double first_sample_time = MAX(last_sample_time - scalar_plot.vector_time_range, m_linked_scalar_x_axis_limits.min);
+                    double first_sample_time = MAX(last_sample_time - plot_window.vector_time_range, m_linked_scalar_x_axis_limits.min);
                     auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
                     renderVectorSubplot(subplot, subplot_idx, time_idx);
                     break;
                 }
                 case PlotType::Spectrum: {
-                    renderSpectrumSubplot(subplot, subplot_idx, scalar_plot.spectrum.time_range, scalar_plot.spectrum.window, scalar_plot.spectrum.logarithmic_y_axis);
+                    renderSpectrumSubplot(subplot, subplot_idx, plot_window.spectrum.time_range, plot_window.spectrum.window, plot_window.spectrum.logarithmic_y_axis);
                     break;
                 }
                 case PlotType::Scalar: {
@@ -319,7 +319,7 @@ void DbgGui::showScalarPlots() {
             }
         });
         if (fit_x_to_latest) {
-            scalar_plot.last_frame_timestamp = m_plot_timestamp;
+            plot_window.last_frame_timestamp = m_plot_timestamp;
         }
         ImPlot::PopStyleVar();
     });

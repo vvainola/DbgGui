@@ -39,7 +39,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                 PlotWindow plot(window_or_plot_name, hashWithTime(window_or_plot_name));
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
-                m_scalar_plots.push_back(std::move(plot));
+                m_plot_windows.push_back(std::move(plot));
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };

@@ -78,7 +78,7 @@ void loadImguiLayout(std::string layout) {
 
 std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                                            nlohmann::json& settings,
-                                           std::vector<PlotWindow>& scalar_plots,
+                                           std::vector<PlotWindow>& plot_windows,
                                            std::vector<std::unique_ptr<Scalar>> const& scalars,
                                            std::vector<CustomWindow>& custom_windows) {
     std::vector<Scalar*> scalars_to_sample;
@@ -97,11 +97,11 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
     )
 
     // Restore scalar to plots
-    TRY(for (auto scalar_plot_data : settings["scalar_plots"]) {
+    TRY(for (auto plot_data : settings["scalar_plots"]) {
         PlotWindow* plot = nullptr;
-        for (auto& scalar_plot : scalar_plots) {
-            if (scalar_plot.id == scalar_plot_data["id"]) {
-                plot = &scalar_plot;
+        for (auto& plot_window : plot_windows) {
+            if (plot_window.id == plot_data["id"]) {
+                plot = &plot_window;
                 break;
             }
         }
@@ -110,9 +110,9 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
         }
         // New settings store signal placement per subplot. Old settings only
         // have a top-level signals object, which restores into subplot 0.
-        if (scalar_plot_data.contains("subplots")) {
+        if (plot_data.contains("subplots")) {
             int subplot_idx = 0;
-            for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+            for (auto const& subplot_data : plot_data["subplots"]) {
                 if (subplot_data.contains("signals")) {
                     forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
                         if (id == scalar->id) {
@@ -157,8 +157,8 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                 }
                 ++subplot_idx;
             }
-        } else if (scalar_plot_data.contains("signals")) {
-            forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+        } else if (plot_data.contains("signals")) {
+            forEachSignalId(plot_data["signals"], [&](uint64_t id) {
                 if (id == scalar->id) {
                     plot->addScalarToPlot(scalar);
                     start_sampling(scalar);
@@ -507,7 +507,7 @@ void DbgGui::updateLoop() {
         showSymbolsWindow();
         showScriptWindow();
         showGridWindow();
-        showScalarPlots();
+        showPlots();
         showCustomSignalCreator();
         setInitialFocus();
         updateSavedSettings();
@@ -728,14 +728,14 @@ void DbgGui::loadPreviousSessionSettings() {
               dockspace.focus.initial_focus = dockspace_data["initial_focus"];)
         }
 
-        m_scalar_plots.clear();
-        for (auto& scalar_plot_data : m_settings["scalar_plots"]) {
-            PlotWindow& plot = m_scalar_plots.emplace_back(scalar_plot_data);
+        m_plot_windows.clear();
+        for (auto& plot_data : m_settings["scalar_plots"]) {
+            PlotWindow& plot = m_plot_windows.emplace_back(plot_data);
             // Prefer the subplot-aware format, but keep old top-level signals
             // readable for existing settings files.
-            if (scalar_plot_data.contains("subplots")) {
+            if (plot_data.contains("subplots")) {
                 int subplot_idx = 0;
-                for (auto const& subplot_data : scalar_plot_data["subplots"]) {
+                for (auto const& subplot_data : plot_data["subplots"]) {
                     if (subplot_data.contains("signals")) {
                         forEachSignalId(subplot_data["signals"], [&](uint64_t id) {
                             Scalar* scalar = findScalar(m_scalars, id);
@@ -775,8 +775,8 @@ void DbgGui::loadPreviousSessionSettings() {
                     }
                     ++subplot_idx;
                 }
-            } else if (scalar_plot_data.contains("signals")) {
-                forEachSignalId(scalar_plot_data["signals"], [&](uint64_t id) {
+            } else if (plot_data.contains("signals")) {
+                forEachSignalId(plot_data["signals"], [&](uint64_t id) {
                     Scalar* scalar = findScalar(m_scalars, id);
                     if (scalar) {
                         m_sampler.startSampling(scalar);
@@ -933,26 +933,26 @@ void DbgGui::updateSavedSettings() {
         dockspace.updateJson(m_settings["dockspaces"][std::to_string(i)]);
     }
 
-    for (PlotWindow& scalar_plot : m_scalar_plots) {
-        if (!scalar_plot.open) {
-            m_settings["scalar_plots"].erase(std::to_string(scalar_plot.id));
+    for (PlotWindow& plot_window : m_plot_windows) {
+        if (!plot_window.open) {
+            m_settings["scalar_plots"].erase(std::to_string(plot_window.id));
             continue;
         }
-        if (scalar_plot.id == 0) {
-            scalar_plot.id = hashWithTime(scalar_plot.name);
+        if (plot_window.id == 0) {
+            plot_window.id = hashWithTime(plot_window.name);
         }
-        nlohmann::json& j = m_settings["scalar_plots"][std::to_string(scalar_plot.id)];
+        nlohmann::json& j = m_settings["scalar_plots"][std::to_string(plot_window.id)];
         if (!j["subplots"].is_array() && j.contains("signals")) {
             j["subplots"] = nlohmann::json::array(
               {nlohmann::json{{"signals", j["signals"]}}});
         }
-        scalar_plot.updateJson(j);
+        plot_window.updateJson(j);
         // Top-level scalar plot signals are a legacy read-only migration path.
         // New settings write signal placement only under subplots.
         j.erase("signals");
-        for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
-            replaceDeletedVectorComponents(scalar_plot.subplots[subplot_idx]);
-            auto& subplot = scalar_plot.subplots[subplot_idx];
+        for (int subplot_idx = 0; subplot_idx < plot_window.subplotCount(); ++subplot_idx) {
+            replaceDeletedVectorComponents(plot_window.subplots[subplot_idx]);
+            auto& subplot = plot_window.subplots[subplot_idx];
             replaceDeletedSpectrumComponents(subplot);
             auto& saved_spectrums = j["subplots"][subplot_idx]["spectrums"];
             nlohmann::json reconciled_spectrums = nlohmann::json::array();
@@ -968,7 +968,7 @@ void DbgGui::updateSavedSettings() {
                 reconciled_spectrums.push_back({spec.real->id, spec.imag == nullptr ? 0 : spec.imag->id});
             }
             saved_spectrums = std::move(reconciled_spectrums);
-            auto const& vectors = scalar_plot.subplots[subplot_idx].vectors;
+            auto const& vectors = plot_window.subplots[subplot_idx].vectors;
             nlohmann::json& saved_vectors = j["subplots"][subplot_idx]["vectors"];
             nlohmann::json reconciled_vectors = nlohmann::json::array();
             // Keep unresolved pairs; rebuild registered placements from runtime state.
@@ -987,7 +987,7 @@ void DbgGui::updateSavedSettings() {
                 reconciled_vectors.push_back({pair.x->id, pair.y->id});
             }
             saved_vectors = std::move(reconciled_vectors);
-            auto const& reference = scalar_plot.subplots[subplot_idx].reference_frame_vector;
+            auto const& reference = plot_window.subplots[subplot_idx].reference_frame_vector;
             auto& saved_subplot = j["subplots"][subplot_idx];
             if (reference) {
                 saved_subplot["reference_frame"] = {reference->x->id, reference->y->id};
@@ -1006,7 +1006,7 @@ void DbgGui::updateSavedSettings() {
                     saved_subplot.erase("reference_frame");
                 }
             }
-            auto& scalars = scalar_plot.subplots[subplot_idx].scalars;
+            auto& scalars = plot_window.subplots[subplot_idx].scalars;
             nlohmann::json& saved_signals = j["subplots"][subplot_idx]["signals"];
             if (!saved_signals.is_object()) {
                 saved_signals = nlohmann::json::object();
@@ -1207,10 +1207,10 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
-    for (PlotWindow& scalar_plot : m_scalar_plots) {
-        ImGui::Begin(scalar_plot.title().c_str());
-        if (scalar_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(scalar_plot.title().c_str());
+    for (PlotWindow& plot_window : m_plot_windows) {
+        ImGui::Begin(plot_window.title().c_str());
+        if (plot_window.focus.initial_focus) {
+            ImGui::SetWindowFocus(plot_window.title().c_str());
         }
         ImGui::End();
     }
@@ -1348,7 +1348,7 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     if (m_initialized.load()) {
         std::vector<Scalar*> const scalars_to_sample = restoreScalarSettings(new_scalar.get(),
                                                                              m_settings,
-                                                                             m_scalar_plots,
+                                                                             m_plot_windows,
                                                                              m_scalars,
                                                                              m_custom_windows);
         for (Scalar* scalar_to_sample : scalars_to_sample) {

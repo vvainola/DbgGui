@@ -137,7 +137,7 @@ class DbgGui {
     std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_sampling_hotkeys = true);
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
-    void showScalarPlots();
+    void showPlots();
     void renderScalarSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
                              double vertical_line_time,
@@ -229,7 +229,7 @@ class DbgGui {
     std::vector<GridWindow> m_grid_windows;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
-    std::vector<PlotWindow> m_scalar_plots;
+    std::vector<PlotWindow> m_plot_windows;
     std::vector<DockSpace> m_dockspaces;
     std::vector<PauseTrigger> m_pause_triggers;
     struct {
