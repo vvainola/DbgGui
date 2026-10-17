@@ -835,7 +835,7 @@ void DbgGui::showScalarWindow() {
                     bool hide_by_filter = !scalar_name_filter.empty()
                                        && !str::fuzzy_match(scalar_name_filter.c_str(), scalar->alias.c_str())
                                        && !group_matches_filter;
-                    if (scalar->hide_from_scalars_window || hide_by_filter) {
+                    if (hide_by_filter) {
                         continue;
                     }
                     ImGui::TableNextRow();
