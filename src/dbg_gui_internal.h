@@ -318,6 +318,7 @@ class DbgGui {
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
+    bool m_settings_load_failed = false;
     CommandHotkeyOverrides m_hotkey_overrides;
     std::filesystem::file_time_type m_last_settings_write_time;
     bool m_clear_saved_settings = false;

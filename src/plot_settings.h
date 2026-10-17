@@ -28,9 +28,7 @@ namespace plot_settings {
 
 template <typename Fn>
 void forEachSignalId(nlohmann::json const& signals, Fn fn) {
-    // Saved signal maps use names as keys, while older/imported shapes may be
-    // arrays. Iterating values supports both without duplicating restore loops.
-    if (!signals.is_array() && !signals.is_object()) {
+    if (!signals.is_object()) {
         return;
     }
     for (auto const& signal : signals) {
@@ -251,7 +249,6 @@ inline void remapScalarId(nlohmann::json& settings, uint64_t old_id,
         }
     };
     for (auto& plot : settings["scalar_plots"]) {
-        remap_signals(plot, old_name, scalar.name_and_group);
         if (!plot.contains("subplots")) {
             continue;
         }

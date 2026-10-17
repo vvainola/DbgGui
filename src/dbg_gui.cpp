@@ -26,9 +26,9 @@
 #include "themes.h"
 #include "str_helpers.h"
 #include "custom_signal.hpp"
-#include "imgui_settings_migration.h"
 #include "signal_cleanup.h"
 #include "plot_settings.h"
+#include "settings_migration.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
@@ -44,11 +44,6 @@
 #include <sstream>
 
 namespace {
-void loadImguiLayout(std::string layout) {
-    imgui_settings::migrateLayoutIniHashes(layout);
-    ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
-}
-
 std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                                            nlohmann::json& settings,
                                            std::vector<PlotWindow>& plot_windows,
@@ -81,28 +76,20 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
         if (plot == nullptr) {
             continue;
         }
-        // New settings store signal placement per subplot. Old settings only
-        // have a top-level signals object, which restores into subplot 0.
-        if (plot_data.contains("subplots")) {
-            int subplot_idx = 0;
-            for (auto const& subplot_data : plot_data["subplots"]) {
-                if (subplot_idx < plot->subplotCount()) {
-                    for (Scalar* component : plot_settings::restoreScalars(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                        start_sampling(component);
-                    }
-                    for (Scalar* component : plot_settings::restoreVectors(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                        start_sampling(component);
-                    }
-                    for (Scalar* component : plot_settings::restoreSpectra(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                        start_sampling(component);
-                    }
+        int subplot_idx = 0;
+        for (auto const& subplot_data : plot_data["subplots"]) {
+            if (subplot_idx < plot->subplotCount()) {
+                for (Scalar* component : plot_settings::restoreScalars(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
+                    start_sampling(component);
                 }
-                ++subplot_idx;
+                for (Scalar* component : plot_settings::restoreVectors(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
+                    start_sampling(component);
+                }
+                for (Scalar* component : plot_settings::restoreSpectra(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
+                    start_sampling(component);
+                }
             }
-        } else if (plot_data.contains("signals")) {
-            for (Scalar* component : plot_settings::restoreScalars(plot->subplots[0], plot_data, scalars, scalar->id)) {
-                start_sampling(component);
-            }
+            ++subplot_idx;
         }
     })
 
@@ -159,13 +146,6 @@ Scalar* DbgGui::findScalarByName(std::string_view name) {
 
 
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
-
-uint64_t hash(const std::string& str) {
-    uint64_t hash = 5381;
-    for (size_t i = 0; i < str.size(); ++i)
-        hash = 33 * hash + (uint64_t)str[i];
-    return hash;
-}
 
 uint64_t hashWithTime(const std::string& str) {
     return hash(std::format("{}{}",
@@ -568,12 +548,32 @@ void DbgGui::loadPreviousSessionSettings() {
     std::ifstream f(settings_path);
     if (f.is_open()) {
         m_last_settings_write_time = std::filesystem::last_write_time(settings_path);
-        TRY(m_settings = nlohmann::json::parse(f);
-            m_settings_saved = m_settings;)
+        try {
+            auto settings = nlohmann::json::parse(f);
+            f.close();
+            if (settings_migration::migrate(settings)) {
+                // Replace the file only after the complete migration succeeds.
+                std::string const temporary_path = settings_path + ".migration.tmp";
+                std::ofstream output;
+                output.exceptions(std::ios::failbit | std::ios::badbit);
+                output.open(temporary_path);
+                output << std::setw(4) << settings;
+                output.close();
+                std::filesystem::rename(temporary_path, settings_path);
+                m_last_settings_write_time = std::filesystem::last_write_time(settings_path);
+            }
+            m_settings = std::move(settings);
+            m_settings_saved = m_settings;
+            m_settings_load_failed = false;
+        } catch (std::exception const& error) {
+            m_settings_load_failed = true;
+            logMessage(std::format("Could not load settings: {}. Automatic settings saving is disabled.", error.what()));
+            return;
+        }
 
         if (m_settings.contains("layout")) {
             std::string layout = m_settings["layout"];
-            loadImguiLayout(layout);
+            ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
         }
 
         m_options.fromJson(m_settings["options"]);
@@ -670,28 +670,20 @@ void DbgGui::loadPreviousSessionSettings() {
         m_plot_windows.clear();
         for (auto& plot_data : m_settings["scalar_plots"]) {
             PlotWindow& plot = m_plot_windows.emplace_back(plot_data);
-            // Prefer the subplot-aware format, but keep old top-level signals
-            // readable for existing settings files.
-            if (plot_data.contains("subplots")) {
-                int subplot_idx = 0;
-                for (auto const& subplot_data : plot_data["subplots"]) {
-                    if (subplot_idx < plot.subplotCount()) {
-                        for (Scalar* component : plot_settings::restoreScalars(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                            m_sampler.startSampling(component);
-                        }
-                        for (Scalar* component : plot_settings::restoreVectors(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                            m_sampler.startSampling(component);
-                        }
-                        for (Scalar* component : plot_settings::restoreSpectra(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                            m_sampler.startSampling(component);
-                        }
+            int subplot_idx = 0;
+            for (auto const& subplot_data : plot_data["subplots"]) {
+                if (subplot_idx < plot.subplotCount()) {
+                    for (Scalar* component : plot_settings::restoreScalars(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
+                        m_sampler.startSampling(component);
                     }
-                    ++subplot_idx;
+                    for (Scalar* component : plot_settings::restoreVectors(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
+                        m_sampler.startSampling(component);
+                    }
+                    for (Scalar* component : plot_settings::restoreSpectra(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
+                        m_sampler.startSampling(component);
+                    }
                 }
-            } else if (plot_data.contains("signals")) {
-                for (Scalar* component : plot_settings::restoreScalars(plot.subplots[0], plot_data, m_scalars)) {
-                    m_sampler.startSampling(component);
-                }
+                ++subplot_idx;
             }
         }
 
@@ -749,7 +741,6 @@ void DbgGui::loadPreviousSessionSettings() {
         TRY(m_group_to_add_symbols = m_settings["group_to_add_symbols"].get<std::string>();)
         TRY(m_symbol_search_depth = std::max(0, m_settings.value("symbol_search_depth", m_symbol_search_depth));)
     }
-    f.close();
 }
 
 void DbgGui::updateSavedSettings() {
@@ -766,6 +757,7 @@ void DbgGui::updateSavedSettings() {
 
     if (m_clear_saved_settings) {
         m_clear_saved_settings = false;
+        m_settings_load_failed = false;
         // Maximized/minimized windows cannot supply their normal restore geometry.
         auto window_settings = m_settings["window"];
         m_settings.clear();
@@ -818,6 +810,7 @@ void DbgGui::updateSavedSettings() {
         m_settings["window"]["xpos"] = xpos;
         m_settings["window"]["ypos"] = ypos;
     }
+    m_settings["format_version"] = settings_migration::FORMAT_VERSION;
     m_settings["options"] = m_options.toJson();
     m_settings["hotkeys"] = nlohmann::json::object();
     for (auto const& [command_id, hotkey] : m_hotkey_overrides) {
@@ -851,14 +844,7 @@ void DbgGui::updateSavedSettings() {
             plot_window.id = hashWithTime(plot_window.name);
         }
         nlohmann::json& j = m_settings["scalar_plots"][std::to_string(plot_window.id)];
-        if (!j["subplots"].is_array() && j.contains("signals")) {
-            j["subplots"] = nlohmann::json::array(
-              {nlohmann::json{{"signals", j["signals"]}}});
-        }
         plot_window.updateJson(j);
-        // Top-level scalar plot signals are a legacy read-only migration path.
-        // New settings write signal placement only under subplots.
-        j.erase("signals");
         for (int subplot_idx = 0; subplot_idx < plot_window.subplotCount(); ++subplot_idx) {
             removeDeletedVectorComponents(plot_window.subplots[subplot_idx]);
             auto& subplot = plot_window.subplots[subplot_idx];
@@ -981,7 +967,8 @@ void DbgGui::updateSavedSettings() {
     bool closing = glfwWindowShouldClose(m_window);
     bool focused = (bool)glfwGetWindowAttrib(m_window, GLFW_FOCUSED);
     bool settings_changed = (m_settings != m_settings_saved);
-    if (!closing
+    if (!m_settings_load_failed
+        && !closing
         && focused
         && m_initial_focus_set
         && settings_changed

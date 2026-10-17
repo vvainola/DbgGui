@@ -49,7 +49,7 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "multi_select_helpers.h"
 #include "csv_helpers.h"
 #include "custom_signal.hpp"
-#include "imgui_settings_migration.h"
+#include "settings_migration.h"
 #include "minmax.h"
 #include "sample_clipboard.h"
 #include "stb_image.h"
@@ -192,7 +192,7 @@ static std::expected<void, std::string> setSignalTransformOffset(CsvSignalTransf
 }
 
 static void loadImguiLayout(std::string layout) {
-    imgui_settings::migrateLayoutIniHashes(layout);
+    settings_migration::migrateLayoutIniHashes(layout);
     ImGui::LoadIniSettingsFromMemory(layout.data(), layout.size());
 }
 

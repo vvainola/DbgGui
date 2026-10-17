@@ -53,7 +53,13 @@
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
-uint64_t hash(const std::string& str);
+inline uint64_t hash(const std::string& str) {
+    uint64_t hash = 5381;
+    for (size_t i = 0; i < str.size(); ++i) {
+        hash = 33 * hash + (uint64_t)str[i];
+    }
+    return hash;
+}
 uint64_t hashWithTime(const std::string& str);
 // Compute the signal id from name and group, matching the formula used by
 // addScalar/addVector: hash(name + " (" + group + ")").
@@ -681,12 +687,7 @@ struct ScriptWindow : Window {
     ScriptWindow(DbgGui* gui, nlohmann::json const& j)
         : Window(j), m_gui(gui) {
         text = j.value("text", "");
-        if (j.contains("loop_count")) {
-            loop_count = std::max(j.value("loop_count", loop_count), 0);
-        } else {
-            // Migrate the former checkbox: enabled meant looping forever.
-            loop_count = j.value("loop", false) ? 0 : 1;
-        }
+        loop_count = std::max(j.value("loop_count", loop_count), 0);
         language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
         run_on_startup = j.value("run_on_startup", false);
     }

@@ -115,13 +115,7 @@ TEST_CASE("Scalar settings restore at load and on late registration") {
     scalars.push_back(makeSettingsScalar(1));
     scalars.push_back(makeSettingsScalar(2));
     scalars[1]->deleted = true;
-    nlohmann::json saved;
-    SECTION("Named signal map") {
-        saved["signals"] = {{"live", 1}, {"deleted", 2}, {"pending", 99}, {"invalid", "bad"}};
-    }
-    SECTION("Legacy signal array") {
-        saved["signals"] = {1, 1, 2, 99, "bad"};
-    }
+    nlohmann::json saved = {{"signals", {{"live", 1}, {"deleted", 2}, {"pending", 99}, {"invalid", "bad"}}}};
     PlotWindow::Subplot subplot;
     auto sampled = plot_settings::restoreScalars(subplot, saved, scalars);
     REQUIRE(sampled.size() == 1);
@@ -171,7 +165,6 @@ TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved co
             {"reference_frame", {1, 99}}
         }})}
     };
-    settings["scalar_plots"]["legacy"] = {{"signals", {1, 99}}};
     settings["custom_windows"]["custom"] = {{"signals", {{"old x", 1}, {"pending", 99}}}};
     settings["grid_windows"]["grid"] = {{"id", 1}, {"rows", 1}, {"signals", {1, 99, 0}}};
     settings["scalars"]["x (old)"] = {{"alias", "Alias"}};
@@ -188,8 +181,6 @@ TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved co
     REQUIRE(subplot["vectors"] == nlohmann::json::array({{2, 99}, {99, 2}}));
     REQUIRE(subplot["spectrums"] == nlohmann::json::array({{2, 0}, {99, 2}}));
     REQUIRE(subplot["reference_frame"] == nlohmann::json::array({2, 99}));
-    REQUIRE(settings["scalar_plots"]["legacy"]["signals"] == nlohmann::json::array({2, 99}));
-    REQUIRE_FALSE(settings["scalar_plots"]["legacy"].contains("subplots"));
     REQUIRE(settings["custom_windows"]["custom"]["signals"] == nlohmann::json({{"new x", 2}, {"pending", 99}}));
     REQUIRE(settings["grid_windows"]["grid"]["signals"] == nlohmann::json::array({2, 99, 0}));
     REQUIRE(settings["grid_windows"]["grid"]["id"] == 1);
