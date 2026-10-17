@@ -60,6 +60,7 @@ inline constexpr int32_t MAX_FONT_SIZE = 100;
 namespace str {
 inline constexpr const char* ADD_PLOT = "Add plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
+inline constexpr const char* ADD_PANEL = "Add panel";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
@@ -125,6 +126,7 @@ class DbgGui {
     void showCustomWindow();
     void showScriptWindow();
     void showGridWindow();
+    void showPanels();
 
     struct Message {
         std::string text;
@@ -233,6 +235,7 @@ class DbgGui {
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
     std::vector<GridWindow> m_grid_windows;
+    std::vector<PanelWindow> m_panels;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_plot_windows;

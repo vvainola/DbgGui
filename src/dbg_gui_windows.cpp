@@ -563,6 +563,11 @@ void DbgGui::showMainMenuBar() {
                 }
                 addPopupModal(str::ADD_GRID_WINDOW);
 
+                if (ImGui::Button("Panel")) {
+                    ImGui::OpenPopup(str::ADD_PANEL);
+                }
+                addPopupModal(str::ADD_PANEL);
+
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
                     ImGui::OpenPopup(str::ADD_DOCKSPACE);

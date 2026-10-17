@@ -290,6 +290,7 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"add-plot", "Add plot", "Open the add-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1, [&] { ImGui::OpenPopup(str::ADD_PLOT); }},
       {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
       {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
+      {"add-panel", "Add panel", "Open the add-panel dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_PANEL); }},
       {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
       {"copy-visible-samples", "Copy visible samples to clipboard", "Copy visible scalar samples for import into CsvPlotter.", ImGuiMod_Ctrl | ImGuiKey_T, [&] { copyAllScalarSamplesToClipboard(); }},
       {"save-plots-csv", "Save all plots as CSV", "Export visible scalar samples from all plots to a CSV file.", ImGuiKey_None, save_all_plots_as_csv},
@@ -408,6 +409,7 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_DOCKSPACE);
         addPopupModal(str::ADD_GRID_WINDOW);
+        addPopupModal(str::ADD_PANEL);
         addPopupModal(str::PAUSE_AFTER);
         addPopupModal(str::PAUSE_AT);
 
@@ -426,6 +428,7 @@ void DbgGui::updateLoop() {
         showSymbolsWindow();
         showScriptWindow();
         showGridWindow();
+        showPanels();
         showPlots();
         showCustomSignalCreator();
         setInitialFocus();
@@ -725,6 +728,11 @@ void DbgGui::loadPreviousSessionSettings() {
             }
         }
 
+        m_panels.clear();
+        for (auto const& panel_data : m_settings["panels"]) {
+            m_panels.emplace_back(panel_data);
+        }
+
         m_grid_windows.clear();
         for (auto grid_window_data : m_settings["grid_windows"]) {
             GridWindow& grid_window = m_grid_windows.emplace_back(grid_window_data);
@@ -897,6 +905,24 @@ void DbgGui::updateSavedSettings() {
         }
     }
 
+    auto saved_panels = nlohmann::json::array();
+    for (PanelWindow& panel : m_panels) {
+        if (!panel.open) {
+            continue;
+        }
+        // Preserve widget/canvas settings until those parts are restored too.
+        auto panel_data = nlohmann::json::object();
+        for (auto const& saved : m_settings["panels"]) {
+            if (saved.value("id", uint64_t{0}) == panel.id) {
+                panel_data = saved;
+                break;
+            }
+        }
+        panel.updateJson(panel_data);
+        saved_panels.push_back(std::move(panel_data));
+    }
+    m_settings["panels"] = std::move(saved_panels);
+
     for (GridWindow& grid_window : m_grid_windows) {
         if (!grid_window.open) {
             m_settings["grid_windows"].erase(std::to_string(grid_window.id));
@@ -1032,6 +1058,13 @@ void DbgGui::setInitialFocus() {
         ImGui::Begin(custom_window.title().c_str());
         if (custom_window.focus.initial_focus) {
             ImGui::SetWindowFocus(custom_window.title().c_str());
+        }
+        ImGui::End();
+    }
+    for (PanelWindow& panel : m_panels) {
+        ImGui::Begin(panel.title().c_str());
+        if (panel.focus.initial_focus) {
+            ImGui::SetWindowFocus(panel.title().c_str());
         }
         ImGui::End();
     }

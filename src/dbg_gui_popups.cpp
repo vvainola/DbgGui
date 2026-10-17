@@ -55,6 +55,16 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             };
             ImGui::EndPopup();
         }
+    } else if (modal_name == str::ADD_PANEL) {
+        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("Panel name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_panels.emplace_back(window_or_plot_name, hashWithTime(window_or_plot_name));
+                window_or_plot_name.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     } else if (modal_name == str::ADD_GRID_WINDOW) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
