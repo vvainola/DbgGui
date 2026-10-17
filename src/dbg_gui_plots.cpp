@@ -61,6 +61,38 @@ void addScalarAliasInput(Scalar& scalar) {
     }
 }
 
+namespace {
+template <typename Plots, typename Render>
+void renderPlotWindows(Plots& plots, double timestamp, Render render) {
+    for (auto& plot : plots) {
+        if (!plot.open) {
+            continue;
+        }
+        plot.focus.focused = ImGui::Begin(plot.title().c_str(), nullptr, ImGuiWindowFlags_NoNavFocus);
+        plot.closeOnMiddleClick();
+        plot.contextMenu();
+        if (plot.focus.focused) {
+            render(plot);
+        } else if constexpr (requires { plot.last_frame_timestamp; }) {
+            plot.last_frame_timestamp = timestamp;
+        }
+        ImGui::End();
+    }
+}
+
+template <typename Render>
+void renderPlotGrid(int rows, int cols, const char* id, Render render) {
+    if (rows * cols == 1) {
+        render(0);
+    } else if (ImPlot::BeginSubplots(id, rows, cols, ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotSubplotFlags_NoTitle)) {
+        for (int index = 0; index < rows * cols; ++index) {
+            render(index);
+        }
+        ImPlot::EndSubplots();
+    }
+}
+} // namespace
+
 void DbgGui::showScalarPlots() {
     // Show vertical line at same time in all plots if mouse is hovered in any plot
     static double vertical_line_time_next = 0;
@@ -72,21 +104,9 @@ void DbgGui::showScalarPlots() {
         int subplot_idx;
         Scalar* scalar;
     };
-    for (ScalarPlot& scalar_plot : m_scalar_plots) {
-        if (!scalar_plot.open) {
-            continue;
-        }
+    renderPlotWindows(m_scalar_plots, m_plot_timestamp, [&](ScalarPlot& scalar_plot) {
         Scalar* scalar_to_remove = nullptr;
         int subplot_to_remove_from = 0;
-
-        scalar_plot.focus.focused = ImGui::Begin(scalar_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        scalar_plot.closeOnMiddleClick();
-        scalar_plot.contextMenu();
-        if (!scalar_plot.focus.focused) {
-            scalar_plot.last_frame_timestamp = m_plot_timestamp;
-            ImGui::End();
-            continue;
-        }
 
         // Menu
         if (ImGui::Button("Menu")) {
@@ -388,43 +408,20 @@ void DbgGui::showScalarPlots() {
 
             ImPlot::EndPlot();
         };
-        if (scalar_plot.subplotCount() == 1) {
-            render_subplot(0);
-        } else if (ImPlot::BeginSubplots("##ScalarSubplots",
-                                         scalar_plot.rows(),
-                                         scalar_plot.cols(),
-                                         ImVec2(-1, ImGui::GetContentRegionAvail().y),
-                                         ImPlotSubplotFlags_NoTitle)) {
-            for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
-                render_subplot(subplot_idx);
-            }
-            ImPlot::EndSubplots();
-        }
+        renderPlotGrid(scalar_plot.rows(), scalar_plot.cols(), "##ScalarSubplots", render_subplot);
         if (fit_x_to_latest) {
             scalar_plot.last_frame_timestamp = m_plot_timestamp;
         }
         ImPlot::PopStyleVar();
-        ImGui::End();
 
         if (scalar_to_remove) {
             scalar_plot.removeScalar(scalar_to_remove, subplot_to_remove_from);
         }
-    }
+    });
 }
 
 void DbgGui::showVectorPlots() {
-    for (VectorPlot& vector_plot : m_vector_plots) {
-        if (!vector_plot.open) {
-            continue;
-        }
-        vector_plot.focus.focused = ImGui::Begin(vector_plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        vector_plot.closeOnMiddleClick();
-        vector_plot.contextMenu();
-        if (!vector_plot.focus.focused) {
-            ImGui::End();
-            continue;
-        }
-
+    renderPlotWindows(m_vector_plots, m_plot_timestamp, [&](VectorPlot& vector_plot) {
         // Fit first few frames because the initial fit does not seem to work sometimes with equal axes
         if (ImGui::GetFrameCount() < 5) {
             ImPlot::SetNextAxesToFit();
@@ -597,30 +594,17 @@ void DbgGui::showVectorPlots() {
             ImPlot::EndPlot();
         }
         ImPlot::PopStyleVar();
-        ImGui::End();
 
         if (signal_to_remove) {
             remove(vector_plot.vectors, signal_to_remove);
             size_t signals_removed = m_settings["vector_plots"][std::to_string(vector_plot.id)]["signals"].erase(signal_to_remove->name_and_group);
             assert(signals_removed > 0);
         }
-    }
+    });
 }
 
 void DbgGui::showSpectrumPlots() {
-    for (SpectrumPlot& plot : m_spectrum_plots) {
-        if (!plot.open) {
-            continue;
-        }
-
-        plot.focus.focused = ImGui::Begin(plot.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-        plot.closeOnMiddleClick();
-        plot.contextMenu();
-        if (!plot.focus.focused) {
-            ImGui::End();
-            continue;
-        }
-
+    renderPlotWindows(m_spectrum_plots, m_plot_timestamp, [&](SpectrumPlot& plot) {
         double time_range_ms = plot.time_range * 1e3;
         double min = 1;
         double max = 10000;
@@ -769,9 +753,7 @@ void DbgGui::showSpectrumPlots() {
                                               m_options.spectrum_plot_threshold / 100.0);
             }
         }
-
-        ImGui::End();
-    }
+    });
 }
 
 SampleClipboardData DbgGui::collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits) {
