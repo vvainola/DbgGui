@@ -321,6 +321,12 @@ struct PlotWindow : Window {
         MinMax y_axis = {-1, 1};
         bool autofit_y = true;
 
+        void addScalar(Scalar* scalar) {
+            if (!contains(scalars, scalar)) {
+                scalars.push_back(scalar);
+            }
+        }
+
         void removeScalar(Scalar* scalar) {
             remove(scalars, scalar);
         }
@@ -428,14 +434,7 @@ struct PlotWindow : Window {
 
     void addScalarToPlot(Scalar* new_scalar, int subplot_idx = 0) {
         subplot_idx = std::clamp(subplot_idx, 0, subplotCount() - 1);
-        // Add scalar if it is not already in the subplot
-        std::vector<Scalar*>& subplot_scalars = subplots[subplot_idx].scalars;
-        auto it = std::find_if(subplot_scalars.begin(), subplot_scalars.end(), [=](Scalar* sig) {
-            return sig->id == new_scalar->id;
-        });
-        if (it == subplot_scalars.end()) {
-            subplot_scalars.push_back(new_scalar);
-        }
+        subplots[subplot_idx].addScalar(new_scalar);
     }
 
     std::vector<Scalar*> allScalars() const {
