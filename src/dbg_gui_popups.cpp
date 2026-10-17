@@ -32,7 +32,7 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     }
     static std::string window_or_plot_name;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-    if (modal_name == str::ADD_SCALAR_PLOT) {
+    if (modal_name == str::ADD_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -40,16 +40,6 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
                 m_scalar_plots.push_back(plot);
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-    } else if (modal_name == str::ADD_VECTOR_PLOT) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Vector plot name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_vector_plots.push_back(VectorPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };

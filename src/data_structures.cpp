@@ -54,33 +54,6 @@ bool SignalGroup<Scalar>::hasVisibleItems(std::string const& filter) {
     return m_has_visible_items;
 }
 
-template <>
-bool SignalGroup<Vector2D>::hasVisibleItems(std::string const& filter) {
-    if (filter == m_filter_prev && !filter.empty()) {
-        return m_has_visible_items;
-    }
-    m_filter_prev = filter;
-    m_has_visible_items = false;
-
-    if (!filter.empty()) {
-        for (std::string_view const& g : str::splitSv(full_name, '|')) {
-            m_has_visible_items |= str::fuzzy_match(filter.c_str(), g);
-        }
-    }
-    for (Vector2D* vector : signals) {
-        if (m_has_visible_items) {
-            // No need to check further
-            return m_has_visible_items;
-        }
-        m_has_visible_items |= str::fuzzy_match(filter.c_str(), vector->name.c_str());
-    }
-    for (auto& subgroup : subgroups) {
-        m_has_visible_items |= subgroup.second.hasVisibleItems(filter);
-    }
-
-    return m_has_visible_items;
-}
-
 std::string getFilenameToSave(std::string const& filter, std::string default_path) {
     nfdchar_t* out_path = NULL;
     if (default_path.empty()) {

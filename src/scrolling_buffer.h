@@ -136,9 +136,9 @@ class ScrollingBuffer {
         }
     }
 
-    void startSampling(Vector2D* vector) {
-        startSampling(vector->x);
-        startSampling(vector->y);
+    void startSampling(VectorPair const& vector) {
+        startSampling(vector.x);
+        startSampling(vector.y);
     }
 
     void copySamples(Scalar& from, Scalar& to) {
@@ -149,7 +149,7 @@ class ScrollingBuffer {
         }
     }
 
-    void copySamples(Vector2D& from, Vector2D& to) {
+    void copySamples(VectorPair const& from, VectorPair& to) {
         copySamples(*from.x, *to.x);
         copySamples(*from.y, *to.y);
     }

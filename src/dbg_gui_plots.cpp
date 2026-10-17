@@ -569,13 +569,6 @@ void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, 
                 subplot.addVector(dragged.vector);
             }
         }
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-            Vector2D* vector = findVector(m_vectors, *static_cast<uint64_t const*>(payload->Data));
-            if (vector) {
-                m_sampler.startSampling(vector);
-                subplot.addVector(*vector);
-            }
-        }
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
             std::span<uint64_t const> ids(static_cast<uint64_t const*>(payload->Data), payload->DataSize / sizeof(uint64_t));
             if (ids.size() == 2) {
@@ -609,147 +602,6 @@ void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, 
     if (vector_to_remove) {
         subplot.removeVector(*vector_to_remove);
     }
-}
-
-void DbgGui::showVectorPlots() {
-    renderPlotWindows(m_vector_plots, m_plot_timestamp, [&](VectorPlot& vector_plot) {
-        // Fit first few frames because the initial fit does not seem to work sometimes with equal axes
-        if (ImGui::GetFrameCount() < 5) {
-            ImPlot::SetNextAxesToFit();
-        }
-
-        Vector2D* signal_to_remove = nullptr;
-
-        float time_range_ms = vector_plot.time_range * 1e3f;
-        ImGui::PushItemWidth(-ImGui::GetContentRegionAvail().x * 0.6f);
-        ImGui::SliderFloat("Time range", &time_range_ms, 0, 100, "%.0f ms");
-        vector_plot.time_range = time_range_ms * 1e-3f;
-
-        // Use time range from the scalar plots
-        double last_sample_time = m_linked_scalar_x_axis_limits.max;
-        double first_sample_time = MAX(last_sample_time - vector_plot.time_range, m_linked_scalar_x_axis_limits.min);
-        auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
-
-        static ImPlotAxisFlags flags = ImPlotAxisFlags_None;
-
-        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
-        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
-            ImPlot::SetupAxes(NULL, NULL, flags, flags);
-
-            // Plot unit circle
-            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
-            ImPlot::PlotLine("##Unit circle",
-                             &UNIT_CIRCLE.data()->x,
-                             &UNIT_CIRCLE.data()->y,
-                             int(UNIT_CIRCLE.size()),
-                             ImPlotLineFlags_None,
-                             0,
-                             2 * sizeof(double));
-            ImPlot::PlotLine("##Half unit circle",
-                             &HALF_UNIT_CIRCLE.data()->x,
-                             &HALF_UNIT_CIRCLE.data()->y,
-                             int(HALF_UNIT_CIRCLE.size()),
-                             ImPlotLineFlags_None,
-                             0,
-                             2 * sizeof(double));
-            ImPlot::PopStyleColor();
-
-            // Collect rotation vectors to rotate samples to reference frame
-            std::vector<XY<double>> frame_rotation_vectors;
-            if (vector_plot.reference_frame_vector) {
-                frame_rotation_vectors = getFrameRotationVectors(m_sampler, *vector_plot.reference_frame_vector, time_idx);
-            }
-
-            // Plot vectors
-            for (Vector2D* vector : vector_plot.vectors) {
-                renderVectorPair(m_sampler, *vector, vector->name_and_group.c_str(), time_idx, frame_rotation_vectors);
-
-                // Legend right-click
-                if (ImPlot::BeginLegendPopup(vector->name_and_group.c_str())) {
-
-                    if (vector == vector_plot.reference_frame_vector) {
-                        if (ImGui::Button("Remove reference frame")) {
-                            vector_plot.reference_frame_vector = nullptr;
-                        }
-                    } else {
-                        if (ImGui::Button("Set as reference frame")) {
-                            vector_plot.reference_frame_vector = vector;
-                        };
-                    }
-                    if (ImGui::Button("Copy name")) {
-                        ImGui::SetClipboardText(vector->name.c_str());
-                        ImGui::CloseCurrentPopup();
-                    }
-                    if (ImGui::Button("Remove")) {
-                        signal_to_remove = vector;
-                    };
-
-                    ImPlot::EndLegendPopup();
-                }
-
-                // Legend items can be dragged to other plots to move the vector.
-                if (ImPlot::BeginDragDropSourceItem(vector->name_and_group.c_str(), ImGuiDragDropFlags_None)) {
-                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = {&vector_plot, vector};
-                    ImGui::SetDragDropPayload("PLOT_AND_VECTOR", &plot_and_vector, sizeof(plot_and_vector));
-                    ImGui::Text("Drag to move to another plot\n  %s", vector->name_and_group.c_str());
-                    ImPlot::EndDragDropSource();
-                }
-            }
-
-            if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = findVector(m_vectors, id);
-                    if (vector) {
-                        m_sampler.startSampling(vector);
-                        vector_plot.addVector(vector);
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
-                    std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
-                                                      payload->DataSize / sizeof(VariantSymbol*));
-                    if (symbols.size() != 2) {
-                        logMessage("Vector plots require exactly two symbols.");
-                    } else {
-                        Vector2D* vector = addVectorSymbol(symbols[0], symbols[1], m_group_to_add_symbols);
-                        m_sampler.startSampling(vector);
-                        vector_plot.addVector(vector);
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
-                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                            payload->DataSize / sizeof(uint64_t));
-                    if (ids.size() == 2) {
-                        Scalar* x = findScalar(m_scalars, ids[0]);
-                        Scalar* y = findScalar(m_scalars, ids[1]);
-                        if (x && y) {
-                            Vector2D* vector = addVectorFromScalars(x, y);
-                            if (vector) {
-                                m_sampler.startSampling(vector);
-                                vector_plot.addVector(vector);
-                            }
-                        }
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_AND_VECTOR")) {
-                    std::pair<VectorPlot*, Vector2D*> plot_and_vector = *(std::pair<VectorPlot*, Vector2D*>*)payload->Data;
-                    VectorPlot* original_plot = plot_and_vector.first;
-                    Vector2D* vector = plot_and_vector.second;
-                    if (original_plot != &vector_plot) {
-                        original_plot->removeVector(vector);
-                        vector_plot.addVector(vector);
-                    }
-                }
-                ImPlot::EndDragDropTarget();
-            }
-            ImPlot::EndPlot();
-        }
-        ImPlot::PopStyleVar();
-
-        if (signal_to_remove) {
-            vector_plot.removeVector(signal_to_remove);
-        }
-    });
 }
 
 void DbgGui::showSpectrumPlots() {
@@ -819,14 +671,6 @@ void DbgGui::showSpectrumPlots() {
                         Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
                         m_sampler.startSampling(scalar);
                         plot.addToPlot(scalar, nullptr);
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = findVector(m_vectors, id);
-                    if (vector) {
-                        m_sampler.startSampling(vector);
-                        plot.addToPlot(vector->x, vector->y);
                     }
                 }
                 ImPlot::EndDragDropTarget();

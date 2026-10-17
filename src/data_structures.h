@@ -269,15 +269,6 @@ struct VectorPair {
     bool operator==(VectorPair const&) const = default;
 };
 
-struct Vector2D : VectorPair {
-    uint64_t id;
-    std::string group;
-    std::string name;
-    std::string name_and_group;
-    bool deleted = false;
-    Vector2D* replacement = nullptr;
-};
-
 struct Window {
     Window(std::string const& name_, uint64_t id_)
         : name(name_), id(id_) {
@@ -511,35 +502,6 @@ struct PlotWindow : Window {
   private:
     int m_rows = 1;
     int m_cols = 1;
-};
-
-struct VectorPlot : Window {
-    VectorPlot(std::string const& name, uint64_t id)
-        : Window(name, id) {
-    }
-    VectorPlot(nlohmann::json const& j)
-        : Window(j) {
-        time_range = j.value("time_range", time_range);
-    }
-    nlohmann::json updateJson(nlohmann::json& j) const {
-        Window::updateJson(j);
-        j["time_range"] = time_range;
-        return j;
-    }
-
-    std::vector<Vector2D*> vectors;
-    Vector2D* reference_frame_vector = nullptr;
-    float time_range = 20e-3f;
-
-    void addVector(Vector2D* new_vector) {
-        if (!contains(vectors, new_vector)) {
-            vectors.push_back(new_vector);
-        }
-    }
-
-    void removeVector(Vector2D* vector) {
-        remove(vectors, vector);
-    }
 };
 
 struct SpectrumPlot : Window {

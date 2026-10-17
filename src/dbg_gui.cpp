@@ -208,30 +208,6 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
     return scalars_to_sample;
 }
 
-bool restoreVectorSettings(Vector2D* vector,
-                           nlohmann::json& settings,
-                           std::vector<VectorPlot>& vector_plots) {
-    bool restored_to_plot = false;
-    TRY(for (auto const& vector_plot_data : settings["vector_plots"]) {
-        VectorPlot* plot = nullptr;
-        for (VectorPlot& vector_plot : vector_plots) {
-            if (vector_plot.id == vector_plot_data["id"]) {
-                plot = &vector_plot;
-                break;
-            }
-        }
-        if (plot == nullptr || !vector_plot_data.contains("signals")) {
-            continue;
-        }
-        forEachSignalId(vector_plot_data["signals"], [&](uint64_t id) {
-            if (id == vector->id) {
-                plot->addVector(vector);
-                restored_to_plot = true;
-            }
-        });
-    })
-    return restored_to_plot;
-}
 } // namespace
 
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id) {
@@ -263,14 +239,6 @@ Scalar* DbgGui::findScalarByName(std::string_view name) {
     return nullptr;
 }
 
-Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id) {
-    for (std::unique_ptr<Vector2D> const& vector : vectors) {
-        if (vector->id == id && !vector->deleted) {
-            return vector.get();
-        }
-    }
-    return nullptr;
-}
 
 constexpr int SETTINGS_CHECK_INTERVAL_MS = 500;
 
@@ -421,8 +389,7 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"halve-speed", "Halve simulation speed", "Decrease simulated speed relative to real time.", ImGuiKey_KeypadSubtract, [&] { m_simulation_speed /= 2.; }},
       {"pause-after", "Pause after", "Open the pause-after-time dialog.", ImGuiKey_KeypadDivide, [&] { ImGui::OpenPopup(str::PAUSE_AFTER); }},
       {"pause-at", "Pause at", "Open the pause-at-time dialog.", ImGuiKey_KeypadMultiply, [&] { ImGui::OpenPopup(str::PAUSE_AT); }},
-      {"add-scalar-plot", "Add scalar plot", "Open the add-scalar-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1, [&] { ImGui::OpenPopup(str::ADD_SCALAR_PLOT); }},
-      {"add-vector-plot", "Add vector plot", "Open the add-vector-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2, [&] { ImGui::OpenPopup(str::ADD_VECTOR_PLOT); }},
+      {"add-plot", "Add plot", "Open the add-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1, [&] { ImGui::OpenPopup(str::ADD_PLOT); }},
       {"add-spectrum-plot", "Add spectrum plot", "Open the add-spectrum-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3, [&] { ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT); }},
       {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
       {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
@@ -540,8 +507,7 @@ void DbgGui::updateLoop() {
         std::vector<CommandPaletteCommand> commands = commandPaletteCommands(!ImGui::IsAnyItemActive());
         triggerCommandHotkeys("Command Palette", commands, m_hotkey_overrides);
         showCommandPalette();
-        addPopupModal(str::ADD_SCALAR_PLOT);
-        addPopupModal(str::ADD_VECTOR_PLOT);
+        addPopupModal(str::ADD_PLOT);
         addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_DOCKSPACE);
@@ -560,13 +526,11 @@ void DbgGui::updateLoop() {
         showMainMenuBar();
         showLogWindow();
         showScalarWindow();
-        showVectorWindow();
         showCustomWindow();
         showSymbolsWindow();
         showScriptWindow();
         showGridWindow();
         showScalarPlots();
-        showVectorPlots();
         showSpectrumPlots();
         showCustomSignalCreator();
         setInitialFocus();
@@ -729,7 +693,6 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         TRY(m_window_focus.scalars.initial_focus = m_settings["initial_focus"]["scalars"];)
-        TRY(m_window_focus.vectors.initial_focus = m_settings["initial_focus"]["vectors"];)
         TRY(m_window_focus.symbols.initial_focus = m_settings["initial_focus"]["symbols"];)
         TRY(m_window_focus.log.initial_focus = m_settings["initial_focus"]["log"];)
 
@@ -750,24 +713,6 @@ void DbgGui::loadPreviousSessionSettings() {
                       || sym->getType() == VariantSymbol::Type::Pointer)) {
                   addScalarSymbol(sym, symbol["group"]);
               })
-        }
-
-        for (auto symbol : m_settings["vector_symbols"]) {
-            TRY(
-              VariantSymbol* sym_x = m_symbols.getSymbol(symbol["x"]);
-              VariantSymbol* sym_y = m_symbols.getSymbol(symbol["y"]);
-              if (sym_x && sym_y) {
-                  std::string group = symbol.value("group", "debug");
-                  // Prefer referencing existing visible scalars instead of creating hidden
-                  // duplicates via addVectorSymbol, which would hide the user's existing ones.
-                  Scalar* existing_x = findScalar(m_scalars, signalId((std::string)symbol["x"], group));
-                  Scalar* existing_y = findScalar(m_scalars, signalId((std::string)symbol["y"], group));
-                  if (existing_x && existing_y) {
-                      addVectorFromScalars(existing_x, existing_y);
-                  } else {
-                      addVectorSymbol(sym_x, sym_y, group);
-                  }
-              };)
         }
 
         for (auto custom_signal : m_settings["custom_signals"]) {
@@ -808,7 +753,7 @@ void DbgGui::loadPreviousSessionSettings() {
         }
 
         m_scalar_plots.clear();
-        for (auto scalar_plot_data : m_settings["scalar_plots"]) {
+        for (auto& scalar_plot_data : m_settings["scalar_plots"]) {
             PlotWindow& plot = m_scalar_plots.emplace_back(scalar_plot_data);
             // Prefer the subplot-aware format, but keep old top-level signals
             // readable for existing settings files.
@@ -850,18 +795,6 @@ void DbgGui::loadPreviousSessionSettings() {
                     }
                 });
             }
-        }
-
-        m_vector_plots.clear();
-        for (auto vector_plot_data : m_settings["vector_plots"]) {
-            VectorPlot& plot = m_vector_plots.emplace_back(vector_plot_data);
-            forEachSignalId(vector_plot_data["signals"], [&](uint64_t id) {
-                Vector2D* vec = findVector(m_vectors, id);
-                if (vec) {
-                    m_sampler.startSampling(vec);
-                    plot.addVector(vec);
-                }
-            });
         }
 
         m_spectrum_plots.clear();
@@ -972,16 +905,7 @@ void DbgGui::updateSavedSettings() {
                 m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
             }
         }
-        for (auto const& vector : m_vectors) {
-            VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
-            VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
-            if (x && y) {
-                m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
-                m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
-                m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
-                m_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
-            }
-        }
+
     }
 
     // Read current settings from json if there is a parallel process in which they have changed
@@ -1026,15 +950,8 @@ void DbgGui::updateSavedSettings() {
         m_settings["hotkeys"][command_id] = hotkey;
     }
     m_settings["initial_focus"]["scalars"] = m_window_focus.scalars.focused;
-    m_settings["initial_focus"]["vectors"] = m_window_focus.vectors.focused;
     m_settings["initial_focus"]["symbols"] = m_window_focus.symbols.focused;
     m_settings["initial_focus"]["log"] = m_window_focus.log.focused;
-
-    // If a component scalar is deleted, delete the vector too so vector groups
-    // cannot keep pointers to scalars that are removed below. If vector uses
-    // hidden component scalars, mark them as also deleted but don't delete them
-    // for real yet before they are removed from all other structures.
-    markVectorsDeletedByDeletedComponents(m_vectors);
 
     // Remove first deleted dockspaces because are saved by index and index changes if any is removed
     for (int i = int(m_dockspaces.size() - 1); i >= 0; --i) {
@@ -1142,47 +1059,6 @@ void DbgGui::updateSavedSettings() {
                 } else {
                     saved_signals[scalar->name_and_group] = scalar->id;
                 }
-            }
-        }
-    }
-
-    for (VectorPlot& vector_plot : m_vector_plots) {
-        if (!vector_plot.open) {
-            m_settings["vector_plots"].erase(std::to_string(vector_plot.id));
-            continue;
-        }
-        if (vector_plot.id == 0) {
-            vector_plot.id = hashWithTime(vector_plot.name);
-        }
-        nlohmann::json& j = m_settings["vector_plots"][std::to_string(vector_plot.id)];
-        vector_plot.updateJson(j);
-        nlohmann::json& saved_signals = j["signals"];
-        if (!saved_signals.is_object()) {
-            saved_signals = nlohmann::json::object();
-        }
-        // Rebuild registered vector placements from runtime state; keep unresolved vectors.
-        for (auto it = saved_signals.begin(); it != saved_signals.end();) {
-            if (!it->is_number_unsigned() && !it->is_number_integer()) {
-                it = saved_signals.erase(it);
-                continue;
-            }
-            uint64_t const id = it->get<uint64_t>();
-            bool const vector_registered = std::ranges::any_of(m_vectors, [id](auto const& vector) {
-                return vector->id == id;
-            });
-            if (vector_registered) {
-                it = saved_signals.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        for (int i = int(vector_plot.vectors.size() - 1); i >= 0; --i) {
-            Vector2D* vector = vector_plot.vectors[i];
-            if (!isLiveVector(vector)) {
-                j["signals"].erase(vector->name_and_group);
-                replaceDeletedVectorInPlot(vector_plot, vector);
-            } else {
-                j["signals"][vector->name_and_group] = vector->id;
             }
         }
     }
@@ -1311,27 +1187,6 @@ void DbgGui::updateSavedSettings() {
         removeDeletedSignalsFromGroup(scalar_group.second);
     }
 
-    // Remove deleted vectors from vector groups
-    for (auto& vector_group : m_vector_groups) {
-        removeDeletedSignalsFromGroup(vector_group.second);
-    }
-
-    for (int i = int(m_vectors.size() - 1); i >= 0; --i) {
-        auto& vector = m_vectors[i];
-        if (vector->deleted) {
-            remove(m_selected_vectors, vector.get());
-            bool const has_live_duplicate = std::any_of(m_vectors.begin(), m_vectors.end(), [&](auto const& candidate) {
-                return candidate.get() != vector.get()
-                    && !candidate->deleted
-                    && candidate->name_and_group == vector->name_and_group;
-            });
-            if (!has_live_duplicate) {
-                m_settings["vector_symbols"].erase(vector->name_and_group);
-            }
-            remove(m_vectors, vector);
-        }
-    }
-
     for (int i = int(m_scalars.size() - 1); i >= 0; --i) {
         std::unique_ptr<Scalar>& scalar = m_scalars[i];
         if (m_settings["scalars"].contains(scalar->name_and_group)
@@ -1413,11 +1268,6 @@ void DbgGui::setInitialFocus() {
         ImGui::SetWindowFocus("Scalars");
         ImGui::End();
     }
-    if (m_window_focus.vectors.initial_focus) {
-        ImGui::Begin("Vectors");
-        ImGui::SetWindowFocus("Vectors");
-        ImGui::End();
-    }
     if (m_window_focus.symbols.initial_focus) {
         ImGui::Begin("Symbols");
         ImGui::SetWindowFocus("Symbols");
@@ -1440,13 +1290,6 @@ void DbgGui::setInitialFocus() {
         ImGui::Begin(scalar_plot.title().c_str());
         if (scalar_plot.focus.initial_focus) {
             ImGui::SetWindowFocus(scalar_plot.title().c_str());
-        }
-        ImGui::End();
-    }
-    for (VectorPlot& vector_plot : m_vector_plots) {
-        ImGui::Begin(vector_plot.title().c_str());
-        if (vector_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(vector_plot.title().c_str());
         }
         ImGui::End();
     }
@@ -1481,15 +1324,6 @@ Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
     m_settings["scalar_symbols"][scalar->name_and_group]["name"] = scalar->name;
     m_settings["scalar_symbols"][scalar->name_and_group]["group"] = scalar->group;
     return scalar;
-}
-
-Vector2D* DbgGui::addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group) {
-    Vector2D* vector = addVector(x->getValueSource(), y->getValueSource(), group, x->getFullName(), y->getFullName());
-    m_settings["vector_symbols"][vector->name_and_group]["name"] = vector->name;
-    m_settings["vector_symbols"][vector->name_and_group]["group"] = vector->group;
-    m_settings["vector_symbols"][vector->name_and_group]["x"] = x->getFullName();
-    m_settings["vector_symbols"][vector->name_and_group]["y"] = y->getFullName();
-    return vector;
 }
 
 bool DbgGui::isClosed() {
@@ -1579,8 +1413,7 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
                                     std::string group,
                                     std::string const& name,
                                     std::string const& scale,
-                                    std::string const& offset,
-                                    bool restore_saved_vectors) {
+                                    std::string const& offset) {
     if (group.empty()) {
         group = "debug";
     }
@@ -1624,137 +1457,25 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     added_group->signals.push_back(new_scalar.get());
     // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
-    if (m_initialized.load() && restore_saved_vectors) {
-        // Saved vectors made from custom scalars cannot be reconstructed during
-        // session loading when those scalars are created later by a script.
-        // Retry matching definitions whenever either component is registered.
-        std::vector<std::pair<Scalar*, Scalar*>> vectors_to_restore;
-        for (auto const& vector_data : m_settings["vector_symbols"]) {
-            std::string const vector_group = vector_data.value("group", "debug");
-            std::string const x_name = vector_data.value("x", "");
-            std::string const y_name = vector_data.value("y", "");
-            if (vector_group != new_scalar->group
-                || (x_name != new_scalar->name && y_name != new_scalar->name)) {
-                continue;
-            }
-            Scalar* x = findScalar(m_scalars, signalId(x_name, vector_group));
-            Scalar* y = findScalar(m_scalars, signalId(y_name, vector_group));
-            if (x != nullptr && y != nullptr) {
-                vectors_to_restore.emplace_back(x, y);
-            }
-        }
-        for (auto const& [x, y] : vectors_to_restore) {
-            addVectorFromScalars(x, y);
-        }
-    }
     return new_scalar.get();
 }
 
-Vector2D* DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {
+VectorPair DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {
     if (m_gui_thread.joinable() && std::this_thread::get_id() != m_gui_thread.get_id()) {
-        Vector2D* result = nullptr;
+        VectorPair result{};
         runOnGuiThreadAndWait([this, &result, x, y, group = std::move(group), name_x, name_y, scale, offset] {
             result = addVector(x, y, group, name_x, name_y, scale, offset);
         });
         return result;
     }
-
     if (group.empty()) {
         group = "debug";
     }
-    uint64_t id = signalId(name_x, group);
-    Vector2D* existing_vector = findVector(m_vectors, id);
-    if (existing_vector != nullptr) {
-        return existing_vector;
-    }
-    auto& new_vector = m_vectors.emplace_back(std::make_unique<Vector2D>());
-    new_vector->name = name_x;
-    new_vector->group = group;
-    new_vector->name_and_group = name_x + " (" + group + ")";
-    new_vector->id = id;
-    // Defer saved vector reconstruction while this vector is being assembled;
-    // the completed vector restores its own plot membership below.
-    bool restore_saved_vectors = false;
-    new_vector->x = addScalarExpression(x,
-                                        group,
-                                        name_x,
-                                        std::format("{:g}", scale),
-                                        std::format("{:g}", offset),
-                                        restore_saved_vectors);
-    new_vector->x->hide_from_scalars_window = true;
-    new_vector->y = addScalarExpression(y,
-                                        group,
-                                        name_y,
-                                        std::format("{:g}", scale),
-                                        std::format("{:g}", offset),
-                                        restore_saved_vectors);
-    new_vector->y->hide_from_scalars_window = true;
-    new_vector->x->setScaleStr(std::format("{:g}", scale));
-    new_vector->x->setOffsetStr(std::format("{:g}", offset));
-    new_vector->y->setScaleStr(std::format("{:g}", scale));
-    new_vector->y->setOffsetStr(std::format("{:g}", offset));
-    std::vector<std::string> groups = str::split(new_vector->group, '|');
-    SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
-    added_group->name = groups[0];
-    added_group->full_name = added_group->name;
-    std::string full_group_name = added_group->name;
-    for (int i = 1; i < groups.size(); ++i) {
-        added_group = &added_group->subgroups[groups[i]];
-        added_group->name = groups[i];
-        full_group_name += "|" + added_group->name;
-        added_group->full_name = full_group_name;
-    }
-
-    added_group->signals.push_back(new_vector.get());
-    // Sort items within the inserted group
-    std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
-    if (m_initialized.load()
-        && restoreVectorSettings(new_vector.get(), m_settings, m_vector_plots)) {
-        m_sampler.startSampling(new_vector.get());
-    }
-    return new_vector.get();
-}
-
-Vector2D* DbgGui::addVectorFromScalars(Scalar* x, Scalar* y) {
-    if (x->group != y->group) {
-        return nullptr;
-    }
-    uint64_t id = signalId(x->name + "+" + y->name, x->group);
-    Vector2D* existing_vector = findVector(m_vectors, id);
-    if (existing_vector != nullptr) {
-        return existing_vector;
-    }
-    auto& new_vector = m_vectors.emplace_back(std::make_unique<Vector2D>());
-    new_vector->name = x->name;
-    new_vector->group = x->group;
-    new_vector->name_and_group = new_vector->name + " (" + x->group + ")";
-    new_vector->id = id;
-    new_vector->x = x;
-    new_vector->y = y;
-    std::vector<std::string> groups = str::split(new_vector->group, '|');
-    SignalGroup<Vector2D>* added_group = &m_vector_groups[groups[0]];
-    added_group->name = groups[0];
-    added_group->full_name = added_group->name;
-    std::string full_group_name = added_group->name;
-    for (int i = 1; i < groups.size(); ++i) {
-        added_group = &added_group->subgroups[groups[i]];
-        added_group->name = groups[i];
-        full_group_name += "|" + added_group->name;
-        added_group->full_name = full_group_name;
-    }
-    added_group->signals.push_back(new_vector.get());
-    std::sort(added_group->signals.begin(), added_group->signals.end(), [](Vector2D* a, Vector2D* b) { return a->name < b->name; });
-    if (m_initialized.load()
-        && restoreVectorSettings(new_vector.get(), m_settings, m_vector_plots)) {
-        m_sampler.startSampling(new_vector.get());
-    }
-    // Reuse vector_symbols persistence intentionally. This restores only
-    // symbol-backed scalar pairs; vectors built from custom scalars are session-only.
-    m_settings["vector_symbols"][new_vector->name_and_group]["name"] = new_vector->name;
-    m_settings["vector_symbols"][new_vector->name_and_group]["group"] = new_vector->group;
-    m_settings["vector_symbols"][new_vector->name_and_group]["x"] = x->name;
-    m_settings["vector_symbols"][new_vector->name_and_group]["y"] = y->name;
-    return new_vector.get();
+    VectorPair pair{
+        addScalarExpression(x, group, name_x, std::format("{:g}", scale), std::format("{:g}", offset)),
+        addScalarExpression(y, group, name_y, std::format("{:g}", scale), std::format("{:g}", offset))
+    };
+    return pair;
 }
 
 void DbgGui::logMessage(std::string message, MessageType type) {

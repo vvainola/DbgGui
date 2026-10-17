@@ -58,8 +58,7 @@ inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
 
 namespace str {
-inline constexpr const char* ADD_SCALAR_PLOT = "Add scalar plot";
-inline constexpr const char* ADD_VECTOR_PLOT = "Add vector plot";
+inline constexpr const char* ADD_PLOT = "Add plot";
 inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
@@ -101,7 +100,7 @@ class DbgGui {
                         std::string name,
                         double scale = 1.0,
                         double offset = 0.0);
-    Vector2D* addVector(ValueSource const& x,
+    VectorPair addVector(ValueSource const& x,
                         ValueSource const& y,
                         std::string group,
                         std::string const& name_x,
@@ -124,7 +123,6 @@ class DbgGui {
     void showLogWindow();
     void showScalarWindow();
     void showSymbolsWindow();
-    void showVectorWindow();
     void showCustomWindow();
     void showScriptWindow();
     void showGridWindow();
@@ -148,7 +146,6 @@ class DbgGui {
     void renderVectorSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
                              std::pair<int32_t, int32_t> time_idx);
-    void showVectorPlots();
     void showSpectrumPlots();
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
@@ -197,11 +194,8 @@ class DbgGui {
                                 std::string group,
                                 std::string const& name,
                                 std::string const& scale,
-                                std::string const& offset,
-                                bool restore_saved_vectors = true);
+                                std::string const& offset);
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
-    Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
-    Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
     Scalar* findScalarByName(std::string_view name);
 
     DbgSymbols const& m_symbols;
@@ -220,8 +214,6 @@ class DbgGui {
     std::vector<VariantSymbol*> m_visible_tree_symbols;
     std::vector<Scalar*> m_selected_scalars;
     std::vector<Scalar*> m_visible_scalars;
-    std::vector<Vector2D*> m_selected_vectors;
-    std::vector<Vector2D*> m_visible_vectors;
     bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
@@ -230,8 +222,6 @@ class DbgGui {
     // name while m_scalars retains ownership and display order.
     std::unordered_map<std::string, Scalar*> m_scalars_by_name;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
-    std::vector<std::unique_ptr<Vector2D>> m_vectors;
-    std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
 
     GLFWwindow* m_window = nullptr;
@@ -240,13 +230,11 @@ class DbgGui {
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_scalar_plots;
-    std::vector<VectorPlot> m_vector_plots;
     std::vector<SpectrumPlot> m_spectrum_plots;
     std::vector<DockSpace> m_dockspaces;
     std::vector<PauseTrigger> m_pause_triggers;
     struct {
         Focus scalars;
-        Focus vectors;
         Focus symbols;
         Focus log;
     } m_window_focus;
@@ -341,6 +329,5 @@ std::string getSourceValueStr(ValueSource src);
 std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id);
-Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id);
 double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);

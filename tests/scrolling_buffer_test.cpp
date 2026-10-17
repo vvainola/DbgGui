@@ -66,7 +66,7 @@ TEST_CASE("Scrolling buffer copies partially sampled vectors without creating so
         for (Scalar* scalar : {&source_x, &source_y, &target_x, &target_y}) {
             scalar->src = ReadWriteFn([](std::optional<double>) { return 7.0; });
         }
-        Vector2D source{}, target{};
+        VectorPair source{}, target{};
         source.x = &source_x;
         source.y = &source_y;
         target.x = &target_x;
@@ -82,7 +82,7 @@ TEST_CASE("Scrolling buffer copies partially sampled vectors without creating so
         }
         buffer.emptyTempBuffers();
         buffer.sample(5); // Copy pending samples as well as wrapped history.
-        buffer.startSampling(&target);
+        buffer.startSampling(target);
         buffer.copySamples(source, target);
         REQUIRE_NOTHROW(buffer.emptyTempBuffers());
         REQUIRE_FALSE(buffer.isScalarSampled(missing_source));

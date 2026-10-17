@@ -31,29 +31,6 @@ inline bool isLiveScalar(Scalar const* scalar) {
     return scalar != nullptr && !scalar->deleted;
 }
 
-inline bool isLiveVector(Vector2D const* vector) {
-    return vector != nullptr
-        && !vector->deleted
-        && isLiveScalar(vector->x)
-        && isLiveScalar(vector->y);
-}
-
-inline void markVectorsDeletedByDeletedComponents(std::vector<std::unique_ptr<Vector2D>>& vectors) {
-    for (auto& vector : vectors) {
-        if (vector->x->deleted || vector->y->deleted) {
-            vector->deleted = true;
-        }
-        if (vector->deleted) {
-            if (vector->x->hide_from_scalars_window) {
-                vector->x->deleted = true;
-            }
-            if (vector->y->hide_from_scalars_window) {
-                vector->y->deleted = true;
-            }
-        }
-    }
-}
-
 template <typename T>
 inline void removeDeletedSignalsFromGroup(SignalGroup<T>& group) {
     for (int i = int(group.signals.size() - 1); i >= 0; --i) {
@@ -64,13 +41,6 @@ inline void removeDeletedSignalsFromGroup(SignalGroup<T>& group) {
     for (auto& subgroup : group.subgroups) {
         removeDeletedSignalsFromGroup(subgroup.second);
     }
-}
-
-inline void replaceDeletedVectorInPlot(VectorPlot& vector_plot, Vector2D* vector) {
-    if (vector->deleted && isLiveVector(vector->replacement)) {
-        vector_plot.addVector(vector->replacement);
-    }
-    vector_plot.removeVector(vector);
 }
 
 inline void replaceDeletedVectorComponents(PlotWindow::Subplot& subplot) {
