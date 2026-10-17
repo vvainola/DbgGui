@@ -786,31 +786,18 @@ void DbgGui::showScalarWindow() {
             // Symbols can be dragged from one group to another for easier reorganizing if symbol
             // is initially added to wrong group
             if (ImGui::BeginDragDropTarget()) {
-                auto move_scalar_to_group = [&](Scalar* scalar) {
-                    if (scalar->group != group.full_name) {
-                        VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
-                        if (scalar_symbol) {
-                            Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
-                            new_scalar->alias = scalar->alias;
-                            new_scalar->updateDisplayNames();
-                            new_scalar->setScaleStr(scalar->getScaleStr());
-                            new_scalar->setOffsetStr(scalar->getOffsetStr());
-                            scalar->deleted = true;
-                            if (m_sampler.isScalarSampled(scalar)) {
-                                m_sampler.startSampling(new_scalar);
-                                m_sampler.copySamples(*scalar, *new_scalar);
-                            }
-                            scalar->replacement = new_scalar;
-                        }
-                    }
-                };
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                             payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
                         Scalar* scalar = findScalar(m_scalars, id);
-                        if (scalar) {
-                            move_scalar_to_group(scalar);
+                        if (scalar && m_symbols.getSymbol(scalar->name)) {
+                            auto const groups = str::split(scalar->group, '|');
+                            auto* source = &m_scalar_groups.at(groups[0]);
+                            for (size_t i = 1; i < groups.size(); ++i) {
+                                source = &source->subgroups.at(groups[i]);
+                            }
+                            moveScalarToGroup(scalar, *source, group);
                         }
                     }
                 }

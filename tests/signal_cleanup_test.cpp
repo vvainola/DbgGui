@@ -48,83 +48,22 @@ std::unique_ptr<Scalar> makeScalar(std::string const& name, std::string const& g
 
 } // namespace
 
-TEST_CASE("Moving vector components to an earlier group replaces every custom window scalar") {
-    auto old_x = makeScalar("x", "z");
-    auto old_y = makeScalar("y", "z");
-    auto new_x = makeScalar("x", "a");
-    auto new_y = makeScalar("y", "a");
-    auto unchanged = makeScalar("other", "m");
-    double value = 12;
-    new_x->src = &value;
-    new_y->src = &value;
-    unchanged->src = &value;
-    old_x->deleted = true;
-    old_y->deleted = true;
-    old_x->replacement = new_x.get();
-    old_y->replacement = new_y.get();
-
-    CustomWindow window("Signals", 1);
-    window.addScalar(old_x.get());
-    window.addScalar(old_y.get());
-    window.addScalar(unchanged.get());
-    replaceDeletedScalarsInCustomWindow(window);
-    REQUIRE(window.scalars == std::vector<Scalar*>{new_x.get(), new_y.get(), unchanged.get()});
-
-    // End-of-frame cleanup frees the moved scalars before the next render.
-    old_x.reset();
-    old_y.reset();
-    for (Scalar* scalar : window.scalars) {
-        CHECK(scalar->getValue() == value);
-    }
-    replaceDeletedScalarsInCustomWindow(window);
-    CHECK(window.scalars.size() == 3);
-}
-
-TEST_CASE("Custom window cleanup deduplicates replacements and removes deleted replacements") {
-    auto old_x = makeScalar("x", "a");
-    auto old_y = makeScalar("y", "a");
-    auto new_x = makeScalar("x", "z");
-    auto new_y = makeScalar("y", "z");
-    old_x->deleted = true;
-    old_y->deleted = true;
-    new_y->deleted = true;
-    old_x->replacement = new_x.get();
-    old_y->replacement = new_y.get();
-
-    CustomWindow window("Signals", 1);
-    window.addScalar(old_x.get());
-    window.addScalar(old_y.get());
-    window.addScalar(new_x.get());
-    replaceDeletedScalarsInCustomWindow(window);
-    REQUIRE(window.scalars == std::vector<Scalar*>{new_x.get()});
-}
-
-TEST_CASE("Vector subplot cleanup replaces components and deduplicates pairs") {
-    auto old_x = makeScalar("old x", "group");
+TEST_CASE("Vector subplot cleanup removes pairs with either deleted component") {
     auto x = makeScalar("x", "group");
     auto y = makeScalar("y", "group");
     PlotWindow::Subplot subplot;
-    subplot.addVector({old_x.get(), y.get()});
     subplot.addVector({x.get(), y.get()});
-    subplot.reference_frame_vector = VectorPair{old_x.get(), y.get()};
-    old_x->deleted = true;
-    old_x->replacement = x.get();
-
-    replaceDeletedVectorComponents(subplot);
-
+    subplot.reference_frame_vector = subplot.vectors[0];
+    removeDeletedVectorComponents(subplot);
     REQUIRE(subplot.vectors.size() == 1);
-    REQUIRE(subplot.vectors[0].x == x.get());
-    REQUIRE(subplot.vectors[0].y == y.get());
     REQUIRE(subplot.reference_frame_vector == subplot.vectors[0]);
-
-    SECTION("Deleting a component removes the pair and reference") {
+    SECTION("X is deleted") {
+        x->deleted = true;
+    }
+    SECTION("Y is deleted") {
         y->deleted = true;
     }
-    SECTION("A deleted replacement cannot remain in the subplot") {
-        y->deleted = true;
-        y->replacement = old_x.get();
-    }
-    replaceDeletedVectorComponents(subplot);
+    removeDeletedVectorComponents(subplot);
     REQUIRE(subplot.vectors.empty());
     REQUIRE_FALSE(subplot.reference_frame_vector.has_value());
 }
@@ -156,7 +95,7 @@ TEST_CASE("Shrinking a subplot grid preserves vector pairs without changing the 
     REQUIRE(plot.subplots[0].reference_frame_vector == expected_reference);
 }
 
-TEST_CASE("Spectrum subplot cleanup replaces each component independently") {
+TEST_CASE("Spectrum subplot cleanup removes spectra with deleted components") {
     auto old_real = makeScalar("old real", "group");
     auto real = makeScalar("real", "group");
     auto imag = makeScalar("imag", "group");
@@ -165,13 +104,12 @@ TEST_CASE("Spectrum subplot cleanup replaces each component independently") {
     subplot.addSpectrum(real.get(), imag.get());
     subplot.addSpectrum(real.get());
     old_real->deleted = true;
-    old_real->replacement = real.get();
-    replaceDeletedSpectrumComponents(subplot);
+    removeDeletedSpectrumComponents(subplot);
     REQUIRE(subplot.spectrums.size() == 2);
     REQUIRE(subplot.spectrums[0].real == real.get());
     REQUIRE(subplot.spectrums[0].imag == imag.get());
     imag->deleted = true;
-    replaceDeletedSpectrumComponents(subplot);
+    removeDeletedSpectrumComponents(subplot);
     REQUIRE(subplot.spectrums.size() == 1);
     REQUIRE(subplot.spectrums[0].real == real.get());
     REQUIRE(subplot.spectrums[0].imag == nullptr);
@@ -204,20 +142,4 @@ TEST_CASE("Spectrum subplot settings round trip and grid shrinking preserves spe
     REQUIRE(plot.subplots[0].spectrums[0].imag == nullptr);
     plot.clearSignals();
     REQUIRE(plot.subplots[0].spectrums.empty());
-}
-
-TEST_CASE("Scalar subplot cleanup replaces and deduplicates registered components") {
-    auto old = makeScalar("old", "group");
-    auto live = makeScalar("live", "group");
-    auto deleted = makeScalar("deleted", "group");
-    PlotWindow::Subplot subplot;
-    subplot.addScalar(old.get());
-    subplot.addScalar(live.get());
-    subplot.addScalar(deleted.get());
-    old->deleted = true;
-    old->replacement = live.get();
-    deleted->deleted = true;
-    replaceDeletedScalarsInSubplot(subplot);
-    REQUIRE(subplot.scalars.size() == 1);
-    REQUIRE(subplot.scalars[0] == live.get());
 }

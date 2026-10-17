@@ -221,4 +221,66 @@ inline void reconcileSpectra(PlotWindow::Subplot const& subplot,
     saved_subplot["spectrums"] = std::move(spectra);
 }
 
+// A group move changes the scalar ID. Update saved references too, including
+// unresolved pairs that cannot be rebuilt from runtime placements when saving.
+inline void remapScalarId(nlohmann::json& settings, uint64_t old_id,
+                          std::string const& old_group, Scalar const& scalar) {
+    uint64_t const new_id = scalar.id;
+    std::string const old_name = scalar.name + " (" + old_group + ")";
+    std::string const old_custom_key = old_group + " " + scalar.name;
+    // Only placement fields contain signal IDs; window IDs and axis settings
+    // must not be changed even if their numeric values happen to match.
+    auto remap_ids = [&](auto&& self, nlohmann::json& ids) -> void {
+        if (ids.is_array() || ids.is_object()) {
+            for (auto& id : ids) {
+                self(self, id);
+            }
+        } else if ((ids.is_number_unsigned() || ids.is_number_integer()) && ids.get<uint64_t>() == old_id) {
+            ids = new_id;
+        }
+    };
+    auto remap_signals = [&](nlohmann::json& owner, std::string const& old_key, std::string const& new_key) {
+        if (!owner.contains("signals")) {
+            return;
+        }
+        auto& signals = owner["signals"];
+        remap_ids(remap_ids, signals);
+        if (signals.is_object() && signals.contains(old_key)) {
+            signals[new_key] = new_id;
+            signals.erase(old_key);
+        }
+    };
+    for (auto& plot : settings["scalar_plots"]) {
+        remap_signals(plot, old_name, scalar.name_and_group);
+        if (!plot.contains("subplots")) {
+            continue;
+        }
+        for (auto& subplot : plot["subplots"]) {
+            remap_signals(subplot, old_name, scalar.name_and_group);
+            for (auto key : {"vectors", "spectrums", "reference_frame"}) {
+                if (subplot.contains(key)) {
+                    remap_ids(remap_ids, subplot[key]);
+                }
+            }
+        }
+    }
+    for (auto& window : settings["custom_windows"]) {
+        remap_signals(window, old_custom_key, scalar.group + " " + scalar.name);
+    }
+    for (auto& window : settings["grid_windows"]) {
+        remap_ids(remap_ids, window["signals"]);
+    }
+    for (auto key : {"scalars", "scalar_symbols"}) {
+        auto& entries = settings[key];
+        if (entries.contains(old_name)) {
+            entries[scalar.name_and_group] = std::move(entries[old_name]);
+            entries.erase(old_name);
+        }
+    }
+    scalar.updateJson(settings["scalars"][scalar.name_and_group]);
+    auto& symbol = settings["scalar_symbols"][scalar.name_and_group];
+    symbol["name"] = scalar.name;
+    symbol["group"] = scalar.group;
+}
+
 } // namespace plot_settings

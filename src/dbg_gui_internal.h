@@ -100,12 +100,12 @@ class DbgGui {
                         double scale = 1.0,
                         double offset = 0.0);
     VectorPair addVector(ValueSource const& x,
-                        ValueSource const& y,
-                        std::string group,
-                        std::string const& name_x,
-                        std::string const& name_y,
-                        double scale = 1.0,
-                        double offset = 0.0);
+                         ValueSource const& y,
+                         std::string group,
+                         std::string const& name_x,
+                         std::string const& name_y,
+                         double scale = 1.0,
+                         double offset = 0.0);
     void logMessage(std::string message, MessageType type = MessageType::Error);
 
   private:
@@ -145,8 +145,11 @@ class DbgGui {
     void renderVectorSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
                              std::pair<int32_t, int32_t> time_idx);
-    void renderSpectrumSubplot(PlotWindow::Subplot& subplot, int subplot_idx,
-                               double time_range, SpectrumWindow window, bool logarithmic_y_axis);
+    void renderSpectrumSubplot(PlotWindow::Subplot& subplot,
+                               int subplot_idx,
+                               double time_range,
+                               SpectrumWindow window,
+                               bool logarithmic_y_axis);
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
@@ -195,6 +198,9 @@ class DbgGui {
                                 std::string const& name,
                                 std::string const& scale,
                                 std::string const& offset);
+    void moveScalarToGroup(Scalar* scalar,
+                           SignalGroup<Scalar>& source,
+                           SignalGroup<Scalar>& destination);
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
     Scalar* findScalarByName(std::string_view name);
 

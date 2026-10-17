@@ -153,3 +153,50 @@ TEST_CASE("Scalar settings reconciliation rebuilds placements and keeps unresolv
     plot_settings::reconcileScalars(subplot, saved, scalars);
     REQUIRE(saved["signals"] == nlohmann::json({{"pending", 99}}));
 }
+
+TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved components") {
+    Scalar scalar;
+    scalar.name = "x";
+    scalar.group = "new";
+    scalar.alias = "Alias";
+    scalar.id = 2;
+    scalar.updateDisplayNames();
+    nlohmann::json settings;
+    settings["scalar_plots"]["plot"] = {
+        {"id", 1}, {"x_range", 1},
+        {"subplots", nlohmann::json::array({{
+            {"signals", {{"x (old)", 1}, {"pending", 99}}},
+            {"vectors", {{1, 99}, {99, 1}}},
+            {"spectrums", {{1, 0}, {99, 1}}},
+            {"reference_frame", {1, 99}}
+        }})}
+    };
+    settings["scalar_plots"]["legacy"] = {{"signals", {1, 99}}};
+    settings["custom_windows"]["custom"] = {{"signals", {{"old x", 1}, {"pending", 99}}}};
+    settings["grid_windows"]["grid"] = {{"id", 1}, {"rows", 1}, {"signals", {1, 99, 0}}};
+    settings["scalars"]["x (old)"] = {{"alias", "Alias"}};
+    settings["scalar_symbols"]["x (old)"] = {{"name", "x"}, {"group", "old"}};
+
+    plot_settings::remapScalarId(settings, 1, "old", scalar);
+
+    auto const& plot = settings["scalar_plots"]["plot"];
+    auto const& subplot = plot["subplots"][0];
+    REQUIRE(plot["id"] == 1);
+    REQUIRE(plot["x_range"] == 1);
+    REQUIRE_FALSE(plot.contains("signals"));
+    REQUIRE(subplot["signals"] == nlohmann::json({{"x (new)", 2}, {"pending", 99}}));
+    REQUIRE(subplot["vectors"] == nlohmann::json::array({{2, 99}, {99, 2}}));
+    REQUIRE(subplot["spectrums"] == nlohmann::json::array({{2, 0}, {99, 2}}));
+    REQUIRE(subplot["reference_frame"] == nlohmann::json::array({2, 99}));
+    REQUIRE(settings["scalar_plots"]["legacy"]["signals"] == nlohmann::json::array({2, 99}));
+    REQUIRE_FALSE(settings["scalar_plots"]["legacy"].contains("subplots"));
+    REQUIRE(settings["custom_windows"]["custom"]["signals"] == nlohmann::json({{"new x", 2}, {"pending", 99}}));
+    REQUIRE(settings["grid_windows"]["grid"]["signals"] == nlohmann::json::array({2, 99, 0}));
+    REQUIRE(settings["grid_windows"]["grid"]["id"] == 1);
+    REQUIRE(settings["grid_windows"]["grid"]["rows"] == 1);
+    REQUIRE_FALSE(settings["scalars"].contains("x (old)"));
+    REQUIRE(settings["scalars"]["x (new)"]["id"] == 2);
+    REQUIRE(settings["scalars"]["x (new)"]["alias"] == "Alias");
+    REQUIRE_FALSE(settings["scalar_symbols"].contains("x (old)"));
+    REQUIRE(settings["scalar_symbols"]["x (new)"]["group"] == "new");
+}

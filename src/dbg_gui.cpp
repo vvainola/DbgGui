@@ -860,10 +860,10 @@ void DbgGui::updateSavedSettings() {
         // New settings write signal placement only under subplots.
         j.erase("signals");
         for (int subplot_idx = 0; subplot_idx < plot_window.subplotCount(); ++subplot_idx) {
-            replaceDeletedVectorComponents(plot_window.subplots[subplot_idx]);
+            removeDeletedVectorComponents(plot_window.subplots[subplot_idx]);
             auto& subplot = plot_window.subplots[subplot_idx];
-            replaceDeletedSpectrumComponents(subplot);
-            replaceDeletedScalarsInSubplot(subplot);
+            removeDeletedSpectrumComponents(subplot);
+            std::erase_if(subplot.scalars, [](Scalar* scalar) { return !isLiveScalar(scalar); });
             auto& saved_subplot = j["subplots"][subplot_idx];
             plot_settings::reconcileVectors(subplot, saved_subplot, m_scalars);
             plot_settings::reconcileSpectra(subplot, saved_subplot, m_scalars);
@@ -886,7 +886,7 @@ void DbgGui::updateSavedSettings() {
                 j["signals"].erase(scalar->group + " " + scalar->name);
             }
         }
-        replaceDeletedScalarsInCustomWindow(custom_window);
+        std::erase_if(custom_window.scalars, [](Scalar* scalar) { return !isLiveScalar(scalar); });
         for (Scalar* scalar : custom_window.scalars) {
             // use group first in key so that the signals are sorted alphabetically by group
             j["signals"][scalar->group + " " + scalar->name] = scalar->id;
@@ -1195,9 +1195,43 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
     }
 
     added_group->signals.push_back(new_scalar.get());
-    // Sort items within the inserted group
     std::sort(added_group->signals.begin(), added_group->signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
     return new_scalar.get();
+}
+
+void DbgGui::moveScalarToGroup(Scalar* scalar, SignalGroup<Scalar>& source, SignalGroup<Scalar>& destination) {
+    if (&source == &destination) {
+        return;
+    }
+    uint64_t const new_id = signalId(scalar->name, destination.full_name);
+    if (findScalar(m_scalars, new_id)) {
+        return;
+    }
+    std::scoped_lock lock(m_sampling_mutex);
+    uint64_t const old_id = scalar->id;
+    std::string const old_group = scalar->group;
+    // Remove browser membership before changing the group. The scalar itself
+    // stays alive, so sampled data and pointer-based placements remain valid.
+    remove(source.signals, scalar);
+    scalar->group = destination.full_name;
+    scalar->id = new_id;
+    scalar->updateDisplayNames();
+    destination.signals.push_back(scalar);
+    std::sort(destination.signals.begin(), destination.signals.end(), [](Scalar* a, Scalar* b) { return a->name < b->name; });
+
+    plot_settings::remapScalarId(m_settings, old_id, old_group, *scalar);
+    for (auto& window : m_custom_windows) {
+        window.sortSignals();
+    }
+    for (auto& window : m_grid_windows) {
+        for (auto& row : window.scalars) {
+            for (auto& id : row) {
+                if (id == old_id) {
+                    id = new_id;
+                }
+            }
+        }
+    }
 }
 
 VectorPair DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {

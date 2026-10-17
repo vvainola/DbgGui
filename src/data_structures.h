@@ -133,7 +133,6 @@ struct Scalar {
     ValueSource src;
     bool read_only = false;
     bool deleted = false;
-    Scalar* replacement = nullptr;
 
     void updateDisplayNames() {
         name_and_group = name + " (" + group + ")";
@@ -559,7 +558,6 @@ struct CustomWindow : Window {
         }
     }
 
-  private:
     void sortSignals() {
         std::sort(scalars.begin(), scalars.end(), [](Scalar* l, Scalar* r) {
             if (l->group == r->group) {
