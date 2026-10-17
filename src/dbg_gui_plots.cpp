@@ -62,6 +62,11 @@ void addScalarAliasInput(Scalar& scalar) {
 }
 
 namespace {
+struct VectorSubplotDragDropPayload {
+    PlotWindow::Subplot* subplot;
+    VectorPair vector;
+};
+
 template <typename Plots, typename Render>
 void renderPlotWindows(Plots& plots, double timestamp, Render render) {
     for (auto& plot : plots) {
@@ -175,7 +180,7 @@ void DbgGui::showScalarPlots() {
             if (ImGui::InputInt("Columns", &cols)) {
                 scalar_plot.setSubplotGrid(scalar_plot.rows(), cols);
             }
-            float type_width = std::max(ImGui::CalcTextSize("Scalar").x, ImGui::CalcTextSize("Vector").x)
+            float type_width = std::max({ImGui::CalcTextSize("Scalar").x, ImGui::CalcTextSize("Vector").x, ImGui::CalcTextSize("Spectrum").x})
                              + ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().FramePadding.x;
             if (ImGui::BeginTable("##SubplotTypes", scalar_plot.cols(), ImGuiTableFlags_Borders)) {
                 for (int row = 0; row < scalar_plot.rows(); ++row) {
@@ -186,14 +191,24 @@ void DbgGui::showScalarPlots() {
                         auto& subplot = scalar_plot.subplots[index];
                         std::string id = std::format("##Type{}", index);
                         ImGui::SetNextItemWidth(type_width);
-                        if (ImGui::BeginCombo(id.c_str(), subplot.type == PlotType::Vector ? "Vector" : "Scalar")) {
+                        if (ImGui::BeginCombo(id.c_str(), subplot.type == PlotType::Vector ? "Vector" : subplot.type == PlotType::Spectrum ? "Spectrum" :
+                                                                                                                                             "Scalar")) {
                             if (ImGui::Selectable("Scalar", subplot.type == PlotType::Scalar)) {
                                 subplot.type = PlotType::Scalar;
                             }
                             if (ImGui::Selectable("Vector", subplot.type == PlotType::Vector)) {
                                 subplot.type = PlotType::Vector;
                             }
+                            if (ImGui::Selectable("Spectrum", subplot.type == PlotType::Spectrum)) {
+                                subplot.type = PlotType::Spectrum;
+                            }
                             ImGui::EndCombo();
+                        }
+                        ImGui::SameLine();
+                        std::string autofit_id = std::format("##Autofit{}", index);
+                        ImGui::Checkbox(autofit_id.c_str(), &subplot.autofit_y);
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("Autofit");
                         }
                     }
                 }
@@ -207,6 +222,21 @@ void DbgGui::showScalarPlots() {
                 if (ImGui::SliderFloat("Vector time range", &time_range_ms, 0, 100, "%.0f ms")) {
                     scalar_plot.vector_time_range = time_range_ms * 1e-3f;
                 }
+            }
+            bool has_spectrums = std::ranges::any_of(scalar_plot.subplots, [](auto const& subplot) {
+                return subplot.type == PlotType::Spectrum;
+            });
+            if (has_spectrums) {
+                ImGui::Checkbox("Spectrum logarithmic Y-axis", &scalar_plot.spectrum.logarithmic_y_axis);
+                double time_range_ms = scalar_plot.spectrum.time_range * 1e3;
+                double min = 1, max = 10000;
+                if (ImGui::SliderScalar("Spectrum time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms")) {
+                    scalar_plot.spectrum.time_range = time_range_ms * 1e-3;
+                }
+                ImGui::InputDouble("Bin Threshold [%]", &m_options.spectrum_plot_threshold, 0, 0, "%.3f");
+                ImGui::SameLine();
+                HelpMarker("Minimum bin magnitude as a percentage of the largest bin. Zero includes all bins.");
+                ImGui::Combo("FFT window", reinterpret_cast<int*>(&scalar_plot.spectrum.window), "None\0Hann\0Hamming\0Flat top\0\0");
             }
             ImGui::EndPopup();
         }
@@ -261,23 +291,32 @@ void DbgGui::showScalarPlots() {
         bool fit_x_to_latest = running || (scalar_plot.last_frame_timestamp < m_plot_timestamp);
         renderPlotGrid(scalar_plot.rows(), scalar_plot.cols(), "##ScalarSubplots", [&](int subplot_idx) {
             auto& subplot = scalar_plot.subplots[subplot_idx];
-            if (subplot.type == PlotType::Vector) {
-                double last_sample_time = m_linked_scalar_x_axis_limits.max;
-                double first_sample_time = MAX(last_sample_time - scalar_plot.vector_time_range, m_linked_scalar_x_axis_limits.min);
-                auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
-                renderVectorSubplot(subplot, subplot_idx, time_idx);
-                return;
+            switch (subplot.type) {
+                case PlotType::Vector: {
+                    double last_sample_time = m_linked_scalar_x_axis_limits.max;
+                    double first_sample_time = MAX(last_sample_time - scalar_plot.vector_time_range, m_linked_scalar_x_axis_limits.min);
+                    auto time_idx = m_sampler.getTimeIndices(first_sample_time, last_sample_time);
+                    renderVectorSubplot(subplot, subplot_idx, time_idx);
+                    break;
+                }
+                case PlotType::Spectrum: {
+                    renderSpectrumSubplot(subplot, subplot_idx, scalar_plot.spectrum.time_range, scalar_plot.spectrum.window, scalar_plot.spectrum.logarithmic_y_axis);
+                    break;
+                }
+                case PlotType::Scalar: {
+                    ImPlot::SetNextAxisLinks(ImAxis_X1, &x_limits.min, &x_limits.max);
+                    // Follow the latest samples while running; allow free movement while paused.
+                    if (fit_x_to_latest) {
+                        ImPlot::SetNextAxisLimits(ImAxis_X1, m_plot_timestamp - x_range, m_plot_timestamp, ImGuiCond_Always);
+                    } else if (time_range_changed) {
+                        double mid = 0.5 * (x_limits.max + x_limits.min);
+                        ImPlot::SetNextAxisLimits(ImAxis_X1, mid - x_range / 2.0, mid + x_range / 2.0, ImGuiCond_Always);
+                    }
+                    x_range = MAX(1e-6, x_range);
+                    renderScalarSubplot(subplot, subplot_idx, vertical_line_time, vertical_line_time_next);
+                    break;
+                }
             }
-            ImPlot::SetNextAxisLinks(ImAxis_X1, &x_limits.min, &x_limits.max);
-            // Follow the latest samples while running; allow free movement while paused.
-            if (fit_x_to_latest) {
-                ImPlot::SetNextAxisLimits(ImAxis_X1, m_plot_timestamp - x_range, m_plot_timestamp, ImGuiCond_Always);
-            } else if (time_range_changed) {
-                double mid = 0.5 * (x_limits.max + x_limits.min);
-                ImPlot::SetNextAxisLimits(ImAxis_X1, mid - x_range / 2.0, mid + x_range / 2.0, ImGuiCond_Always);
-            }
-            x_range = MAX(1e-6, x_range);
-            renderScalarSubplot(scalar_plot.subplots[subplot_idx], subplot_idx, vertical_line_time, vertical_line_time_next);
         });
         if (fit_x_to_latest) {
             scalar_plot.last_frame_timestamp = m_plot_timestamp;
@@ -507,10 +546,6 @@ void DbgGui::renderScalarSubplot(PlotWindow::Subplot& subplot,
 }
 
 void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, std::pair<int32_t, int32_t> time_idx) {
-    struct VectorSubplotDragDropPayload {
-        PlotWindow::Subplot* subplot;
-        VectorPair vector;
-    };
     if (ImGui::GetFrameCount() < 5) {
         ImPlot::SetNextAxesToFit();
     }
@@ -604,149 +639,141 @@ void DbgGui::renderVectorSubplot(PlotWindow::Subplot& subplot, int subplot_idx, 
     }
 }
 
-void DbgGui::showSpectrumPlots() {
-    renderPlotWindows(m_spectrum_plots, m_plot_timestamp, [&](SpectrumPlot& plot) {
-        double time_range_ms = plot.time_range * 1e3;
-        double min = 1;
-        double max = 10000;
-        ImGui::SetNextItemWidth(ImGui::CalcTextSize("10000 ms").x * 2);
-        ImGui::SliderScalar("Time range", ImGuiDataType_Double, &time_range_ms, &min, &max, "%.0f ms");
-        plot.time_range = time_range_ms * 1e-3;
-
-        ImGui::SameLine();
-        ImGui::Checkbox("Logarithmic y-axis", &plot.logarithmic_y_axis);
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::CalcTextSize(" 0.001 % ").x);
-        ImGui::InputDouble("Bin Threshold [%]", &m_options.spectrum_plot_threshold, 0, 0, "%.3f");
-        ImGui::SameLine();
-        HelpMarker("Minimum magnitude of spectral bins shown in percentage of the largest bin. Set to 0 to include all bins but then the double-click auto-zoom will always zoom out up to Nyquist frequency.");
-
-        ImGui::SameLine();
-        ImGui::PushItemWidth(80);
-        ImGui::Combo("Window", reinterpret_cast<int*>(&plot.window), "None\0Hann\0Hamming\0Flat top\0\0");
-
-        ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
-        if (ImPlot::BeginPlot("Spectrum", ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
-            // Connect link values
-            ImPlot::SetupAxisLinks(ImAxis_Y1, &plot.y_axis.min, &plot.y_axis.max);
-            ImPlot::SetupAxisLinks(ImAxis_X1, &plot.x_axis.min, &plot.x_axis.max);
-            if (plot.logarithmic_y_axis) {
-                ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-                // Limit y-axis minimum with log axis because auto-zoom will otherwise always zoom out min to 1e-300
-                if (plot.y_axis.min < LOG_AXIS_Y_MIN) {
-                    ImPlot::SetupAxisLimits(ImAxis_Y1, LOG_AXIS_Y_MIN, plot.y_axis.max, ImPlotCond_Always);
-                }
+void DbgGui::renderSpectrumSubplot(PlotWindow::Subplot& subplot,
+                                   int subplot_idx,
+                                   double time_range,
+                                   SpectrumWindow window,
+                                   bool logarithmic_y_axis) {
+    std::optional<VectorPair> spectrum_to_remove;
+    ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
+    if (ImPlot::BeginPlot(std::format("##Spectrum{}", subplot_idx).c_str(), ImVec2(-1, ImGui::GetContentRegionAvail().y))) {
+        ImPlot::SetupAxis(ImAxis_Y1, nullptr, subplot.autofit_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None);
+        // Connect link values
+        ImPlot::SetupAxisLinks(ImAxis_Y1, &subplot.spectrum_y_axis.min, &subplot.spectrum_y_axis.max);
+        ImPlot::SetupAxisLinks(ImAxis_X1, &subplot.spectrum_x_axis.min, &subplot.spectrum_x_axis.max);
+        if (logarithmic_y_axis) {
+            ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+            // Limit y-axis minimum with log axis because auto-zoom will otherwise always zoom out min to 1e-300
+            if (subplot.spectrum_y_axis.min < LOG_AXIS_Y_MIN) {
+                ImPlot::SetupAxisLimits(ImAxis_Y1, LOG_AXIS_Y_MIN, subplot.spectrum_y_axis.max, ImPlotCond_Always);
             }
+        }
 
-            for (auto& spec : plot.spectrums) {
-                std::string const label_id = std::format("{}###{}", spec.real->alias_and_group, spec.real->name_and_group);
-                ImPlot::PlotStems(label_id.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
-                // Legend right-click
-                if (ImPlot::BeginLegendPopup(label_id.c_str())) {
-                    addScalarAliasInput(*spec.real);
-                    if (ImGui::Button("Remove")) {
-                        plot.removeFromPlot(spec.real);
-                    };
-                    ImPlot::EndLegendPopup();
-                }
+        for (auto& spec : subplot.spectrums) {
+            std::string const label_id = std::format("{}###Spectrum{}:{}", spec.real->alias_and_group, spec.real->id, spec.imag ? spec.imag->id : 0);
+            ImPlot::PlotStems(label_id.c_str(), spec.data.freq.data(), spec.data.mag.data(), int(spec.data.mag.size()));
+            // Legend right-click
+            if (ImPlot::BeginLegendPopup(label_id.c_str())) {
+                addScalarAliasInput(*spec.real);
+                if (ImGui::Button("Remove")) {
+                    spectrum_to_remove = VectorPair{spec.real, spec.imag};
+                };
+                ImPlot::EndLegendPopup();
             }
+        }
 
-            if (ImPlot::BeginDragDropTargetPlot()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
-                    std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                            payload->DataSize / sizeof(uint64_t));
-                    for (uint64_t id : ids) {
-                        Scalar* scalar = findScalar(m_scalars, id);
-                        if (scalar) {
-                            m_sampler.startSampling(scalar);
-                            plot.addToPlot(scalar, nullptr);
-                        }
-                    }
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
-                    std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
-                                                      payload->DataSize / sizeof(VariantSymbol*));
-                    for (VariantSymbol* symbol : symbols) {
-                        Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+        if (ImPlot::BeginDragDropTargetPlot()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SUBPLOT_VECTOR")) {
+                auto const& dragged = *static_cast<VectorSubplotDragDropPayload const*>(payload->Data);
+                m_sampler.startSampling(dragged.vector);
+                subplot.addSpectrum(dragged.vector.x, dragged.vector.y);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
+                                        payload->DataSize / sizeof(uint64_t));
+                for (uint64_t id : ids) {
+                    Scalar* scalar = findScalar(m_scalars, id);
+                    if (scalar) {
                         m_sampler.startSampling(scalar);
-                        plot.addToPlot(scalar, nullptr);
-                    }
-                }
-                ImPlot::EndDragDropTarget();
-            }
-
-            if (ImPlot::IsPlotHovered()) {
-                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
-                for (int i = 0; i < plot.spectrums.size(); ++i) {
-                    auto& spec = plot.spectrums[i];
-                    int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
-                    if (idx != -1) {
-                        ImVec4 color = ImPlot::GetColormapColor(i);
-                        ImPlot::PushStyleColor(ImPlotCol_Line, color);
-                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, IMPLOT_AUTO, color, IMPLOT_AUTO, color);
-                        ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
-                        ImPlot::PopStyleColor();
-                        ImGui::BeginTooltip();
-                        ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
-                        ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
-                        ImGui::EndTooltip();
+                        subplot.addSpectrum(scalar, nullptr);
                     }
                 }
             }
-
-            ImPlot::EndPlot();
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+                std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
+                                                  payload->DataSize / sizeof(VariantSymbol*));
+                for (VariantSymbol* symbol : symbols) {
+                    Scalar* scalar = addScalarSymbol(symbol, m_group_to_add_symbols);
+                    m_sampler.startSampling(scalar);
+                    subplot.addSpectrum(scalar, nullptr);
+                }
+            }
+            ImPlot::EndDragDropTarget();
         }
-        ImPlot::PopStyleVar();
 
-        for (auto& spec : plot.spectrums) {
-            bool one_sided = spec.imag == nullptr;
-            auto time_idx = m_sampler.getTimeIndices(m_plot_timestamp - plot.time_range, m_plot_timestamp);
-            if (spec.calculation.valid() && spec.calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                spec.data = spec.calculation.get();
-            } else if (!one_sided && !spec.calculation.valid()) {
-                DecimatedValues samples_x = m_sampler.getValuesInRange(spec.real,
-                                                                       time_idx,
-                                                                       ALL_SAMPLES,
-                                                                       spec.real->getScale(),
-                                                                       spec.real->getOffset());
-                DecimatedValues samples_y = m_sampler.getValuesInRange(spec.imag,
-                                                                       time_idx,
-                                                                       ALL_SAMPLES,
-                                                                       spec.imag->getScale(),
-                                                                       spec.imag->getOffset());
-                std::vector<std::complex<double>> samples = collectFftSamples(samples_x.x,
-                                                                              samples_x.y_min,
-                                                                              samples_y.y_min,
-                                                                              m_sampling_time);
-                spec.calculation = std::async(std::launch::async,
-                                              calculateSpectrum,
-                                              samples,
-                                              m_sampling_time,
-                                              plot.window,
-                                              one_sided,
-                                              m_options.spectrum_plot_threshold / 100.0);
-            } else if (one_sided && !spec.calculation.valid()) {
-                DecimatedValues values = m_sampler.getValuesInRange(spec.real,
-                                                                    time_idx,
-                                                                    ALL_SAMPLES,
-                                                                    spec.real->getScale(),
-                                                                    spec.real->getOffset());
-                std::vector<double> zeros(values.x.size(), 0);
-                std::vector<std::complex<double>> samples = collectFftSamples(values.x,
-                                                                              values.y_min,
-                                                                              zeros,
-                                                                              m_sampling_time);
-                spec.calculation = std::async(std::launch::async,
-                                              calculateSpectrum,
-                                              samples,
-                                              m_sampling_time,
-                                              plot.window,
-                                              one_sided,
-                                              m_options.spectrum_plot_threshold / 100.0);
+        if (ImPlot::IsPlotHovered()) {
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+            for (int i = 0; i < subplot.spectrums.size(); ++i) {
+                auto& spec = subplot.spectrums[i];
+                int idx = closestSpectralBin(spec.data.freq, spec.data.mag, mouse.x, mouse.y);
+                if (idx != -1) {
+                    ImVec4 color = ImPlot::GetColormapColor(i);
+                    ImPlot::PushStyleColor(ImPlotCol_Line, color);
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, IMPLOT_AUTO, color, IMPLOT_AUTO, color);
+                    ImPlot::PlotStems("", &spec.data.freq[idx], &spec.data.mag[idx], 1);
+                    ImPlot::PopStyleColor();
+                    ImGui::BeginTooltip();
+                    ImGui::TextColored(color, "%s", std::format("{} x : {:10f}", spec.real->alias, spec.data.freq[idx]).c_str());
+                    ImGui::TextColored(color, "%s", std::format("{} y : {:10f}", spec.real->alias, spec.data.mag[idx]).c_str());
+                    ImGui::EndTooltip();
+                }
             }
         }
-    });
+
+        ImPlot::EndPlot();
+    }
+    ImPlot::PopStyleVar();
+    if (spectrum_to_remove) {
+        subplot.removeSpectrum(spectrum_to_remove->x, spectrum_to_remove->y);
+    }
+
+    for (auto& spec : subplot.spectrums) {
+        bool one_sided = spec.imag == nullptr;
+        auto time_idx = m_sampler.getTimeIndices(m_plot_timestamp - time_range, m_plot_timestamp);
+        if (spec.calculation.valid() && spec.calculation.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            spec.data = spec.calculation.get();
+        } else if (!one_sided && !spec.calculation.valid()) {
+            DecimatedValues samples_x = m_sampler.getValuesInRange(spec.real,
+                                                                   time_idx,
+                                                                   ALL_SAMPLES,
+                                                                   spec.real->getScale(),
+                                                                   spec.real->getOffset());
+            DecimatedValues samples_y = m_sampler.getValuesInRange(spec.imag,
+                                                                   time_idx,
+                                                                   ALL_SAMPLES,
+                                                                   spec.imag->getScale(),
+                                                                   spec.imag->getOffset());
+            std::vector<std::complex<double>> samples = collectFftSamples(samples_x.x,
+                                                                          samples_x.y_min,
+                                                                          samples_y.y_min,
+                                                                          m_sampling_time);
+            spec.calculation = std::async(std::launch::async,
+                                          calculateSpectrum,
+                                          samples,
+                                          m_sampling_time,
+                                          window,
+                                          one_sided,
+                                          m_options.spectrum_plot_threshold / 100.0);
+        } else if (one_sided && !spec.calculation.valid()) {
+            DecimatedValues values = m_sampler.getValuesInRange(spec.real,
+                                                                time_idx,
+                                                                ALL_SAMPLES,
+                                                                spec.real->getScale(),
+                                                                spec.real->getOffset());
+            std::vector<double> zeros(values.x.size(), 0);
+            std::vector<std::complex<double>> samples = collectFftSamples(values.x,
+                                                                          values.y_min,
+                                                                          zeros,
+                                                                          m_sampling_time);
+            spec.calculation = std::async(std::launch::async,
+                                          calculateSpectrum,
+                                          samples,
+                                          m_sampling_time,
+                                          window,
+                                          one_sided,
+                                          m_options.spectrum_plot_threshold / 100.0);
+        }
+    }
 }
 
 SampleClipboardData DbgGui::collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits) {

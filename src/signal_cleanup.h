@@ -76,6 +76,35 @@ inline void replaceDeletedVectorComponents(PlotWindow::Subplot& subplot) {
     }
 }
 
+inline void replaceDeletedSpectrumComponents(PlotWindow::Subplot& subplot) {
+    bool needs_cleanup = std::ranges::any_of(subplot.spectrums, [](auto const& spec) {
+        return !isLiveScalar(spec.real) || (spec.imag && !isLiveScalar(spec.imag));
+    });
+    if (!needs_cleanup) {
+        return;
+    }
+    auto old_spectrums = std::move(subplot.spectrums);
+    subplot.spectrums.clear();
+    for (auto& spec : old_spectrums) {
+        Scalar* real = spec.real->deleted ? spec.real->replacement : spec.real;
+        Scalar* imag = spec.imag && spec.imag->deleted ? spec.imag->replacement : spec.imag;
+        if (!isLiveScalar(real) || (spec.imag && !isLiveScalar(imag))) {
+            continue;
+        }
+        bool exists = std::ranges::any_of(subplot.spectrums, [=](auto const& current) {
+            return current.real == real && current.imag == imag;
+        });
+        if (exists) {
+            continue;
+        }
+        if (real == spec.real && imag == spec.imag) {
+            subplot.spectrums.push_back(std::move(spec));
+        } else {
+            subplot.addSpectrum(real, imag);
+        }
+    }
+}
+
 inline void replaceDeletedScalarsInCustomWindow(CustomWindow& window) {
     std::vector<Scalar*> replacements;
     for (Scalar* scalar : window.scalars) {

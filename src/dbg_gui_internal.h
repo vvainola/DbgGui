@@ -59,7 +59,6 @@ inline constexpr int32_t MAX_FONT_SIZE = 100;
 
 namespace str {
 inline constexpr const char* ADD_PLOT = "Add plot";
-inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
@@ -146,7 +145,8 @@ class DbgGui {
     void renderVectorSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
                              std::pair<int32_t, int32_t> time_idx);
-    void showSpectrumPlots();
+    void renderSpectrumSubplot(PlotWindow::Subplot& subplot, int subplot_idx,
+                               double time_range, SpectrumWindow window, bool logarithmic_y_axis);
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
@@ -230,7 +230,6 @@ class DbgGui {
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_scalar_plots;
-    std::vector<SpectrumPlot> m_spectrum_plots;
     std::vector<DockSpace> m_dockspaces;
     std::vector<PauseTrigger> m_pause_triggers;
     struct {

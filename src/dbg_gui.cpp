@@ -79,7 +79,6 @@ void loadImguiLayout(std::string layout) {
 std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                                            nlohmann::json& settings,
                                            std::vector<PlotWindow>& scalar_plots,
-                                           std::vector<SpectrumPlot>& spectrum_plots,
                                            std::vector<std::unique_ptr<Scalar>> const& scalars,
                                            std::vector<CustomWindow>& custom_windows) {
     std::vector<Scalar*> scalars_to_sample;
@@ -140,6 +139,22 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                         }
                     });
                 }
+                if (subplot_idx < plot->subplotCount() && subplot_data.contains("spectrums")) {
+                    forEachVectorPair(subplot_data["spectrums"], [&](uint64_t real_id, uint64_t imag_id) {
+                        if (scalar->id != real_id && scalar->id != imag_id) {
+                            return;
+                        }
+                        Scalar* real = findScalar(scalars, real_id);
+                        Scalar* imag = imag_id == 0 ? nullptr : findScalar(scalars, imag_id);
+                        if (real && (imag_id == 0 || imag)) {
+                            plot->subplots[subplot_idx].addSpectrum(real, imag);
+                            start_sampling(real);
+                            if (imag) {
+                                start_sampling(imag);
+                            }
+                        }
+                    });
+                }
                 ++subplot_idx;
             }
         } else if (scalar_plot_data.contains("signals")) {
@@ -149,42 +164,6 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
                     start_sampling(scalar);
                 }
             });
-        }
-    })
-
-    // Restore spectra whose scalar components were registered after settings
-    // were loaded. Complex spectra wait until both components are available.
-    TRY(for (auto const& spectrum_plot_data : settings["spec_plots"]) {
-        SpectrumPlot* plot = nullptr;
-        for (SpectrumPlot& spectrum_plot : spectrum_plots) {
-            if (spectrum_plot.id == spectrum_plot_data["id"]) {
-                plot = &spectrum_plot;
-                break;
-            }
-        }
-        if (plot == nullptr || !spectrum_plot_data.contains("signals")) {
-            continue;
-        }
-        for (auto const& xy : spectrum_plot_data["signals"]) {
-            if (!xy.is_array() || xy.size() != 2
-                || (!xy[0].is_number_unsigned() && !xy[0].is_number_integer())
-                || (!xy[1].is_number_unsigned() && !xy[1].is_number_integer())) {
-                continue;
-            }
-            uint64_t const real_id = xy[0].get<uint64_t>();
-            uint64_t const imag_id = xy[1].get<uint64_t>();
-            if (scalar->id != real_id && scalar->id != imag_id) {
-                continue;
-            }
-            Scalar* real = findScalar(scalars, real_id);
-            Scalar* imag = imag_id == 0 ? nullptr : findScalar(scalars, imag_id);
-            if (real != nullptr && (imag_id == 0 || imag != nullptr)) {
-                plot->addToPlot(real, imag);
-                start_sampling(real);
-                if (imag != nullptr) {
-                    start_sampling(imag);
-                }
-            }
         }
     })
 
@@ -390,7 +369,6 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"pause-after", "Pause after", "Open the pause-after-time dialog.", ImGuiKey_KeypadDivide, [&] { ImGui::OpenPopup(str::PAUSE_AFTER); }},
       {"pause-at", "Pause at", "Open the pause-at-time dialog.", ImGuiKey_KeypadMultiply, [&] { ImGui::OpenPopup(str::PAUSE_AT); }},
       {"add-plot", "Add plot", "Open the add-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1, [&] { ImGui::OpenPopup(str::ADD_PLOT); }},
-      {"add-spectrum-plot", "Add spectrum plot", "Open the add-spectrum-plot dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3, [&] { ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT); }},
       {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
       {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
       {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
@@ -508,7 +486,6 @@ void DbgGui::updateLoop() {
         triggerCommandHotkeys("Command Palette", commands, m_hotkey_overrides);
         showCommandPalette();
         addPopupModal(str::ADD_PLOT);
-        addPopupModal(str::ADD_SPECTRUM_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_DOCKSPACE);
         addPopupModal(str::ADD_GRID_WINDOW);
@@ -531,7 +508,6 @@ void DbgGui::updateLoop() {
         showScriptWindow();
         showGridWindow();
         showScalarPlots();
-        showSpectrumPlots();
         showCustomSignalCreator();
         setInitialFocus();
         updateSavedSettings();
@@ -784,6 +760,19 @@ void DbgGui::loadPreviousSessionSettings() {
                             }
                         });
                     }
+                    if (subplot_idx < plot.subplotCount() && subplot_data.contains("spectrums")) {
+                        forEachVectorPair(subplot_data["spectrums"], [&](uint64_t real_id, uint64_t imag_id) {
+                            Scalar* real = findScalar(m_scalars, real_id);
+                            Scalar* imag = imag_id == 0 ? nullptr : findScalar(m_scalars, imag_id);
+                            if (real && (imag_id == 0 || imag)) {
+                                plot.subplots[subplot_idx].addSpectrum(real, imag);
+                                m_sampler.startSampling(real);
+                                if (imag) {
+                                    m_sampler.startSampling(imag);
+                                }
+                            }
+                        });
+                    }
                     ++subplot_idx;
                 }
             } else if (scalar_plot_data.contains("signals")) {
@@ -794,30 +783,6 @@ void DbgGui::loadPreviousSessionSettings() {
                         plot.addScalarToPlot(scalar);
                     }
                 });
-            }
-        }
-
-        m_spectrum_plots.clear();
-        for (auto spec_plot_data : m_settings["spec_plots"]) {
-            SpectrumPlot& plot = m_spectrum_plots.emplace_back(spec_plot_data);
-            if (spec_plot_data.contains("signals")) {
-                for (auto xy : spec_plot_data.at("signals")) {
-                    if (xy.is_array() && xy.size() == 2) {
-                        Scalar* real = findScalar(m_scalars, xy[0]);
-                        Scalar* imag = findScalar(m_scalars, xy[1]);
-                        if (real && imag) {
-                            m_sampler.startSampling(real);
-                            m_sampler.startSampling(imag);
-                            plot.addToPlot(real, imag);
-                            // An imaginary ID of 0 marks a real-only spectrum. If a
-                            // nonzero imaginary ID is unresolved, wait for its
-                            // scalar to be registered instead of changing the type.
-                        } else if (real && xy[1] == 0) {
-                            m_sampler.startSampling(real);
-                            plot.addToPlot(real, nullptr);
-                        }
-                    }
-                }
             }
         }
 
@@ -987,6 +952,22 @@ void DbgGui::updateSavedSettings() {
         j.erase("signals");
         for (int subplot_idx = 0; subplot_idx < scalar_plot.subplotCount(); ++subplot_idx) {
             replaceDeletedVectorComponents(scalar_plot.subplots[subplot_idx]);
+            auto& subplot = scalar_plot.subplots[subplot_idx];
+            replaceDeletedSpectrumComponents(subplot);
+            auto& saved_spectrums = j["subplots"][subplot_idx]["spectrums"];
+            nlohmann::json reconciled_spectrums = nlohmann::json::array();
+            // Keep unresolved spectra; rebuild resolved placements from runtime state.
+            forEachVectorPair(saved_spectrums, [&](uint64_t real_id, uint64_t imag_id) {
+                bool real_registered = std::ranges::any_of(m_scalars, [real_id](auto const& scalar) { return scalar->id == real_id; });
+                bool imag_registered = imag_id == 0 || std::ranges::any_of(m_scalars, [imag_id](auto const& scalar) { return scalar->id == imag_id; });
+                if (!real_registered || !imag_registered) {
+                    reconciled_spectrums.push_back({real_id, imag_id});
+                }
+            });
+            for (auto const& spec : subplot.spectrums) {
+                reconciled_spectrums.push_back({spec.real->id, spec.imag == nullptr ? 0 : spec.imag->id});
+            }
+            saved_spectrums = std::move(reconciled_spectrums);
             auto const& vectors = scalar_plot.subplots[subplot_idx].vectors;
             nlohmann::json& saved_vectors = j["subplots"][subplot_idx]["vectors"];
             nlohmann::json reconciled_vectors = nlohmann::json::array();
@@ -1060,66 +1041,6 @@ void DbgGui::updateSavedSettings() {
                     saved_signals[scalar->name_and_group] = scalar->id;
                 }
             }
-        }
-    }
-
-    for (SpectrumPlot& spec_plot : m_spectrum_plots) {
-        if (!spec_plot.open) {
-            m_settings["spec_plots"].erase(std::to_string(spec_plot.id));
-            continue;
-        }
-        if (spec_plot.id == 0) {
-            spec_plot.id = hashWithTime(spec_plot.name);
-        }
-        nlohmann::json& j = m_settings["spec_plots"][std::to_string(spec_plot.id)];
-        spec_plot.updateJson(j);
-        // Snapshot removal requests because removing one component can also
-        // erase other spectra that share it.
-        std::vector<std::pair<Scalar*, Scalar*>> removed_spectra;
-        for (Spectrum<Scalar> const& spec : spec_plot.spectrums) {
-            if (spec.real->deleted || (spec.imag != nullptr && spec.imag->deleted)) {
-                removed_spectra.emplace_back(spec.real, spec.imag);
-            }
-        }
-        for (auto const& [real, imag] : removed_spectra) {
-            spec_plot.removeFromPlot(real);
-            if (imag != nullptr) {
-                spec_plot.removeFromPlot(imag);
-            }
-        }
-        for (auto const& [real, imag] : removed_spectra) {
-            if (isLiveScalar(real->replacement) && (imag == nullptr || isLiveScalar(imag->replacement))) {
-                spec_plot.addToPlot(real->replacement, imag == nullptr ? nullptr : imag->replacement);
-            }
-        }
-        nlohmann::json& saved_signals = j["signals"];
-        if (!saved_signals.is_object()) {
-            saved_signals = nlohmann::json::object();
-        }
-        // Rebuild resolved placements; keep unresolved spectra.
-        for (auto it = saved_signals.begin(); it != saved_signals.end();) {
-            if (!it->is_array() || it->size() != 2
-                || (!(*it)[0].is_number_unsigned() && !(*it)[0].is_number_integer())
-                || (!(*it)[1].is_number_unsigned() && !(*it)[1].is_number_integer())) {
-                it = saved_signals.erase(it);
-                continue;
-            }
-            uint64_t const real_id = (*it)[0].get<uint64_t>();
-            uint64_t const imag_id = (*it)[1].get<uint64_t>();
-            bool const real_registered = std::ranges::any_of(m_scalars, [real_id](auto const& scalar) {
-                return scalar->id == real_id;
-            });
-            bool const imag_registered = imag_id == 0 || std::ranges::any_of(m_scalars, [imag_id](auto const& scalar) {
-                return scalar->id == imag_id;
-            });
-            if (real_registered && imag_registered) {
-                it = saved_signals.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        for (Spectrum<Scalar> const& spec : spec_plot.spectrums) {
-            saved_signals[spec.real->name_and_group] = {spec.real->id, spec.imag == nullptr ? 0 : spec.imag->id};
         }
     }
 
@@ -1293,13 +1214,6 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
-    for (SpectrumPlot& spec_plot : m_spectrum_plots) {
-        ImGui::Begin(spec_plot.title().c_str());
-        if (spec_plot.focus.initial_focus) {
-            ImGui::SetWindowFocus(spec_plot.title().c_str());
-        }
-        ImGui::End();
-    }
     for (CustomWindow& custom_window : m_custom_windows) {
         ImGui::Begin(custom_window.title().c_str());
         if (custom_window.focus.initial_focus) {
@@ -1435,7 +1349,6 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
         std::vector<Scalar*> const scalars_to_sample = restoreScalarSettings(new_scalar.get(),
                                                                              m_settings,
                                                                              m_scalar_plots,
-                                                                             m_spectrum_plots,
                                                                              m_scalars,
                                                                              m_custom_windows);
         for (Scalar* scalar_to_sample : scalars_to_sample) {

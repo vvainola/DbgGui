@@ -155,3 +155,53 @@ TEST_CASE("Shrinking a subplot grid preserves vector pairs without changing the 
     REQUIRE(contains(plot.subplots[0].vectors, yx));
     REQUIRE(plot.subplots[0].reference_frame_vector == expected_reference);
 }
+
+TEST_CASE("Spectrum subplot cleanup replaces each component independently") {
+    auto old_real = makeScalar("old real", "group");
+    auto real = makeScalar("real", "group");
+    auto imag = makeScalar("imag", "group");
+    PlotWindow::Subplot subplot;
+    subplot.addSpectrum(old_real.get(), imag.get());
+    subplot.addSpectrum(real.get(), imag.get());
+    subplot.addSpectrum(real.get());
+    old_real->deleted = true;
+    old_real->replacement = real.get();
+    replaceDeletedSpectrumComponents(subplot);
+    REQUIRE(subplot.spectrums.size() == 2);
+    REQUIRE(subplot.spectrums[0].real == real.get());
+    REQUIRE(subplot.spectrums[0].imag == imag.get());
+    imag->deleted = true;
+    replaceDeletedSpectrumComponents(subplot);
+    REQUIRE(subplot.spectrums.size() == 1);
+    REQUIRE(subplot.spectrums[0].real == real.get());
+    REQUIRE(subplot.spectrums[0].imag == nullptr);
+}
+
+TEST_CASE("Spectrum subplot settings round trip and grid shrinking preserves spectra") {
+    auto real = makeScalar("real", "group");
+    auto imag = makeScalar("imag", "group");
+    PlotWindow plot("spectra", 1);
+    plot.setSubplotGrid(2, 2);
+    plot.subplots[3].type = PlotType::Spectrum;
+    plot.spectrum.logarithmic_y_axis = true;
+    plot.subplots[3].spectrum_x_axis = {10, 100};
+    plot.spectrum.time_range = 0.5;
+    plot.spectrum.window = SpectrumWindow::Hann;
+    plot.subplots[3].addSpectrum(real.get(), imag.get());
+    nlohmann::json saved;
+    plot.updateJson(saved);
+    PlotWindow restored(saved);
+    REQUIRE(restored.subplots[3].type == PlotType::Spectrum);
+    REQUIRE(restored.spectrum.logarithmic_y_axis);
+    REQUIRE(restored.subplots[3].spectrum_x_axis.min == 10);
+    REQUIRE(restored.spectrum.time_range == 0.5);
+    REQUIRE(restored.spectrum.window == SpectrumWindow::Hann);
+    plot.setSubplotGrid(1, 1);
+    REQUIRE(plot.subplots[0].spectrums.size() == 1);
+    plot.subplots[0].addSpectrum(real.get());
+    plot.subplots[0].removeSpectrum(real.get(), imag.get());
+    REQUIRE(plot.subplots[0].spectrums.size() == 1);
+    REQUIRE(plot.subplots[0].spectrums[0].imag == nullptr);
+    plot.clearSignals();
+    REQUIRE(plot.subplots[0].spectrums.empty());
+}

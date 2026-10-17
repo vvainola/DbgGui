@@ -549,14 +549,6 @@ void DbgGui::showMainMenuBar() {
                 HelpMarker(std::format("Hotkey to add new plot is {}.", commandHotkeyName("add-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1)).c_str());
                 addPopupModal(str::ADD_PLOT);
 
-                // Spectrum plot
-                if (ImGui::Button("Spectrum plot")) {
-                    ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
-                }
-                ImGui::SameLine();
-                HelpMarker(std::format("Hotkey to add new spectrum plot is {}.", commandHotkeyName("add-spectrum-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3)).c_str());
-                addPopupModal(str::ADD_SPECTRUM_PLOT);
-
                 // Custom window
                 if (ImGui::Button("Custom window")) {
                     ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW);
