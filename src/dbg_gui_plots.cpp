@@ -99,9 +99,7 @@ void DbgGui::showScalarPlots() {
     double vertical_line_time = vertical_line_time_next;
     vertical_line_time_next = NAN;
     struct PlotScalarDragDropPayload {
-        PlotWindow* plot;
-        // Needed to move legend items between subplots without searching all cells.
-        int subplot_idx;
+        PlotWindow::Subplot* subplot;
         Scalar* scalar;
     };
     renderPlotWindows(m_scalar_plots, m_plot_timestamp, [&](PlotWindow& scalar_plot) {
@@ -283,10 +281,10 @@ void DbgGui::showScalarPlots() {
                     if (move_all_signals) {
                         dragged_scalars.reserve(subplot.scalars.size());
                         for (Scalar* source_scalar : subplot.scalars) {
-                            dragged_scalars.push_back({&scalar_plot, subplot_idx, source_scalar});
+                            dragged_scalars.push_back({&subplot, source_scalar});
                         }
                     } else {
-                        dragged_scalars.push_back({&scalar_plot, subplot_idx, scalar});
+                        dragged_scalars.push_back({&subplot, scalar});
                     }
                     ImGui::SetDragDropPayload("PLOT_AND_SCALAR",
                                               dragged_scalars.data(),
@@ -325,9 +323,9 @@ void DbgGui::showScalarPlots() {
                       static_cast<PlotScalarDragDropPayload const*>(payload->Data),
                       payload->DataSize / sizeof(PlotScalarDragDropPayload));
                     for (PlotScalarDragDropPayload const& dragged_scalar : dragged_scalars) {
-                        if (dragged_scalar.plot != &scalar_plot || dragged_scalar.subplot_idx != subplot_idx) {
-                            dragged_scalar.plot->subplots[dragged_scalar.subplot_idx].removeScalar(dragged_scalar.scalar);
-                            scalar_plot.addScalarToPlot(dragged_scalar.scalar, subplot_idx);
+                        if (dragged_scalar.subplot != &subplot) {
+                            dragged_scalar.subplot->removeScalar(dragged_scalar.scalar);
+                            subplot.addScalar(dragged_scalar.scalar);
                         }
                     }
                 }
