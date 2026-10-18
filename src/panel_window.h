@@ -46,7 +46,7 @@ enum class PanelWidgetType {
     ValueGrid,
     CheckboxGrid,
     SliderGrid,
-    Led
+    LedGrid
 };
 
 struct PanelLedResult {
@@ -194,31 +194,34 @@ struct PanelSliderGrid : PanelControlGrid<PanelSlider> {
     float text_to_value_ratio = 0.3f;
 };
 
+struct PanelLedCell {
+    std::string label = "LED";
+    bool editor_open = false;
+    std::string condition = "return false";
+    std::string draft;
+    ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
+    std::shared_ptr<PanelLedState> state;
+
+    void configure(LuaScriptHost host) {
+        state = std::make_shared<PanelLedState>(condition, std::move(host));
+    }
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
     std::string label = "Widget";
     ImVec2 position = {30, 30};
     ImVec2 size = {320, 180};
-    struct {
-        bool editor_open = false;
-        std::string condition = "return false";
-        std::string draft;
-        ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
-        std::shared_ptr<PanelLedState> state;
-    } led;
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
     PanelButtonGrid buttons;
     PanelCheckboxGrid checkboxes;
     PanelValueGrid values;
     PanelSliderGrid sliders;
-    void configureLed(LuaScriptHost host) {
-        led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
-    }
+    PanelControlGrid<PanelLedCell> leds;
     ImVec2 minimumSize() const {
         switch (type) {
-            case PanelWidgetType::Led: return {20, 20};
             case PanelWidgetType::SliderGrid: return {100, 96};
             default: return {160, 100};
         }
@@ -226,14 +229,8 @@ struct PanelWidget {
     void setSize(ImVec2 requested) {
         ImVec2 const minimum = minimumSize();
         size = {std::max(minimum.x, requested.x), std::max(minimum.y, requested.y)};
-        if (type == PanelWidgetType::Led) {
-            size.x = size.y = std::min(size.x, size.y);
-        }
     }
     void resizeOnGrid(ImVec2 original, ImVec2 delta) {
-        if (type == PanelWidgetType::Led) {
-            delta.x = delta.y = std::abs(delta.x) > std::abs(delta.y) ? delta.x : delta.y;
-        }
         ImVec2 const minimum = minimumSize();
         setSize({std::max(std::ceil(minimum.x / PANEL_GRID_SPACING) * PANEL_GRID_SPACING, snapToPanelGrid(original.x + delta.x)),
                  std::max(std::ceil(minimum.y / PANEL_GRID_SPACING) * PANEL_GRID_SPACING, snapToPanelGrid(original.y + delta.y))});
@@ -247,7 +244,7 @@ struct PanelWindow : Window {
         pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
         for (auto const& data : j.value("widgets", nlohmann::json::array())) {
             int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
-            if (type < 0 || type > static_cast<int>(PanelWidgetType::Led)) {
+            if (type < 0 || type > static_cast<int>(PanelWidgetType::LedGrid)) {
                 continue;
             }
             PanelWidget widget;
@@ -256,14 +253,18 @@ struct PanelWindow : Window {
             widget.label = data.value("label", widget.label);
             widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
             widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
-            if (widget.type == PanelWidgetType::Led) {
-                auto const color = data.value("led_color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
-                if (color.size() == 4) {
-                    widget.led.color = {color[0], color[1], color[2], color[3]};
-                }
+            if (widget.type == PanelWidgetType::LedGrid) {
+                widget.leds.resize(data.value("rows", 1), data.value("columns", 1));
                 auto const cells = data.value("cells", nlohmann::json::array());
-                if (!cells.empty()) {
-                    widget.led.condition = cells[0].value("script", widget.led.condition);
+                for (size_t index = 0; index < widget.leds.cells.size(); ++index) {
+                    auto& cell = widget.leds.cells[index];
+                    auto const saved = index < cells.size() ? cells[index] : nlohmann::json::object();
+                    cell.label = saved.value("label", cell.label);
+                    cell.condition = saved.value("script", cell.condition);
+                    auto const color = saved.value("color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
+                    if (color.size() == 4) {
+                        cell.color = {color[0], color[1], color[2], color[3]};
+                    }
                 }
             }
             if (widget.type == PanelWidgetType::SliderGrid) {
@@ -341,9 +342,14 @@ struct PanelWindow : Window {
             data["y"] = widget.position.y;
             data["width"] = widget.size.x;
             data["height"] = widget.size.y;
-            if (widget.type == PanelWidgetType::Led) {
-                data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
-                data["cells"][0]["script"] = widget.led.condition;
+            if (widget.type == PanelWidgetType::LedGrid) {
+                data["rows"] = widget.leds.rows;
+                data["columns"] = widget.leds.columns;
+                data["cells"] = nlohmann::json::array();
+                for (auto const& cell : widget.leds.cells) {
+                    data["cells"].push_back({{"label", cell.label}, {"script", cell.condition},
+                        {"color", {cell.color.x, cell.color.y, cell.color.z, cell.color.w}}});
+                }
             }
             if (widget.type == PanelWidgetType::SliderGrid) {
                 data["text_to_value_ratio"] = widget.sliders.text_to_value_ratio;

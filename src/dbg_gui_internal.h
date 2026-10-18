@@ -135,6 +135,7 @@ class DbgGui {
     void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
     void renderPanelValueGrid(PanelWidget& widget);
     void renderPanelSliderGrid(PanelWidget& widget);
+    void renderPanelLedGrid(PanelWidget& widget);
     void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
     void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 

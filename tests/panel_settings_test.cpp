@@ -42,7 +42,7 @@ TEST_CASE("Panel widget loading bounds geometry and skips unknown types") {
 TEST_CASE("Panel box selection and group movement use canvas coordinates") {
     PanelWindow panel("Panel", 1);
     panel.widgets = {
-        {1, PanelWidgetType::Led, "LED", {10, 10}, {20, 20}},
+        {1, PanelWidgetType::LedGrid, "LED", {10, 10}, {20, 20}},
         {2, PanelWidgetType::CheckboxGrid, "Check", {50, 10}, {60, 20}},
         {3, PanelWidgetType::Plot, "Plot", {200, 200}, {320, 180}}
     };
@@ -66,19 +66,15 @@ TEST_CASE("Panel box selection and group movement use canvas coordinates") {
     REQUIRE(restored.selected_widgets.empty());
 }
 
-TEST_CASE("LED geometry is square and contains only the indicator") {
-    nlohmann::json saved = {{"widgets", nlohmann::json::array({{
-        {"id", 1}, {"type", PanelWidgetType::Led}, {"width", 100}, {"height", 40}
-    }})}};
-    PanelWindow panel(saved);
-    auto& led = panel.widgets[0];
-    REQUIRE(led.size.x == 40);
-    REQUIRE(led.size.y == 40);
-    led.setSize({10, 30});
-    REQUIRE(led.size.x == 20);
-    REQUIRE(led.size.y == 20);
-    panel.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["width"] == saved["widgets"][0]["height"]);
+TEST_CASE("LED grids allow rectangular layouts") {
+    PanelWidget grid;
+    grid.type = PanelWidgetType::LedGrid;
+    grid.setSize({320, 160});
+    REQUIRE(grid.size.x == 320);
+    REQUIRE(grid.size.y == 160);
+    grid.setSize({10, 30});
+    REQUIRE(grid.size.x == 160);
+    REQUIRE(grid.size.y == 100);
 }
 
 TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum sizes") {
@@ -91,33 +87,33 @@ TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum s
     REQUIRE(slider.size.x == 128);
     REQUIRE(slider.size.y == 96);
     PanelWidget led;
-    led.type = PanelWidgetType::Led;
+    led.type = PanelWidgetType::LedGrid;
     led.resizeOnGrid({40, 40}, {30, 0});
-    REQUIRE(led.size.x == 64);
-    REQUIRE(led.size.y == 64);
+    REQUIRE(led.size.x == 160);
+    REQUIRE(led.size.y == 128);
     led.resizeOnGrid({40, 40}, {-100, 0});
-    REQUIRE(led.size.x == 32);
-    REQUIRE(led.size.y == 32);
+    REQUIRE(led.size.x == 160);
+    REQUIRE(led.size.y == 128);
 }
 
 TEST_CASE("LED settings preserve the applied condition and color without saving drafts or runtime state") {
     PanelWindow panel("Panel", 1);
     PanelWidget widget;
     widget.id = 2;
-    widget.type = PanelWidgetType::Led;
+    widget.type = PanelWidgetType::LedGrid;
     widget.setSize({40, 40});
-    widget.led.condition = "return read('enabled') > 0";
-    widget.led.draft = "unfinished script";
-    widget.led.color = {0.9f, 0.3f, 0.1f, 1};
+    widget.leds.cells[0].condition = "return read('enabled') > 0";
+    widget.leds.cells[0].draft = "unfinished script";
+    widget.leds.cells[0].color = {0.9f, 0.3f, 0.1f, 1};
     panel.widgets.push_back(std::move(widget));
     nlohmann::json saved;
     panel.updateJson(saved);
     PanelWindow restored(saved);
-    REQUIRE(restored.widgets[0].led.condition == "return read('enabled') > 0");
-    REQUIRE(restored.widgets[0].led.color.x == 0.9f);
-    REQUIRE(restored.widgets[0].led.color.y == 0.3f);
-    REQUIRE(restored.widgets[0].led.draft.empty());
-    REQUIRE_FALSE(restored.widgets[0].led.state);
+    REQUIRE(restored.widgets[0].leds.cells[0].condition == "return read('enabled') > 0");
+    REQUIRE(restored.widgets[0].leds.cells[0].color.x == 0.9f);
+    REQUIRE(restored.widgets[0].leds.cells[0].color.y == 0.3f);
+    REQUIRE(restored.widgets[0].leds.cells[0].draft.empty());
+    REQUIRE_FALSE(restored.widgets[0].leds.cells[0].state);
 }
 
 TEST_CASE("Panel plots preserve layout, styles, and unresolved placements") {
@@ -518,4 +514,34 @@ TEST_CASE("Slider grid resizing preserves per-cell bindings and ranges") {
     REQUIRE(grid.cells[4].maximum == 15);
     REQUIRE_FALSE(grid.cells[3].scalar_id.has_value());
     REQUIRE(grid.cells[3].maximum == 1);
+}
+
+TEST_CASE("LED grids preserve independent cells and runtimes when resized") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.type = PanelWidgetType::LedGrid;
+    widget.leds.resize(2, 2);
+    auto& cell = widget.leds.cells[3];
+    cell.label = "Ready";
+    cell.condition = "return true";
+    cell.color = {1, 0, 0, 1};
+    cell.configure(LuaScriptHost{});
+    auto state = cell.state;
+    widget.leds.resize(2, 3);
+    REQUIRE(widget.leds.cells[4].state == state);
+    REQUIRE(widget.leds.cells[4].label == "Ready");
+    REQUIRE_FALSE(widget.leds.cells[3].state);
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    auto const& grid = restored.widgets[0].leds;
+    REQUIRE(grid.rows == 2);
+    REQUIRE(grid.columns == 3);
+    REQUIRE(grid.cells[4].label == "Ready");
+    REQUIRE(grid.cells[4].condition == "return true");
+    REQUIRE(grid.cells[4].color.x == 1);
+    REQUIRE(grid.cells[4].color.y == 0);
+    REQUIRE_FALSE(grid.cells[4].state);
+    REQUIRE(grid.cells[0].condition == "return false");
 }

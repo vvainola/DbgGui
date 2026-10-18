@@ -464,6 +464,81 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
     ImGui::EndTable();
 }
 
+void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
+    auto& grid = widget.leds;
+    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
+        - 2 * ImGui::GetStyle().CellPadding.y);
+    if (!ImGui::BeginTable("leds", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
+        return;
+    }
+    for (size_t index = 0; index < grid.cells.size(); ++index) {
+        auto& cell = grid.cells[index];
+        if (!cell.state) {
+            cell.configure(createLuaScriptHost());
+            std::scoped_lock lock(m_sampling_mutex);
+            m_panel.led_scripts.push_back(cell.state);
+        }
+        ImGui::TableNextColumn();
+        ImGui::PushID(static_cast<int>(index));
+        ImVec2 const position = ImGui::GetCursorScreenPos();
+        float const width = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        float const diameter = std::max(1.0f, std::min(cell_height, width * 0.35f) - 4);
+        ImVec2 const center = {position.x + diameter * 0.5f + 2, position.y + cell_height * 0.5f};
+        ImGui::InvisibleButton("led", {width, cell_height});
+        cell.state->requested.store(true);
+        m_panel.scripts_requested.store(true);
+        auto result = cell.state->result.load();
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->AddCircleFilled(center, diameter * 0.5f,
+            result->lit ? ImGui::GetColorU32(cell.color) : IM_COL32(60, 60, 60, 255));
+        if (!result->error.empty()) {
+            draw->AddCircle(center, diameter * 0.5f, SCRIPT_ERROR_RED, 0, 2.0f);
+        }
+        float const label_x = position.x + diameter + 4 + ImGui::GetStyle().ItemInnerSpacing.x;
+        float const label_width = std::max(1.0f, position.x + width - label_x);
+        float font_size = std::max(1.0f, diameter * 0.5f);
+        ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
+        float const text_width = ImGui::CalcTextSize(cell.label.c_str()).x;
+        if (text_width > label_width) {
+            ImGui::PopFont();
+            font_size = std::max(1.0f, font_size * label_width / text_width);
+            ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
+        }
+        draw->AddText({label_x, center.y - ImGui::GetFontSize() * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text), cell.label.c_str());
+        ImGui::PopFont();
+
+        bool apply = false;
+        bool const editor_open = ImGui::BeginPopupContextItem("led_settings");
+        if (editor_open) {
+            if (ImGui::IsWindowAppearing()) {
+                cell.draft = cell.condition;
+            }
+            ImGui::InputText("Label", &cell.label);
+            ImGui::SameLine();
+            ImGui::ColorEdit4("##lit_color", &cell.color.x, ImGuiColorEditFlags_NoInputs);
+            ImGui::SameLine();
+            HelpMarker("Return true to light the LED, false to turn it off");
+            inputScriptTextWithLineNumbers(cell.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
+            apply = ImGui::Button("Apply condition");
+            ImGui::SameLine();
+            if (ImGui::Button("Close")) {
+                ImGui::CloseCurrentPopup();
+            }
+            showPanelScriptError(result->error);
+            ImGui::EndPopup();
+        }
+        if (apply || (cell.editor_open && !editor_open && cell.draft != cell.condition)) {
+            cell.condition = cell.draft;
+            cell.configure(createLuaScriptHost());
+            std::scoped_lock lock(m_sampling_mutex);
+            m_panel.led_scripts.push_back(cell.state);
+        }
+        cell.editor_open = editor_open;
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
+}
+
 void DbgGui::showPanels() {
     for (PanelWindow& panel : m_panels) {
         if (!panel.open) {
@@ -521,13 +596,6 @@ void DbgGui::showPanels() {
             }
             std::optional<uint64_t> remove_widget;
             for (auto& widget : panel.widgets) {
-                if (widget.type == PanelWidgetType::Led && !widget.led.state) {
-                    widget.configureLed(createLuaScriptHost());
-                    {
-                        std::scoped_lock lock(m_sampling_mutex);
-                        m_panel.led_scripts.push_back(widget.led.state);
-                    }
-                }
                 ImGui::PushID(std::to_string(widget.id).c_str());
                 ImVec2 const position = {origin.x + panel.pan.x + widget.position.x * panel.zoom,
                                          origin.y + panel.pan.y + widget.position.y * panel.zoom};
@@ -540,7 +608,8 @@ void DbgGui::showPanels() {
                 bool const is_checkbox = widget.type == PanelWidgetType::CheckboxGrid;
                 bool const is_values = widget.type == PanelWidgetType::ValueGrid;
                 bool const is_slider = widget.type == PanelWidgetType::SliderGrid;
-                bool const has_controls = is_plot || is_buttons || is_checkbox || is_values || is_slider;
+                bool const is_led = widget.type == PanelWidgetType::LedGrid;
+                bool const has_controls = is_plot || is_buttons || is_checkbox || is_values || is_slider || is_led;
                 float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
                 bool const visible = ImGui::BeginChild("widget", size,
@@ -570,13 +639,12 @@ void DbgGui::showPanels() {
                     if (widget_hovered && !resize_target && (!has_controls || ImGui::IsItemHovered())) {
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
                     }
-                    bool apply_led = false;
                     bool const settings_open = ImGui::BeginPopupContextItem("widget_settings");
                     if (settings_open) {
                         ImGui::InputText("Label", &widget.label);
-                        if (is_buttons || is_checkbox || is_values || is_slider) {
-                            int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : is_values ? widget.values.rows : widget.sliders.rows;
-                            int columns = is_buttons ? widget.buttons.columns : is_checkbox ? widget.checkboxes.columns : is_values ? widget.values.columns : widget.sliders.columns;
+                        if (is_buttons || is_checkbox || is_values || is_slider || is_led) {
+                            int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : is_values ? widget.values.rows : is_slider ? widget.sliders.rows : widget.leds.rows;
+                            int columns = is_buttons ? widget.buttons.columns : is_checkbox ? widget.checkboxes.columns : is_values ? widget.values.columns : is_slider ? widget.sliders.columns : widget.leds.columns;
                             bool const rows_changed = ImGui::InputInt("Rows", &rows);
                             bool const columns_changed = ImGui::InputInt("Columns", &columns);
                             if (rows_changed || columns_changed) {
@@ -586,8 +654,10 @@ void DbgGui::showPanels() {
                                     widget.checkboxes.resize(rows, columns);
                                 } else if (is_values) {
                                     widget.values.resize(rows, columns);
-                                } else {
+                                } else if (is_slider) {
                                     widget.sliders.resize(rows, columns);
+                                } else {
+                                    widget.leds.resize(rows, columns);
                                 }
                             }
                         }
@@ -595,50 +665,12 @@ void DbgGui::showPanels() {
                             float& ratio = is_values ? widget.values.text_to_value_ratio : widget.sliders.text_to_value_ratio;
                             ImGui::SliderFloat("Text to value ratio", &ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
                         }
-                        if (widget.type == PanelWidgetType::Led) {
-                            if (ImGui::IsWindowAppearing()) {
-                                widget.led.draft = widget.led.condition;
-                            }
-                            ImGui::SameLine();
-                            ImGui::ColorEdit4("##lit_color", &widget.led.color.x, ImGuiColorEditFlags_NoInputs);
-                            ImGui::SameLine();
-                            HelpMarker("Return true to light the LED, false to turn it off");
-                            inputScriptTextWithLineNumbers(widget.led.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
-                            if (ImGui::Button("Apply condition")) {
-                                apply_led = true;
-                            }
-                            ImGui::SameLine();
-                            if (ImGui::Button("Close")) {
-                                ImGui::CloseCurrentPopup();
-                            }
-                            auto result = widget.led.state->result.load();
-                            showPanelScriptError(result->error);
-                        }
                         if (ImGui::MenuItem("Delete widget")) {
                             remove_widget = widget.id;
                         }
                         ImGui::EndPopup();
                     }
-                    if (widget.type == PanelWidgetType::Led) {
-                        if (apply_led || (widget.led.editor_open && !settings_open && widget.led.draft != widget.led.condition)) {
-                            widget.led.condition = widget.led.draft;
-                            widget.configureLed(createLuaScriptHost());
-                            std::scoped_lock lock(m_sampling_mutex);
-                            m_panel.led_scripts.push_back(widget.led.state);
-                        }
-                        widget.led.editor_open = settings_open;
-                        float const radius = std::max(1.0f, size.x * 0.5f - 2.0f);
-                        ImVec2 const center = {position.x + size.x * 0.5f, position.y + size.y * 0.5f};
-                        auto& led = *widget.led.state;
-                        led.requested.store(true);
-                        m_panel.scripts_requested.store(true);
-                        auto result = led.result.load();
-                        widget_draw->AddCircleFilled(center, radius,
-                            result->lit ? ImGui::GetColorU32(widget.led.color) : IM_COL32(60, 60, 60, 255));
-                        if (!result->error.empty()) {
-                            widget_draw->AddCircle(center, radius, SCRIPT_ERROR_RED, 0, 2.0f);
-                        }
-                    } else if (has_controls) {
+                    if (has_controls) {
                         widget_draw->AddText({control_position.x, control_position.y + ImGui::GetStyle().FramePadding.y},
                                             ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
                         if (is_plot) {
@@ -653,8 +685,10 @@ void DbgGui::showPanels() {
                             renderPanelCheckboxGrid(widget, panel);
                         } else if (is_values) {
                             renderPanelValueGrid(widget);
-                        } else {
+                        } else if (is_slider) {
                             renderPanelSliderGrid(widget);
+                        } else {
+                            renderPanelLedGrid(widget);
                         }
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
@@ -681,12 +715,6 @@ void DbgGui::showPanels() {
                     }
                 }
                 ImGui::EndChild();
-                if (visible && widget.type == PanelWidgetType::Led) {
-                    ImVec2 const text_size = ImGui::CalcTextSize(widget.label.c_str());
-                    ImVec2 const label_position = {corner.x + ImGui::GetStyle().ItemInnerSpacing.x * panel.zoom,
-                                                  position.y + (size.y - text_size.y) * 0.5f};
-                    ImGui::GetWindowDrawList()->AddText(label_position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
-                }
                 ImGui::PopFont();
                 ImGui::PopID();
             }
@@ -716,7 +744,7 @@ void DbgGui::showPanels() {
                        {"Value grid", PanelWidgetType::ValueGrid},
                        {"Checkbox grid", PanelWidgetType::CheckboxGrid},
                        {"Slider grid", PanelWidgetType::SliderGrid},
-                       {"LED", PanelWidgetType::Led}}) {
+                       {"LED grid", PanelWidgetType::LedGrid}}) {
                     if (ImGui::MenuItem(label)) {
                         PanelWidget widget;
                         for (auto const& existing : panel.widgets) {
@@ -727,8 +755,8 @@ void DbgGui::showPanels() {
                         if (type == PanelWidgetType::Plot) {
                             widget.size = {640, 384};
                             widget.plot = std::make_shared<PlotWindow>(label, widget.id);
-                        } else if (type == PanelWidgetType::Led) {
-                            widget.setSize({PANEL_GRID_SPACING, PANEL_GRID_SPACING});
+                        } else if (type == PanelWidgetType::LedGrid) {
+                            widget.size = {320, 160};
                         } else if (type == PanelWidgetType::CheckboxGrid) {
                             widget.size = {320, 160};
                         } else if (type == PanelWidgetType::SliderGrid) {
