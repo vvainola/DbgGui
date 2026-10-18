@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "panel_window.h"
+#include "panel_file.h"
 
 TEST_CASE("Panel widget geometry preserves saved control settings") {
     nlohmann::json saved = {
@@ -544,4 +545,60 @@ TEST_CASE("LED grids preserve independent cells and runtimes when resized") {
     REQUIRE(grid.cells[4].color.y == 0);
     REQUIRE_FALSE(grid.cells[4].state);
     REQUIRE(grid.cells[0].condition == "return false");
+}
+
+
+TEST_CASE("Panel files preserve widgets and bindings while assigning new identities") {
+    PanelWindow panel("Controls", 10);
+    PanelWidget widget;
+    widget.id = 900;
+    widget.type = PanelWidgetType::SliderGrid;
+    widget.sliders.resize(2, 2);
+    widget.sliders.cells[3].scalar_id = 123;
+    widget.sliders.cells[3].minimum = -10;
+    panel.widgets.push_back(std::move(widget));
+    PanelWidget button;
+    button.id = 900; // Local IDs are rebuilt even when the input has duplicates.
+    button.buttons.cells[0].script = "write('enabled', 1)";
+    panel.widgets.push_back(std::move(button));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    auto const file = panel_file::encode(saved);
+    auto const decoded = panel_file::decode(nlohmann::json::parse(file.dump()), 20);
+    PanelWindow restored(decoded);
+    REQUIRE(restored.id == 20);
+    REQUIRE(restored.name == "Controls");
+    REQUIRE(restored.widgets[0].id == 1);
+    REQUIRE(restored.widgets[1].id == 2);
+    REQUIRE(restored.widgets[0].sliders.cells[3].scalar_id == 123);
+    REQUIRE(restored.widgets[0].sliders.cells[3].minimum == -10);
+    REQUIRE(restored.widgets[1].buttons.cells[0].script == "write('enabled', 1)");
+    REQUIRE_FALSE(restored.widgets[1].buttons.cells[0].action);
+    REQUIRE(saved["id"] == 10);
+}
+
+TEST_CASE("Panel files reject unsupported formats and malformed panels") {
+    REQUIRE_THROWS(panel_file::decode(nlohmann::json::object(), 1));
+    auto file = panel_file::encode({{"widgets", nlohmann::json::array()}});
+    file["version"] = 2;
+    REQUIRE_THROWS(panel_file::decode(file, 1));
+    file["version"] = 1;
+    file["panel"]["widgets"] = 42;
+    REQUIRE_THROWS(panel_file::decode(file, 1));
+    file["panel"]["widgets"] = nlohmann::json::array({42});
+    REQUIRE_THROWS(panel_file::decode(file, 1));
+}
+
+TEST_CASE("Panel files retain unresolved plot placements") {
+    nlohmann::json panel = {{"name", "Plots"}, {"widgets", nlohmann::json::array({{
+        {"id", 4}, {"type", PanelWidgetType::Plot}, {"label", "Scope"},
+        {"plot", {{"subplots", nlohmann::json::array({{
+            {"signals", {{"missing signal", 123}}},
+            {"vectors", nlohmann::json::array({{123, 456}})}
+        }})}}}
+    }})}};
+    auto const decoded = panel_file::decode(panel_file::encode(panel), 10);
+    REQUIRE(decoded["widgets"][0]["plot"] == panel["widgets"][0]["plot"]);
+    PanelWindow restored(decoded);
+    REQUIRE(restored.widgets[0].plot->id == restored.widgets[0].id);
 }

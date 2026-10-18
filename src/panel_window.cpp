@@ -25,6 +25,8 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "lua_script_editor.h"
+#include "panel_file.h"
+#include <fstream>
 
 #include <algorithm>
 #include <cmath>
@@ -539,7 +541,66 @@ void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
     ImGui::EndTable();
 }
 
+void DbgGui::exportPanel(PanelWindow& panel) {
+    auto const path = getFilenameToSave("json");
+    if (path.empty()) {
+        return;
+    }
+    try {
+        auto data = nlohmann::json::object();
+        for (auto const& saved : m_settings["panels"]) {
+            if (saved.value("id", uint64_t{0}) == panel.id) {
+                data = saved;
+                break;
+            }
+        }
+        panel.updateJson(data);
+        for (size_t index = 0; index < panel.widgets.size(); ++index) {
+            if (panel.widgets[index].plot) {
+                reconcilePlotSettings(*panel.widgets[index].plot, data["widgets"][index]["plot"]);
+            }
+        }
+        auto const text = panel_file::encode(std::move(data)).dump(2);
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(path);
+        out << text << '\n';
+        out.close();
+    } catch (std::exception const& error) {
+        logMessage(std::format("Cannot export panel: {}", error.what()));
+    }
+}
+
+bool DbgGui::importPanel() {
+    auto const path = getFilenameToOpen("json");
+    if (path.empty()) {
+        return false;
+    }
+    try {
+        std::ifstream in(path);
+        if (!in) {
+            throw std::runtime_error("Cannot open panel file");
+        }
+        auto const file = nlohmann::json::parse(in);
+        uint64_t id = hashWithTime(path);
+        while (std::ranges::any_of(m_panels, [id](auto const& panel) { return panel.id == id; })) {
+            ++id;
+        }
+        auto data = panel_file::decode(file, id);
+        PanelWindow panel(data);
+        m_settings["panels"].push_back(std::move(data));
+        m_panels.push_back(std::move(panel));
+        std::scoped_lock lock(m_sampling_mutex);
+        restorePanelPlotSettings();
+        return true;
+    } catch (std::exception const& error) {
+        logMessage(std::format("Cannot import panel: {}", error.what()));
+    }
+    return false;
+}
+
 void DbgGui::showPanels() {
+    bool import_requested = false;
     for (PanelWindow& panel : m_panels) {
         if (!panel.open) {
             continue;
@@ -552,7 +613,17 @@ void DbgGui::showPanels() {
         panel.focus.focused = ImGui::Begin(panel.title().c_str(), &panel.open);
         ImGui::PopStyleVar();
         panel.closeOnMiddleClick();
-        panel.contextMenu();
+        if (ImGui::BeginPopupContextItem("panel_context_menu")) {
+            ImGui::InputText("Name", &panel.name);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Import panel...")) {
+                import_requested = true;
+            }
+            if (ImGui::MenuItem("Export panel...")) {
+                exportPanel(panel);
+            }
+            ImGui::EndPopup();
+        }
         if (!panel.focus.focused) {
             ImGui::End();
             continue;
@@ -781,5 +852,8 @@ void DbgGui::showPanels() {
         }
         ImGui::EndChild();
         ImGui::End();
+    }
+    if (import_requested) {
+        importPanel();
     }
 }
