@@ -63,6 +63,26 @@ void showPanelScriptError(std::string_view error) {
     ImGui::EndChild();
 }
 
+void showPanelActionEditor(PanelActionScript& script) {
+    inputScriptTextWithLineNumbers(script.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
+    if (ImGui::Button("Apply script")) {
+        script.applyScript();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Close")) {
+        ImGui::CloseCurrentPopup();
+    }
+    std::string error = script.syntax_error;
+    if (script.action) {
+        if (script.action->running.load()) {
+            ImGui::TextDisabled("Running...");
+        } else if (error.empty()) {
+            error = script.action->error;
+        }
+    }
+    showPanelScriptError(error);
+}
+
 void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
     auto const& io = ImGui::GetIO();
     bool const hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -174,23 +194,72 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
             ImGui::InputText("Label", &cell.label);
             ImGui::SameLine();
             HelpMarker("Runs once when clicked. Clicking again stops the action. Lua waits use simulation time.");
-            inputScriptTextWithLineNumbers(cell.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
-            if (ImGui::Button("Apply script")) {
-                cell.applyScript();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Close")) {
-                ImGui::CloseCurrentPopup();
-            }
-            std::string error = cell.syntax_error;
-            if (cell.action) {
-                if (cell.action->running.load()) {
-                    ImGui::TextDisabled("Running...");
-                } else if (error.empty()) {
-                    error = cell.action->error;
+            showPanelActionEditor(cell);
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
+}
+
+void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
+    auto& grid = widget.checkboxes;
+    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
+        - 2 * ImGui::GetStyle().CellPadding.y);
+    if (!ImGui::BeginTable("checkboxes", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
+        return;
+    }
+    for (size_t index = 0; index < grid.cells.size(); ++index) {
+        auto& cell = grid.cells[index];
+        ImGui::TableNextColumn();
+        ImGui::PushID(static_cast<int>(index));
+        bool const checked = cell.checked;
+        if (checked) {
+            ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, RUNNING_BUTTON_PRESSED_DARK_GREEN);
+        }
+        if (ImGui::Button((cell.label + "###toggle").c_str(), {-1, cell_height}) && !ImGui::GetIO().KeyCtrl) {
+            auto action = cell.setChecked(!cell.checked, createLuaScriptHost());
+            std::scoped_lock lock(m_sampling_mutex);
+            m_panel.actions.push_back(action);
+        }
+        if (checked) {
+            ImGui::PopStyleColor(3);
+        }
+        if (cell.checked) {
+            ImVec2 const min = ImGui::GetItemRectMin();
+            ImVec2 const max = ImGui::GetItemRectMax();
+            float const mark_size = std::min(ImGui::GetFontSize(), cell_height);
+            ImGui::RenderCheckMark(ImGui::GetWindowDrawList(),
+                {min.x + ImGui::GetStyle().FramePadding.x, (min.y + max.y - mark_size) * 0.5f},
+                ImGui::GetColorU32(ImGuiCol_Text), mark_size);
+        }
+        if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
+            panel.selectWidget(widget.id, true);
+            ImGui::ClearActiveID();
+        }
+        if (ImGui::BeginPopupContextItem("checkbox_settings")) {
+            if (ImGui::IsWindowAppearing()) {
+                for (auto* script : {&cell.on_enable, &cell.on_disable}) {
+                    script->draft = script->script;
+                    script->syntax_error.clear();
                 }
             }
-            showPanelScriptError(error);
+            ImGui::InputText("Label", &cell.label);
+            ImGui::SameLine();
+            HelpMarker("Runs the selected transition script when checked or unchecked. Lua waits use simulation time.");
+            if (ImGui::BeginTabBar("checkbox_scripts")) {
+                if (ImGui::BeginTabItem("On enable")) {
+                    showPanelActionEditor(cell.on_enable);
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("On disable")) {
+                    showPanelActionEditor(cell.on_disable);
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
             ImGui::EndPopup();
         }
         ImGui::PopID();
@@ -271,7 +340,8 @@ void DbgGui::showPanels() {
                 ImGui::PushFont(ImGui::GetDefaultFont(), ImGui::GetFontSize() * panel.zoom);
                 bool const is_plot = widget.type == PanelWidgetType::Plot;
                 bool const is_buttons = widget.type == PanelWidgetType::ButtonGrid;
-                bool const has_controls = is_plot || is_buttons;
+                bool const is_checkbox = widget.type == PanelWidgetType::CheckboxGrid;
+                bool const has_controls = is_plot || is_buttons || is_checkbox;
                 float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
                 bool const visible = ImGui::BeginChild("widget", size,
@@ -303,13 +373,17 @@ void DbgGui::showPanels() {
                     }
                     if (ImGui::BeginPopupContextItem("widget_settings")) {
                         ImGui::InputText("Label", &widget.label);
-                        if (is_buttons) {
-                            int rows = widget.buttons.rows;
-                            int columns = widget.buttons.columns;
+                        if (is_buttons || is_checkbox) {
+                            int rows = is_buttons ? widget.buttons.rows : widget.checkboxes.rows;
+                            int columns = is_buttons ? widget.buttons.columns : widget.checkboxes.columns;
                             bool const rows_changed = ImGui::InputInt("Rows", &rows);
                             bool const columns_changed = ImGui::InputInt("Columns", &columns);
                             if (rows_changed || columns_changed) {
-                                widget.buttons.resize(rows, columns);
+                                if (is_buttons) {
+                                    widget.buttons.resize(rows, columns);
+                                } else {
+                                    widget.checkboxes.resize(rows, columns);
+                                }
                             }
                         }
                         if (widget.type == PanelWidgetType::Led) {
@@ -359,8 +433,10 @@ void DbgGui::showPanels() {
                             }
                             ImGui::SameLine();
                             renderPlotContents(*widget.plot);
-                        } else {
+                        } else if (is_buttons) {
                             renderPanelButtonGrid(widget, panel);
+                        } else {
+                            renderPanelCheckboxGrid(widget, panel);
                         }
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
@@ -420,7 +496,7 @@ void DbgGui::showPanels() {
                        std::pair{"Plot", PanelWidgetType::Plot},
                        {"Button grid", PanelWidgetType::ButtonGrid},
                        {"Value grid", PanelWidgetType::ValueGrid},
-                       {"Checkbox", PanelWidgetType::Checkbox},
+                       {"Checkbox grid", PanelWidgetType::CheckboxGrid},
                        {"Slider", PanelWidgetType::Slider},
                        {"LED", PanelWidgetType::Led}}) {
                     if (ImGui::MenuItem(label)) {
@@ -435,8 +511,8 @@ void DbgGui::showPanels() {
                             widget.plot = std::make_shared<PlotWindow>(label, widget.id);
                         } else if (type == PanelWidgetType::Led) {
                             widget.setSize({PANEL_GRID_SPACING, PANEL_GRID_SPACING});
-                        } else if (type == PanelWidgetType::Checkbox) {
-                            widget.size = {140, 30};
+                        } else if (type == PanelWidgetType::CheckboxGrid) {
+                            widget.size = {320, 160};
                         } else if (type == PanelWidgetType::Slider) {
                             widget.size = {240, 30};
                         }

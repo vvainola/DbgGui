@@ -44,7 +44,7 @@ enum class PanelWidgetType {
     Plot,
     ButtonGrid,
     ValueGrid,
-    Checkbox,
+    CheckboxGrid,
     Slider,
     Led
 };
@@ -100,8 +100,7 @@ struct PanelActionState {
     std::string error;
 };
 
-struct PanelButtonCell {
-    std::string label = "Button";
+struct PanelActionScript {
     std::string script;
     std::string draft;
     std::shared_ptr<PanelActionState> action;
@@ -120,15 +119,43 @@ struct PanelButtonCell {
     }
 };
 
-struct PanelButtonGrid {
+struct PanelButtonCell : PanelActionScript {
+    std::string label = "Button";
+};
+
+struct PanelCheckbox {
+    std::string label = "Checkbox";
+    bool checked = false;
+    PanelActionScript on_enable;
+    PanelActionScript on_disable;
+
+    std::shared_ptr<PanelActionState> setChecked(bool value, LuaScriptHost host) {
+        if (checked == value) {
+            return nullptr;
+        }
+        checked = value;
+        // A delayed action from the previous state must not undo this transition.
+        for (auto* script : {&on_enable, &on_disable}) {
+            if (script->action && script->action->running.load()) {
+                script->action->stop_requested.store(true);
+            }
+        }
+        auto& script = checked ? on_enable : on_disable;
+        script.action = std::make_shared<PanelActionState>(script.script, std::move(host));
+        return script.action;
+    }
+};
+
+template <typename Cell>
+struct PanelControlGrid {
     int rows = 1;
     int columns = 1;
-    std::vector<PanelButtonCell> cells{1};
+    std::vector<Cell> cells{1};
 
     void resize(int new_rows, int new_columns) {
         new_rows = std::clamp(new_rows, 1, 20);
         new_columns = std::clamp(new_columns, 1, 10);
-        std::vector<PanelButtonCell> resized(new_rows * new_columns);
+        std::vector<Cell> resized(new_rows * new_columns);
         for (int row = 0; row < std::min(rows, new_rows); ++row) {
             for (int col = 0; col < std::min(columns, new_columns); ++col) {
                 resized[row * new_columns + col] = std::move(cells[row * columns + col]);
@@ -139,6 +166,9 @@ struct PanelButtonGrid {
         cells = std::move(resized);
     }
 };
+
+using PanelButtonGrid = PanelControlGrid<PanelButtonCell>;
+using PanelCheckboxGrid = PanelControlGrid<PanelCheckbox>;
 
 struct PanelWidget {
     uint64_t id = 0;
@@ -155,13 +185,13 @@ struct PanelWidget {
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
     PanelButtonGrid buttons;
+    PanelCheckboxGrid checkboxes;
     void configureLed(LuaScriptHost host) {
         led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
     }
     ImVec2 minimumSize() const {
         switch (type) {
             case PanelWidgetType::Led: return {20, 20};
-            case PanelWidgetType::Checkbox: return {60, 20};
             case PanelWidgetType::Slider: return {100, 20};
             default: return {160, 100};
         }
@@ -209,6 +239,16 @@ struct PanelWindow : Window {
                     widget.led.condition = cells[0].value("script", widget.led.condition);
                 }
             }
+            if (widget.type == PanelWidgetType::CheckboxGrid) {
+                widget.checkboxes.resize(data.value("rows", 1), data.value("columns", 1));
+                auto const cells = data.value("cells", nlohmann::json::array());
+                for (size_t index = 0; index < cells.size() && index < widget.checkboxes.cells.size(); ++index) {
+                    auto& cell = widget.checkboxes.cells[index];
+                    cell.label = cells[index].value("label", cell.label);
+                    cell.on_enable.script = cells[index].value("on_enable", std::string{});
+                    cell.on_disable.script = cells[index].value("on_disable", std::string{});
+                }
+            }
             if (widget.type == PanelWidgetType::ButtonGrid) {
                 widget.buttons.resize(data.value("rows", 1), data.value("columns", 1));
                 auto const cells = data.value("cells", nlohmann::json::array());
@@ -253,6 +293,14 @@ struct PanelWindow : Window {
             if (widget.type == PanelWidgetType::Led) {
                 data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
                 data["cells"][0]["script"] = widget.led.condition;
+            }
+            if (widget.type == PanelWidgetType::CheckboxGrid) {
+                data["rows"] = widget.checkboxes.rows;
+                data["columns"] = widget.checkboxes.columns;
+                data["cells"] = nlohmann::json::array();
+                for (auto const& cell : widget.checkboxes.cells) {
+                    data["cells"].push_back({{"label", cell.label}, {"on_enable", cell.on_enable.script}, {"on_disable", cell.on_disable.script}});
+                }
             }
             if (widget.type == PanelWidgetType::ButtonGrid) {
                 data["rows"] = widget.buttons.rows;

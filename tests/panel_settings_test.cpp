@@ -43,7 +43,7 @@ TEST_CASE("Panel box selection and group movement use canvas coordinates") {
     PanelWindow panel("Panel", 1);
     panel.widgets = {
         {1, PanelWidgetType::Led, "LED", {10, 10}, {20, 20}},
-        {2, PanelWidgetType::Checkbox, "Check", {50, 10}, {60, 20}},
+        {2, PanelWidgetType::CheckboxGrid, "Check", {50, 10}, {60, 20}},
         {3, PanelWidgetType::Plot, "Plot", {200, 200}, {320, 180}}
     };
     panel.selectWidgetsInBox({120, 40}, {0, 0}, false);
@@ -289,4 +289,129 @@ TEST_CASE("Applying a valid button script does not stop or execute the running a
     REQUIRE(cell.action->running.load());
     REQUIRE_FALSE(cell.action->stop_requested.load());
     REQUIRE(cell.script == cell.draft);
+}
+
+TEST_CASE("Checkbox settings save transition scripts without runtime state or drafts") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.type = PanelWidgetType::CheckboxGrid;
+    widget.id = 2;
+    widget.label = "Enable output";
+    widget.checkboxes.cells[0].checked = true;
+    widget.checkboxes.cells[0].on_enable.script = "write('enabled', 1)";
+    widget.checkboxes.cells[0].on_disable.script = "write('enabled', 0)";
+    widget.checkboxes.cells[0].on_enable.draft = "invalid [";
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    auto const& cell = saved["widgets"][0]["cells"][0];
+    REQUIRE(cell["on_enable"] == "write('enabled', 1)");
+    REQUIRE(cell["on_disable"] == "write('enabled', 0)");
+    REQUIRE_FALSE(cell.contains("checked"));
+    REQUIRE_FALSE(cell.contains("draft"));
+    REQUIRE_FALSE(cell.contains("action"));
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets[0].label == "Enable output");
+    auto const& checkbox = restored.widgets[0].checkboxes.cells[0];
+    REQUIRE_FALSE(checkbox.checked);
+    REQUIRE(checkbox.on_enable.script == "write('enabled', 1)");
+    REQUIRE(checkbox.on_disable.script == "write('enabled', 0)");
+    REQUIRE(checkbox.on_enable.draft.empty());
+    REQUIRE_FALSE(checkbox.on_enable.action);
+    REQUIRE_FALSE(checkbox.on_disable.action);
+}
+
+TEST_CASE("Checkbox transitions queue the matching script and cancel the previous action") {
+    std::vector<double> writes;
+    LuaScriptHost host;
+    host.write = [&](std::string_view, double value) -> std::expected<void, std::string> {
+        writes.push_back(value);
+        return {};
+    };
+    PanelCheckbox checkbox;
+    checkbox.on_enable.script = "write('target', 1); wait(1); write('target', 9)";
+    checkbox.on_disable.script = "write('target', 0)";
+    REQUIRE_FALSE(checkbox.setChecked(false, host));
+    auto enabled = checkbox.setChecked(true, host);
+    REQUIRE(checkbox.checked);
+    REQUIRE(enabled == checkbox.on_enable.action);
+    REQUIRE(writes.empty());
+    enabled->process(0);
+    REQUIRE(writes == std::vector<double>{1});
+    auto disabled = checkbox.setChecked(false, host);
+    REQUIRE_FALSE(checkbox.checked);
+    REQUIRE(disabled == checkbox.on_disable.action);
+    REQUIRE(enabled->stop_requested.load());
+    enabled->process(1);
+    disabled->process(1);
+    REQUIRE(writes == std::vector<double>{1, 0});
+    REQUIRE_FALSE(enabled->running.load());
+    REQUIRE_FALSE(disabled->running.load());
+    REQUIRE_FALSE(checkbox.setChecked(false, host));
+    auto reenabled = checkbox.setChecked(true, host);
+    REQUIRE(reenabled != enabled);
+    reenabled->process(2);
+    REQUIRE(writes == std::vector<double>{1, 0, 1});
+}
+
+TEST_CASE("Checkbox transition editors apply and validate independently") {
+    PanelCheckbox checkbox;
+    checkbox.on_enable.script = "return";
+    checkbox.on_enable.draft = "invalid [";
+    checkbox.on_disable.draft = "write('target', 0)";
+    checkbox.on_enable.applyScript();
+    checkbox.on_disable.applyScript();
+    REQUIRE_FALSE(checkbox.on_enable.syntax_error.empty());
+    REQUIRE(checkbox.on_enable.script == "return");
+    REQUIRE(checkbox.on_disable.syntax_error.empty());
+    REQUIRE(checkbox.on_disable.script == "write('target', 0)");
+    REQUIRE_FALSE(checkbox.on_enable.action);
+    REQUIRE_FALSE(checkbox.on_disable.action);
+}
+
+TEST_CASE("Checkbox grids preserve cell state and scripts in their coordinates when resized") {
+    PanelCheckboxGrid grid;
+    grid.resize(2, 2);
+    auto& cell = grid.cells[2];
+    cell.label = "Output";
+    cell.on_enable.script = "wait(1)";
+    auto action = cell.setChecked(true, LuaScriptHost{});
+    grid.resize(3, 3);
+    REQUIRE(grid.cells[3].label == "Output");
+    REQUIRE(grid.cells[3].checked);
+    REQUIRE(grid.cells[3].on_enable.script == "wait(1)");
+    REQUIRE(grid.cells[3].on_enable.action == action);
+    REQUIRE_FALSE(grid.cells[2].checked);
+    auto other = grid.cells[0].setChecked(true, LuaScriptHost{});
+    REQUIRE(other != action);
+    REQUIRE_FALSE(action->stop_requested.load());
+    grid.resize(2, 2);
+    REQUIRE(grid.cells[2].label == "Output");
+    REQUIRE(grid.cells[2].checked);
+    grid.resize(1, 1);
+    REQUIRE(grid.cells.size() == 1);
+    REQUIRE(grid.cells[0].checked);
+}
+
+TEST_CASE("Checkbox grids round trip multiple cell labels and transition scripts") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.id = 2;
+    widget.type = PanelWidgetType::CheckboxGrid;
+    widget.checkboxes.resize(2, 2);
+    widget.checkboxes.cells[3].label = "Power";
+    widget.checkboxes.cells[3].on_enable.script = "write('power', 1)";
+    widget.checkboxes.cells[3].on_disable.script = "write('power', 0)";
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    REQUIRE(saved["widgets"][0]["rows"] == 2);
+    REQUIRE(saved["widgets"][0]["columns"] == 2);
+    REQUIRE(saved["widgets"][0]["cells"].size() == 4);
+    PanelWindow restored(saved);
+    auto const& cell = restored.widgets[0].checkboxes.cells[3];
+    REQUIRE(cell.label == "Power");
+    REQUIRE(cell.on_enable.script == "write('power', 1)");
+    REQUIRE(cell.on_disable.script == "write('power', 0)");
+    REQUIRE_FALSE(cell.checked);
 }

@@ -133,6 +133,7 @@ class DbgGui {
     LuaScriptHost createLuaScriptHost();
     void processPanelScripts(double timestamp);
     void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
+    void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
         std::string text;
