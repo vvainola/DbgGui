@@ -134,7 +134,7 @@ bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
         auto const bounds = panel.groupBounds(*group);
         ImVec2 const min = {origin.x + panel.pan.x + bounds.x * panel.zoom, origin.y + panel.pan.y + bounds.y * panel.zoom};
         ImVec2 const max = {origin.x + panel.pan.x + bounds.z * panel.zoom, origin.y + panel.pan.y + bounds.w * panel.zoom};
-        ImVec2 const header_end = {max.x, min.y + 24 * panel.zoom};
+        ImVec2 const header_end = {max.x, min.y + PanelGroup::TITLE_HEIGHT * panel.zoom};
         auto* draw = ImGui::GetWindowDrawList();
         draw->AddRectFilled(min, max, ImGui::GetColorU32(group->color), 4 * panel.zoom);
         draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), 4 * panel.zoom);

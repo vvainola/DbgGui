@@ -42,6 +42,7 @@ inline float snapToPanelGrid(float value) {
     return std::round(value / PANEL_GRID_SPACING) * PANEL_GRID_SPACING;
 }
 
+// Numeric values are stored in panel files and session settings.
 enum class PanelWidgetType {
     Plot,
     ButtonGrid,
@@ -211,6 +212,9 @@ struct PanelLedCell {
 };
 
 struct PanelGroup {
+    // Canvas units; shared by the group bounds and its draggable title area.
+    static constexpr float TITLE_HEIGHT = 24;
+
     uint64_t id = 0;
     std::string title = "Group";
     ImVec4 color = {0.15f, 0.25f, 0.3f, 0.7f};
@@ -259,6 +263,8 @@ struct PanelWindow : Window {
     explicit PanelWindow(nlohmann::json const& j) : Window(j) {
         zoom = std::clamp(j.value("zoom", 1.0f), 0.25f, 3.0f);
         pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
+        // Each widget saves its group metadata. Reconnect matching IDs to one
+        // shared group so edits and selection apply to all its members.
         std::map<uint64_t, std::shared_ptr<PanelGroup>> groups;
         for (auto const& data : j.value("widgets", nlohmann::json::array())) {
             int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
@@ -369,7 +375,7 @@ struct PanelWindow : Window {
         auto const previous_widgets = j.value("widgets", nlohmann::json::array());
         auto saved_widgets = nlohmann::json::array();
         for (auto const& widget : widgets) {
-            // Keep control settings while restoring the widget types in stages.
+            // Preserve saved plot placements whose scalars are not registered yet.
             auto data = nlohmann::json::object();
             for (auto const& saved : previous_widgets) {
                 if (saved.value("id", uint64_t{0}) == widget.id) {
@@ -508,7 +514,7 @@ struct PanelWindow : Window {
         for (auto const& widget : widgets) {
             if (widget.group.get() == &group) {
                 bounds.x = std::min(bounds.x, widget.position.x - group.padding);
-                bounds.y = std::min(bounds.y, widget.position.y - group.padding - 24);
+                bounds.y = std::min(bounds.y, widget.position.y - group.padding - PanelGroup::TITLE_HEIGHT);
                 bounds.z = std::max(bounds.z, widget.position.x + widget.size.x + group.padding);
                 bounds.w = std::max(bounds.w, widget.position.y + widget.size.y + group.padding);
             }
