@@ -919,21 +919,7 @@ void DbgGui::updateSavedSettings() {
         if (!panel.open) {
             continue;
         }
-        // Preserve widget/canvas settings until those parts are restored too.
-        auto panel_data = nlohmann::json::object();
-        for (auto const& saved : m_settings["panels"]) {
-            if (saved.value("id", uint64_t{0}) == panel.id) {
-                panel_data = saved;
-                break;
-            }
-        }
-        panel.updateJson(panel_data);
-        for (size_t index = 0; index < panel.widgets.size(); ++index) {
-            if (panel.widgets[index].plot) {
-                reconcilePlotSettings(*panel.widgets[index].plot, panel_data["widgets"][index]["plot"]);
-            }
-        }
-        saved_panels.push_back(std::move(panel_data));
+        saved_panels.push_back(panelSettings(panel));
     }
     m_settings["panels"] = std::move(saved_panels);
 
