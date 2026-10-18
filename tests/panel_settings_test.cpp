@@ -703,3 +703,59 @@ TEST_CASE("Panel text notes bound font sizes and support small rectangular geome
     REQUIRE(panel.widgets[0].size.x == 64);
     REQUIRE(panel.widgets[0].size.y == 32);
 }
+
+TEST_CASE("Panel groups expand selection and follow their members' bounds") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ValueGrid, "Two", {256, 64}, {160, 100}},
+                     {3, PanelWidgetType::TextNote, "Other", {600, 64}, {64, 32}}};
+    panel.selected_widgets = {1, 2};
+    panel.groupSelected();
+    auto group = panel.widgets[0].group;
+    REQUIRE(group == panel.widgets[1].group);
+    REQUIRE_FALSE(panel.widgets[2].group);
+    panel.selected_widgets.clear();
+    panel.selectWidget(2, false);
+    REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1, 2});
+    auto bounds = panel.groupBounds(*group);
+    REQUIRE(bounds.x == 48);
+    REQUIRE(bounds.y == 24);
+    REQUIRE(bounds.z == 432);
+    panel.moveSelectedWidgets({32, 64});
+    REQUIRE(panel.groupBounds(*group).x == bounds.x + 32);
+    REQUIRE(panel.widgets[2].position.x == 600);
+    panel.selectWidget(1, true);
+    REQUIRE(panel.selected_widgets.empty());
+    panel.selectWidgetsInBox({96, 128}, {97, 129}, false);
+    REQUIRE(panel.selected_widgets.size() == 2);
+    panel.ungroupSelected();
+    REQUIRE_FALSE(panel.widgets[0].group);
+    REQUIRE_FALSE(panel.widgets[1].group);
+}
+
+TEST_CASE("Groups round trip and pasted groups are independent of existing groups") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets.resize(2);
+    panel.widgets[0].id = 1;
+    panel.widgets[1].id = 2;
+    panel.selected_widgets = {1, 2};
+    panel.groupSelected();
+    auto group = panel.widgets[0].group;
+    group->title = "Controls";
+    group->padding = 24;
+    group->color = {0.1f, 0.2f, 0.3f, 0.4f};
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(panel_file::decode(panel_file::encode(saved), 10));
+    REQUIRE(restored.widgets[0].group == restored.widgets[1].group);
+    REQUIRE(restored.widgets[0].group != group);
+    REQUIRE(restored.widgets[0].group->title == "Controls");
+    REQUIRE(restored.widgets[0].group->padding == 24);
+    REQUIRE(restored.widgets[0].group->color.w == 0.4f);
+    auto clipboard = panel_clipboard::copy(saved, {1, 2});
+    PanelWindow pasted(nlohmann::json{{"widgets", panel_clipboard::place(clipboard, panel, {0, 0})}});
+    REQUIRE(pasted.widgets[0].group == pasted.widgets[1].group);
+    REQUIRE(pasted.widgets[0].group->id != group->id);
+    pasted.widgets[0].group->title = "Copy";
+    REQUIRE(group->title == "Controls");
+}

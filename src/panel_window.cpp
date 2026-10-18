@@ -90,6 +90,63 @@ void showPanelActionEditor(PanelActionScript& script) {
     showPanelScriptError(error);
 }
 
+bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
+    std::vector<std::shared_ptr<PanelGroup>> groups;
+    for (auto const& widget : panel.widgets) {
+        if (widget.group && !contains(groups, widget.group)) {
+            groups.push_back(widget.group);
+        }
+    }
+    bool header_hovered = false;
+    for (auto const& group : groups) {
+        auto const bounds = panel.groupBounds(*group);
+        ImVec2 const min = {origin.x + panel.pan.x + bounds.x * panel.zoom, origin.y + panel.pan.y + bounds.y * panel.zoom};
+        ImVec2 const max = {origin.x + panel.pan.x + bounds.z * panel.zoom, origin.y + panel.pan.y + bounds.w * panel.zoom};
+        ImVec2 const header_end = {max.x, min.y + 24 * panel.zoom};
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(min, max, ImGui::GetColorU32(group->color), 4 * panel.zoom);
+        draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), 4 * panel.zoom);
+        ImGui::PushFont(ImGui::GetDefaultFont(), 16 * panel.zoom);
+        draw->PushClipRect(min, header_end, true);
+        draw->AddText({min.x + 4 * panel.zoom, min.y + 4 * panel.zoom}, ImGui::GetColorU32(ImGuiCol_Text), group->title.c_str(), nullptr);
+        draw->PopClipRect();
+        ImGui::PopFont();
+        ImGui::PushID(std::to_string(group->id).c_str());
+        bool const hovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(min, header_end);
+        if (hovered) {
+            header_hovered = true;
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                auto const member = std::ranges::find(panel.widgets, group, &PanelWidget::group);
+                panel.selectWidget(member->id, ImGui::GetIO().KeyCtrl);
+                panel.moving_widgets = !ImGui::GetIO().KeyCtrl;
+                panel.move_origin = member->position;
+                panel.applied_move = {0, 0};
+                panel.box_selecting = false;
+            }
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+                ImGui::OpenPopup("group_settings");
+            }
+        }
+        if (ImGui::BeginPopup("group_settings")) {
+            ImGui::InputText("Title", &group->title);
+            ImGui::ColorEdit4("Background", &group->color.x, ImGuiColorEditFlags_NoInputs);
+            ImGui::SliderFloat("Padding", &group->padding, 0, 64, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::Button("Ungroup")) {
+                for (auto& widget : panel.widgets) {
+                    if (widget.group == group) {
+                        widget.group.reset();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+    return header_hovered;
+}
+
 void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
     auto const& io = ImGui::GetIO();
     bool const hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -675,6 +732,12 @@ void DbgGui::showPanels() {
             drawPanelCanvas(panel, origin, available);
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive()
                 && !io.WantTextInput && !panel.moving_widgets && !panel.resizing_widget) {
+                if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal)) {
+                    panel.groupSelected();
+                }
+                if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_RouteGlobal)) {
+                    panel.ungroupSelected();
+                }
                 if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal)) {
                     copyPanelWidgets(panel);
                 }
@@ -685,9 +748,21 @@ void DbgGui::showPanels() {
                                       (anchor.y - origin.y - panel.pan.y) / panel.zoom};
                 }
             }
+            if (panel.moving_widgets && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                ImVec2 const drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+                ImVec2 const movement = {snapToPanelGrid(panel.move_origin.x + drag.x / panel.zoom) - panel.move_origin.x,
+                                         snapToPanelGrid(panel.move_origin.y + drag.y / panel.zoom) - panel.move_origin.y};
+                panel.moveSelectedWidgets({movement.x - panel.applied_move.x, movement.y - panel.applied_move.y});
+                panel.applied_move = movement;
+            }
+            if (!io.MouseDown[ImGuiMouseButton_Left]) {
+                panel.moving_widgets = false;
+                panel.resizing_widget.reset();
+            }
+            bool const group_header_hovered = drawPanelGroups(panel, origin);
             // Capture empty-canvas clicks so dragging selects instead of moving the window.
             ImGui::InvisibleButton("background", available);
-            if (ImGui::IsItemClicked()) {
+            if (ImGui::IsItemClicked() && !group_header_hovered) {
                 panel.box_selecting = true;
                 panel.box_start = {(io.MousePos.x - origin.x - panel.pan.x) / panel.zoom,
                                    (io.MousePos.y - origin.y - panel.pan.y) / panel.zoom};
@@ -704,17 +779,6 @@ void DbgGui::showPanels() {
                 if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
                     panel.box_selecting = false;
                 }
-            }
-            if (panel.moving_widgets && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-                ImVec2 const drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
-                ImVec2 const movement = {snapToPanelGrid(panel.move_origin.x + drag.x / panel.zoom) - panel.move_origin.x,
-                                         snapToPanelGrid(panel.move_origin.y + drag.y / panel.zoom) - panel.move_origin.y};
-                panel.moveSelectedWidgets({movement.x - panel.applied_move.x, movement.y - panel.applied_move.y});
-                panel.applied_move = movement;
-            }
-            if (!io.MouseDown[ImGuiMouseButton_Left]) {
-                panel.moving_widgets = false;
-                panel.resizing_widget.reset();
             }
             std::optional<uint64_t> remove_widget;
             for (auto& widget : panel.widgets) {
@@ -868,7 +932,7 @@ void DbgGui::showPanels() {
                 overlay->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_CheckMark));
                 ImGui::EndChild();
             }
-            if (ImGui::BeginPopupContextWindow("canvas_menu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::BeginPopupContextWindow("canvas_menu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup)) {
                 ImVec2 const mouse = ImGui::GetMousePosOnOpeningCurrentPopup();
                 for (auto const& [label, type] : {
                        std::pair{"Plot", PanelWidgetType::Plot},
@@ -902,6 +966,16 @@ void DbgGui::showPanels() {
                                            snapToPanelGrid((mouse.y - origin.y - panel.pan.y) / panel.zoom)};
                         panel.widgets.push_back(std::move(widget));
                     }
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Group selection", "Ctrl+G", false, panel.selected_widgets.size() > 1)) {
+                    panel.groupSelected();
+                }
+                bool const grouped_selection = std::ranges::any_of(panel.widgets, [&](auto const& widget) {
+                    return widget.group && contains(panel.selected_widgets, widget.id);
+                });
+                if (ImGui::MenuItem("Ungroup selection", "Ctrl+Shift+G", false, grouped_selection)) {
+                    panel.ungroupSelected();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reset view")) {

@@ -28,6 +28,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cfloat>
+#include <map>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -208,12 +210,20 @@ struct PanelLedCell {
     }
 };
 
+struct PanelGroup {
+    uint64_t id = 0;
+    std::string title = "Group";
+    ImVec4 color = {0.15f, 0.25f, 0.3f, 0.7f};
+    float padding = 16;
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
     std::string label = "Widget";
     ImVec2 position = {30, 30};
     ImVec2 size = {320, 180};
+    std::shared_ptr<PanelGroup> group;
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
     PanelButtonGrid buttons;
@@ -249,6 +259,7 @@ struct PanelWindow : Window {
     explicit PanelWindow(nlohmann::json const& j) : Window(j) {
         zoom = std::clamp(j.value("zoom", 1.0f), 0.25f, 3.0f);
         pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
+        std::map<uint64_t, std::shared_ptr<PanelGroup>> groups;
         for (auto const& data : j.value("widgets", nlohmann::json::array())) {
             int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
             if (type < 0 || type > static_cast<int>(PanelWidgetType::TextNote)) {
@@ -258,6 +269,22 @@ struct PanelWindow : Window {
             widget.id = data.value("id", uint64_t(widgets.size() + 1));
             widget.type = static_cast<PanelWidgetType>(type);
             widget.label = data.value("label", widget.label);
+            if (data.contains("group") && data["group"].is_object()) {
+                auto const& saved = data["group"];
+                uint64_t const id = saved.at("id").get<uint64_t>();
+                auto& group = groups[id];
+                if (!group) {
+                    group = std::make_shared<PanelGroup>();
+                    group->id = id;
+                    group->title = saved.value("title", group->title);
+                    group->padding = std::clamp(saved.value("padding", 16.0f), 0.0f, 64.0f);
+                    auto const color = saved.value("color", std::vector<float>{0.15f, 0.25f, 0.3f, 0.7f});
+                    if (color.size() == 4) {
+                        group->color = {color[0], color[1], color[2], color[3]};
+                    }
+                }
+                widget.group = group;
+            }
             widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
             widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
             if (widget.type == PanelWidgetType::TextNote) {
@@ -357,6 +384,12 @@ struct PanelWindow : Window {
             data["y"] = widget.position.y;
             data["width"] = widget.size.x;
             data["height"] = widget.size.y;
+            data.erase("group");
+            if (widget.group) {
+                auto const& group = *widget.group;
+                data["group"] = {{"id", group.id}, {"title", group.title}, {"padding", group.padding},
+                    {"color", {group.color.x, group.color.y, group.color.z, group.color.w}}};
+            }
             if (widget.type == PanelWidgetType::TextNote) {
                 data["text"] = widget.note.text;
                 data["font_size"] = widget.note.font_size;
@@ -421,15 +454,66 @@ struct PanelWindow : Window {
         j["widgets"] = std::move(saved_widgets);
     }
     void selectWidget(uint64_t id, bool additive) {
-        if (additive) {
-            if (contains(selected_widgets, id)) {
-                remove(selected_widgets, id);
-            } else {
-                selected_widgets.push_back(id);
-            }
-        } else if (!contains(selected_widgets, id)) {
-            selected_widgets = {id};
+        auto it = std::ranges::find(widgets, id, &PanelWidget::id);
+        if (it == widgets.end()) {
+            return;
         }
+        std::vector<uint64_t> members;
+        for (auto const& widget : widgets) {
+            if (widget.id == id || (it->group && widget.group == it->group)) {
+                members.push_back(widget.id);
+            }
+        }
+        bool const all_selected = std::ranges::all_of(members, [&](uint64_t member) { return contains(selected_widgets, member); });
+        if (!additive) {
+            if (!all_selected) {
+                selected_widgets = members;
+            }
+        } else if (all_selected) {
+            std::erase_if(selected_widgets, [&](uint64_t member) { return contains(members, member); });
+        } else {
+            for (uint64_t member : members) {
+                if (!contains(selected_widgets, member)) {
+                    selected_widgets.push_back(member);
+                }
+            }
+        }
+    }
+    void groupSelected() {
+        if (selected_widgets.size() < 2) {
+            return;
+        }
+        auto group = std::make_shared<PanelGroup>();
+        for (auto const& widget : widgets) {
+            if (widget.group) {
+                group->id = std::max(group->id, widget.group->id);
+            }
+        }
+        ++group->id;
+        for (auto& widget : widgets) {
+            if (contains(selected_widgets, widget.id)) {
+                widget.group = group;
+            }
+        }
+    }
+    void ungroupSelected() {
+        for (auto& widget : widgets) {
+            if (contains(selected_widgets, widget.id)) {
+                widget.group.reset();
+            }
+        }
+    }
+    ImVec4 groupBounds(PanelGroup const& group) const {
+        ImVec4 bounds = {FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX};
+        for (auto const& widget : widgets) {
+            if (widget.group.get() == &group) {
+                bounds.x = std::min(bounds.x, widget.position.x - group.padding);
+                bounds.y = std::min(bounds.y, widget.position.y - group.padding - 24);
+                bounds.z = std::max(bounds.z, widget.position.x + widget.size.x + group.padding);
+                bounds.w = std::max(bounds.w, widget.position.y + widget.size.y + group.padding);
+            }
+        }
+        return bounds;
     }
     void selectWidgetsInBox(ImVec2 start, ImVec2 end, bool additive) {
         if (!additive) {
@@ -442,6 +526,16 @@ struct PanelWindow : Window {
                 && widget.position.y <= max.y && widget.position.y + widget.size.y >= min.y
                 && !contains(selected_widgets, widget.id)) {
                 selected_widgets.push_back(widget.id);
+            }
+        }
+        auto const selected = selected_widgets;
+        for (auto const& widget : widgets) {
+            if (widget.group && contains(selected, widget.id)) {
+                for (auto const& member : widgets) {
+                    if (member.group == widget.group && !contains(selected_widgets, member.id)) {
+                        selected_widgets.push_back(member.id);
+                    }
+                }
             }
         }
     }
