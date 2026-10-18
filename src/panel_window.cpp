@@ -57,6 +57,21 @@ void editPanelGridDimensions(PanelControlGrid<Cell>& grid) {
     }
 }
 
+float panelCellFontHeight(float cell_height) {
+    auto const& style = ImGui::GetStyle();
+    return std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
+}
+
+void pushPanelFontToFit(char const* text, float font_size, float width) {
+    font_size = std::max(1.0f, font_size);
+    ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
+    float const text_width = ImGui::CalcTextSize(text).x;
+    if (text_width > width) {
+        ImGui::PopFont();
+        ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_size * width / text_width));
+    }
+}
+
 void drawPanelScriptErrorBorder() {
     ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),
                                         ImGui::GetItemRectMax(),
@@ -309,28 +324,20 @@ void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
                             cell.scalar_id ? "Unavailable scalar" :
                                              "Drop a scalar here";
         auto const& style = ImGui::GetStyle();
-        float const font_height = std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
+        float const font_height = panelCellFontHeight(cell_height);
         float const cell_width = ImGui::GetContentRegionAvail().x;
         // Split the cell height between its label and value.
-        ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * grid.text_to_value_ratio));
-        float const label_width = ImGui::CalcTextSize(label).x;
-        if (label_width > cell_width) {
-            ImGui::PopFont();
-            ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * grid.text_to_value_ratio * cell_width / label_width));
-        }
+        pushPanelFontToFit(label, font_height * grid.text_to_value_ratio, cell_width);
         ImGui::TextUnformatted(label);
         ImGui::PopFont();
-        ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * (1.0f - grid.text_to_value_ratio)));
+        float const value_font_size = font_height * (1.0f - grid.text_to_value_ratio);
         if (available) {
             std::string const value = numberAsStr(scalar->getScaledValue());
-            float const value_width = ImGui::CalcTextSize(value.c_str()).x;
             float const input_width = std::max(1.0f, cell_width - 2 * style.FramePadding.x);
-            if (value_width > input_width) {
-                ImGui::PopFont();
-                ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * (1.0f - grid.text_to_value_ratio) * input_width / value_width));
-            }
+            pushPanelFontToFit(value.c_str(), value_font_size, input_width);
             addInputScalar(scalar->src, "##value", scalar->getScale(), scalar->getOffset(), scalar->read_only);
         } else {
+            ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, value_font_size));
             ImGui::TextDisabled("-");
         }
         ImGui::PopFont();
@@ -389,20 +396,13 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         Scalar* scalar = slider.scalar_id ? findScalar(m_scalars, *slider.scalar_id) : nullptr;
         bool const available = scalar && !scalar->deleted;
         auto const& style = ImGui::GetStyle();
-        float const font_height = std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
+        float const font_height = panelCellFontHeight(cell_height);
         float const cell_width = ImGui::GetContentRegionAvail().x;
         char const* label = available ?
                               scalar->alias_and_group.c_str() :
                             slider.scalar_id ? "Unavailable scalar" :
                                                "Drop a scalar here";
-        float label_font_size = std::max(1.0f, font_height * grid.text_to_value_ratio);
-        ImGui::PushFont(ImGui::GetDefaultFont(), label_font_size);
-        float const label_width = ImGui::CalcTextSize(label).x;
-        if (label_width > cell_width) {
-            ImGui::PopFont();
-            label_font_size = std::max(1.0f, label_font_size * cell_width / label_width);
-            ImGui::PushFont(ImGui::GetDefaultFont(), label_font_size);
-        }
+        pushPanelFontToFit(label, font_height * grid.text_to_value_ratio, cell_width);
         ImGui::TextUnformatted(label);
         ImGui::PopFont();
         if (available && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
@@ -433,15 +433,8 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         double const maximum = valid_range ? slider.maximum : 1;
         double value = available ? scalar->getScaledValue() : minimum;
         bool const writable = available && !scalar->read_only && scalar->getScale() != 0 && valid_range;
-        float value_font_size = std::max(1.0f, font_height * (1.0f - grid.text_to_value_ratio));
-        ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
-        float const value_width = ImGui::CalcTextSize(numberAsStr(value).c_str()).x;
         float const input_width = std::max(1.0f, cell_width - 2 * style.FramePadding.x);
-        if (value_width > input_width) {
-            ImGui::PopFont();
-            value_font_size = std::max(1.0f, value_font_size * input_width / value_width);
-            ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
-        }
+        pushPanelFontToFit(numberAsStr(value).c_str(), font_height * (1.0f - grid.text_to_value_ratio), input_width);
         ImGui::BeginGroup();
         ImGui::BeginDisabled(!writable);
         ImGui::SetNextItemWidth(-1);
