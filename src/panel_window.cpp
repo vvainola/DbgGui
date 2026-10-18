@@ -46,6 +46,17 @@ constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
 constexpr ImU32 SCRIPT_ERROR_RED = IM_COL32(255, 64, 64, 255);
 
+template <typename Cell>
+void editPanelGridDimensions(PanelControlGrid<Cell>& grid) {
+    int rows = grid.rows;
+    int columns = grid.columns;
+    bool const rows_changed = ImGui::InputInt("Rows", &rows);
+    bool const columns_changed = ImGui::InputInt("Columns", &columns);
+    if (rows_changed || columns_changed) {
+        grid.resize(rows, columns);
+    }
+}
+
 void drawPanelScriptErrorBorder() {
     ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
         SCRIPT_ERROR_RED, ImGui::GetStyle().FrameRounding, ImDrawFlags_None, 2.0f);
@@ -835,24 +846,25 @@ void DbgGui::showPanels() {
                         } else {
                             ImGui::InputText("Label", &widget.label);
                         }
-                        if (is_buttons || is_checkbox || is_values || is_slider || is_led) {
-                            int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : is_values ? widget.values.rows : is_slider ? widget.sliders.rows : widget.leds.rows;
-                            int columns = is_buttons ? widget.buttons.columns : is_checkbox ? widget.checkboxes.columns : is_values ? widget.values.columns : is_slider ? widget.sliders.columns : widget.leds.columns;
-                            bool const rows_changed = ImGui::InputInt("Rows", &rows);
-                            bool const columns_changed = ImGui::InputInt("Columns", &columns);
-                            if (rows_changed || columns_changed) {
-                                if (is_buttons) {
-                                    widget.buttons.resize(rows, columns);
-                                } else if (is_checkbox) {
-                                    widget.checkboxes.resize(rows, columns);
-                                } else if (is_values) {
-                                    widget.values.resize(rows, columns);
-                                } else if (is_slider) {
-                                    widget.sliders.resize(rows, columns);
-                                } else {
-                                    widget.leds.resize(rows, columns);
-                                }
-                            }
+                        switch (widget.type) {
+                            case PanelWidgetType::ButtonGrid:
+                                editPanelGridDimensions(widget.buttons);
+                                break;
+                            case PanelWidgetType::CheckboxGrid:
+                                editPanelGridDimensions(widget.checkboxes);
+                                break;
+                            case PanelWidgetType::ValueGrid:
+                                editPanelGridDimensions(widget.values);
+                                break;
+                            case PanelWidgetType::SliderGrid:
+                                editPanelGridDimensions(widget.sliders);
+                                break;
+                            case PanelWidgetType::LedGrid:
+                                editPanelGridDimensions(widget.leds);
+                                break;
+                            case PanelWidgetType::Plot:
+                            case PanelWidgetType::TextNote:
+                                break;
                         }
                         if (is_values || is_slider) {
                             float& ratio = is_values ? widget.values.text_to_value_ratio : widget.sliders.text_to_value_ratio;
