@@ -6,9 +6,18 @@ namespace panel_clipboard {
 
 inline nlohmann::json copy(nlohmann::json const& panel, std::vector<uint64_t> const& selected) {
     auto widgets = nlohmann::json::array();
+    std::vector<uint64_t> partial_groups;
     for (auto const& widget : panel.at("widgets")) {
         if (contains(selected, widget.at("id").get<uint64_t>())) {
             widgets.push_back(widget);
+        } else if (widget.contains("group")) {
+            partial_groups.push_back(widget["group"]["id"].get<uint64_t>());
+        }
+    }
+    // A background is copied only when all its members are selected.
+    for (auto& widget : widgets) {
+        if (widget.contains("group") && contains(partial_groups, widget["group"]["id"].get<uint64_t>())) {
+            widget.erase("group");
         }
     }
     if (!widgets.empty()) {

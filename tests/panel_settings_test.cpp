@@ -704,7 +704,7 @@ TEST_CASE("Panel text notes bound font sizes and support small rectangular geome
     REQUIRE(panel.widgets[0].size.y == 32);
 }
 
-TEST_CASE("Panel groups expand selection and follow their members' bounds") {
+TEST_CASE("Panel backgrounds do not couple widget selection or movement") {
     PanelWindow panel("Panel", 1);
     panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
                      {2, PanelWidgetType::ValueGrid, "Two", {256, 64}, {160, 100}},
@@ -716,21 +716,51 @@ TEST_CASE("Panel groups expand selection and follow their members' bounds") {
     REQUIRE_FALSE(panel.widgets[2].group);
     panel.selected_widgets.clear();
     panel.selectWidget(2, false);
-    REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1, 2});
+    REQUIRE(panel.selected_widgets == std::vector<uint64_t>{2});
     auto bounds = panel.groupBounds(*group);
     REQUIRE(bounds.x == 56);
     REQUIRE(bounds.y == 44);
     REQUIRE(bounds.z == 424);
     panel.moveSelectedWidgets({32, 64});
-    REQUIRE(panel.groupBounds(*group).x == bounds.x + 32);
+    REQUIRE(panel.widgets[0].position.x == 64);
+    REQUIRE(panel.widgets[0].position.y == 64);
+    REQUIRE(panel.widgets[1].position.x == 288);
+    REQUIRE(panel.widgets[1].position.y == 128);
     REQUIRE(panel.widgets[2].position.x == 600);
-    panel.selectWidget(1, true);
+    panel.selectWidget(2, true);
     REQUIRE(panel.selected_widgets.empty());
     panel.selectWidgetsInBox({96, 128}, {97, 129}, false);
-    REQUIRE(panel.selected_widgets.size() == 2);
+    REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1});
+    panel.removeWidgets(1);
+    REQUIRE(panel.widgets.size() == 2);
+    REQUIRE(panel.widgets[0].id == 2);
+    REQUIRE(panel.widgets[0].group == group);
+    panel.selectWidget(2, false);
     panel.ungroupSelected();
     REQUIRE_FALSE(panel.widgets[0].group);
-    REQUIRE_FALSE(panel.widgets[1].group);
+}
+
+TEST_CASE("Panel placement finds the topmost background at the canvas position") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ButtonGrid, "Two", {128, 64}, {160, 100}},
+                     {3, PanelWidgetType::ButtonGrid, "Three", {64, 64}, {160, 100}}};
+    panel.selected_widgets = {1, 3};
+    panel.groupSelected();
+    auto const first = panel.widgets[0].group;
+    panel.widgets[1].group = std::make_shared<PanelGroup>();
+    panel.widgets[1].group->id = first->id + 1;
+    REQUIRE(panel.groupAt({64, 64}) == first);
+    REQUIRE(panel.groupAt({160, 96}) == panel.widgets[1].group);
+    REQUIRE_FALSE(panel.groupAt({0, 0}));
+    PanelWidget added;
+    added.position = {160, 96};
+    added.group = panel.groupAt(added.position);
+    panel.widgets.push_back(std::move(added));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets.back().group == restored.widgets[1].group);
 }
 
 TEST_CASE("Groups round trip and pasted groups are independent of existing groups") {
@@ -752,6 +782,11 @@ TEST_CASE("Groups round trip and pasted groups are independent of existing group
     REQUIRE(restored.widgets[0].group->title == "Controls");
     REQUIRE(restored.widgets[0].group->padding == 24);
     REQUIRE(restored.widgets[0].group->color.w == 0.4f);
+    auto single = panel_clipboard::copy(saved, {1});
+    REQUIRE(single.size() == 1);
+    REQUIRE_FALSE(single[0].contains("group"));
+    PanelWindow pasted_single(nlohmann::json{{"widgets", panel_clipboard::place(single, panel, {640, 0})}});
+    REQUIRE_FALSE(pasted_single.widgets[0].group);
     auto clipboard = panel_clipboard::copy(saved, {1, 2});
     PanelWindow pasted(nlohmann::json{{"widgets", panel_clipboard::place(clipboard, panel, {0, 0})}});
     REQUIRE(pasted.widgets[0].group == pasted.widgets[1].group);

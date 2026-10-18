@@ -211,7 +211,7 @@ struct PanelLedCell {
 };
 
 struct PanelGroup {
-    // Canvas units; shared by the group bounds and its draggable title area.
+    // Canvas units; shared by the background bounds and its title area.
     static constexpr float TITLE_HEIGHT = 20;
 
     uint64_t id = 0;
@@ -268,25 +268,15 @@ struct PanelWindow : Window {
         if (it == widgets.end()) {
             return;
         }
-        std::vector<uint64_t> members;
-        for (auto const& widget : widgets) {
-            if (widget.id == id || (it->group && widget.group == it->group)) {
-                members.push_back(widget.id);
-            }
-        }
-        bool const all_selected = std::ranges::all_of(members, [&](uint64_t member) { return contains(selected_widgets, member); });
+        bool const selected = contains(selected_widgets, id);
         if (!additive) {
-            if (!all_selected) {
-                selected_widgets = members;
+            if (!selected) {
+                selected_widgets = {id};
             }
-        } else if (all_selected) {
-            std::erase_if(selected_widgets, [&](uint64_t member) { return contains(members, member); });
+        } else if (selected) {
+            std::erase(selected_widgets, id);
         } else {
-            for (uint64_t member : members) {
-                if (!contains(selected_widgets, member)) {
-                    selected_widgets.push_back(member);
-                }
-            }
+            selected_widgets.push_back(id);
         }
     }
     void groupSelected() {
@@ -325,6 +315,23 @@ struct PanelWindow : Window {
         }
         return bounds;
     }
+    std::shared_ptr<PanelGroup> groupAt(ImVec2 position) const {
+        std::vector<std::shared_ptr<PanelGroup>> groups;
+        for (auto const& widget : widgets) {
+            if (widget.group && !contains(groups, widget.group)) {
+                groups.push_back(widget.group);
+            }
+        }
+        // Backgrounds are drawn in first-member order; the last one is on top.
+        for (auto it = groups.rbegin(); it != groups.rend(); ++it) {
+            auto const bounds = groupBounds(**it);
+            if (position.x >= bounds.x && position.x <= bounds.z
+                && position.y >= bounds.y && position.y <= bounds.w) {
+                return *it;
+            }
+        }
+        return nullptr;
+    }
     void selectWidgetsInBox(ImVec2 start, ImVec2 end, bool additive) {
         if (!additive) {
             selected_widgets.clear();
@@ -336,16 +343,6 @@ struct PanelWindow : Window {
                 && widget.position.y <= max.y && widget.position.y + widget.size.y >= min.y
                 && !contains(selected_widgets, widget.id)) {
                 selected_widgets.push_back(widget.id);
-            }
-        }
-        auto const selected = selected_widgets;
-        for (auto const& widget : widgets) {
-            if (widget.group && contains(selected, widget.id)) {
-                for (auto const& member : widgets) {
-                    if (member.group == widget.group && !contains(selected_widgets, member.id)) {
-                        selected_widgets.push_back(member.id);
-                    }
-                }
             }
         }
     }

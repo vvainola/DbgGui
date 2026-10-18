@@ -172,9 +172,14 @@ bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
             header_hovered = true;
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                panel.selected_widgets.clear();
+                for (auto const& widget : panel.widgets) {
+                    if (widget.group == group) {
+                        panel.selected_widgets.push_back(widget.id);
+                    }
+                }
                 auto const member = std::ranges::find(panel.widgets, group, &PanelWidget::group);
-                panel.selectWidget(member->id, ImGui::GetIO().KeyCtrl);
-                panel.moving_widgets = !ImGui::GetIO().KeyCtrl;
+                panel.moving_widgets = true;
                 panel.move_origin = member->position;
                 panel.applied_move = {0, 0};
                 panel.box_selecting = false;
@@ -668,15 +673,20 @@ void DbgGui::pastePanelWidgets(PanelWindow& panel, ImVec2 position) {
     }
     auto widgets = panel_clipboard::place(m_panel.widget_clipboard, panel, position);
     PanelWindow pasted(nlohmann::json{{"widgets", widgets}});
+    auto const group = panel.groupAt({snapToPanelGrid(position.x), snapToPanelGrid(position.y)});
     auto saved = panelSettings(panel);
     panel.selected_widgets.clear();
     for (auto& widget : pasted.widgets) {
+        if (!widget.group) {
+            widget.group = group;
+        }
         panel.selected_widgets.push_back(widget.id);
         panel.widgets.push_back(std::move(widget));
     }
     for (auto& widget : widgets) {
         saved["widgets"].push_back(std::move(widget));
     }
+    panel.updateJson(saved);
     auto& panels = m_settings["panels"];
     auto it = std::ranges::find(panels, panel.id, [](auto const& value) { return value.value("id", uint64_t{0}); });
     if (it != panels.end()) {
@@ -1012,6 +1022,7 @@ void DbgGui::showPanels() {
                         widget.label = label;
                         widget.position = {snapToPanelGrid((mouse.x - origin.x - panel.pan.x) / panel.zoom),
                                            snapToPanelGrid((mouse.y - origin.y - panel.pan.y) / panel.zoom)};
+                        widget.group = panel.groupAt(widget.position);
                         panel.widgets.push_back(std::move(widget));
                     }
                 }

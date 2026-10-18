@@ -28,7 +28,7 @@ PanelWindow::PanelWindow(nlohmann::json const& j) : Window(j) {
     zoom = std::clamp(j.value("zoom", 1.0f), 0.25f, 3.0f);
     pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
     // Each widget saves its group metadata. Reconnect matching IDs to one
-    // shared group so edits and selection apply to all its members.
+    // shared background so title and color edits apply to all its members.
     std::map<uint64_t, std::shared_ptr<PanelGroup>> groups;
     for (auto const& data : j.value("widgets", nlohmann::json::array())) {
         int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
