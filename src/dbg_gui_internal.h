@@ -136,6 +136,9 @@ class DbgGui {
     void renderPanelValueGrid(PanelWidget& widget);
     void renderPanelSliderGrid(PanelWidget& widget);
     void renderPanelLedGrid(PanelWidget& widget);
+    nlohmann::json panelSettings(PanelWindow& panel);
+    void copyPanelWidgets(PanelWindow& panel);
+    void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
     void exportPanel(PanelWindow& panel);
     bool importPanel();
     void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
@@ -259,6 +262,7 @@ class DbgGui {
         std::vector<std::weak_ptr<PanelLedState>> led_scripts;
         std::vector<std::weak_ptr<PanelActionState>> actions;
         std::atomic<bool> scripts_requested = false;
+        nlohmann::json widget_clipboard = nlohmann::json::array();
     } m_panel;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;

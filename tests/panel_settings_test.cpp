@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "panel_window.h"
 #include "panel_file.h"
+#include "panel_clipboard.h"
 
 TEST_CASE("Panel widget geometry preserves saved control settings") {
     nlohmann::json saved = {
@@ -601,4 +602,48 @@ TEST_CASE("Panel files retain unresolved plot placements") {
     REQUIRE(decoded["widgets"][0]["plot"] == panel["widgets"][0]["plot"]);
     PanelWindow restored(decoded);
     REQUIRE(restored.widgets[0].plot->id == restored.widgets[0].id);
+}
+
+TEST_CASE("Panel clipboard preserves relative positions and assigns destination IDs") {
+    PanelWindow source("Source", 1);
+    source.widgets = {{7, PanelWidgetType::ButtonGrid, "First", {64, 96}},
+                      {8, PanelWidgetType::ValueGrid, "Second", {128, 32}}};
+    source.widgets[0].buttons.cells[0].script = "write('enabled', 1)";
+    source.widgets[1].values.cells[0].scalar_id = 123;
+    nlohmann::json saved;
+    source.updateJson(saved);
+    auto clipboard = panel_clipboard::copy(saved, {7, 8});
+    PanelWindow destination("Destination", 2);
+    destination.widgets.emplace_back();
+    destination.widgets[0].id = 50;
+    auto pasted = panel_clipboard::place(clipboard, destination, {17, 80});
+    PanelWindow restored(nlohmann::json{{"widgets", pasted}});
+    REQUIRE(restored.widgets[0].id == 51);
+    REQUIRE(restored.widgets[1].id == 52);
+    REQUIRE(restored.widgets[0].position.x == 32);
+    REQUIRE(restored.widgets[0].position.y == 160);
+    REQUIRE(restored.widgets[1].position.x == 96);
+    REQUIRE(restored.widgets[1].position.y == 96);
+    REQUIRE(restored.widgets[0].buttons.cells[0].script == "write('enabled', 1)");
+    REQUIRE(restored.widgets[1].values.cells[0].scalar_id == 123);
+    REQUIRE(clipboard[0]["id"] == 7);
+    REQUIRE(panel_clipboard::copy(saved, {8}).size() == 1);
+    REQUIRE(panel_clipboard::copy(saved, {}).empty());
+}
+
+TEST_CASE("Pasted widgets omit drafts and script runtimes") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets.emplace_back();
+    auto& widget = panel.widgets[0];
+    widget.id = 2;
+    widget.buttons.cells[0].script = "return";
+    widget.buttons.cells[0].draft = "unsaved";
+    widget.buttons.cells[0].action = std::make_shared<PanelActionState>("return", LuaScriptHost{});
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    auto clipboard = panel_clipboard::copy(saved, {2});
+    PanelWindow pasted(nlohmann::json{{"widgets", panel_clipboard::place(clipboard, panel, {0, 0})}});
+    REQUIRE_FALSE(pasted.widgets[0].buttons.cells[0].action);
+    REQUIRE(pasted.widgets[0].buttons.cells[0].draft.empty());
+    REQUIRE(pasted.widgets[0].buttons.cells[0].script == "return");
 }

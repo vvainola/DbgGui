@@ -26,6 +26,7 @@
 #include "imgui_stdlib.h"
 #include "lua_script_editor.h"
 #include "panel_file.h"
+#include "panel_clipboard.h"
 #include <fstream>
 
 #include <algorithm>
@@ -541,25 +542,62 @@ void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
     ImGui::EndTable();
 }
 
+nlohmann::json DbgGui::panelSettings(PanelWindow& panel) {
+    auto data = nlohmann::json::object();
+    for (auto const& saved : m_settings["panels"]) {
+        if (saved.value("id", uint64_t{0}) == panel.id) {
+            data = saved;
+            break;
+        }
+    }
+    panel.updateJson(data);
+    for (size_t index = 0; index < panel.widgets.size(); ++index) {
+        if (panel.widgets[index].plot) {
+            reconcilePlotSettings(*panel.widgets[index].plot, data["widgets"][index]["plot"]);
+        }
+    }
+    return data;
+}
+
+void DbgGui::copyPanelWidgets(PanelWindow& panel) {
+    if (!panel.selected_widgets.empty()) {
+        m_panel.widget_clipboard = panel_clipboard::copy(panelSettings(panel), panel.selected_widgets);
+    }
+}
+
+void DbgGui::pastePanelWidgets(PanelWindow& panel, ImVec2 position) {
+    if (m_panel.widget_clipboard.empty()) {
+        return;
+    }
+    auto widgets = panel_clipboard::place(m_panel.widget_clipboard, panel, position);
+    PanelWindow pasted(nlohmann::json{{"widgets", widgets}});
+    auto saved = panelSettings(panel);
+    panel.selected_widgets.clear();
+    for (auto& widget : pasted.widgets) {
+        panel.selected_widgets.push_back(widget.id);
+        panel.widgets.push_back(std::move(widget));
+    }
+    for (auto& widget : widgets) {
+        saved["widgets"].push_back(std::move(widget));
+    }
+    auto& panels = m_settings["panels"];
+    auto it = std::ranges::find(panels, panel.id, [](auto const& value) { return value.value("id", uint64_t{0}); });
+    if (it != panels.end()) {
+        *it = std::move(saved);
+    } else {
+        panels.push_back(std::move(saved));
+    }
+    std::scoped_lock lock(m_sampling_mutex);
+    restorePanelPlotSettings();
+}
+
 void DbgGui::exportPanel(PanelWindow& panel) {
     auto const path = getFilenameToSave("json");
     if (path.empty()) {
         return;
     }
     try {
-        auto data = nlohmann::json::object();
-        for (auto const& saved : m_settings["panels"]) {
-            if (saved.value("id", uint64_t{0}) == panel.id) {
-                data = saved;
-                break;
-            }
-        }
-        panel.updateJson(data);
-        for (size_t index = 0; index < panel.widgets.size(); ++index) {
-            if (panel.widgets[index].plot) {
-                reconcilePlotSettings(*panel.widgets[index].plot, data["widgets"][index]["plot"]);
-            }
-        }
+        auto data = panelSettings(panel);
         auto const text = panel_file::encode(std::move(data)).dump(2);
         std::ofstream out;
         out.exceptions(std::ios::failbit | std::ios::badbit);
@@ -628,12 +666,25 @@ void DbgGui::showPanels() {
             ImGui::End();
             continue;
         }
+        std::optional<ImVec2> paste_position;
         if (ImGui::BeginChild("canvas", ImVec2(0, 0), ImGuiChildFlags_Borders,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
             auto const& io = ImGui::GetIO();
             ImVec2 const origin = ImGui::GetCursorScreenPos();
             ImVec2 const available = ImGui::GetContentRegionAvail();
             drawPanelCanvas(panel, origin, available);
+            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive()
+                && !io.WantTextInput && !panel.moving_widgets && !panel.resizing_widget) {
+                if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal)) {
+                    copyPanelWidgets(panel);
+                }
+                if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal) && !m_panel.widget_clipboard.empty()) {
+                    ImVec2 const anchor = ImGui::IsMouseHoveringRect(origin, {origin.x + available.x, origin.y + available.y})
+                        ? io.MousePos : ImVec2(origin.x + available.x * 0.5f, origin.y + available.y * 0.5f);
+                    paste_position = {(anchor.x - origin.x - panel.pan.x) / panel.zoom,
+                                      (anchor.y - origin.y - panel.pan.y) / panel.zoom};
+                }
+            }
             // Capture empty-canvas clicks so dragging selects instead of moving the window.
             ImGui::InvisibleButton("background", available);
             if (ImGui::IsItemClicked()) {
@@ -852,6 +903,9 @@ void DbgGui::showPanels() {
             }
         }
         ImGui::EndChild();
+        if (paste_position) {
+            pastePanelWidgets(panel, *paste_position);
+        }
         ImGui::End();
     }
     if (import_requested) {
