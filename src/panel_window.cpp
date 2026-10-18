@@ -40,9 +40,12 @@ constexpr ImVec2 PANEL_SCRIPT_EDITOR_SIZE = {420, 180};
 constexpr ImVec4 RUNNING_BUTTON_GREEN = {0.15f, 0.5f, 0.2f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
-constexpr ImVec4 FAILED_BUTTON_RED = {0.65f, 0.15f, 0.15f, 1.0f};
-constexpr ImVec4 FAILED_BUTTON_HOVERED_LIGHT_RED = {0.75f, 0.2f, 0.2f, 1.0f};
-constexpr ImVec4 FAILED_BUTTON_PRESSED_DARK_RED = {0.5f, 0.1f, 0.1f, 1.0f};
+constexpr ImU32 SCRIPT_ERROR_RED = IM_COL32(255, 64, 64, 255);
+
+void drawPanelScriptErrorBorder() {
+    ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+        SCRIPT_ERROR_RED, ImGui::GetStyle().FrameRounding, ImDrawFlags_None, 2.0f);
+}
 
 void showPanelScriptError(std::string_view error) {
     if (error.empty()) {
@@ -163,11 +166,10 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
         ImGui::TableNextColumn();
         ImGui::PushID(static_cast<int>(index));
         bool const running = cell.action && cell.action->running.load();
-        bool const failed = !running && cell.action && !cell.action->error.empty();
-        if (running || failed) {
-            ImGui::PushStyleColor(ImGuiCol_Button, failed ? FAILED_BUTTON_RED : RUNNING_BUTTON_GREEN);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, failed ? FAILED_BUTTON_HOVERED_LIGHT_RED : RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, failed ? FAILED_BUTTON_PRESSED_DARK_RED : RUNNING_BUTTON_PRESSED_DARK_GREEN);
+        if (running) {
+            ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, RUNNING_BUTTON_PRESSED_DARK_GREEN);
         }
         if (ImGui::Button((cell.label + "###action").c_str(), {-1, cell_height}) && !ImGui::GetIO().KeyCtrl) {
             if (running) {
@@ -178,8 +180,11 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
                 m_panel.actions.push_back(cell.action);
             }
         }
-        if (running || failed) {
+        if (running) {
             ImGui::PopStyleColor(3);
+        }
+        if (cell.hasError()) {
+            drawPanelScriptErrorBorder();
         }
         if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
             panel.selectWidget(widget.id, true);
@@ -299,6 +304,9 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
         }
         if (checked) {
             ImGui::PopStyleColor(3);
+        }
+        if (cell.on_enable.hasError() || cell.on_disable.hasError()) {
+            drawPanelScriptErrorBorder();
         }
         if (cell.checked) {
             ImVec2 const min = ImGui::GetItemRectMin();
@@ -503,6 +511,9 @@ void DbgGui::showPanels() {
                         auto result = led.result.load();
                         widget_draw->AddCircleFilled(center, radius,
                             result->lit ? ImGui::GetColorU32(widget.led.color) : IM_COL32(60, 60, 60, 255));
+                        if (!result->error.empty()) {
+                            widget_draw->AddCircle(center, radius, SCRIPT_ERROR_RED, 0, 2.0f);
+                        }
                     } else if (has_controls) {
                         widget_draw->AddText({control_position.x, control_position.y + ImGui::GetStyle().FramePadding.y},
                                             ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());

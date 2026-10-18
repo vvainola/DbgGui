@@ -106,6 +106,10 @@ struct PanelActionScript {
     std::shared_ptr<PanelActionState> action;
     std::string syntax_error;
 
+    bool hasError() const {
+        return !syntax_error.empty() || (action && !action->running.load() && !action->error.empty());
+    }
+
     void applyScript() {
         if (auto result = validateLuaSyntax(draft, "Panel action"); !result) {
             syntax_error = result.error();

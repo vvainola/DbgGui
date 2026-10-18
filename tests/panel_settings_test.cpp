@@ -458,3 +458,21 @@ TEST_CASE("Panel value grids save their text to value ratio and default to 30 pe
     saved["widgets"][0]["text_to_value_ratio"] = 2.0f;
     REQUIRE(PanelWindow(saved).widgets[0].values.text_to_value_ratio == 0.95f);
 }
+
+TEST_CASE("Panel action error indicators include syntax and completed runtime errors") {
+    PanelActionScript script;
+    REQUIRE_FALSE(script.hasError());
+    script.draft = "unfinished [";
+    script.applyScript();
+    REQUIRE(script.hasError());
+    script.draft = "return";
+    script.applyScript();
+    REQUIRE_FALSE(script.hasError());
+
+    script.action = std::make_shared<PanelActionState>("error('failed')", LuaScriptHost{});
+    REQUIRE_FALSE(script.hasError());
+    script.action->process(0);
+    REQUIRE(script.hasError());
+    script.applyScript();
+    REQUIRE_FALSE(script.hasError());
+}
