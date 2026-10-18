@@ -191,3 +191,56 @@ TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved co
     REQUIRE_FALSE(settings["scalar_symbols"].contains("x (old)"));
     REQUIRE(settings["scalar_symbols"]["x (new)"]["group"] == "new");
 }
+
+TEST_CASE("Full plot restoration covers mixed styles and late registration") {
+    nlohmann::json saved = {
+        {"id", 1}, {"name", "Plot"}, {"rows", 1}, {"cols", 3},
+        {"subplots", nlohmann::json::array({
+            {{"type", PlotType::Scalar}, {"signals", {{"source", 1}}}},
+            {{"type", PlotType::Vector}, {"vectors", {{1, 2}}}},
+            {{"type", PlotType::Spectrum}, {"spectrums", {{1, 0}}}}
+        })}
+    };
+    PlotWindow plot(saved);
+    std::vector<std::unique_ptr<Scalar>> scalars;
+    scalars.push_back(makeSettingsScalar(1));
+    auto sampled = plot_settings::restorePlot(plot, saved, scalars);
+    REQUIRE(sampled == std::vector<Scalar*>{scalars[0].get()});
+    REQUIRE(plot.subplots[0].scalars.size() == 1);
+    REQUIRE(plot.subplots[1].vectors.empty());
+    REQUIRE(plot.subplots[2].spectrums.size() == 1);
+    scalars.push_back(makeSettingsScalar(2));
+    sampled = plot_settings::restorePlot(plot, saved, scalars, 2);
+    REQUIRE(sampled.size() == 2);
+    REQUIRE(plot.subplots[1].vectors.size() == 1);
+    REQUIRE(plot.subplots[1].vectors[0].y == scalars[1].get());
+    plot_settings::restorePlot(plot, saved, scalars);
+    REQUIRE(plot.subplots[0].scalars.size() == 1);
+    REQUIRE(plot.subplots[1].vectors.size() == 1);
+    REQUIRE(plot.subplots[2].spectrums.size() == 1);
+}
+
+TEST_CASE("Scalar moves remap embedded panel plot placements") {
+    Scalar scalar;
+    scalar.name = "source";
+    scalar.group = "new";
+    scalar.id = 2;
+    scalar.updateDisplayNames();
+    nlohmann::json settings;
+    settings["panels"] = nlohmann::json::array({{
+        {"id", 1}, {"widgets", nlohmann::json::array({{
+            {"id", 1}, {"plot", {{"subplots", nlohmann::json::array({{
+                {"signals", {{"source (old)", 1}}}, {"vectors", {{1, 99}}},
+                {"spectrums", {{1, 0}}}, {"reference_frame", {1, 99}}
+            }})}}}
+        }})}
+    }});
+    plot_settings::remapScalarId(settings, 1, "old", scalar);
+    auto const& widget = settings["panels"][0]["widgets"][0];
+    auto const& subplot = widget["plot"]["subplots"][0];
+    REQUIRE(widget["id"] == 1);
+    REQUIRE(subplot["signals"]["source (new)"] == 2);
+    REQUIRE(subplot["vectors"][0] == nlohmann::json::array({2, 99}));
+    REQUIRE(subplot["spectrums"][0] == nlohmann::json::array({2, 0}));
+    REQUIRE(subplot["reference_frame"] == nlohmann::json::array({2, 99}));
+}

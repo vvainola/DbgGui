@@ -38,7 +38,6 @@ void forEachSignalId(nlohmann::json const& signals, Fn fn) {
     }
 }
 
-
 template <typename Fn>
 void forEachPair(nlohmann::json const& pairs, Fn fn) {
     if (!pairs.is_array()) {
@@ -154,8 +153,29 @@ inline std::vector<Scalar*> restoreSpectra(PlotWindow::Subplot& subplot,
     return to_sample;
 }
 
-inline void reconcileScalars(PlotWindow::Subplot const& subplot, nlohmann::json& saved_subplot,
-                              std::vector<std::unique_ptr<Scalar>> const& scalars) {
+// Restore all styles through the same path for standalone and embedded plots.
+inline std::vector<Scalar*> restorePlot(PlotWindow& plot,
+                                        nlohmann::json const& saved,
+                                        std::vector<std::unique_ptr<Scalar>> const& scalars,
+                                        std::optional<uint64_t> registered_id = std::nullopt) {
+    std::vector<Scalar*> to_sample;
+    auto const subplots = saved.find("subplots");
+    if (subplots == saved.end() || !subplots->is_array()) {
+        return to_sample;
+    }
+    for (size_t index = 0; index < subplots->size() && index < plot.subplots.size(); ++index) {
+        for (auto restore : {restoreScalars, restoreVectors, restoreSpectra}) {
+            for (auto* scalar : restore(plot.subplots[index], (*subplots)[index], scalars, registered_id)) {
+                if (!contains(to_sample, scalar)) {
+                    to_sample.push_back(scalar);
+                }
+            }
+        }
+    }
+    return to_sample;
+}
+
+inline void reconcileScalars(PlotWindow::Subplot const& subplot, nlohmann::json& saved_subplot, std::vector<std::unique_ptr<Scalar>> const& scalars) {
     auto& signals = saved_subplot["signals"];
     if (!signals.is_object()) {
         signals = nlohmann::json::object();
@@ -221,8 +241,10 @@ inline void reconcileSpectra(PlotWindow::Subplot const& subplot,
 
 // A group move changes the scalar ID. Update saved references too, including
 // unresolved pairs that cannot be rebuilt from runtime placements when saving.
-inline void remapScalarId(nlohmann::json& settings, uint64_t old_id,
-                          std::string const& old_group, Scalar const& scalar) {
+inline void remapScalarId(nlohmann::json& settings,
+                          uint64_t old_id,
+                          std::string const& old_group,
+                          Scalar const& scalar) {
     uint64_t const new_id = scalar.id;
     std::string const old_name = scalar.name + " (" + old_group + ")";
     std::string const old_custom_key = old_group + " " + scalar.name;
@@ -248,9 +270,9 @@ inline void remapScalarId(nlohmann::json& settings, uint64_t old_id,
             signals.erase(old_key);
         }
     };
-    for (auto& plot : settings["scalar_plots"]) {
+    auto remap_plot = [&](nlohmann::json& plot) {
         if (!plot.contains("subplots")) {
-            continue;
+            return;
         }
         for (auto& subplot : plot["subplots"]) {
             remap_signals(subplot, old_name, scalar.name_and_group);
@@ -258,6 +280,16 @@ inline void remapScalarId(nlohmann::json& settings, uint64_t old_id,
                 if (subplot.contains(key)) {
                     remap_ids(remap_ids, subplot[key]);
                 }
+            }
+        }
+    };
+    for (auto& plot : settings["scalar_plots"]) {
+        remap_plot(plot);
+    }
+    for (auto& panel : settings["panels"]) {
+        for (auto& widget : panel["widgets"]) {
+            if (widget.contains("plot")) {
+                remap_plot(widget["plot"]);
             }
         }
     }

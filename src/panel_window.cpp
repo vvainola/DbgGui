@@ -159,8 +159,11 @@ void DbgGui::showPanels() {
                 ImVec2 const corner = {position.x + size.x, position.y + size.y};
                 ImGui::SetCursorScreenPos(position);
                 ImGui::PushFont(ImGui::GetDefaultFont(), ImGui::GetFontSize() * panel.zoom);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-                bool const visible = ImGui::BeginChild("widget", size, ImGuiChildFlags_None,
+                bool const is_plot = widget.type == PanelWidgetType::Plot;
+                float const plot_padding = is_plot ? 12.0f * panel.zoom : 0.0f;
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(plot_padding, 0));
+                bool const visible = ImGui::BeginChild("widget", size,
+                    is_plot ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None,
                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                 ImGui::PopStyleVar();
                 if (visible) {
@@ -168,10 +171,13 @@ void DbgGui::showPanels() {
                     float const grip = std::min(std::max(12.0f, 16.0f * panel.zoom), std::min(size.x, size.y) / 3.0f);
                     bool const resize_target = panel.resizing_widget == widget.id
                         || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect({corner.x - grip, corner.y - grip}, corner));
+                    ImVec2 const control_position = ImGui::GetCursorScreenPos();
+                    ImVec2 const control_size = is_plot ? ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
+                                                                 ImGui::GetFrameHeight()) : size;
                     if (resize_target) {
-                        ImGui::Dummy(size);
+                        ImGui::Dummy(control_size);
                     } else {
-                        ImGui::InvisibleButton("control", size);
+                        ImGui::InvisibleButton("control", control_size);
                     }
                     bool const widget_hovered = ImGui::IsWindowHovered();
                     if (!resize_target && ImGui::IsItemClicked()) {
@@ -180,7 +186,7 @@ void DbgGui::showPanels() {
                         panel.move_origin = widget.position;
                         panel.applied_move = {0, 0};
                     }
-                    if (widget_hovered && !resize_target) {
+                    if (widget_hovered && !resize_target && (!is_plot || ImGui::IsItemHovered())) {
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
                     }
                     if (ImGui::BeginPopupContextItem("widget_settings")) {
@@ -227,6 +233,14 @@ void DbgGui::showPanels() {
                         auto result = led.result.load();
                         widget_draw->AddCircleFilled(center, radius,
                             result->lit ? ImGui::GetColorU32(widget.led.color) : IM_COL32(60, 60, 60, 255));
+                    } else if (is_plot) {
+                        if (!widget.plot) {
+                            widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
+                        }
+                        widget_draw->AddText({control_position.x, control_position.y + ImGui::GetStyle().FramePadding.y},
+                                            ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
+                        ImGui::SameLine();
+                        renderPlotContents(*widget.plot);
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
                     }
@@ -295,7 +309,10 @@ void DbgGui::showPanels() {
                         }
                         ++widget.id;
                         widget.type = type;
-                        if (type == PanelWidgetType::Led) {
+                        if (type == PanelWidgetType::Plot) {
+                            widget.size = {640, 384};
+                            widget.plot = std::make_shared<PlotWindow>(label, widget.id);
+                        } else if (type == PanelWidgetType::Led) {
                             widget.setSize({PANEL_GRID_SPACING, PANEL_GRID_SPACING});
                         } else if (type == PanelWidgetType::Checkbox) {
                             widget.size = {140, 30};

@@ -76,20 +76,8 @@ std::vector<Scalar*> restoreScalarSettings(Scalar* scalar,
         if (plot == nullptr) {
             continue;
         }
-        int subplot_idx = 0;
-        for (auto const& subplot_data : plot_data["subplots"]) {
-            if (subplot_idx < plot->subplotCount()) {
-                for (Scalar* component : plot_settings::restoreScalars(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                    start_sampling(component);
-                }
-                for (Scalar* component : plot_settings::restoreVectors(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                    start_sampling(component);
-                }
-                for (Scalar* component : plot_settings::restoreSpectra(plot->subplots[subplot_idx], subplot_data, scalars, scalar->id)) {
-                    start_sampling(component);
-                }
-            }
-            ++subplot_idx;
+        for (Scalar* component : plot_settings::restorePlot(*plot, plot_data, scalars, scalar->id)) {
+            start_sampling(component);
         }
     })
 
@@ -678,20 +666,8 @@ void DbgGui::loadPreviousSessionSettings() {
         m_plot_windows.clear();
         for (auto& plot_data : m_settings["scalar_plots"]) {
             PlotWindow& plot = m_plot_windows.emplace_back(plot_data);
-            int subplot_idx = 0;
-            for (auto const& subplot_data : plot_data["subplots"]) {
-                if (subplot_idx < plot.subplotCount()) {
-                    for (Scalar* component : plot_settings::restoreScalars(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                        m_sampler.startSampling(component);
-                    }
-                    for (Scalar* component : plot_settings::restoreVectors(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                        m_sampler.startSampling(component);
-                    }
-                    for (Scalar* component : plot_settings::restoreSpectra(plot.subplots[subplot_idx], subplot_data, m_scalars)) {
-                        m_sampler.startSampling(component);
-                    }
-                }
-                ++subplot_idx;
+            for (Scalar* component : plot_settings::restorePlot(plot, plot_data, m_scalars)) {
+                m_sampler.startSampling(component);
             }
         }
 
@@ -737,6 +713,7 @@ void DbgGui::loadPreviousSessionSettings() {
         for (auto const& panel_data : m_settings["panels"]) {
             m_panels.emplace_back(panel_data);
         }
+        restorePanelPlotSettings();
 
         m_grid_windows.clear();
         for (auto grid_window_data : m_settings["grid_windows"]) {
@@ -753,6 +730,37 @@ void DbgGui::loadPreviousSessionSettings() {
 
         TRY(m_group_to_add_symbols = m_settings["group_to_add_symbols"].get<std::string>();)
         TRY(m_symbol_search_depth = std::max(0, m_settings.value("symbol_search_depth", m_symbol_search_depth));)
+    }
+}
+
+void DbgGui::reconcilePlotSettings(PlotWindow& plot, nlohmann::json& saved) {
+    for (int subplot_idx = 0; subplot_idx < plot.subplotCount(); ++subplot_idx) {
+        removeDeletedVectorComponents(plot.subplots[subplot_idx]);
+        auto& subplot = plot.subplots[subplot_idx];
+        removeDeletedSpectrumComponents(subplot);
+        std::erase_if(subplot.scalars, [](Scalar* scalar) { return !isLiveScalar(scalar); });
+        auto& saved_subplot = saved["subplots"][subplot_idx];
+        plot_settings::reconcileVectors(subplot, saved_subplot, m_scalars);
+        plot_settings::reconcileSpectra(subplot, saved_subplot, m_scalars);
+        plot_settings::reconcileScalars(subplot, saved_subplot, m_scalars);
+    }
+}
+
+void DbgGui::restorePanelPlotSettings(std::optional<uint64_t> registered_id) {
+    for (auto const& saved_panel : m_settings["panels"]) {
+        auto panel = std::ranges::find(m_panels, saved_panel.value("id", uint64_t{0}), &PanelWindow::id);
+        if (panel == m_panels.end()) {
+            continue;
+        }
+        for (auto const& saved_widget : saved_panel.value("widgets", nlohmann::json::array())) {
+            auto widget = std::ranges::find(panel->widgets, saved_widget.value("id", uint64_t{0}), &PanelWidget::id);
+            if (widget == panel->widgets.end() || !widget->plot || !saved_widget.contains("plot")) {
+                continue;
+            }
+            for (auto* scalar : plot_settings::restorePlot(*widget->plot, saved_widget["plot"], m_scalars, registered_id)) {
+                m_sampler.startSampling(scalar);
+            }
+        }
     }
 }
 
@@ -858,16 +866,7 @@ void DbgGui::updateSavedSettings() {
         }
         nlohmann::json& j = m_settings["scalar_plots"][std::to_string(plot_window.id)];
         plot_window.updateJson(j);
-        for (int subplot_idx = 0; subplot_idx < plot_window.subplotCount(); ++subplot_idx) {
-            removeDeletedVectorComponents(plot_window.subplots[subplot_idx]);
-            auto& subplot = plot_window.subplots[subplot_idx];
-            removeDeletedSpectrumComponents(subplot);
-            std::erase_if(subplot.scalars, [](Scalar* scalar) { return !isLiveScalar(scalar); });
-            auto& saved_subplot = j["subplots"][subplot_idx];
-            plot_settings::reconcileVectors(subplot, saved_subplot, m_scalars);
-            plot_settings::reconcileSpectra(subplot, saved_subplot, m_scalars);
-            plot_settings::reconcileScalars(subplot, saved_subplot, m_scalars);
-        }
+        reconcilePlotSettings(plot_window, j);
     }
 
     for (CustomWindow& custom_window : m_custom_windows) {
@@ -924,6 +923,11 @@ void DbgGui::updateSavedSettings() {
             }
         }
         panel.updateJson(panel_data);
+        for (size_t index = 0; index < panel.widgets.size(); ++index) {
+            if (panel.widgets[index].plot) {
+                reconcilePlotSettings(*panel.widgets[index].plot, panel_data["widgets"][index]["plot"]);
+            }
+        }
         saved_panels.push_back(std::move(panel_data));
     }
     m_settings["panels"] = std::move(saved_panels);
@@ -1206,6 +1210,7 @@ Scalar* DbgGui::addScalarExpression(ValueSource const& src,
         for (Scalar* scalar_to_sample : scalars_to_sample) {
             m_sampler.startSampling(scalar_to_sample);
         }
+        restorePanelPlotSettings(new_scalar->id);
     }
     std::vector<std::string> groups = str::split(new_scalar->group, '|');
     SignalGroup<Scalar>* added_group = &m_scalar_groups[groups[0]];

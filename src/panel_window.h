@@ -76,6 +76,8 @@ struct PanelWidget {
         ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
         std::shared_ptr<PanelLedState> state;
     } led;
+    // Stable addresses keep plot drag/drop payloads valid when adding widgets.
+    std::shared_ptr<PlotWindow> plot;
     void configureLed(LuaScriptHost host) {
         led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
     }
@@ -130,6 +132,12 @@ struct PanelWindow : Window {
                     widget.led.condition = cells[0].value("script", widget.led.condition);
                 }
             }
+            if (widget.type == PanelWidgetType::Plot) {
+                auto plot_data = data.value("plot", nlohmann::json::object());
+                plot_data["name"] = widget.label;
+                plot_data["id"] = widget.id;
+                widget.plot = std::make_shared<PlotWindow>(plot_data);
+            }
             widgets.push_back(std::move(widget));
         }
     }
@@ -159,6 +167,9 @@ struct PanelWindow : Window {
             if (widget.type == PanelWidgetType::Led) {
                 data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
                 data["cells"][0]["script"] = widget.led.condition;
+            }
+            if (widget.plot) {
+                widget.plot->updateJson(data["plot"]);
             }
             saved_widgets.push_back(std::move(data));
         }

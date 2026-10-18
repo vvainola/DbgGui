@@ -119,3 +119,39 @@ TEST_CASE("LED settings preserve the applied condition and color without saving 
     REQUIRE(restored.widgets[0].led.draft.empty());
     REQUIRE_FALSE(restored.widgets[0].led.state);
 }
+
+TEST_CASE("Panel plots preserve layout, styles, and unresolved placements") {
+    nlohmann::json saved = {
+        {"id", 1}, {"name", "Panel"},
+        {"widgets", nlohmann::json::array({{
+            {"id", 2}, {"type", PanelWidgetType::Plot}, {"label", "Measurements"},
+            {"plot", {
+                {"rows", 1}, {"cols", 3}, {"vector_time_range", 0.05},
+                {"spectrum_time_range", 0.5}, {"spectrum_logarithmic_y_axis", true},
+                {"subplots", nlohmann::json::array({
+                    {{"type", PlotType::Scalar}, {"signals", {{"pending", 99}}}},
+                    {{"type", PlotType::Vector}, {"vectors", {{1, 2}}}},
+                    {{"type", PlotType::Spectrum}, {"spectrums", {{3, 0}}}}
+                })}
+            }}
+        }})}
+    };
+    PanelWindow panel(saved);
+    auto* plot = panel.widgets[0].plot.get();
+    REQUIRE(plot != nullptr);
+    REQUIRE(plot->subplotCount() == 3);
+    REQUIRE(plot->subplots[1].type == PlotType::Vector);
+    REQUIRE(plot->subplots[2].type == PlotType::Spectrum);
+    REQUIRE(plot->vector_time_range == 0.05f);
+    REQUIRE(plot->spectrum.logarithmic_y_axis);
+    panel.widgets.reserve(100);
+    REQUIRE(panel.widgets[0].plot.get() == plot);
+    plot->vector_time_range = 0.1;
+    panel.updateJson(saved);
+    auto const& plot_data = saved["widgets"][0]["plot"];
+    REQUIRE(plot_data["subplots"][0]["signals"]["pending"] == 99);
+    REQUIRE(plot_data["subplots"][1]["vectors"][0] == nlohmann::json::array({1, 2}));
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets[0].plot->vector_time_range == 0.1f);
+    REQUIRE(restored.widgets[0].plot->subplots[2].type == PlotType::Spectrum);
+}
