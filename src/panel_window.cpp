@@ -122,6 +122,31 @@ void showPanelActionEditor(PanelActionScript& script) {
     showPanelScriptError(error);
 }
 
+void zoomPanelToSelection(PanelWindow& panel, ImVec2 canvas_size) {
+    ImVec2 min = {FLT_MAX, FLT_MAX};
+    ImVec2 max = {-FLT_MAX, -FLT_MAX};
+    for (auto const& widget : panel.widgets) {
+        if (!contains(panel.selected_widgets, widget.id)) {
+            continue;
+        }
+        ImVec4 const bounds = widget.group ? panel.groupBounds(*widget.group)
+            : ImVec4(widget.position.x, widget.position.y,
+                     widget.position.x + widget.size.x, widget.position.y + widget.size.y);
+        min = {std::min(min.x, bounds.x), std::min(min.y, bounds.y)};
+        max = {std::max(max.x, bounds.z), std::max(max.y, bounds.w)};
+    }
+    if (min.x > max.x || min.y > max.y) {
+        return;
+    }
+    // Keep a screen-space margin while centering the selection in the canvas.
+    float const padding = 16;
+    float const scale_x = std::max(1.0f, canvas_size.x - 2 * padding) / std::max(1.0f, max.x - min.x);
+    float const scale_y = std::max(1.0f, canvas_size.y - 2 * padding) / std::max(1.0f, max.y - min.y);
+    panel.zoom = std::clamp(std::min(scale_x, scale_y), 0.25f, 3.0f);
+    panel.pan = {canvas_size.x * 0.5f - (min.x + max.x) * 0.5f * panel.zoom,
+                 canvas_size.y * 0.5f - (min.y + max.y) * 0.5f * panel.zoom};
+}
+
 bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
     std::vector<std::shared_ptr<PanelGroup>> groups;
     for (auto const& widget : panel.widgets) {
@@ -1001,6 +1026,9 @@ void DbgGui::showPanels() {
                     panel.ungroupSelected();
                 }
                 ImGui::Separator();
+                if (ImGui::MenuItem("Zoom to selection", nullptr, false, !panel.selected_widgets.empty())) {
+                    zoomPanelToSelection(panel, available);
+                }
                 if (ImGui::MenuItem("Reset view")) {
                     panel.pan = {0, 0};
                     panel.zoom = 1;

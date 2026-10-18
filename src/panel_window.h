@@ -217,7 +217,7 @@ struct PanelGroup {
     uint64_t id = 0;
     std::string title = "Group";
     ImVec4 color = {0.15f, 0.25f, 0.3f, 0.7f};
-    float padding = 16;
+    float padding = 8;
 };
 
 struct PanelWidget {

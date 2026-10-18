@@ -47,7 +47,7 @@ PanelWindow::PanelWindow(nlohmann::json const& j) : Window(j) {
                 group = std::make_shared<PanelGroup>();
                 group->id = id;
                 group->title = saved.value("title", group->title);
-                group->padding = std::clamp(saved.value("padding", 16.0f), 0.0f, 64.0f);
+                group->padding = std::clamp(saved.value("padding", group->padding), 0.0f, 64.0f);
                 auto const color = saved.value("color", std::vector<float>{0.15f, 0.25f, 0.3f, 0.7f});
                 if (color.size() == 4) {
                     group->color = {color[0], color[1], color[2], color[3]};
