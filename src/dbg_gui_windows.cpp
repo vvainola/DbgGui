@@ -305,43 +305,49 @@ void addInputScalar(ValueSource const& value_src,
 bool DbgGui::addScalarContextMenu(Scalar* scalar) {
     bool delete_clicked = false;
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
-        double pause_level = scalar->getScaledValue();
-        if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
-            m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
-            ImGui::CloseCurrentPopup();
-        }
-        if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
-            logMessage(*error);
-        }
-        if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
-            logMessage(*error);
-        }
-
-        if (ImGui::Button("Copy name")) {
-            ImGui::SetClipboardText(scalar->name.c_str());
-            ImGui::CloseCurrentPopup();
-        }
-        if (ImGui::Button("Copy alias")) {
-            ImGui::SetClipboardText(scalar->alias.c_str());
-            ImGui::CloseCurrentPopup();
-        }
-        if (ImGui::Button("Copy alias and value")) {
-            ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
-            ImGui::CloseCurrentPopup();
-        }
-
-        if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
-            if (scalar->alias.empty()) {
-                scalar->alias = scalar->name;
-            }
-            scalar->updateDisplayNames();
-        }
-        ImGui::Separator();
-        if (ImGui::Button("Delete")) {
-            delete_clicked = true;
-            ImGui::CloseCurrentPopup();
-        }
+        delete_clicked = scalarContextMenuContents(scalar);
         ImGui::EndPopup();
+    }
+    return delete_clicked;
+}
+
+bool DbgGui::scalarContextMenuContents(Scalar* scalar) {
+    bool delete_clicked = false;
+    double pause_level = scalar->getScaledValue();
+    if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+        m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
+        ImGui::CloseCurrentPopup();
+    }
+    if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
+        logMessage(*error);
+    }
+    if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
+        logMessage(*error);
+    }
+
+    if (ImGui::Button("Copy name")) {
+        ImGui::SetClipboardText(scalar->name.c_str());
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::Button("Copy alias")) {
+        ImGui::SetClipboardText(scalar->alias.c_str());
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::Button("Copy alias and value")) {
+        ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
+        ImGui::CloseCurrentPopup();
+    }
+
+    if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
+        if (scalar->alias.empty()) {
+            scalar->alias = scalar->name;
+        }
+        scalar->updateDisplayNames();
+    }
+    ImGui::Separator();
+    if (ImGui::Button("Delete")) {
+        delete_clicked = true;
+        ImGui::CloseCurrentPopup();
     }
     return delete_clicked;
 }

@@ -1257,6 +1257,11 @@ void DbgGui::moveScalarToGroup(Scalar* scalar, SignalGroup<Scalar>& source, Sign
     plot_settings::remapScalarId(m_settings, old_id, old_group, *scalar);
     for (auto& panel : m_panels) {
         for (auto& widget : panel.widgets) {
+            for (auto& cell : widget.sliders.cells) {
+                if (cell.scalar_id == old_id) {
+                    cell.scalar_id = new_id;
+                }
+            }
             for (auto& cell : widget.values.cells) {
                 if (cell.scalar_id == old_id) {
                     cell.scalar_id = new_id;

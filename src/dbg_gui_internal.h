@@ -134,6 +134,8 @@ class DbgGui {
     void processPanelScripts(double timestamp);
     void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
     void renderPanelValueGrid(PanelWidget& widget);
+    void renderPanelSliderGrid(PanelWidget& widget);
+    void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
     void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
@@ -175,6 +177,7 @@ class DbgGui {
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
     // The caller handles removal from its placement or the scalar registry.
     bool addScalarContextMenu(Scalar* scalar);
+    bool scalarContextMenuContents(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;

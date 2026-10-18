@@ -30,13 +30,13 @@ TEST_CASE("Panel widget geometry preserves saved control settings") {
 TEST_CASE("Panel widget loading bounds geometry and skips unknown types") {
     PanelWindow panel(nlohmann::json{
         {"widgets", nlohmann::json::array({
-            {{"type", PanelWidgetType::Slider}, {"width", -1}, {"height", 0}},
+            {{"type", PanelWidgetType::SliderGrid}, {"width", -1}, {"height", 0}},
             {{"type", 100}}
         })}
     });
     REQUIRE(panel.widgets.size() == 1);
     REQUIRE(panel.widgets[0].size.x == 100);
-    REQUIRE(panel.widgets[0].size.y == 20);
+    REQUIRE(panel.widgets[0].size.y == 96);
 }
 
 TEST_CASE("Panel box selection and group movement use canvas coordinates") {
@@ -86,10 +86,10 @@ TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum s
     REQUIRE(snapToPanelGrid(17) == 32);
     REQUIRE(snapToPanelGrid(-17) == -32);
     PanelWidget slider;
-    slider.type = PanelWidgetType::Slider;
+    slider.type = PanelWidgetType::SliderGrid;
     slider.resizeOnGrid({240, 30}, {-200, -100});
     REQUIRE(slider.size.x == 128);
-    REQUIRE(slider.size.y == 32);
+    REQUIRE(slider.size.y == 96);
     PanelWidget led;
     led.type = PanelWidgetType::Led;
     led.resizeOnGrid({40, 40}, {30, 0});
@@ -475,4 +475,47 @@ TEST_CASE("Panel action error indicators include syntax and completed runtime er
     REQUIRE(script.hasError());
     script.applyScript();
     REQUIRE_FALSE(script.hasError());
+}
+
+TEST_CASE("Panel sliders round trip ranges and unresolved bindings") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.id = 2;
+    widget.type = PanelWidgetType::SliderGrid;
+    widget.sliders.resize(2, 2);
+    widget.sliders.text_to_value_ratio = 0.4f;
+    widget.sliders.cells[3].scalar_id = 5678;
+    widget.sliders.cells[3].maximum = 100;
+    widget.sliders.cells[0].scalar_id = 1234;
+    widget.sliders.cells[0].minimum = -10;
+    widget.sliders.cells[0].maximum = 20;
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets[0].sliders.text_to_value_ratio == 0.4f);
+    REQUIRE(restored.widgets[0].sliders.rows == 2);
+    REQUIRE(restored.widgets[0].sliders.columns == 2);
+    REQUIRE(restored.widgets[0].sliders.cells[3].scalar_id == 5678);
+    REQUIRE(restored.widgets[0].sliders.cells[3].maximum == 100);
+    REQUIRE(restored.widgets[0].sliders.cells[0].scalar_id == 1234);
+    REQUIRE(restored.widgets[0].sliders.cells[0].minimum == -10);
+    REQUIRE(restored.widgets[0].sliders.cells[0].maximum == 20);
+    restored.widgets[0].sliders.cells[0].scalar_id.reset();
+    restored.updateJson(saved);
+    REQUIRE_FALSE(saved["widgets"][0]["cells"][0].contains("scalar_id"));
+}
+
+TEST_CASE("Slider grid resizing preserves per-cell bindings and ranges") {
+    PanelControlGrid<PanelSlider> grid;
+    grid.resize(2, 2);
+    grid.cells[3].scalar_id = 123;
+    grid.cells[3].minimum = -5;
+    grid.cells[3].maximum = 15;
+    grid.resize(2, 3);
+    REQUIRE(grid.cells[4].scalar_id == 123);
+    REQUIRE(grid.cells[4].minimum == -5);
+    REQUIRE(grid.cells[4].maximum == 15);
+    REQUIRE_FALSE(grid.cells[3].scalar_id.has_value());
+    REQUIRE(grid.cells[3].maximum == 1);
 }

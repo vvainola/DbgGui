@@ -45,7 +45,7 @@ enum class PanelWidgetType {
     ButtonGrid,
     ValueGrid,
     CheckboxGrid,
-    Slider,
+    SliderGrid,
     Led
 };
 
@@ -185,6 +185,15 @@ struct PanelValueGrid : PanelControlGrid<PanelValueCell> {
     float text_to_value_ratio = 0.3f;
 };
 
+struct PanelSlider : PanelValueCell {
+    double minimum = 0;
+    double maximum = 1;
+};
+
+struct PanelSliderGrid : PanelControlGrid<PanelSlider> {
+    float text_to_value_ratio = 0.3f;
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
@@ -203,13 +212,14 @@ struct PanelWidget {
     PanelButtonGrid buttons;
     PanelCheckboxGrid checkboxes;
     PanelValueGrid values;
+    PanelSliderGrid sliders;
     void configureLed(LuaScriptHost host) {
         led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
     }
     ImVec2 minimumSize() const {
         switch (type) {
             case PanelWidgetType::Led: return {20, 20};
-            case PanelWidgetType::Slider: return {100, 20};
+            case PanelWidgetType::SliderGrid: return {100, 96};
             default: return {160, 100};
         }
     }
@@ -254,6 +264,19 @@ struct PanelWindow : Window {
                 auto const cells = data.value("cells", nlohmann::json::array());
                 if (!cells.empty()) {
                     widget.led.condition = cells[0].value("script", widget.led.condition);
+                }
+            }
+            if (widget.type == PanelWidgetType::SliderGrid) {
+                widget.sliders.resize(data.value("rows", 1), data.value("columns", 1));
+                widget.sliders.text_to_value_ratio = std::clamp(data.value("text_to_value_ratio", 0.3f), 0.05f, 0.95f);
+                auto const cells = data.value("cells", nlohmann::json::array());
+                for (size_t index = 0; index < cells.size() && index < widget.sliders.cells.size(); ++index) {
+                    auto& cell = widget.sliders.cells[index];
+                    if (cells[index].contains("scalar_id") && !cells[index]["scalar_id"].is_null()) {
+                        cell.scalar_id = cells[index]["scalar_id"].get<uint64_t>();
+                    }
+                    cell.minimum = cells[index].value("minimum", 0.0);
+                    cell.maximum = cells[index].value("maximum", 1.0);
                 }
             }
             if (widget.type == PanelWidgetType::ValueGrid) {
@@ -321,6 +344,19 @@ struct PanelWindow : Window {
             if (widget.type == PanelWidgetType::Led) {
                 data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
                 data["cells"][0]["script"] = widget.led.condition;
+            }
+            if (widget.type == PanelWidgetType::SliderGrid) {
+                data["text_to_value_ratio"] = widget.sliders.text_to_value_ratio;
+                data["rows"] = widget.sliders.rows;
+                data["columns"] = widget.sliders.columns;
+                data["cells"] = nlohmann::json::array();
+                for (auto const& cell : widget.sliders.cells) {
+                    nlohmann::json saved = {{"minimum", cell.minimum}, {"maximum", cell.maximum}};
+                    if (cell.scalar_id) {
+                        saved["scalar_id"] = *cell.scalar_id;
+                    }
+                    data["cells"].push_back(std::move(saved));
+                }
             }
             if (widget.type == PanelWidgetType::ValueGrid) {
                 data["text_to_value_ratio"] = widget.values.text_to_value_ratio;
