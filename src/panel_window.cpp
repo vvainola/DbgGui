@@ -191,10 +191,10 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
             // A selection click must not run the action if Ctrl is released first.
             ImGui::ClearActiveID();
         }
-        if (ImGui::BeginPopupContextItem("button_settings")) {
-            if (ImGui::IsWindowAppearing()) {
+        bool const editor_open = ImGui::BeginPopupContextItem("button_settings");
+        if (editor_open) {
+            if (ImGui::IsWindowAppearing() && cell.syntax_error.empty()) {
                 cell.draft = cell.script;
-                cell.syntax_error.clear();
             }
             ImGui::InputText("Label", &cell.label);
             ImGui::SameLine();
@@ -202,6 +202,10 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
             showPanelActionEditor(cell);
             ImGui::EndPopup();
         }
+        if (cell.editor_open && !editor_open && (cell.draft != cell.script || !cell.syntax_error.empty())) {
+            cell.applyScript();
+        }
+        cell.editor_open = editor_open;
         ImGui::PopID();
     }
     ImGui::EndTable();
@@ -324,11 +328,13 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
             panel.selectWidget(widget.id, true);
             ImGui::ClearActiveID();
         }
-        if (ImGui::BeginPopupContextItem("checkbox_settings")) {
+        bool const editor_open = ImGui::BeginPopupContextItem("checkbox_settings");
+        if (editor_open) {
             if (ImGui::IsWindowAppearing()) {
                 for (auto* script : {&cell.on_enable, &cell.on_disable}) {
-                    script->draft = script->script;
-                    script->syntax_error.clear();
+                    if (script->syntax_error.empty()) {
+                        script->draft = script->script;
+                    }
                 }
             }
             ImGui::InputText("Label", &cell.label);
@@ -347,6 +353,14 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
             }
             ImGui::EndPopup();
         }
+        if (cell.editor_open && !editor_open) {
+            for (auto* script : {&cell.on_enable, &cell.on_disable}) {
+                if (script->draft != script->script || !script->syntax_error.empty()) {
+                    script->applyScript();
+                }
+            }
+        }
+        cell.editor_open = editor_open;
         ImGui::PopID();
     }
     ImGui::EndTable();
@@ -457,7 +471,9 @@ void DbgGui::showPanels() {
                     if (widget_hovered && !resize_target && (!has_controls || ImGui::IsItemHovered())) {
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
                     }
-                    if (ImGui::BeginPopupContextItem("widget_settings")) {
+                    bool apply_led = false;
+                    bool const settings_open = ImGui::BeginPopupContextItem("widget_settings");
+                    if (settings_open) {
                         ImGui::InputText("Label", &widget.label);
                         if (is_buttons || is_checkbox || is_values) {
                             int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : widget.values.rows;
@@ -487,12 +503,7 @@ void DbgGui::showPanels() {
                             HelpMarker("Return true to light the LED, false to turn it off");
                             inputScriptTextWithLineNumbers(widget.led.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
                             if (ImGui::Button("Apply condition")) {
-                                widget.led.condition = widget.led.draft;
-                                widget.configureLed(createLuaScriptHost());
-                                {
-                                    std::scoped_lock lock(m_sampling_mutex);
-                                    m_panel.led_scripts.push_back(widget.led.state);
-                                }
+                                apply_led = true;
                             }
                             ImGui::SameLine();
                             if (ImGui::Button("Close")) {
@@ -507,6 +518,13 @@ void DbgGui::showPanels() {
                         ImGui::EndPopup();
                     }
                     if (widget.type == PanelWidgetType::Led) {
+                        if (apply_led || (widget.led.editor_open && !settings_open && widget.led.draft != widget.led.condition)) {
+                            widget.led.condition = widget.led.draft;
+                            widget.configureLed(createLuaScriptHost());
+                            std::scoped_lock lock(m_sampling_mutex);
+                            m_panel.led_scripts.push_back(widget.led.state);
+                        }
+                        widget.led.editor_open = settings_open;
                         float const radius = std::max(1.0f, size.x * 0.5f - 2.0f);
                         ImVec2 const center = {position.x + size.x * 0.5f, position.y + size.y * 0.5f};
                         auto& led = *widget.led.state;

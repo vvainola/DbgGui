@@ -124,10 +124,12 @@ struct PanelActionScript {
 };
 
 struct PanelButtonCell : PanelActionScript {
+    bool editor_open = false;
     std::string label = "Button";
 };
 
 struct PanelCheckbox {
+    bool editor_open = false;
     std::string label = "Checkbox";
     bool checked = false;
     PanelActionScript on_enable;
@@ -190,6 +192,7 @@ struct PanelWidget {
     ImVec2 position = {30, 30};
     ImVec2 size = {320, 180};
     struct {
+        bool editor_open = false;
         std::string condition = "return false";
         std::string draft;
         ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
