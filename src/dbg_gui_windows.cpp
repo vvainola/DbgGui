@@ -302,7 +302,8 @@ void addInputScalar(ValueSource const& value_src,
     }
 }
 
-void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
+bool DbgGui::addScalarContextMenu(Scalar* scalar) {
+    bool delete_clicked = false;
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
         double pause_level = scalar->getScaledValue();
         if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -335,22 +336,14 @@ void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
             }
             scalar->updateDisplayNames();
         }
-        if (show_delete) {
-            ImGui::Separator();
-            if (ImGui::Button("Delete")) {
-                if (contains(m_selected_scalars, scalar)) {
-                    for (Scalar* selected_scalar : m_selected_scalars) {
-                        selected_scalar->deleted = true;
-                    }
-                    m_selected_scalars.clear();
-                } else {
-                    scalar->deleted = true;
-                }
-                ImGui::CloseCurrentPopup();
-            }
+        ImGui::Separator();
+        if (ImGui::Button("Delete")) {
+            delete_clicked = true;
+            ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    return delete_clicked;
 }
 
 double getSymbolScale(VariantSymbol const& sym,
@@ -880,7 +873,16 @@ void DbgGui::showScalarWindow() {
                     if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
-                    addScalarContextMenu(scalar, true);
+                    if (addScalarContextMenu(scalar)) {
+                        if (contains(m_selected_scalars, scalar)) {
+                            for (Scalar* selected_scalar : m_selected_scalars) {
+                                selected_scalar->deleted = true;
+                            }
+                            m_selected_scalars.clear();
+                        } else {
+                            scalar->deleted = true;
+                        }
+                    }
 
                     // Show value
                     ImGui::TableNextColumn();
@@ -1036,7 +1038,9 @@ void DbgGui::showCustomWindow() {
                     ImGui::EndDragDropSource();
                 }
 
-                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
+                bool const delete_pressed = ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete);
+                bool const delete_clicked = addScalarContextMenu(scalar);
+                if (delete_pressed || delete_clicked) {
                     if (contains(m_selected_scalars, scalar)) {
                         for (Scalar* selected_scalar : m_selected_scalars) {
                             if (contains(custom_window.scalars, selected_scalar)) {
@@ -1047,7 +1051,6 @@ void DbgGui::showCustomWindow() {
                         scalars_to_remove.push_back(scalar);
                     }
                 }
-                addScalarContextMenu(scalar);
 
                 // Show value
                 ImGui::TableNextColumn();
@@ -1634,10 +1637,10 @@ void DbgGui::showGridWindow() {
                         } else {
                             ImGui::TextUnformatted(scalar->alias_and_group.c_str());
                         }
-                        addScalarContextMenu(scalar);
-                        // Hide symbol on delete
-                        if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
-                            grid_window.scalars[row][col] = NULL;
+                        bool const delete_pressed = ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete);
+                        bool const delete_clicked = addScalarContextMenu(scalar);
+                        if (delete_pressed || delete_clicked) {
+                            grid_window.scalars[row][col] = 0;
                         }
                         ImGui::PopFont();
                         // Make text drag-and-droppable

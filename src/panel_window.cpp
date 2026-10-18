@@ -269,8 +269,12 @@ void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
             }
             ImGui::EndDragDropTarget();
         }
-        if (ImGui::BeginPopupContextItem("value_settings")) {
-            if (ImGui::MenuItem("Unbind", nullptr, false, cell.scalar_id.has_value())) {
+        if (available) {
+            if (addScalarContextMenu(scalar)) {
+                cell.scalar_id.reset();
+            }
+        } else if (ImGui::BeginPopupContextItem("value_settings")) {
+            if (ImGui::MenuItem("Delete", nullptr, false, cell.scalar_id.has_value())) {
                 cell.scalar_id.reset();
             }
             ImGui::EndPopup();

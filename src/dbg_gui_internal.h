@@ -173,7 +173,8 @@ class DbgGui {
     void copyAllScalarSamplesToClipboard();
     SampleClipboardData collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits);
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
-    void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
+    // The caller handles removal from its placement or the scalar registry.
+    bool addScalarContextMenu(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;
