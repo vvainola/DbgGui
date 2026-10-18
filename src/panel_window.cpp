@@ -938,8 +938,10 @@ void DbgGui::showPanels() {
                         ImGui::PopFont();
                     }
                     bool const selected = contains(panel.selected_widgets, widget.id);
+                    // Keep the right and bottom strokes inside the child window's clipping rectangle.
+                    widget_draw->AddRect(position, {corner.x - 1, corner.y - 1},
+                                         ImGui::GetColorU32(selected ? ImGuiCol_CheckMark : ImGuiCol_Border));
                     if (widget_hovered || selected || panel.resizing_widget == widget.id) {
-                        widget_draw->AddRect(position, corner, ImGui::GetColorU32(selected ? ImGuiCol_CheckMark : ImGuiCol_Border));
                         ImGui::SetCursorScreenPos({corner.x - grip, corner.y - grip});
                         ImGui::InvisibleButton("resize", {grip, grip});
                         if (ImGui::IsItemClicked()) {
