@@ -58,8 +58,12 @@ void editPanelGridDimensions(PanelControlGrid<Cell>& grid) {
 }
 
 void drawPanelScriptErrorBorder() {
-    ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-        SCRIPT_ERROR_RED, ImGui::GetStyle().FrameRounding, ImDrawFlags_None, 2.0f);
+    ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),
+                                        ImGui::GetItemRectMax(),
+                                        SCRIPT_ERROR_RED,
+                                        ImGui::GetStyle().FrameRounding,
+                                        ImDrawFlags_None,
+                                        2.0f);
 }
 
 void showPanelScriptError(std::string_view error) {
@@ -70,7 +74,9 @@ void showPanelScriptError(std::string_view error) {
     float const wrap_width = PANEL_SCRIPT_EDITOR_SIZE.x - 2 * style.WindowPadding.x - style.ScrollbarSize;
     float const text_height = ImGui::CalcTextSize(error.data(), error.data() + error.size(), false, wrap_width).y;
     float const height = std::min(text_height, 4 * ImGui::GetTextLineHeight()) + 2 * style.WindowPadding.y;
-    if (ImGui::BeginChild("script_error", {PANEL_SCRIPT_EDITOR_SIZE.x, height}, ImGuiChildFlags_AlwaysUseWindowPadding,
+    if (ImGui::BeginChild("script_error",
+                          {PANEL_SCRIPT_EDITOR_SIZE.x, height},
+                          ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_NoBackground)) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap_width);
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
@@ -228,8 +234,8 @@ void DbgGui::processPanelScripts(double timestamp) {
 
 void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
     auto& grid = widget.buttons;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
-        - 2 * ImGui::GetStyle().CellPadding.y);
+    float const cell_height = std::max(1.0f,
+                                       ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("buttons", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
@@ -285,8 +291,8 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
 
 void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
     auto& grid = widget.values;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
-        - 2 * ImGui::GetStyle().CellPadding.y);
+    float const cell_height = std::max(1.0f,
+                                       ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("values", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
@@ -298,8 +304,10 @@ void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
         ImVec2 const start = ImGui::GetCursorScreenPos();
         Scalar* scalar = cell.scalar_id ? findScalar(m_scalars, *cell.scalar_id) : nullptr;
         bool const available = scalar && !scalar->deleted;
-        char const* label = available ? scalar->alias_and_group.c_str()
-            : cell.scalar_id ? "Unavailable scalar" : "Drop a scalar here";
+        char const* label = available ?
+                              scalar->alias_and_group.c_str() :
+                            cell.scalar_id ? "Unavailable scalar" :
+                                             "Drop a scalar here";
         auto const& style = ImGui::GetStyle();
         float const font_height = std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
         float const cell_width = ImGui::GetContentRegionAvail().x;
@@ -368,8 +376,8 @@ void DbgGui::addPanelScalarBinding(std::optional<uint64_t>& scalar_id) {
 
 void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
     auto& grid = widget.sliders;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
-        - 2 * ImGui::GetStyle().CellPadding.y);
+    float const cell_height = std::max(1.0f,
+                                       ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("sliders", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
@@ -383,8 +391,10 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         auto const& style = ImGui::GetStyle();
         float const font_height = std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
         float const cell_width = ImGui::GetContentRegionAvail().x;
-        char const* label = available ? scalar->alias_and_group.c_str()
-            : slider.scalar_id ? "Unavailable scalar" : "Drop a scalar here";
+        char const* label = available ?
+                              scalar->alias_and_group.c_str() :
+                            slider.scalar_id ? "Unavailable scalar" :
+                                               "Drop a scalar here";
         float label_font_size = std::max(1.0f, font_height * grid.text_to_value_ratio);
         ImGui::PushFont(ImGui::GetDefaultFont(), label_font_size);
         float const label_width = ImGui::CalcTextSize(label).x;
@@ -416,9 +426,9 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
             ImGui::EndPopup();
         }
         bool const valid_range = std::isfinite(slider.minimum) && std::isfinite(slider.maximum)
-            && slider.minimum < slider.maximum
-            && slider.minimum >= -std::numeric_limits<double>::max() / 2
-            && slider.maximum <= std::numeric_limits<double>::max() / 2;
+                              && slider.minimum < slider.maximum
+                              && slider.minimum >= -std::numeric_limits<double>::max() / 2
+                              && slider.maximum <= std::numeric_limits<double>::max() / 2;
         double const minimum = valid_range ? slider.minimum : 0;
         double const maximum = valid_range ? slider.maximum : 1;
         double value = available ? scalar->getScaledValue() : minimum;
@@ -435,16 +445,18 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         ImGui::BeginGroup();
         ImGui::BeginDisabled(!writable);
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::SliderScalar("##slider", ImGuiDataType_Double, &value, &minimum, &maximum,
-                                "%.6g", ImGuiSliderFlags_AlwaysClamp) && writable) {
+        if (ImGui::SliderScalar("##slider", ImGuiDataType_Double, &value, &minimum, &maximum, "%.6g", ImGuiSliderFlags_AlwaysClamp) && writable) {
             scalar->setScaledValue(value);
         }
         ImGui::EndDisabled();
         ImGui::EndGroup();
         ImGui::PopFont();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("%s", available ? scalar->alias_and_group.c_str()
-                : slider.scalar_id ? "Unavailable scalar" : "Drop a scalar here");
+            ImGui::SetTooltip("%s",
+                              available ?
+                                scalar->alias_and_group.c_str() :
+                              slider.scalar_id ? "Unavailable scalar" :
+                                                 "Drop a scalar here");
         }
         addPanelScalarBinding(slider.scalar_id);
         if (!valid_range) {
@@ -459,8 +471,7 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
 
 void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
     auto& grid = widget.checkboxes;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
-        - 2 * ImGui::GetStyle().CellPadding.y);
+    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("checkboxes", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
@@ -490,8 +501,9 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
             ImVec2 const max = ImGui::GetItemRectMax();
             float const mark_size = std::min(ImGui::GetFontSize(), cell_height);
             ImGui::RenderCheckMark(ImGui::GetWindowDrawList(),
-                {min.x + ImGui::GetStyle().FramePadding.x, (min.y + max.y - mark_size) * 0.5f},
-                ImGui::GetColorU32(ImGuiCol_Text), mark_size);
+                                   {min.x + ImGui::GetStyle().FramePadding.x, (min.y + max.y - mark_size) * 0.5f},
+                                   ImGui::GetColorU32(ImGuiCol_Text),
+                                   mark_size);
         }
         if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
             panel.selectWidget(widget.id, true);
@@ -537,8 +549,8 @@ void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
 
 void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
     auto& grid = widget.leds;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
-        - 2 * ImGui::GetStyle().CellPadding.y);
+    float const cell_height = std::max(1.0f,
+                                       ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("leds", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
@@ -560,8 +572,9 @@ void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
         m_panel.scripts_requested.store(true);
         auto result = cell.state->result.load();
         auto* draw = ImGui::GetWindowDrawList();
-        draw->AddCircleFilled(center, diameter * 0.5f,
-            result->lit ? ImGui::GetColorU32(cell.color) : IM_COL32(60, 60, 60, 255));
+        draw->AddCircleFilled(center,
+                              diameter * 0.5f,
+                              result->lit ? ImGui::GetColorU32(cell.color) : IM_COL32(60, 60, 60, 255));
         if (!result->error.empty()) {
             draw->AddCircle(center, diameter * 0.5f, SCRIPT_ERROR_RED, 0, 2.0f);
         }
@@ -735,7 +748,9 @@ void DbgGui::showPanels() {
             continue;
         }
         std::optional<ImVec2> paste_position;
-        if (ImGui::BeginChild("canvas", ImVec2(0, 0), ImGuiChildFlags_Borders,
+        if (ImGui::BeginChild("canvas",
+                              ImVec2(0, 0),
+                              ImGuiChildFlags_Borders,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
             auto const& io = ImGui::GetIO();
             ImVec2 const origin = ImGui::GetCursorScreenPos();
@@ -753,8 +768,10 @@ void DbgGui::showPanels() {
                     copyPanelWidgets(panel);
                 }
                 if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal) && !m_panel.widget_clipboard.empty()) {
-                    ImVec2 const anchor = ImGui::IsMouseHoveringRect(origin, {origin.x + available.x, origin.y + available.y})
-                        ? io.MousePos : ImVec2(origin.x + available.x * 0.5f, origin.y + available.y * 0.5f);
+                    ImVec2 const anchor = ImGui::IsMouseHoveringRect(origin,
+                                                                     {origin.x + available.x, origin.y + available.y}) ?
+                                            io.MousePos :
+                                            ImVec2(origin.x + available.x * 0.5f, origin.y + available.y * 0.5f);
                     paste_position = {(anchor.x - origin.x - panel.pan.x) / panel.zoom,
                                       (anchor.y - origin.y - panel.pan.y) / panel.zoom};
                 }
@@ -809,18 +826,18 @@ void DbgGui::showPanels() {
                 bool const has_controls = is_plot || is_buttons || is_checkbox || is_values || is_slider || is_led;
                 float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
-                bool const visible = ImGui::BeginChild("widget", size,
-                    has_controls ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None,
-                    ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                bool const visible = ImGui::BeginChild("widget", size, has_controls ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                 ImGui::PopStyleVar();
                 if (visible) {
                     auto* widget_draw = ImGui::GetWindowDrawList();
                     float const grip = std::min(std::max(12.0f, 16.0f * panel.zoom), std::min(size.x, size.y) / 3.0f);
                     bool const resize_target = panel.resizing_widget == widget.id
-                        || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect({corner.x - grip, corner.y - grip}, corner));
+                                            || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect({corner.x - grip, corner.y - grip}, corner));
                     ImVec2 const control_position = ImGui::GetCursorScreenPos();
-                    ImVec2 const control_size = has_controls ? ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
-                                                                 ImGui::GetFrameHeight()) : size;
+                    ImVec2 const control_size = has_controls ?
+                                                  ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
+                                                         ImGui::GetFrameHeight()) :
+                                                  size;
                     if (resize_target) {
                         ImGui::Dummy(control_size);
                     } else {
@@ -878,7 +895,8 @@ void DbgGui::showPanels() {
                     }
                     if (has_controls) {
                         widget_draw->AddText({control_position.x, control_position.y + ImGui::GetStyle().FramePadding.y},
-                                            ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
+                                             ImGui::GetColorU32(ImGuiCol_Text),
+                                             widget.label.c_str());
                         if (is_plot) {
                             if (!widget.plot) {
                                 widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
@@ -898,8 +916,7 @@ void DbgGui::showPanels() {
                         }
                     } else {
                         ImGui::PushFont(ImGui::GetDefaultFont(), widget.note.font_size * panel.zoom);
-                        widget_draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), position,
-                            ImGui::GetColorU32(widget.note.color), widget.note.text.c_str(), nullptr, size.x);
+                        widget_draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), position, ImGui::GetColorU32(widget.note.color), widget.note.text.c_str(), nullptr, size.x);
                         ImGui::PopFont();
                     }
                     bool const selected = contains(panel.selected_widgets, widget.id);
@@ -919,8 +936,7 @@ void DbgGui::showPanels() {
                             ImVec2 const drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
                             widget.resizeOnGrid(panel.resize_origin, {drag.x / panel.zoom, drag.y / panel.zoom});
                         }
-                        widget_draw->AddTriangleFilled({corner.x - grip * 0.5f, corner.y}, corner,
-                          {corner.x, corner.y - grip * 0.5f}, ImGui::GetColorU32(ImGuiCol_ResizeGripHovered));
+                        widget_draw->AddTriangleFilled({corner.x - grip * 0.5f, corner.y}, corner, {corner.x, corner.y - grip * 0.5f}, ImGui::GetColorU32(ImGuiCol_ResizeGripHovered));
                     }
                 }
                 ImGui::EndChild();
@@ -935,8 +951,10 @@ void DbgGui::showPanels() {
                                       origin.y + panel.pan.y + panel.box_start.y * panel.zoom};
                 // Draw after widget children so the selection rectangle stays visible.
                 ImGui::SetCursorScreenPos(origin);
-                ImGui::BeginChild("selection", available, ImGuiChildFlags_None,
-                    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+                ImGui::BeginChild("selection",
+                                  available,
+                                  ImGuiChildFlags_None,
+                                  ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
                 auto* overlay = ImGui::GetWindowDrawList();
                 ImVec2 const min = {std::min(start.x, io.MousePos.x), std::min(start.y, io.MousePos.y)};
                 ImVec2 const max = {std::max(start.x, io.MousePos.x), std::max(start.y, io.MousePos.y)};
