@@ -736,7 +736,8 @@ void DbgGui::showPanels() {
                             float& ratio = is_values ? widget.values.text_to_value_ratio : widget.sliders.text_to_value_ratio;
                             ImGui::SliderFloat("Text to value ratio", &ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
                         }
-                        if (ImGui::MenuItem("Delete widget")) {
+                        if (ImGui::Button("Delete widget")) {
+                            ImGui::CloseCurrentPopup();
                             remove_widget = widget.id;
                         }
                         ImGui::EndPopup();
