@@ -580,7 +580,7 @@ struct GridWindow : Window {
         : Window(j) {
         rows = j.value("rows", rows);
         columns = j.value("columns", columns);
-        text_to_value_ratio = j.value("text_to_value_ratio", text_to_value_ratio);
+        text_to_value_ratio = std::clamp(j.value("text_to_value_ratio", text_to_value_ratio), 0.05f, 0.95f);
     }
     void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
@@ -620,7 +620,7 @@ struct GridWindow : Window {
             ImGui::InputText("Name##window_context_menu", &name);
             ImGui::InputInt("Rows", &rows, 0, 0);
             ImGui::InputInt("Columms", &columns, 0, 0);
-            ImGui::InputFloat("Text to value ratio", &text_to_value_ratio, 0, 0, "%.2f");
+            ImGui::SliderFloat("Text to value ratio", &text_to_value_ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::EndPopup();
         }
     }
