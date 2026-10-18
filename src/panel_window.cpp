@@ -202,6 +202,79 @@ void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
     ImGui::EndTable();
 }
 
+void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
+    auto& grid = widget.values;
+    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
+        - 2 * ImGui::GetStyle().CellPadding.y);
+    if (!ImGui::BeginTable("values", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
+        return;
+    }
+    for (size_t index = 0; index < grid.cells.size(); ++index) {
+        auto& cell = grid.cells[index];
+        ImGui::TableNextColumn();
+        ImGui::PushID(static_cast<int>(index));
+        ImGui::BeginGroup();
+        ImVec2 const start = ImGui::GetCursorScreenPos();
+        Scalar* scalar = cell.scalar_id ? findScalar(m_scalars, *cell.scalar_id) : nullptr;
+        bool const available = scalar && !scalar->deleted;
+        char const* label = available ? scalar->alias_and_group.c_str()
+            : cell.scalar_id ? "Unavailable scalar" : "Drop a scalar here";
+        auto const& style = ImGui::GetStyle();
+        float const font_height = std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
+        float const cell_width = ImGui::GetContentRegionAvail().x;
+        // Split the cell height between its label and value.
+        ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * grid.text_to_value_ratio));
+        float const label_width = ImGui::CalcTextSize(label).x;
+        if (label_width > cell_width) {
+            ImGui::PopFont();
+            ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * grid.text_to_value_ratio * cell_width / label_width));
+        }
+        ImGui::TextUnformatted(label);
+        ImGui::PopFont();
+        ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * (1.0f - grid.text_to_value_ratio)));
+        if (available) {
+            std::string const value = numberAsStr(scalar->getScaledValue());
+            float const value_width = ImGui::CalcTextSize(value.c_str()).x;
+            float const input_width = std::max(1.0f, cell_width - 2 * style.FramePadding.x);
+            if (value_width > input_width) {
+                ImGui::PopFont();
+                ImGui::PushFont(ImGui::GetDefaultFont(), std::max(1.0f, font_height * (1.0f - grid.text_to_value_ratio) * input_width / value_width));
+            }
+            addInputScalar(scalar->src, "##value", scalar->getScale(), scalar->getOffset(), scalar->read_only);
+        } else {
+            ImGui::TextDisabled("-");
+        }
+        ImGui::PopFont();
+        float const remaining = cell_height - (ImGui::GetCursorScreenPos().y - start.y);
+        ImGui::Dummy({ImGui::GetContentRegionAvail().x, std::max(0.0f, remaining)});
+        ImGui::EndGroup();
+        if (ImGui::BeginDragDropTarget()) {
+            if (auto const* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
+                if (payload->DataSize >= static_cast<int>(sizeof(uint64_t))) {
+                    cell.scalar_id = *static_cast<uint64_t const*>(payload->Data);
+                }
+            }
+            if (auto const* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
+                if (payload->DataSize >= static_cast<int>(sizeof(VariantSymbol*))) {
+                    auto* symbol = *static_cast<VariantSymbol* const*>(payload->Data);
+                    if (auto* added = addScalarSymbol(symbol, m_group_to_add_symbols)) {
+                        cell.scalar_id = added->id;
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::BeginPopupContextItem("value_settings")) {
+            if (ImGui::MenuItem("Unbind", nullptr, false, cell.scalar_id.has_value())) {
+                cell.scalar_id.reset();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
+}
+
 void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
     auto& grid = widget.checkboxes;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
@@ -341,7 +414,8 @@ void DbgGui::showPanels() {
                 bool const is_plot = widget.type == PanelWidgetType::Plot;
                 bool const is_buttons = widget.type == PanelWidgetType::ButtonGrid;
                 bool const is_checkbox = widget.type == PanelWidgetType::CheckboxGrid;
-                bool const has_controls = is_plot || is_buttons || is_checkbox;
+                bool const is_values = widget.type == PanelWidgetType::ValueGrid;
+                bool const has_controls = is_plot || is_buttons || is_checkbox || is_values;
                 float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
                 bool const visible = ImGui::BeginChild("widget", size,
@@ -373,18 +447,23 @@ void DbgGui::showPanels() {
                     }
                     if (ImGui::BeginPopupContextItem("widget_settings")) {
                         ImGui::InputText("Label", &widget.label);
-                        if (is_buttons || is_checkbox) {
-                            int rows = is_buttons ? widget.buttons.rows : widget.checkboxes.rows;
-                            int columns = is_buttons ? widget.buttons.columns : widget.checkboxes.columns;
+                        if (is_buttons || is_checkbox || is_values) {
+                            int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : widget.values.rows;
+                            int columns = is_buttons ? widget.buttons.columns : is_checkbox ? widget.checkboxes.columns : widget.values.columns;
                             bool const rows_changed = ImGui::InputInt("Rows", &rows);
                             bool const columns_changed = ImGui::InputInt("Columns", &columns);
                             if (rows_changed || columns_changed) {
                                 if (is_buttons) {
                                     widget.buttons.resize(rows, columns);
-                                } else {
+                                } else if (is_checkbox) {
                                     widget.checkboxes.resize(rows, columns);
+                                } else {
+                                    widget.values.resize(rows, columns);
                                 }
                             }
+                        }
+                        if (is_values) {
+                            ImGui::SliderFloat("Text to value ratio", &widget.values.text_to_value_ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
                         }
                         if (widget.type == PanelWidgetType::Led) {
                             if (ImGui::IsWindowAppearing()) {
@@ -435,8 +514,10 @@ void DbgGui::showPanels() {
                             renderPlotContents(*widget.plot);
                         } else if (is_buttons) {
                             renderPanelButtonGrid(widget, panel);
-                        } else {
+                        } else if (is_checkbox) {
                             renderPanelCheckboxGrid(widget, panel);
+                        } else {
+                            renderPanelValueGrid(widget);
                         }
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());

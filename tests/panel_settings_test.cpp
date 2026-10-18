@@ -415,3 +415,46 @@ TEST_CASE("Checkbox grids round trip multiple cell labels and transition scripts
     REQUIRE(cell.on_disable.script == "write('power', 0)");
     REQUIRE_FALSE(cell.checked);
 }
+
+TEST_CASE("Panel value grids preserve unresolved bindings and empty cells") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.id = 2;
+    widget.type = PanelWidgetType::ValueGrid;
+    widget.values.resize(2, 2);
+    widget.values.cells[0].scalar_id = 0;
+    widget.values.cells[3].scalar_id = 1234;
+    panel.widgets.push_back(std::move(widget));
+
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    auto& grid = restored.widgets[0].values;
+    REQUIRE(grid.rows == 2);
+    REQUIRE(grid.columns == 2);
+    REQUIRE(grid.cells[0].scalar_id == 0);
+    REQUIRE_FALSE(grid.cells[1].scalar_id.has_value());
+    REQUIRE(grid.cells[3].scalar_id == 1234);
+
+    grid.resize(2, 3);
+    REQUIRE(grid.cells[4].scalar_id == 1234);
+    REQUIRE_FALSE(grid.cells[3].scalar_id.has_value());
+    grid.resize(1, 1);
+    restored.updateJson(saved);
+    REQUIRE(saved["widgets"][0]["cells"].size() == 1);
+    REQUIRE(saved["widgets"][0]["cells"][0]["scalar_id"] == 0);
+}
+
+TEST_CASE("Panel value grids save their text to value ratio and default to 30 percent") {
+    nlohmann::json saved = {{"widgets", nlohmann::json::array({{
+        {"id", 2}, {"type", PanelWidgetType::ValueGrid}
+    }})}};
+    PanelWindow panel(saved);
+    REQUIRE(panel.widgets[0].values.text_to_value_ratio == 0.3f);
+    panel.widgets[0].values.text_to_value_ratio = 0.45f;
+    panel.updateJson(saved);
+    PanelWindow restored(saved);
+    REQUIRE(restored.widgets[0].values.text_to_value_ratio == 0.45f);
+    saved["widgets"][0]["text_to_value_ratio"] = 2.0f;
+    REQUIRE(PanelWindow(saved).widgets[0].values.text_to_value_ratio == 0.95f);
+}

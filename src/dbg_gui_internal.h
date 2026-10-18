@@ -133,6 +133,7 @@ class DbgGui {
     LuaScriptHost createLuaScriptHost();
     void processPanelScripts(double timestamp);
     void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
+    void renderPanelValueGrid(PanelWidget& widget);
     void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
@@ -356,3 +357,5 @@ std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scal
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id);
 double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
+
+void addInputScalar(ValueSource const& value_src, std::string const& label, double scale, double offset, bool read_only);

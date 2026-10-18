@@ -170,6 +170,15 @@ struct PanelControlGrid {
 using PanelButtonGrid = PanelControlGrid<PanelButtonCell>;
 using PanelCheckboxGrid = PanelControlGrid<PanelCheckbox>;
 
+struct PanelValueCell {
+    // Keep the ID even when the scalar is unavailable so it can resolve later.
+    std::optional<uint64_t> scalar_id;
+};
+
+struct PanelValueGrid : PanelControlGrid<PanelValueCell> {
+    float text_to_value_ratio = 0.3f;
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
@@ -186,6 +195,7 @@ struct PanelWidget {
     std::shared_ptr<PlotWindow> plot;
     PanelButtonGrid buttons;
     PanelCheckboxGrid checkboxes;
+    PanelValueGrid values;
     void configureLed(LuaScriptHost host) {
         led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
     }
@@ -237,6 +247,17 @@ struct PanelWindow : Window {
                 auto const cells = data.value("cells", nlohmann::json::array());
                 if (!cells.empty()) {
                     widget.led.condition = cells[0].value("script", widget.led.condition);
+                }
+            }
+            if (widget.type == PanelWidgetType::ValueGrid) {
+                widget.values.resize(data.value("rows", 1), data.value("columns", 1));
+                widget.values.text_to_value_ratio = std::clamp(data.value("text_to_value_ratio", 0.3f), 0.05f, 0.95f);
+                auto const cells = data.value("cells", nlohmann::json::array());
+                for (size_t index = 0; index < cells.size() && index < widget.values.cells.size(); ++index) {
+                    auto const scalar = cells[index].find("scalar_id");
+                    if (scalar != cells[index].end() && !scalar->is_null()) {
+                        widget.values.cells[index].scalar_id = scalar->get<uint64_t>();
+                    }
                 }
             }
             if (widget.type == PanelWidgetType::CheckboxGrid) {
@@ -293,6 +314,19 @@ struct PanelWindow : Window {
             if (widget.type == PanelWidgetType::Led) {
                 data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
                 data["cells"][0]["script"] = widget.led.condition;
+            }
+            if (widget.type == PanelWidgetType::ValueGrid) {
+                data["text_to_value_ratio"] = widget.values.text_to_value_ratio;
+                data["rows"] = widget.values.rows;
+                data["columns"] = widget.values.columns;
+                data["cells"] = nlohmann::json::array();
+                for (auto const& cell : widget.values.cells) {
+                    auto saved = nlohmann::json::object();
+                    if (cell.scalar_id) {
+                        saved["scalar_id"] = *cell.scalar_id;
+                    }
+                    data["cells"].push_back(std::move(saved));
+                }
             }
             if (widget.type == PanelWidgetType::CheckboxGrid) {
                 data["rows"] = widget.checkboxes.rows;
