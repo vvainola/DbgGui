@@ -212,7 +212,7 @@ struct PanelLedCell {
 
 struct PanelGroup {
     // Canvas units; shared by the group bounds and its draggable title area.
-    static constexpr float TITLE_HEIGHT = 24;
+    static constexpr float TITLE_HEIGHT = 20;
 
     uint64_t id = 0;
     std::string title = "Group";
@@ -316,7 +316,7 @@ struct PanelWindow : Window {
         for (auto const& widget : widgets) {
             if (widget.group.get() == &group) {
                 bounds.x = std::min(bounds.x, widget.position.x - group.padding);
-                bounds.y = std::min(bounds.y, widget.position.y - group.padding - PanelGroup::TITLE_HEIGHT);
+                bounds.y = std::min(bounds.y, widget.position.y - PanelGroup::TITLE_HEIGHT);
                 bounds.z = std::max(bounds.z, widget.position.x + widget.size.x + group.padding);
                 bounds.w = std::max(bounds.w, widget.position.y + widget.size.y + group.padding);
             }

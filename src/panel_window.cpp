@@ -165,7 +165,7 @@ bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
         draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), 4 * panel.zoom);
         ImGui::PushFont(ImGui::GetDefaultFont(), 16 * panel.zoom);
         draw->PushClipRect(min, header_end, true);
-        draw->AddText({min.x + 4 * panel.zoom, min.y + 4 * panel.zoom}, ImGui::GetColorU32(ImGuiCol_Text), group->title.c_str(), nullptr);
+        draw->AddText({min.x + 4 * panel.zoom, min.y + 2 * panel.zoom}, ImGui::GetColorU32(ImGuiCol_Text), group->title.c_str(), nullptr);
         draw->PopClipRect();
         ImGui::PopFont();
         ImGui::PushID(std::to_string(group->id).c_str());

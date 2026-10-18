@@ -718,9 +718,9 @@ TEST_CASE("Panel groups expand selection and follow their members' bounds") {
     panel.selectWidget(2, false);
     REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1, 2});
     auto bounds = panel.groupBounds(*group);
-    REQUIRE(bounds.x == 48);
-    REQUIRE(bounds.y == 24);
-    REQUIRE(bounds.z == 432);
+    REQUIRE(bounds.x == 56);
+    REQUIRE(bounds.y == 44);
+    REQUIRE(bounds.z == 424);
     panel.moveSelectedWidgets({32, 64});
     REQUIRE(panel.groupBounds(*group).x == bounds.x + 32);
     REQUIRE(panel.widgets[2].position.x == 600);
