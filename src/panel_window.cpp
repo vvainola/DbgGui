@@ -129,11 +129,9 @@ void zoomPanelToSelection(PanelWindow& panel, ImVec2 canvas_size) {
         if (!contains(panel.selected_widgets, widget.id)) {
             continue;
         }
-        ImVec4 const bounds = widget.group ? panel.groupBounds(*widget.group)
-            : ImVec4(widget.position.x, widget.position.y,
-                     widget.position.x + widget.size.x, widget.position.y + widget.size.y);
-        min = {std::min(min.x, bounds.x), std::min(min.y, bounds.y)};
-        max = {std::max(max.x, bounds.z), std::max(max.y, bounds.w)};
+        min = {std::min(min.x, widget.position.x), std::min(min.y, widget.position.y)};
+        max = {std::max(max.x, widget.position.x + widget.size.x),
+               std::max(max.y, widget.position.y + widget.size.y)};
     }
     if (min.x > max.x || min.y > max.y) {
         return;

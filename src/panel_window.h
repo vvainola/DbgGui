@@ -242,6 +242,8 @@ struct PanelWidget {
     ImVec2 minimumSize() const {
         switch (type) {
             case PanelWidgetType::TextNote: return {64, 32};
+            case PanelWidgetType::ButtonGrid:
+            case PanelWidgetType::CheckboxGrid: return {64, 64};
             case PanelWidgetType::SliderGrid: return {100, 96};
             default: return {160, 100};
         }
