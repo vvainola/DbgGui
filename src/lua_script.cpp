@@ -32,6 +32,7 @@ extern "C" {
 #include <cmath>
 #include <format>
 #include <limits>
+#include <memory>
 #include <regex>
 #include <sstream>
 #include <utility>
@@ -87,6 +88,19 @@ std::vector<LiteralSymbolTarget> findLiteralSymbolTargets(std::string const& sou
 }
 
 } // namespace
+
+std::expected<void, std::string> validateLuaSyntax(std::string_view source, std::string_view chunk_name) {
+    std::unique_ptr<lua_State, decltype(&lua_close)> state(luaL_newstate(), &lua_close);
+    if (!state) {
+        return std::unexpected("Could not create Lua state");
+    }
+    std::string const name(chunk_name);
+    if (luaL_loadbufferx(state.get(), source.data(), source.size(), name.c_str(), "t") != LUA_OK) {
+        char const* message = lua_tostring(state.get(), -1);
+        return std::unexpected(formatLuaError(chunk_name, message ? message : "Unknown Lua error", 0));
+    }
+    return {};
+}
 
 LuaScriptRunner::LuaScriptRunner(std::string source, LuaScriptHost host, std::string chunk_name)
     : m_source(std::move(source)), m_chunk_name(std::move(chunk_name)), m_host(std::move(host)) {}

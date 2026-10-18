@@ -19,7 +19,7 @@ TEST_CASE("Panel widget geometry preserves saved control settings") {
     panel.widgets[0].position = {50, -10};
     panel.widgets[0].size = {400, 200};
     panel.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["cells"] == cells);
+    REQUIRE(saved["widgets"][0]["cells"][0]["script"] == cells[0]["script"]);
     PanelWindow restored(saved);
     REQUIRE(restored.widgets[0].position.x == 50);
     REQUIRE(restored.widgets[0].position.y == -10);
@@ -154,4 +154,139 @@ TEST_CASE("Panel plots preserve layout, styles, and unresolved placements") {
     PanelWindow restored(saved);
     REQUIRE(restored.widgets[0].plot->vector_time_range == 0.1f);
     REQUIRE(restored.widgets[0].plot->subplots[2].type == PlotType::Spectrum);
+}
+
+TEST_CASE("Button grids preserve cell coordinates when resized and save applied scripts") {
+    PanelWindow panel("Panel", 1);
+    PanelWidget widget;
+    widget.type = PanelWidgetType::ButtonGrid;
+    widget.id = 2;
+    widget.buttons.resize(2, 2);
+    widget.buttons.cells[2].label = "Enable";
+    widget.buttons.cells[2].script = "write('enabled', 1)";
+    widget.buttons.cells[2].draft = "unfinished script [";
+    widget.buttons.resize(3, 3);
+    REQUIRE(widget.buttons.cells[3].label == "Enable");
+    REQUIRE(widget.buttons.cells[3].script == "write('enabled', 1)");
+    REQUIRE(widget.buttons.cells[2].script.empty());
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    REQUIRE(saved["widgets"][0]["rows"] == 3);
+    REQUIRE(saved["widgets"][0]["columns"] == 3);
+    REQUIRE(saved["widgets"][0]["cells"].size() == 9);
+    REQUIRE_FALSE(saved["widgets"][0]["cells"][3].contains("draft"));
+    REQUIRE_FALSE(saved["widgets"][0]["cells"][3].contains("action"));
+    PanelWindow restored(saved);
+    auto& grid = restored.widgets[0].buttons;
+    REQUIRE(grid.cells[3].label == "Enable");
+    REQUIRE(grid.cells[3].script == "write('enabled', 1)");
+    REQUIRE(grid.cells[3].draft.empty());
+    REQUIRE_FALSE(grid.cells[3].action);
+    grid.resize(2, 2);
+    REQUIRE(grid.cells[2].label == "Enable");
+    grid.resize(-1, 100);
+    REQUIRE(grid.rows == 1);
+    REQUIRE(grid.columns == 10);
+    REQUIRE(grid.cells.size() == 10);
+}
+
+TEST_CASE("Panel actions run only on sampling ticks and resume waits without repeating") {
+    std::vector<double> writes;
+    LuaScriptHost host;
+    host.write = [&](std::string_view, double value) -> std::expected<void, std::string> {
+        writes.push_back(value);
+        return {};
+    };
+    PanelActionState action("write('target', 1); wait(1); write('target', 2)", std::move(host));
+    REQUIRE(writes.empty());
+    REQUIRE(action.running.load());
+    action.process(5);
+    REQUIRE(writes == std::vector<double>{1});
+    REQUIRE(action.running.load());
+    action.process(5.5);
+    REQUIRE(writes == std::vector<double>{1});
+    action.runner.shiftSchedule(-4);
+    action.process(2);
+    REQUIRE(writes == std::vector<double>{1, 2});
+    REQUIRE_FALSE(action.running.load());
+    REQUIRE(action.error.empty());
+    action.process(3);
+    REQUIRE(writes == std::vector<double>{1, 2});
+}
+
+TEST_CASE("Panel action errors are published without executing drafts") {
+    PanelButtonCell cell;
+    cell.script = "return";
+    cell.draft = "unfinished [";
+    cell.action = std::make_shared<PanelActionState>(cell.script, LuaScriptHost{});
+    cell.action->process(0);
+    REQUIRE(cell.action->error.empty());
+    REQUIRE_FALSE(cell.action->running.load());
+    cell.script = cell.draft;
+    cell.action = std::make_shared<PanelActionState>(cell.script, LuaScriptHost{});
+    cell.action->process(0);
+    REQUIRE_FALSE(cell.action->error.empty());
+    REQUIRE_FALSE(cell.action->running.load());
+}
+
+TEST_CASE("Panel actions stop on the sampling thread before starting or resuming") {
+    std::vector<double> writes;
+    LuaScriptHost host;
+    host.write = [&](std::string_view, double value) -> std::expected<void, std::string> {
+        writes.push_back(value);
+        return {};
+    };
+    SECTION("Stop an action before its first sample") {
+        PanelActionState action("write('target', 1)", host);
+        action.stop_requested.store(true);
+        action.process(0);
+        REQUIRE(writes.empty());
+        REQUIRE_FALSE(action.running.load());
+        REQUIRE(action.error.empty());
+    }
+    SECTION("Stop an action while it waits") {
+        PanelActionState action("write('target', 1); wait(1); write('target', 2)", host);
+        action.process(0);
+        REQUIRE(writes == std::vector<double>{1});
+        action.stop_requested.store(true);
+        REQUIRE(action.running.load());
+        action.process(1);
+        REQUIRE_FALSE(action.running.load());
+        action.process(2);
+        REQUIRE(writes == std::vector<double>{1});
+        REQUIRE(action.error.empty());
+    }
+}
+
+TEST_CASE("Applying a button script checks syntax and keeps the previous script on errors") {
+    PanelButtonCell cell;
+    cell.script = "write('target', 1)";
+    cell.draft = "unfinished [";
+    cell.applyScript();
+    REQUIRE_FALSE(cell.syntax_error.empty());
+    REQUIRE(cell.script == "write('target', 1)");
+    REQUIRE_FALSE(cell.action);
+
+    cell.action = std::make_shared<PanelActionState>("invalid [", LuaScriptHost{});
+    cell.action->process(0);
+    REQUIRE_FALSE(cell.action->error.empty());
+    cell.draft = "write('target', 2)";
+    cell.applyScript();
+    REQUIRE(cell.syntax_error.empty());
+    REQUIRE(cell.script == "write('target', 2)");
+    REQUIRE_FALSE(cell.action);
+}
+
+TEST_CASE("Applying a valid button script does not stop or execute the running action") {
+    PanelButtonCell cell;
+    cell.action = std::make_shared<PanelActionState>("wait(1)", LuaScriptHost{});
+    cell.action->process(0);
+    auto action = cell.action;
+    cell.draft = "write('target', 2)";
+    cell.applyScript();
+    REQUIRE(cell.action == action);
+    REQUIRE(cell.action->running.load());
+    REQUIRE_FALSE(cell.action->stop_requested.load());
+    REQUIRE(cell.script == cell.draft);
 }

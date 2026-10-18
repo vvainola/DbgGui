@@ -64,6 +64,82 @@ struct PanelLedState {
     std::atomic<std::shared_ptr<PanelLedResult const>> result{std::make_shared<PanelLedResult>()};
 };
 
+// One invocation of a panel action. Execution belongs to the sampling thread;
+// the GUI only reads the published status and error.
+struct PanelActionState {
+    PanelActionState(std::string source, LuaScriptHost host)
+        : runner(std::move(source), std::move(host), "Panel action") {
+    }
+    void process(double timestamp) {
+        if (!running.load()) {
+            return;
+        }
+        if (stop_requested.load()) {
+            runner.stop();
+            running.store(false);
+            return;
+        }
+        std::expected<void, std::string> result;
+        if (!started) {
+            started = true;
+            result = runner.start(timestamp, 1);
+        }
+        if (result) {
+            result = runner.process(timestamp);
+        }
+        if (!result) {
+            error = result.error();
+        }
+        running.store(runner.running());
+    }
+    LuaScriptRunner runner;
+    bool started = false;
+    std::atomic<bool> running = true;
+    std::atomic<bool> stop_requested = false;
+    // Written before running becomes false; GUI reads it only after completion.
+    std::string error;
+};
+
+struct PanelButtonCell {
+    std::string label = "Button";
+    std::string script;
+    std::string draft;
+    std::shared_ptr<PanelActionState> action;
+    std::string syntax_error;
+
+    void applyScript() {
+        if (auto result = validateLuaSyntax(draft, "Panel action"); !result) {
+            syntax_error = result.error();
+            return;
+        }
+        syntax_error.clear();
+        script = draft;
+        if (action && !action->running.load()) {
+            action.reset();
+        }
+    }
+};
+
+struct PanelButtonGrid {
+    int rows = 1;
+    int columns = 1;
+    std::vector<PanelButtonCell> cells{1};
+
+    void resize(int new_rows, int new_columns) {
+        new_rows = std::clamp(new_rows, 1, 20);
+        new_columns = std::clamp(new_columns, 1, 10);
+        std::vector<PanelButtonCell> resized(new_rows * new_columns);
+        for (int row = 0; row < std::min(rows, new_rows); ++row) {
+            for (int col = 0; col < std::min(columns, new_columns); ++col) {
+                resized[row * new_columns + col] = std::move(cells[row * columns + col]);
+            }
+        }
+        rows = new_rows;
+        columns = new_columns;
+        cells = std::move(resized);
+    }
+};
+
 struct PanelWidget {
     uint64_t id = 0;
     PanelWidgetType type = PanelWidgetType::ButtonGrid;
@@ -78,6 +154,7 @@ struct PanelWidget {
     } led;
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
+    PanelButtonGrid buttons;
     void configureLed(LuaScriptHost host) {
         led.state = std::make_shared<PanelLedState>(led.condition, std::move(host));
     }
@@ -132,6 +209,15 @@ struct PanelWindow : Window {
                     widget.led.condition = cells[0].value("script", widget.led.condition);
                 }
             }
+            if (widget.type == PanelWidgetType::ButtonGrid) {
+                widget.buttons.resize(data.value("rows", 1), data.value("columns", 1));
+                auto const cells = data.value("cells", nlohmann::json::array());
+                for (size_t index = 0; index < cells.size() && index < widget.buttons.cells.size(); ++index) {
+                    auto& cell = widget.buttons.cells[index];
+                    cell.label = cells[index].value("label", cell.label);
+                    cell.script = cells[index].value("script", cell.script);
+                }
+            }
             if (widget.type == PanelWidgetType::Plot) {
                 auto plot_data = data.value("plot", nlohmann::json::object());
                 plot_data["name"] = widget.label;
@@ -167,6 +253,14 @@ struct PanelWindow : Window {
             if (widget.type == PanelWidgetType::Led) {
                 data["led_color"] = {widget.led.color.x, widget.led.color.y, widget.led.color.z, widget.led.color.w};
                 data["cells"][0]["script"] = widget.led.condition;
+            }
+            if (widget.type == PanelWidgetType::ButtonGrid) {
+                data["rows"] = widget.buttons.rows;
+                data["columns"] = widget.buttons.columns;
+                data["cells"] = nlohmann::json::array();
+                for (auto const& cell : widget.buttons.cells) {
+                    data["cells"].push_back({{"label", cell.label}, {"script", cell.script}});
+                }
             }
             if (widget.plot) {
                 widget.plot->updateJson(data["plot"]);

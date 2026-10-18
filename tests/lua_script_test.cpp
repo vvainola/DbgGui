@@ -412,3 +412,12 @@ TEST_CASE("Immediate boolean conditions reject waits and invalid returns") {
         CHECK_FALSE(runner.running());
     }
 }
+
+TEST_CASE("Lua syntax validation compiles without executing actions") {
+    REQUIRE(validateLuaSyntax("write('target', 1); pause(); save_csv('file'); wait(1)"));
+    REQUIRE(validateLuaSyntax("while true do end"));
+    REQUIRE(validateLuaSyntax(""));
+    auto result = validateLuaSyntax("local value = 1\nif value then", "Button action");
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().find("Button action:") != std::string::npos);
+}

@@ -31,10 +31,38 @@
 #include <format>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace {
+constexpr ImVec2 PANEL_SCRIPT_EDITOR_SIZE = {420, 180};
+constexpr ImVec4 RUNNING_BUTTON_GREEN = {0.15f, 0.5f, 0.2f, 1.0f};
+constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
+constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
+constexpr ImVec4 FAILED_BUTTON_RED = {0.65f, 0.15f, 0.15f, 1.0f};
+constexpr ImVec4 FAILED_BUTTON_HOVERED_LIGHT_RED = {0.75f, 0.2f, 0.2f, 1.0f};
+constexpr ImVec4 FAILED_BUTTON_PRESSED_DARK_RED = {0.5f, 0.1f, 0.1f, 1.0f};
+
+void showPanelScriptError(std::string_view error) {
+    if (error.empty()) {
+        return;
+    }
+    auto const& style = ImGui::GetStyle();
+    float const wrap_width = PANEL_SCRIPT_EDITOR_SIZE.x - 2 * style.WindowPadding.x - style.ScrollbarSize;
+    float const text_height = ImGui::CalcTextSize(error.data(), error.data() + error.size(), false, wrap_width).y;
+    float const height = std::min(text_height, 4 * ImGui::GetTextLineHeight()) + 2 * style.WindowPadding.y;
+    if (ImGui::BeginChild("script_error", {PANEL_SCRIPT_EDITOR_SIZE.x, height}, ImGuiChildFlags_AlwaysUseWindowPadding,
+                          ImGuiWindowFlags_NoBackground)) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap_width);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+        ImGui::TextUnformatted(error.data(), error.data() + error.size());
+        ImGui::PopStyleColor();
+        ImGui::PopTextWrapPos();
+    }
+    ImGui::EndChild();
+}
+
 void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
     auto const& io = ImGui::GetIO();
     bool const hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -61,7 +89,22 @@ void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
 } // namespace
 
 void DbgGui::processPanelScripts(double timestamp) {
-    // Called with m_sampling_mutex held. Multiple samples consume one frame request.
+    // Called with m_sampling_mutex held. Keep active actions alive while Lua
+    // callbacks may release the mutex to register scalars on the GUI thread.
+    std::erase_if(m_panel.actions, [](auto const& action) {
+        auto state = action.lock();
+        return !state || !state->running.load();
+    });
+    std::vector<std::shared_ptr<PanelActionState>> actions;
+    for (auto const& action : m_panel.actions) {
+        if (auto state = action.lock()) {
+            actions.push_back(std::move(state));
+        }
+    }
+    for (auto const& action : actions) {
+        action->process(timestamp);
+    }
+    // Multiple samples consume one LED frame request.
     if (!m_panel.scripts_requested.exchange(false)) {
         return;
     }
@@ -86,6 +129,73 @@ void DbgGui::processPanelScripts(double timestamp) {
         }
         state->result.store(std::move(published));
     }
+}
+
+void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
+    auto& grid = widget.buttons;
+    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows
+        - 2 * ImGui::GetStyle().CellPadding.y);
+    if (!ImGui::BeginTable("buttons", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
+        return;
+    }
+    for (size_t index = 0; index < grid.cells.size(); ++index) {
+        auto& cell = grid.cells[index];
+        ImGui::TableNextColumn();
+        ImGui::PushID(static_cast<int>(index));
+        bool const running = cell.action && cell.action->running.load();
+        bool const failed = !running && cell.action && !cell.action->error.empty();
+        if (running || failed) {
+            ImGui::PushStyleColor(ImGuiCol_Button, failed ? FAILED_BUTTON_RED : RUNNING_BUTTON_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, failed ? FAILED_BUTTON_HOVERED_LIGHT_RED : RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, failed ? FAILED_BUTTON_PRESSED_DARK_RED : RUNNING_BUTTON_PRESSED_DARK_GREEN);
+        }
+        if (ImGui::Button((cell.label + "###action").c_str(), {-1, cell_height}) && !ImGui::GetIO().KeyCtrl) {
+            if (running) {
+                cell.action->stop_requested.store(true);
+            } else {
+                cell.action = std::make_shared<PanelActionState>(cell.script, createLuaScriptHost());
+                std::scoped_lock lock(m_sampling_mutex);
+                m_panel.actions.push_back(cell.action);
+            }
+        }
+        if (running || failed) {
+            ImGui::PopStyleColor(3);
+        }
+        if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl) {
+            panel.selectWidget(widget.id, true);
+            // A selection click must not run the action if Ctrl is released first.
+            ImGui::ClearActiveID();
+        }
+        if (ImGui::BeginPopupContextItem("button_settings")) {
+            if (ImGui::IsWindowAppearing()) {
+                cell.draft = cell.script;
+                cell.syntax_error.clear();
+            }
+            ImGui::InputText("Label", &cell.label);
+            ImGui::SameLine();
+            HelpMarker("Runs once when clicked. Clicking again stops the action. Lua waits use simulation time.");
+            inputScriptTextWithLineNumbers(cell.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
+            if (ImGui::Button("Apply script")) {
+                cell.applyScript();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close")) {
+                ImGui::CloseCurrentPopup();
+            }
+            std::string error = cell.syntax_error;
+            if (cell.action) {
+                if (cell.action->running.load()) {
+                    ImGui::TextDisabled("Running...");
+                } else if (error.empty()) {
+                    error = cell.action->error;
+                }
+            }
+            showPanelScriptError(error);
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
 }
 
 void DbgGui::showPanels() {
@@ -160,10 +270,12 @@ void DbgGui::showPanels() {
                 ImGui::SetCursorScreenPos(position);
                 ImGui::PushFont(ImGui::GetDefaultFont(), ImGui::GetFontSize() * panel.zoom);
                 bool const is_plot = widget.type == PanelWidgetType::Plot;
-                float const plot_padding = is_plot ? 12.0f * panel.zoom : 0.0f;
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(plot_padding, 0));
+                bool const is_buttons = widget.type == PanelWidgetType::ButtonGrid;
+                bool const has_controls = is_plot || is_buttons;
+                float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
                 bool const visible = ImGui::BeginChild("widget", size,
-                    is_plot ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None,
+                    has_controls ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None,
                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                 ImGui::PopStyleVar();
                 if (visible) {
@@ -172,7 +284,7 @@ void DbgGui::showPanels() {
                     bool const resize_target = panel.resizing_widget == widget.id
                         || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect({corner.x - grip, corner.y - grip}, corner));
                     ImVec2 const control_position = ImGui::GetCursorScreenPos();
-                    ImVec2 const control_size = is_plot ? ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
+                    ImVec2 const control_size = has_controls ? ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
                                                                  ImGui::GetFrameHeight()) : size;
                     if (resize_target) {
                         ImGui::Dummy(control_size);
@@ -186,11 +298,20 @@ void DbgGui::showPanels() {
                         panel.move_origin = widget.position;
                         panel.applied_move = {0, 0};
                     }
-                    if (widget_hovered && !resize_target && (!is_plot || ImGui::IsItemHovered())) {
+                    if (widget_hovered && !resize_target && (!has_controls || ImGui::IsItemHovered())) {
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
                     }
                     if (ImGui::BeginPopupContextItem("widget_settings")) {
                         ImGui::InputText("Label", &widget.label);
+                        if (is_buttons) {
+                            int rows = widget.buttons.rows;
+                            int columns = widget.buttons.columns;
+                            bool const rows_changed = ImGui::InputInt("Rows", &rows);
+                            bool const columns_changed = ImGui::InputInt("Columns", &columns);
+                            if (rows_changed || columns_changed) {
+                                widget.buttons.resize(rows, columns);
+                            }
+                        }
                         if (widget.type == PanelWidgetType::Led) {
                             if (ImGui::IsWindowAppearing()) {
                                 widget.led.draft = widget.led.condition;
@@ -199,7 +320,7 @@ void DbgGui::showPanels() {
                             ImGui::ColorEdit4("##lit_color", &widget.led.color.x, ImGuiColorEditFlags_NoInputs);
                             ImGui::SameLine();
                             HelpMarker("Return true to light the LED, false to turn it off");
-                            inputScriptTextWithLineNumbers(widget.led.draft, {420, 180}, true);
+                            inputScriptTextWithLineNumbers(widget.led.draft, PANEL_SCRIPT_EDITOR_SIZE, true);
                             if (ImGui::Button("Apply condition")) {
                                 widget.led.condition = widget.led.draft;
                                 widget.configureLed(createLuaScriptHost());
@@ -213,11 +334,7 @@ void DbgGui::showPanels() {
                                 ImGui::CloseCurrentPopup();
                             }
                             auto result = widget.led.state->result.load();
-                            if (!result->error.empty()) {
-                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
-                                ImGui::TextWrapped("%s", result->error.c_str());
-                                ImGui::PopStyleColor();
-                            }
+                            showPanelScriptError(result->error);
                         }
                         if (ImGui::MenuItem("Delete widget")) {
                             remove_widget = widget.id;
@@ -233,14 +350,18 @@ void DbgGui::showPanels() {
                         auto result = led.result.load();
                         widget_draw->AddCircleFilled(center, radius,
                             result->lit ? ImGui::GetColorU32(widget.led.color) : IM_COL32(60, 60, 60, 255));
-                    } else if (is_plot) {
-                        if (!widget.plot) {
-                            widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
-                        }
+                    } else if (has_controls) {
                         widget_draw->AddText({control_position.x, control_position.y + ImGui::GetStyle().FramePadding.y},
                                             ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
-                        ImGui::SameLine();
-                        renderPlotContents(*widget.plot);
+                        if (is_plot) {
+                            if (!widget.plot) {
+                                widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
+                            }
+                            ImGui::SameLine();
+                            renderPlotContents(*widget.plot);
+                        } else {
+                            renderPanelButtonGrid(widget, panel);
+                        }
                     } else {
                         widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
                     }

@@ -46,6 +46,9 @@ struct LuaScriptHost {
     std::function<void(std::string)> save_csv;
 };
 
+// Compile source without executing it or accessing host callbacks.
+std::expected<void, std::string> validateLuaSyntax(std::string_view source, std::string_view chunk_name = "Lua script");
+
 class LuaScriptRunner {
   public:
     LuaScriptRunner(std::string source, LuaScriptHost host, std::string chunk_name = "Lua script");

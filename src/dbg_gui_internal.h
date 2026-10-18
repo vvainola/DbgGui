@@ -132,6 +132,7 @@ class DbgGui {
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();
     void processPanelScripts(double timestamp);
+    void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
         std::string text;
@@ -247,6 +248,7 @@ class DbgGui {
     struct {
         // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
         std::vector<std::weak_ptr<PanelLedState>> led_scripts;
+        std::vector<std::weak_ptr<PanelActionState>> actions;
         std::atomic<bool> scripts_requested = false;
     } m_panel;
     std::vector<ScriptWindow> m_script_windows;

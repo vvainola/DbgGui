@@ -206,6 +206,11 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
             for (ScriptWindow& script_window : m_script_windows) {
                 script_window.shiftScriptSchedule(time_offset);
             }
+            for (auto const& action : m_panel.actions) {
+                if (auto state = action.lock()) {
+                    state->runner.shiftSchedule(time_offset);
+                }
+            }
             m_next_sync_timestamp = 0;
         }
         m_sample_timestamp = timestamp;
