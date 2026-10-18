@@ -861,7 +861,7 @@ void DbgGui::showPanels() {
                                             || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect({corner.x - grip, corner.y - grip}, corner));
                     ImVec2 const control_position = ImGui::GetCursorScreenPos();
                     ImVec2 const control_size = has_controls ?
-                                                  ImVec2(ImGui::CalcTextSize(widget.label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2,
+                                                  ImVec2(ImGui::GetContentRegionAvail().x,
                                                          ImGui::GetFrameHeight()) :
                                                   size;
                     if (resize_target) {
@@ -927,7 +927,6 @@ void DbgGui::showPanels() {
                             if (!widget.plot) {
                                 widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
                             }
-                            ImGui::SameLine();
                             renderPlotContents(*widget.plot);
                         } else if (is_buttons) {
                             renderPanelButtonGrid(widget, panel);
