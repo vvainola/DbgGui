@@ -425,6 +425,14 @@ struct PanelWindow : Window {
             }
         }
     }
+    void removeWidgets(uint64_t context_widget) {
+        if (contains(selected_widgets, context_widget)) {
+            std::erase_if(widgets, [&](PanelWidget const& widget) { return contains(selected_widgets, widget.id); });
+            selected_widgets.clear();
+        } else {
+            std::erase_if(widgets, [&](PanelWidget const& widget) { return widget.id == context_widget; });
+        }
+    }
     void moveSelectedWidgets(ImVec2 delta) {
         for (auto& widget : widgets) {
             if (contains(selected_widgets, widget.id)) {

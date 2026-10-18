@@ -647,3 +647,28 @@ TEST_CASE("Pasted widgets omit drafts and script runtimes") {
     REQUIRE(pasted.widgets[0].buttons.cells[0].draft.empty());
     REQUIRE(pasted.widgets[0].buttons.cells[0].script == "return");
 }
+
+TEST_CASE("Deleting a selected panel widget removes the whole selection") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets.resize(3);
+    for (size_t index = 0; index < panel.widgets.size(); ++index) {
+        panel.widgets[index].id = index + 1;
+    }
+    panel.selected_widgets = {1, 3};
+    panel.removeWidgets(3);
+    REQUIRE(panel.widgets.size() == 1);
+    REQUIRE(panel.widgets[0].id == 2);
+    REQUIRE(panel.selected_widgets.empty());
+}
+
+TEST_CASE("Deleting an unselected panel widget preserves the selection") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets.resize(2);
+    panel.widgets[0].id = 1;
+    panel.widgets[1].id = 2;
+    panel.selected_widgets = {1};
+    panel.removeWidgets(2);
+    REQUIRE(panel.widgets.size() == 1);
+    REQUIRE(panel.widgets[0].id == 1);
+    REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1});
+}

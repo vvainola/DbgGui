@@ -842,8 +842,7 @@ void DbgGui::showPanels() {
                 ImGui::PopID();
             }
             if (remove_widget) {
-                std::erase_if(panel.widgets, [&](PanelWidget const& widget) { return widget.id == *remove_widget; });
-                remove(panel.selected_widgets, *remove_widget);
+                panel.removeWidgets(*remove_widget);
             }
             if (panel.box_selecting && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                 ImVec2 const start = {origin.x + panel.pan.x + panel.box_start.x * panel.zoom,
