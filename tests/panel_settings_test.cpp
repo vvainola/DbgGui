@@ -672,3 +672,34 @@ TEST_CASE("Deleting an unselected panel widget preserves the selection") {
     REQUIRE(panel.widgets[0].id == 1);
     REQUIRE(panel.selected_widgets == std::vector<uint64_t>{1});
 }
+
+TEST_CASE("Panel text notes preserve multiline text and appearance through files and clipboard") {
+    PanelWindow panel("Notes", 1);
+    PanelWidget widget;
+    widget.id = 2;
+    widget.type = PanelWidgetType::TextNote;
+    widget.note.text = "Controls\nVoltage [V]";
+    widget.note.font_size = 32;
+    widget.note.color = {0.2f, 0.4f, 0.8f, 1};
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    PanelWindow restored(panel_file::decode(panel_file::encode(saved), 3));
+    REQUIRE(restored.widgets[0].note.text == "Controls\nVoltage [V]");
+    REQUIRE(restored.widgets[0].note.font_size == 32);
+    REQUIRE(restored.widgets[0].note.color.z == 0.8f);
+    auto clipboard = panel_clipboard::copy(saved, {2});
+    PanelWindow pasted(nlohmann::json{{"widgets", panel_clipboard::place(clipboard, panel, {64, 96})}});
+    REQUIRE(pasted.widgets[0].type == PanelWidgetType::TextNote);
+    REQUIRE(pasted.widgets[0].note.text == restored.widgets[0].note.text);
+    REQUIRE(pasted.widgets[0].note.font_size == 32);
+}
+
+TEST_CASE("Panel text notes bound font sizes and support small rectangular geometry") {
+    PanelWindow panel(nlohmann::json{{"widgets", nlohmann::json::array({{
+        {"type", PanelWidgetType::TextNote}, {"font_size", -1}, {"width", 0}, {"height", 0}
+    }})}});
+    REQUIRE(panel.widgets[0].note.font_size == 8);
+    REQUIRE(panel.widgets[0].size.x == 64);
+    REQUIRE(panel.widgets[0].size.y == 32);
+}

@@ -28,7 +28,7 @@ inline nlohmann::json decode(nlohmann::json const& file, uint64_t panel_id) {
             throw std::runtime_error("Invalid panel widget");
         }
         int const type = widget.at("type").get<int>();
-        if (type < 0 || type > static_cast<int>(PanelWidgetType::LedGrid)) {
+        if (type < 0 || type > static_cast<int>(PanelWidgetType::TextNote)) {
             throw std::runtime_error("Unsupported panel widget type");
         }
         widget["id"] = ++id;

@@ -46,7 +46,8 @@ enum class PanelWidgetType {
     ValueGrid,
     CheckboxGrid,
     SliderGrid,
-    LedGrid
+    LedGrid,
+    TextNote
 };
 
 struct PanelLedResult {
@@ -220,8 +221,14 @@ struct PanelWidget {
     PanelValueGrid values;
     PanelSliderGrid sliders;
     PanelControlGrid<PanelLedCell> leds;
+    struct {
+        std::string text = "Text note";
+        float font_size = 20;
+        ImVec4 color = {1, 1, 1, 1};
+    } note;
     ImVec2 minimumSize() const {
         switch (type) {
+            case PanelWidgetType::TextNote: return {64, 32};
             case PanelWidgetType::SliderGrid: return {100, 96};
             default: return {160, 100};
         }
@@ -244,7 +251,7 @@ struct PanelWindow : Window {
         pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
         for (auto const& data : j.value("widgets", nlohmann::json::array())) {
             int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
-            if (type < 0 || type > static_cast<int>(PanelWidgetType::LedGrid)) {
+            if (type < 0 || type > static_cast<int>(PanelWidgetType::TextNote)) {
                 continue;
             }
             PanelWidget widget;
@@ -253,6 +260,14 @@ struct PanelWindow : Window {
             widget.label = data.value("label", widget.label);
             widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
             widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
+            if (widget.type == PanelWidgetType::TextNote) {
+                widget.note.text = data.value("text", widget.note.text);
+                widget.note.font_size = std::clamp(data.value("font_size", 20.0f), 8.0f, 100.0f);
+                auto const color = data.value("text_color", std::vector<float>{1, 1, 1, 1});
+                if (color.size() == 4) {
+                    widget.note.color = {color[0], color[1], color[2], color[3]};
+                }
+            }
             if (widget.type == PanelWidgetType::LedGrid) {
                 widget.leds.resize(data.value("rows", 1), data.value("columns", 1));
                 auto const cells = data.value("cells", nlohmann::json::array());
@@ -342,6 +357,11 @@ struct PanelWindow : Window {
             data["y"] = widget.position.y;
             data["width"] = widget.size.x;
             data["height"] = widget.size.y;
+            if (widget.type == PanelWidgetType::TextNote) {
+                data["text"] = widget.note.text;
+                data["font_size"] = widget.note.font_size;
+                data["text_color"] = {widget.note.color.x, widget.note.color.y, widget.note.color.z, widget.note.color.w};
+            }
             if (widget.type == PanelWidgetType::LedGrid) {
                 data["rows"] = widget.leds.rows;
                 data["columns"] = widget.leds.columns;

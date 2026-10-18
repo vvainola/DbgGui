@@ -763,7 +763,14 @@ void DbgGui::showPanels() {
                     }
                     bool const settings_open = ImGui::BeginPopupContextItem("widget_settings");
                     if (settings_open) {
-                        ImGui::InputText("Label", &widget.label);
+                        if (widget.type == PanelWidgetType::TextNote) {
+                            ImGui::InputTextMultiline("##text", &widget.note.text, {420, 160});
+                            ImGui::SliderFloat("Font size", &widget.note.font_size, 8, 100, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+                            ImGui::SameLine();
+                            ImGui::ColorEdit4("##text_color", &widget.note.color.x, ImGuiColorEditFlags_NoInputs);
+                        } else {
+                            ImGui::InputText("Label", &widget.label);
+                        }
                         if (is_buttons || is_checkbox || is_values || is_slider || is_led) {
                             int rows = is_buttons ? widget.buttons.rows : is_checkbox ? widget.checkboxes.rows : is_values ? widget.values.rows : is_slider ? widget.sliders.rows : widget.leds.rows;
                             int columns = is_buttons ? widget.buttons.columns : is_checkbox ? widget.checkboxes.columns : is_values ? widget.values.columns : is_slider ? widget.sliders.columns : widget.leds.columns;
@@ -814,7 +821,10 @@ void DbgGui::showPanels() {
                             renderPanelLedGrid(widget);
                         }
                     } else {
-                        widget_draw->AddText(position, ImGui::GetColorU32(ImGuiCol_Text), widget.label.c_str());
+                        ImGui::PushFont(ImGui::GetDefaultFont(), widget.note.font_size * panel.zoom);
+                        widget_draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), position,
+                            ImGui::GetColorU32(widget.note.color), widget.note.text.c_str(), nullptr, size.x);
+                        ImGui::PopFont();
                     }
                     bool const selected = contains(panel.selected_widgets, widget.id);
                     if (widget_hovered || selected || panel.resizing_widget == widget.id) {
@@ -866,7 +876,8 @@ void DbgGui::showPanels() {
                        {"Value grid", PanelWidgetType::ValueGrid},
                        {"Checkbox grid", PanelWidgetType::CheckboxGrid},
                        {"Slider grid", PanelWidgetType::SliderGrid},
-                       {"LED grid", PanelWidgetType::LedGrid}}) {
+                       {"LED grid", PanelWidgetType::LedGrid},
+                       {"Text note", PanelWidgetType::TextNote}}) {
                     if (ImGui::MenuItem(label)) {
                         PanelWidget widget;
                         for (auto const& existing : panel.widgets) {
@@ -877,6 +888,8 @@ void DbgGui::showPanels() {
                         if (type == PanelWidgetType::Plot) {
                             widget.size = {640, 384};
                             widget.plot = std::make_shared<PlotWindow>(label, widget.id);
+                        } else if (type == PanelWidgetType::TextNote) {
+                            widget.size = {320, 96};
                         } else if (type == PanelWidgetType::LedGrid) {
                             widget.size = {320, 160};
                         } else if (type == PanelWidgetType::CheckboxGrid) {
