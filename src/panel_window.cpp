@@ -277,8 +277,9 @@ void DbgGui::processPanelScripts(double timestamp) {
 
 void DbgGui::renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel) {
     auto& grid = widget.buttons;
+    float const bottom_padding = 4 * panel.zoom;
     float const cell_height = std::max(1.0f,
-                                       ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
+                                       (ImGui::GetContentRegionAvail().y - bottom_padding) / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("buttons", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
