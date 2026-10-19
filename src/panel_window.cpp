@@ -747,7 +747,7 @@ void DbgGui::showPanels() {
         auto const& style = ImGui::GetStyle();
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
                             ImVec2(style.FramePadding.x, std::max(style.FramePadding.y, style.WindowBorderHoverPadding)));
-        panel.focus.focused = ImGui::Begin(panel.title().c_str(), &panel.open);
+        panel.focus.focused = ImGui::Begin(panel.title().c_str(), nullptr);
         ImGui::PopStyleVar();
         panel.closeOnMiddleClick();
         if (ImGui::BeginPopupContextItem("panel_context_menu")) {
