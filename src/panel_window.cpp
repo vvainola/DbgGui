@@ -474,11 +474,7 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         ImGui::EndGroup();
         ImGui::PopFont();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("%s",
-                              available ?
-                                scalar->alias_and_group.c_str() :
-                              slider.scalar_id ? "Unavailable scalar" :
-                                                 "Drop a scalar here");
+            ImGui::SetTooltip("%s", label);
         }
         addPanelScalarBinding(slider.scalar_id);
         if (!valid_range) {
@@ -602,14 +598,7 @@ void DbgGui::renderPanelLedGrid(PanelWidget& widget) {
         }
         float const label_x = position.x + diameter + 4 + ImGui::GetStyle().ItemInnerSpacing.x;
         float const label_width = std::max(1.0f, position.x + width - label_x);
-        float font_size = std::max(1.0f, diameter * 0.5f);
-        ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
-        float const text_width = ImGui::CalcTextSize(cell.label.c_str()).x;
-        if (text_width > label_width) {
-            ImGui::PopFont();
-            font_size = std::max(1.0f, font_size * label_width / text_width);
-            ImGui::PushFont(ImGui::GetDefaultFont(), font_size);
-        }
+        pushPanelFontToFit(cell.label.c_str(), diameter * 0.5f, label_width);
         draw->AddText({label_x, center.y - ImGui::GetFontSize() * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text), cell.label.c_str());
         ImGui::PopFont();
 
@@ -1004,17 +993,22 @@ void DbgGui::showPanels() {
                         }
                         ++widget.id;
                         widget.type = type;
-                        if (type == PanelWidgetType::Plot) {
-                            widget.size = {640, 384};
-                            widget.plot = std::make_shared<PlotWindow>(label, widget.id);
-                        } else if (type == PanelWidgetType::TextNote) {
-                            widget.size = {320, 96};
-                        } else if (type == PanelWidgetType::LedGrid) {
-                            widget.size = {320, 160};
-                        } else if (type == PanelWidgetType::CheckboxGrid) {
-                            widget.size = {320, 160};
-                        } else if (type == PanelWidgetType::SliderGrid) {
-                            widget.size = {320, 160};
+                        switch (type) {
+                            case PanelWidgetType::Plot:
+                                widget.size = {640, 384};
+                                widget.plot = std::make_shared<PlotWindow>(label, widget.id);
+                                break;
+                            case PanelWidgetType::TextNote:
+                                widget.size = {320, 96};
+                                break;
+                            case PanelWidgetType::LedGrid:
+                            case PanelWidgetType::CheckboxGrid:
+                            case PanelWidgetType::SliderGrid:
+                                widget.size = {320, 160};
+                                break;
+                            case PanelWidgetType::ButtonGrid:
+                            case PanelWidgetType::ValueGrid:
+                                break;
                         }
                         widget.label = label;
                         widget.position = {snapToPanelGrid((mouse.x - origin.x - panel.pan.x) / panel.zoom),
