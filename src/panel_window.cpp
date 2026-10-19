@@ -925,9 +925,6 @@ void DbgGui::showPanels() {
                                              ImGui::GetColorU32(ImGuiCol_Text),
                                              widget.label.c_str());
                         if (is_plot) {
-                            if (!widget.plot) {
-                                widget.plot = std::make_shared<PlotWindow>(widget.label, widget.id);
-                            }
                             renderPlotContents(*widget.plot);
                         } else if (is_buttons) {
                             renderPanelButtonGrid(widget, panel);
