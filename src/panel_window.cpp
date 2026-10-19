@@ -1020,7 +1020,7 @@ void DbgGui::showPanels() {
                     }
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Group selection", "Ctrl+G", false, panel.selected_widgets.size() > 1)) {
+                if (ImGui::MenuItem("Group selection", "Ctrl+G", false, !panel.selected_widgets.empty())) {
                     panel.groupSelected();
                 }
                 bool const grouped_selection = std::ranges::any_of(panel.widgets, [&](auto const& widget) {

@@ -280,6 +280,15 @@ struct PanelWindow : Window {
         }
     }
     void groupSelected() {
+        if (selected_widgets.size() == 1) {
+            auto const widget = std::ranges::find(widgets, selected_widgets.front(), &PanelWidget::id);
+            if (widget != widgets.end()) {
+                if (auto group = groupAt(widget->position)) {
+                    widget->group = std::move(group);
+                }
+            }
+            return;
+        }
         if (selected_widgets.size() < 2) {
             return;
         }

@@ -763,6 +763,25 @@ TEST_CASE("Panel placement finds the topmost background at the canvas position")
     REQUIRE(restored.widgets.back().group == restored.widgets[1].group);
 }
 
+TEST_CASE("Grouping one widget joins the background at its position") {
+    PanelWindow panel("Panel", 1);
+    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ButtonGrid, "Two", {256, 64}, {160, 100}},
+                     {3, PanelWidgetType::ButtonGrid, "Inside", {128, 64}, {64, 64}},
+                     {4, PanelWidgetType::ButtonGrid, "Outside", {640, 64}, {64, 64}}};
+    panel.selected_widgets = {1, 2};
+    panel.groupSelected();
+    auto const group = panel.widgets[0].group;
+    panel.selected_widgets = {3};
+    panel.groupSelected();
+    REQUIRE(panel.widgets[2].group == group);
+    REQUIRE(panel.widgets[0].group == group);
+    REQUIRE(panel.widgets[1].group == group);
+    panel.selected_widgets = {4};
+    panel.groupSelected();
+    REQUIRE_FALSE(panel.widgets[3].group);
+}
+
 TEST_CASE("Groups round trip and pasted groups are independent of existing groups") {
     PanelWindow panel("Panel", 1);
     panel.widgets.resize(2);
