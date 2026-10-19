@@ -489,7 +489,9 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
 
 void DbgGui::renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel) {
     auto& grid = widget.checkboxes;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
+    float const bottom_padding = 4 * panel.zoom;
+    float const cell_height = std::max(1.0f,
+                                       (ImGui::GetContentRegionAvail().y - bottom_padding) / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (!ImGui::BeginTable("checkboxes", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         return;
     }
