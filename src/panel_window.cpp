@@ -26,6 +26,7 @@
 #include "imgui_stdlib.h"
 #include "lua_script_editor.h"
 #include "panel_file.h"
+#include "panel_slider.h"
 #include "panel_clipboard.h"
 #include <fstream>
 
@@ -467,7 +468,7 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         ImGui::BeginGroup();
         ImGui::BeginDisabled(!writable);
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::SliderScalar("##slider", ImGuiDataType_Double, &value, &minimum, &maximum, "%.6g", ImGuiSliderFlags_AlwaysClamp) && writable) {
+        if (panelSliderDouble("##slider", &value, minimum, maximum) && writable) {
             scalar->setScaledValue(value);
         }
         ImGui::EndDisabled();

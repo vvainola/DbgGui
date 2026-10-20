@@ -323,6 +323,7 @@ if get_option('tests')
             'tests/plot_settings_test.cpp',
             'src/panel_window_settings.cpp',
             'tests/panel_settings_test.cpp',
+            'tests/panel_slider_test.cpp',
             'tests/sample_clipboard_test.cpp',
             'tests/scrolling_buffer_test.cpp',
             'tests/script_window_settings_test.cpp',
