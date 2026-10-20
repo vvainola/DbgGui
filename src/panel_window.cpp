@@ -360,6 +360,11 @@ void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
         pushPanelFontToFit(label, font_height * grid.text_to_value_ratio, cell_width);
         ImGui::TextUnformatted(label);
         ImGui::PopFont();
+        if (available && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(scalar->id));
+            ImGui::TextUnformatted(scalar->alias_and_group.c_str());
+            ImGui::EndDragDropSource();
+        }
         float const value_font_size = font_height * (1.0f - grid.text_to_value_ratio);
         if (available) {
             std::string const value = numberAsStr(scalar->getScaledValue());
