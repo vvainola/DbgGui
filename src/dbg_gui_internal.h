@@ -141,6 +141,7 @@ class DbgGui {
     void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
     void exportPanel(PanelWindow& panel);
     bool importPanel();
+    void addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id);
     void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
     void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 

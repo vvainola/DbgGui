@@ -380,9 +380,7 @@ void DbgGui::renderPanelValueGrid(PanelWidget& widget) {
     ImGui::EndTable();
 }
 
-void DbgGui::addPanelScalarBinding(std::optional<uint64_t>& scalar_id) {
-    Scalar* scalar = scalar_id ? findScalar(m_scalars, *scalar_id) : nullptr;
-    bool const available = scalar && !scalar->deleted;
+void DbgGui::addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id) {
     if (ImGui::BeginDragDropTarget()) {
         if (auto const* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
             if (payload->DataSize >= static_cast<int>(sizeof(uint64_t))) {
@@ -399,6 +397,12 @@ void DbgGui::addPanelScalarBinding(std::optional<uint64_t>& scalar_id) {
         }
         ImGui::EndDragDropTarget();
     }
+}
+
+void DbgGui::addPanelScalarBinding(std::optional<uint64_t>& scalar_id) {
+    Scalar* scalar = scalar_id ? findScalar(m_scalars, *scalar_id) : nullptr;
+    bool const available = scalar && !scalar->deleted;
+    addPanelScalarDropTarget(scalar_id);
     if (available) {
         if (addScalarContextMenu(scalar)) {
             scalar_id.reset();
@@ -440,21 +444,7 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
             ImGui::TextUnformatted(scalar->alias_and_group.c_str());
             ImGui::EndDragDropSource();
         }
-        if (ImGui::BeginPopupContextItem("slider_settings")) {
-            if (available && scalarContextMenuContents(scalar)) {
-                slider.scalar_id.reset();
-            }
-            if (!available && ImGui::Button("Delete")) {
-                slider.scalar_id.reset();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::Separator();
-            ImGui::TextUnformatted("Minimum");
-            addInputScalar(&slider.minimum, "##minimum", 1, 0, false);
-            ImGui::TextUnformatted("Maximum");
-            addInputScalar(&slider.maximum, "##maximum", 1, 0, false);
-            ImGui::EndPopup();
-        }
+        addPanelScalarBinding(slider.scalar_id);
         bool const valid_range = std::isfinite(slider.minimum) && std::isfinite(slider.maximum)
                               && slider.minimum < slider.maximum
                               && slider.minimum >= -std::numeric_limits<double>::max() / 2
@@ -477,7 +467,22 @@ void DbgGui::renderPanelSliderGrid(PanelWidget& widget) {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip("%s", label);
         }
-        addPanelScalarBinding(slider.scalar_id);
+        addPanelScalarDropTarget(slider.scalar_id);
+        if (ImGui::BeginPopupContextItem("slider_settings")) {
+            if (available && scalarContextMenuContents(scalar)) {
+                slider.scalar_id.reset();
+            }
+            if (!available && ImGui::Button("Delete")) {
+                slider.scalar_id.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::Separator();
+            ImGui::TextUnformatted("Minimum");
+            addInputScalar(&slider.minimum, "##minimum", 1, 0, false);
+            ImGui::TextUnformatted("Maximum");
+            addInputScalar(&slider.maximum, "##maximum", 1, 0, false);
+            ImGui::EndPopup();
+        }
         if (!valid_range) {
             ImGui::TextDisabled("Set a valid minimum and maximum");
         }
