@@ -288,7 +288,22 @@ lib_gui_dep = declare_dependency(
 
 
 if get_option('tests')
-    executable('tests',
+    if LINUX
+        current_module_library = shared_library('current_module_library',
+            sources : ['tests/current_module_library.cpp'],
+            dependencies : [lib_symbols_dep, deps],
+            include_directories : ['src'],
+        )
+        current_module_test = executable('current_module_test',
+            sources : ['tests/current_module_test.cpp'],
+            link_with : current_module_library,
+            dependencies : [dependency('catch2-with-main'), deps],
+            include_directories : ['include', 'src'],
+        )
+        test('Symbols from current shared library', current_module_test)
+    endif
+
+    main_tests = executable('tests',
         sources : [
             'src/csv_plot/csv_helpers.cpp',
             'src/csv_plot/csv_lua_signal.cpp',
@@ -324,4 +339,5 @@ if get_option('tests')
         link_depends : test_library,
         include_directories: inc + ['src', 'tests'],
     )
+    test('Main tests', main_tests, workdir : meson.current_build_dir())
 endif

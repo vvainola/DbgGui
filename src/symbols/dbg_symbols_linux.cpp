@@ -59,31 +59,6 @@ static void appendMembers(SymbolDescriptor& symbol,
 }
 
 // ============================================================================
-// Address computation helpers
-// ============================================================================
-
-// Determines where the current executable was loaded in memory.
-static MemoryAddress getLoadBase() {
-    static MemoryAddress const load_base = [] {
-        MemoryAddress base = 0;
-        dl_iterate_phdr(
-          [](dl_phdr_info* info, size_t, void* data) {
-              // The main executable is represented by the entry with an empty
-              // name. dlpi_addr is its ELF load bias: zero for ET_EXEC and the
-              // relocation base for PIE executables.
-              if (info->dlpi_name == nullptr || info->dlpi_name[0] == '\0') {
-                  *static_cast<MemoryAddress*>(data) = info->dlpi_addr;
-                  return 1;
-              }
-              return 0;
-          },
-          &base);
-        return base;
-    }();
-    return load_base;
-}
-
-// ============================================================================
 // DWARF type resolution
 // ============================================================================
 
@@ -1374,42 +1349,29 @@ struct SharedLibInfo {
     MemoryAddress load_addr;
 };
 
-static int dl_iterate_callback(struct dl_phdr_info* info, size_t size, void* data) {
+static int dl_iterate_callback(struct dl_phdr_info* info, size_t, void* data) {
     auto* libs = static_cast<std::vector<SharedLibInfo>*>(data);
-    if (info->dlpi_name && info->dlpi_name[0] != '\0') {
-        libs->push_back({info->dlpi_name, (MemoryAddress)info->dlpi_addr});
+    std::string path = info->dlpi_name ? info->dlpi_name : "";
+    if (path.empty()) {
+        path = std::filesystem::read_symlink("/proc/self/exe").string();
     }
+    libs->push_back({std::move(path), (MemoryAddress)info->dlpi_addr});
     return 0;
 }
 
-// Initialize symbol loading from the main executable
+// Keep symbols from the module containing DbgGui unprefixed, whether it is
+// the executable or a shared library. Other modules need a collision prefix.
 void DbgSymbols::initSymbolsFromPdb() {
-    Dwarf_Debug dbg = nullptr;
-    Dwarf_Error err = nullptr;
-    const char* exe_path = "/proc/self/exe";
-
-    int fd = open(exe_path, O_RDONLY);
-    if (fd < 0) {
+    Dl_info current_module{};
+    if (dladdr(reinterpret_cast<void*>(&getCurrentModuleInfo), &current_module) == 0
+        || current_module.dli_fname == nullptr) {
         return;
     }
 
-    if (dwarf_init_b(fd, DW_GROUPNUMBER_ANY, nullptr, nullptr, &dbg, &err) != DW_DLV_OK) {
-        close(fd);
-        return;
-    }
-
-    processAllCUs(dbg, getLoadBase());
-
-    dwarf_finish(dbg);
-    close(fd);
-
-    // ============================================================================
-    // Shared library symbol loading
-    // ============================================================================
     std::vector<SharedLibInfo> libs;
     dl_iterate_phdr(dl_iterate_callback, &libs);
 
-    for (auto& lib : libs) {
+    for (auto const& lib : libs) {
         int fd = open(lib.path.c_str(), O_RDONLY);
         if (fd < 0) {
             continue;
@@ -1422,13 +1384,19 @@ void DbgSymbols::initSymbolsFromPdb() {
             continue;
         }
 
-        std::filesystem::path p(lib.path);
-        std::string stem = p.stem().string();
-        if (stem.starts_with("lib") && stem.size() > 3) {
-            stem = stem.substr(3);
+        std::string module_prefix;
+        // Compare file identity so relative paths and symlinks also match.
+        std::error_code path_error;
+        bool const is_current_module = std::filesystem::equivalent(
+          lib.path, current_module.dli_fname, path_error);
+        if (!is_current_module) {
+            std::string stem = std::filesystem::path(lib.path).stem().string();
+            if (stem.starts_with("lib") && stem.size() > 3) {
+                stem = stem.substr(3);
+            }
+            module_prefix = stem + "|";
         }
-        std::string module_name = stem + "|";
-        processAllCUs(dbg, lib.load_addr, module_name);
+        processAllCUs(dbg, lib.load_addr, module_prefix);
 
         dwarf_finish(dbg);
         close(fd);

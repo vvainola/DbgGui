@@ -61,7 +61,7 @@ build build_folder="build" *opts="":
 [linux]
 test build_folder="build" *opts="":
     #!/usr/bin/env bash
+    set -e
     source .venv_linux/bin/activate
     ninja -C {{build_folder}} {{opts}}
-    cd ./{{build_folder}}
-    ./tests
+    meson test -C {{build_folder}} --no-rebuild --print-errorlogs
