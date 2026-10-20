@@ -46,89 +46,100 @@ std::unique_ptr<Scalar> makeScalar(std::string const& name, std::string const& g
     return scalar;
 }
 
-std::unique_ptr<Vector2D> makeVector(Scalar* x, Scalar* y) {
-    auto vector = std::make_unique<Vector2D>();
-    vector->name = x->name;
-    vector->group = x->group;
-    vector->name_and_group = vector->name + " (" + vector->group + ")";
-    vector->id = testSignalId(x->name + "+" + y->name, x->group);
-    vector->x = x;
-    vector->y = y;
-    return vector;
-}
-
-void eraseDeletedVectors(std::vector<std::unique_ptr<Vector2D>>& vectors) {
-    vectors.erase(std::remove_if(vectors.begin(), vectors.end(), [](auto const& vector) {
-        return vector->deleted;
-    }), vectors.end());
-}
-
 } // namespace
 
-TEST_CASE("Deleted scalar vector cleanup allows recreating the vector") {
-    std::string const group_name = "group 2";
-    auto old_x = makeScalar("g::abc.a", group_name);
-    auto old_y = makeScalar("g::abc.b", group_name);
-    auto old_z = makeScalar("g::abc.c", group_name);
-
-    std::vector<std::unique_ptr<Vector2D>> vectors;
-    auto old_vector = makeVector(old_x.get(), old_y.get());
-    Vector2D* old_vector_ptr = old_vector.get();
-    vectors.push_back(std::move(old_vector));
-
-    SignalGroup<Vector2D> vector_group;
-    vector_group.name = group_name;
-    vector_group.full_name = group_name;
-    vector_group.signals.push_back(old_vector_ptr);
-
-    VectorPlot vector_plot("Vector plot", 1);
-    vector_plot.addVectorToPlot(old_vector_ptr);
-
-    old_x->deleted = true;
-    old_y->deleted = true;
-    old_z->deleted = true;
-    markVectorsDeletedByDeletedComponents(vectors);
-
-    REQUIRE(old_vector_ptr->deleted);
-    replaceDeletedVectorInPlot(vector_plot, old_vector_ptr);
-    removeDeletedSignalsFromGroup(vector_group);
-    eraseDeletedVectors(vectors);
-
-    CHECK(vector_plot.vectors.empty());
-    CHECK(vector_group.signals.empty());
-    CHECK(vectors.empty());
-
-    auto new_x = makeScalar("g::abc.a", group_name);
-    auto new_y = makeScalar("g::abc.b", group_name);
-    auto new_vector = makeVector(new_x.get(), new_y.get());
-    Vector2D* new_vector_ptr = new_vector.get();
-    vectors.push_back(std::move(new_vector));
-    vector_group.signals.push_back(new_vector_ptr);
-    vector_plot.addVectorToPlot(new_vector_ptr);
-
-    REQUIRE(vector_group.signals.size() == 1);
-    CHECK(vector_group.signals.front() == new_vector_ptr);
-    REQUIRE(vector_plot.vectors.size() == 1);
-    CHECK(vector_plot.vectors.front() == new_vector_ptr);
-    CHECK(isLiveVector(new_vector_ptr));
+TEST_CASE("Vector subplot cleanup removes pairs with either deleted component") {
+    auto x = makeScalar("x", "group");
+    auto y = makeScalar("y", "group");
+    PlotWindow::Subplot subplot;
+    subplot.addVector({x.get(), y.get()});
+    subplot.reference_frame_vector = subplot.vectors[0];
+    removeDeletedVectorComponents(subplot);
+    REQUIRE(subplot.vectors.size() == 1);
+    REQUIRE(subplot.reference_frame_vector == subplot.vectors[0]);
+    SECTION("X is deleted") {
+        x->deleted = true;
+    }
+    SECTION("Y is deleted") {
+        y->deleted = true;
+    }
+    removeDeletedVectorComponents(subplot);
+    REQUIRE(subplot.vectors.empty());
+    REQUIRE_FALSE(subplot.reference_frame_vector.has_value());
 }
 
-TEST_CASE("Deleted vector cleanup does not keep a deleted replacement in plots") {
-    std::string const group_name = "group 2";
-    auto old_x = makeScalar("g::abc.a", group_name);
-    auto old_y = makeScalar("g::abc.b", group_name);
-    auto replacement_x = makeScalar("g::abc.a", group_name);
-    auto replacement_y = makeScalar("g::abc.b", group_name);
+TEST_CASE("Shrinking a subplot grid preserves vector pairs without changing the reference frame") {
+    auto x = makeScalar("x", "group");
+    auto y = makeScalar("y", "group");
+    VectorPair xy{x.get(), y.get()};
+    VectorPair yx{y.get(), x.get()};
+    PlotWindow plot("test", 1);
+    plot.setSubplotGrid(2, 2);
+    plot.subplots[0].addVector(xy);
+    plot.subplots[3].addVector(xy);
+    plot.subplots[3].addVector(yx);
+    plot.subplots[3].reference_frame_vector = yx;
 
-    auto old_vector = makeVector(old_x.get(), old_y.get());
-    auto replacement_vector = makeVector(replacement_x.get(), replacement_y.get());
-    old_vector->deleted = true;
-    old_vector->replacement = replacement_vector.get();
-    replacement_x->deleted = true;
+    SECTION("Do not adopt the removed cell's reference frame") {
+        REQUIRE_FALSE(plot.subplots[0].reference_frame_vector.has_value());
+    }
+    SECTION("Keep an existing reference frame") {
+        plot.subplots[0].reference_frame_vector = xy;
+    }
+    auto expected_reference = plot.subplots[0].reference_frame_vector;
+    plot.setSubplotGrid(1, 1);
 
-    VectorPlot vector_plot("Vector plot", 1);
-    vector_plot.addVectorToPlot(old_vector.get());
-    replaceDeletedVectorInPlot(vector_plot, old_vector.get());
+    REQUIRE(plot.subplots[0].vectors.size() == 2);
+    REQUIRE(contains(plot.subplots[0].vectors, xy));
+    REQUIRE(contains(plot.subplots[0].vectors, yx));
+    REQUIRE(plot.subplots[0].reference_frame_vector == expected_reference);
+}
 
-    CHECK(vector_plot.vectors.empty());
+TEST_CASE("Spectrum subplot cleanup removes spectra with deleted components") {
+    auto old_real = makeScalar("old real", "group");
+    auto real = makeScalar("real", "group");
+    auto imag = makeScalar("imag", "group");
+    PlotWindow::Subplot subplot;
+    subplot.addSpectrum(old_real.get(), imag.get());
+    subplot.addSpectrum(real.get(), imag.get());
+    subplot.addSpectrum(real.get());
+    old_real->deleted = true;
+    removeDeletedSpectrumComponents(subplot);
+    REQUIRE(subplot.spectrums.size() == 2);
+    REQUIRE(subplot.spectrums[0].real == real.get());
+    REQUIRE(subplot.spectrums[0].imag == imag.get());
+    imag->deleted = true;
+    removeDeletedSpectrumComponents(subplot);
+    REQUIRE(subplot.spectrums.size() == 1);
+    REQUIRE(subplot.spectrums[0].real == real.get());
+    REQUIRE(subplot.spectrums[0].imag == nullptr);
+}
+
+TEST_CASE("Spectrum subplot settings round trip and grid shrinking preserves spectra") {
+    auto real = makeScalar("real", "group");
+    auto imag = makeScalar("imag", "group");
+    PlotWindow plot("spectra", 1);
+    plot.setSubplotGrid(2, 2);
+    plot.subplots[3].type = PlotType::Spectrum;
+    plot.spectrum.logarithmic_y_axis = true;
+    plot.subplots[3].spectrum_x_axis = {10, 100};
+    plot.spectrum.time_range = 0.5;
+    plot.spectrum.window = SpectrumWindow::Hann;
+    plot.subplots[3].addSpectrum(real.get(), imag.get());
+    nlohmann::json saved;
+    plot.updateJson(saved);
+    PlotWindow restored(saved);
+    REQUIRE(restored.subplots[3].type == PlotType::Spectrum);
+    REQUIRE(restored.spectrum.logarithmic_y_axis);
+    REQUIRE(restored.subplots[3].spectrum_x_axis.min == 10);
+    REQUIRE(restored.spectrum.time_range == 0.5);
+    REQUIRE(restored.spectrum.window == SpectrumWindow::Hann);
+    plot.setSubplotGrid(1, 1);
+    REQUIRE(plot.subplots[0].spectrums.size() == 1);
+    plot.subplots[0].addSpectrum(real.get());
+    plot.subplots[0].removeSpectrum(real.get(), imag.get());
+    REQUIRE(plot.subplots[0].spectrums.size() == 1);
+    REQUIRE(plot.subplots[0].spectrums[0].imag == nullptr);
+    plot.clearSignals();
+    REQUIRE(plot.subplots[0].spectrums.empty());
 }

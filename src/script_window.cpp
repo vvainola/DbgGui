@@ -91,6 +91,118 @@ std::expected<std::vector<VariantSymbol*>, std::string> getValueSymbols(std::str
     return value_symbols;
 }
 
+LuaScriptHost DbgGui::createLuaScriptHost() {
+    auto find_or_add_scalar = [gui = this](std::string_view symbol_name) -> Scalar* {
+        if (Scalar* scalar = gui->findScalarByName(symbol_name)) {
+            return scalar;
+        }
+
+        VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+        if (!validateLuaSymbolAccess(symbol_name, LuaSymbolAccess::Read, nullptr, symbol)) {
+            return nullptr;
+        }
+
+        Scalar* scalar = nullptr;
+        // Cache a symbol as a scalar after the first lookup so subsequent
+        // Lua accesses use the name index instead of searching all symbols.
+        gui->m_sampling_mutex.unlock();
+        try {
+            gui->runOnGuiThreadAndWait([gui, symbol, &scalar] {
+                scalar = gui->findScalarByName(symbol->getFullName());
+                if (scalar == nullptr) {
+                    scalar = gui->addScalarSymbol(symbol, "Scripts");
+                }
+            });
+        } catch (...) {
+            gui->m_sampling_mutex.lock();
+            throw;
+        }
+        gui->m_sampling_mutex.lock();
+        return scalar;
+    };
+
+    LuaScriptHost host;
+    host.add_scalar = [gui = this](std::string_view name, std::string_view group) {
+        std::string scalar_name(name);
+        std::string scalar_group(group);
+        // Script execution holds the sampling mutex. Release it while
+        // waiting so the GUI can finish its current frame and process this
+        // operation at the start of the next one.
+        gui->m_sampling_mutex.unlock();
+        try {
+            gui->runOnGuiThreadAndWait([gui, &scalar_name, &scalar_group] {
+                if (gui->findScalarByName(scalar_name) != nullptr) {
+                    return;
+                }
+
+                auto value = std::make_shared<double>(0.0);
+                ReadWriteFn value_source = [value](std::optional<double> new_value) {
+                    if (new_value.has_value()) {
+                        *value = *new_value;
+                    }
+                    return *value;
+                };
+                gui->addScalar(value_source, scalar_group, scalar_name);
+            });
+        } catch (...) {
+            gui->m_sampling_mutex.lock();
+            throw;
+        }
+        gui->m_sampling_mutex.lock();
+        return scalar_name;
+    };
+    host.exists = [gui = this](std::string_view symbol_name) {
+        if (gui->findScalarByName(symbol_name)) {
+            return true;
+        }
+        auto* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
+        return validateLuaSymbolAccess(symbol_name, LuaSymbolAccess::Read, nullptr, symbol).has_value();
+    };
+    host.read = [find_or_add_scalar](std::string_view symbol_name) -> std::expected<double, std::string> {
+        if (auto* scalar = find_or_add_scalar(symbol_name)) {
+            return scalar->getValue();
+        }
+        return std::unexpected(std::format("No matching scalar or arithmetic symbol found for '{}'", symbol_name));
+    };
+    auto validate_symbol = [gui = this](std::string_view symbol_name, LuaSymbolAccess access) -> std::expected<void, std::string> {
+        Scalar* scalar = gui->findScalarByName(symbol_name);
+        VariantSymbol* symbol = scalar == nullptr ?
+                                  gui->m_symbols.getSymbol(std::string(symbol_name)) :
+                                  nullptr;
+        return validateLuaSymbolAccess(symbol_name, access, scalar, symbol);
+    };
+    host.validate_symbol = validate_symbol;
+    host.write = [gui = this, find_or_add_scalar](std::string_view symbol_name, double value) -> std::expected<void, std::string> {
+        Scalar* scalar = gui->findScalarByName(symbol_name);
+        VariantSymbol* symbol = scalar == nullptr ?
+                                  gui->m_symbols.getSymbol(std::string(symbol_name)) :
+                                  nullptr;
+        std::expected<void, std::string> valid = validateLuaSymbolAccess(symbol_name, LuaSymbolAccess::Write, scalar, symbol);
+        if (!valid.has_value()) {
+            return valid;
+        }
+        if (scalar == nullptr) {
+            scalar = find_or_add_scalar(symbol_name);
+        }
+        scalar->setValue(value);
+        return {};
+    };
+    host.pause = [gui = this] {
+        gui->m_paused = true;
+    };
+    host.save_csv = [gui = this](std::string filename) {
+        std::vector<Scalar*> scalar_ptrs;
+        scalar_ptrs.reserve(gui->m_scalars.size());
+        for (auto const& scalar : gui->m_scalars) {
+            if (!scalar->deleted) {
+                scalar_ptrs.push_back(scalar.get());
+            }
+        }
+        gui->saveScalarsAsCsv(std::move(filename), scalar_ptrs, gui->m_linked_scalar_x_axis_limits);
+    };
+    return host;
+}
+
 ScriptWindow::ScriptWindow(DbgGui* gui, std::string const& name_, uint64_t id_)
     : Window(name_, id_), m_gui(gui) {
     name = name_;
@@ -103,119 +215,7 @@ std::string ScriptWindow::startScript(double timestamp, std::vector<std::unique_
     m_loops_remaining = std::max(loop_count, 0);
 
     if (language == ScriptLanguage::Lua) {
-        auto find_or_add_scalar = [gui = m_gui](std::string_view symbol_name) -> Scalar* {
-            if (Scalar* scalar = gui->findScalarByName(symbol_name)) {
-                return scalar;
-            }
-
-            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
-            if (symbol == nullptr
-                || (symbol->getType() != VariantSymbol::Type::Arithmetic
-                    && symbol->getType() != VariantSymbol::Type::Enum)) {
-                return nullptr;
-            }
-
-            Scalar* scalar = nullptr;
-            // Cache a symbol as a scalar after the first lookup so subsequent
-            // Lua accesses use the name index instead of searching all symbols.
-            gui->m_sampling_mutex.unlock();
-            try {
-                gui->runOnGuiThreadAndWait([gui, symbol, &scalar] {
-                    scalar = gui->findScalarByName(symbol->getFullName());
-                    if (scalar == nullptr) {
-                        scalar = gui->addScalarSymbol(symbol, "Scripts");
-                    }
-                });
-            } catch (...) {
-                gui->m_sampling_mutex.lock();
-                throw;
-            }
-            gui->m_sampling_mutex.lock();
-            return scalar;
-        };
-
-        LuaScriptHost host;
-        host.add_scalar = [gui = m_gui](std::string_view name, std::string_view group) {
-            std::string scalar_name(name);
-            std::string scalar_group(group);
-            // processScript() holds the sampling mutex. Release it while
-            // waiting so the GUI can finish its current frame and process this
-            // operation at the start of the next one.
-            gui->m_sampling_mutex.unlock();
-            try {
-                gui->runOnGuiThreadAndWait([gui, &scalar_name, &scalar_group] {
-                    if (gui->findScalarByName(scalar_name) != nullptr) {
-                        return;
-                    }
-
-                    auto value = std::make_shared<double>(0.0);
-                    ReadWriteFn value_source = [value](std::optional<double> new_value) {
-                        if (new_value.has_value()) {
-                            *value = *new_value;
-                        }
-                        return *value;
-                    };
-                    gui->addScalar(value_source, scalar_group, scalar_name);
-                });
-            } catch (...) {
-                gui->m_sampling_mutex.lock();
-                throw;
-            }
-            gui->m_sampling_mutex.lock();
-            return scalar_name;
-        };
-        host.exists = [gui = m_gui](std::string_view symbol_name) {
-            if (gui->findScalarByName(symbol_name) != nullptr) {
-                return true;
-            }
-            VariantSymbol* symbol = gui->m_symbols.getSymbol(std::string(symbol_name));
-            return symbol != nullptr
-                && (symbol->getType() == VariantSymbol::Type::Arithmetic
-                    || symbol->getType() == VariantSymbol::Type::Enum);
-        };
-        host.read = [find_or_add_scalar](std::string_view symbol_name) -> std::expected<double, std::string> {
-            if (Scalar* scalar = find_or_add_scalar(symbol_name)) {
-                return scalar->getValue();
-            }
-            return std::unexpected(std::format("No matching scalar or arithmetic symbol found for '{}'", symbol_name));
-        };
-        auto validate_symbol = [gui = m_gui](std::string_view symbol_name, LuaSymbolAccess access) -> std::expected<void, std::string> {
-            Scalar* scalar = gui->findScalarByName(symbol_name);
-            VariantSymbol* symbol = scalar == nullptr ?
-                                      gui->m_symbols.getSymbol(std::string(symbol_name)) :
-                                      nullptr;
-            return validateLuaSymbolAccess(symbol_name, access, scalar, symbol);
-        };
-        host.validate_symbol = validate_symbol;
-        host.write = [gui = m_gui, find_or_add_scalar](std::string_view symbol_name, double value) -> std::expected<void, std::string> {
-            Scalar* scalar = gui->findScalarByName(symbol_name);
-            VariantSymbol* symbol = scalar == nullptr ?
-                                      gui->m_symbols.getSymbol(std::string(symbol_name)) :
-                                      nullptr;
-            std::expected<void, std::string> valid = validateLuaSymbolAccess(symbol_name, LuaSymbolAccess::Write, scalar, symbol);
-            if (!valid.has_value()) {
-                return valid;
-            }
-            if (scalar == nullptr) {
-                scalar = find_or_add_scalar(symbol_name);
-            }
-            scalar->setValue(value);
-            return {};
-        };
-        host.pause = [gui = m_gui] {
-            gui->m_paused = true;
-        };
-        host.save_csv = [gui = m_gui](std::string filename) {
-            std::vector<Scalar*> scalar_ptrs;
-            scalar_ptrs.reserve(gui->m_scalars.size());
-            for (auto const& scalar : gui->m_scalars) {
-                if (!scalar->deleted) {
-                    scalar_ptrs.push_back(scalar.get());
-                }
-            }
-            gui->saveScalarsAsCsv(std::move(filename), scalar_ptrs, gui->m_linked_scalar_x_axis_limits);
-        };
-
+        auto host = m_gui->createLuaScriptHost();
         m_lua_script = std::make_unique<LuaScriptRunner>(text, std::move(host), name);
         std::expected<void, std::string> result = m_lua_script->start(timestamp, loop_count);
         if (!result.has_value()) {

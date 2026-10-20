@@ -33,6 +33,7 @@
 #include "nlohmann/json.hpp"
 
 #include <numeric>
+#include <optional>
 #include <vector>
 #include <cmath>
 #include <future>
@@ -52,7 +53,13 @@
 
 inline constexpr unsigned MAX_NAME_LENGTH = 255;
 
-uint64_t hash(const std::string& str);
+inline uint64_t hash(const std::string& str) {
+    uint64_t hash = 5381;
+    for (size_t i = 0; i < str.size(); ++i) {
+        hash = 33 * hash + (uint64_t)str[i];
+    }
+    return hash;
+}
 uint64_t hashWithTime(const std::string& str);
 // Compute the signal id from name and group, matching the formula used by
 // addScalar/addVector: hash(name + " (" + group + ")").
@@ -131,9 +138,7 @@ struct Scalar {
     ImVec4 color = {-1, -1, -1, -1};
     ValueSource src;
     bool read_only = false;
-    bool hide_from_scalars_window = false;
     bool deleted = false;
-    Scalar* replacement = nullptr;
 
     void updateDisplayNames() {
         name_and_group = name + " (" + group + ")";
@@ -159,12 +164,11 @@ struct Scalar {
         updateDisplayNames();
     }
 
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         j["id"] = id;
         j["scale"] = getScaleStr();
         j["offset"] = getOffsetStr();
         j["alias"] = alias;
-        return j;
     }
 
     double getValue() const {
@@ -261,15 +265,11 @@ class PauseTrigger {
     double m_pause_level;
 };
 
-struct Vector2D {
-    uint64_t id;
-    std::string group;
-    std::string name;
-    std::string name_and_group;
+struct VectorPair {
     Scalar* x;
     Scalar* y;
-    bool deleted = false;
-    Vector2D* replacement = nullptr;
+
+    bool operator==(VectorPair const&) const = default;
 };
 
 struct Window {
@@ -281,11 +281,10 @@ struct Window {
         id = j.value("id", id);
         focus.initial_focus = j.value("initial_focus", focus.initial_focus);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         j["name"] = name;
         j["id"] = id;
         j["initial_focus"] = focus.focused;
-        return j;
     }
 
     std::string name = "";
@@ -315,23 +314,77 @@ struct Window {
     }
 };
 
-struct ScalarPlot : Window {
+enum class PlotType {
+    Scalar,
+    Vector,
+    Spectrum
+};
+
+struct PlotWindow : Window {
     struct Subplot {
+        PlotType type = PlotType::Scalar;
         std::vector<Scalar*> scalars;
+        std::vector<VectorPair> vectors;
+        std::vector<Spectrum<Scalar>> spectrums;
+        MinMax spectrum_x_axis = {-1000, 1000};
+        MinMax spectrum_y_axis = {-0.1, 1.1};
+        std::optional<VectorPair> reference_frame_vector;
         MinMax y_axis = {-1, 1};
         bool autofit_y = true;
+
+        void addSpectrum(Scalar* real, Scalar* imag = nullptr) {
+            for (auto const& spec : spectrums) {
+                if (spec.real == real && spec.imag == imag) {
+                    return;
+                }
+            }
+            spectrums.emplace_back(real, imag);
+        }
+
+        void removeSpectrum(Scalar* real, Scalar* imag = nullptr) {
+            std::erase_if(spectrums, [=](auto const& spec) {
+                return spec.real == real && spec.imag == imag;
+            });
+        }
+
+        void addScalar(Scalar* scalar) {
+            if (!contains(scalars, scalar)) {
+                scalars.push_back(scalar);
+            }
+        }
+
+        void removeScalar(Scalar* scalar) {
+            remove(scalars, scalar);
+        }
+
+        void addVector(VectorPair vector) {
+            if (!contains(vectors, vector)) {
+                vectors.push_back(vector);
+            }
+        }
+
+        void removeVector(VectorPair vector) {
+            remove(vectors, vector);
+            if (reference_frame_vector == vector) {
+                reference_frame_vector.reset();
+            }
+        }
     };
 
     inline static constexpr int MAX_SUBPLOT_ROWS = 10;
     inline static constexpr int MAX_SUBPLOT_COLS = 10;
 
-    ScalarPlot(std::string const& name, uint64_t id)
+    PlotWindow(std::string const& name, uint64_t id)
         : Window(name, id) {
         subplots.resize(subplotCount());
     }
-    ScalarPlot(nlohmann::json const& j)
+    PlotWindow(nlohmann::json const& j)
         : Window(j) {
         x_range = j.value("x_range", x_range);
+        vector_time_range = j.value("vector_time_range", vector_time_range);
+        spectrum.time_range = j.value("spectrum_time_range", spectrum.time_range);
+        spectrum.window = j.value("spectrum_window", spectrum.window);
+        spectrum.logarithmic_y_axis = j.value("spectrum_logarithmic_y_axis", spectrum.logarithmic_y_axis);
         x_axis.min = 0;
         x_axis.max = x_range;
         m_rows = std::clamp(j.value("rows", m_rows), 1, MAX_SUBPLOT_ROWS);
@@ -344,6 +397,9 @@ struct ScalarPlot : Window {
                     break;
                 }
                 Subplot& subplot = subplots[subplot_idx];
+                subplot.type = subplot_data.value("type", subplot.type);
+                subplot.spectrum_x_axis = {subplot_data.value("spectrum_x_min", -1000.0), subplot_data.value("spectrum_x_max", 1000.0)};
+                subplot.spectrum_y_axis = {subplot_data.value("spectrum_y_min", -0.1), subplot_data.value("spectrum_y_max", 1.1)};
                 subplot.autofit_y = subplot_data.value("autofit_y", subplot.autofit_y);
                 if (!subplot.autofit_y) {
                     subplot.y_axis.min = subplot_data.value("y_min", subplot.y_axis.min);
@@ -353,9 +409,13 @@ struct ScalarPlot : Window {
             }
         }
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["x_range"] = x_range;
+        j["vector_time_range"] = vector_time_range;
+        j["spectrum_time_range"] = spectrum.time_range;
+        j["spectrum_window"] = spectrum.window;
+        j["spectrum_logarithmic_y_axis"] = spectrum.logarithmic_y_axis;
         j["rows"] = m_rows;
         j["cols"] = m_cols;
         // Preserve signal placement until updateSavedSettings() reconciles it
@@ -372,6 +432,11 @@ struct ScalarPlot : Window {
         for (size_t subplot_idx = 0; subplot_idx < subplots.size(); ++subplot_idx) {
             Subplot const& subplot = subplots[subplot_idx];
             nlohmann::json& subplot_data = j["subplots"][subplot_idx];
+            subplot_data["type"] = subplot.type;
+            subplot_data["spectrum_x_min"] = subplot.spectrum_x_axis.min;
+            subplot_data["spectrum_x_max"] = subplot.spectrum_x_axis.max;
+            subplot_data["spectrum_y_min"] = subplot.spectrum_y_axis.min;
+            subplot_data["spectrum_y_max"] = subplot.spectrum_y_axis.max;
             subplot_data["autofit_y"] = subplot.autofit_y;
             if (!subplot.autofit_y) {
                 subplot_data["y_min"] = subplot.y_axis.min;
@@ -381,12 +446,16 @@ struct ScalarPlot : Window {
                 subplot_data.erase("y_max");
             }
         }
-        return j;
     }
 
-    std::vector<Scalar*> scalars;
     std::vector<Subplot> subplots;
     MinMax x_axis = {0, 1};
+    float vector_time_range = 20e-3f;
+    struct {
+        double time_range = 1;
+        SpectrumWindow window = SpectrumWindow::None;
+        bool logarithmic_y_axis = false;
+    } spectrum;
     double x_range = 1; // Range is stored separately so that x-axis can be zoomed while paused but original range is restored on continue
     double last_frame_timestamp = 0;
 
@@ -420,34 +489,18 @@ struct ScalarPlot : Window {
             for (Scalar* scalar : old_subplots[i].scalars) {
                 addScalarToPlot(scalar, 0);
             }
+            for (VectorPair vector : old_subplots[i].vectors) {
+                subplots[0].addVector(vector);
+            }
+            for (auto const& spec : old_subplots[i].spectrums) {
+                subplots[0].addSpectrum(spec.real, spec.imag);
+            }
         }
     }
 
     void addScalarToPlot(Scalar* new_scalar, int subplot_idx = 0) {
         subplot_idx = std::clamp(subplot_idx, 0, subplotCount() - 1);
-        // A scalar appears at most once inside a scalar plot window. Dropping it
-        // on another subplot moves it there.
-        removeScalar(new_scalar);
-        // Add scalar if it is not already in the plot
-        std::vector<Scalar*>& subplot_scalars = subplots[subplot_idx].scalars;
-        auto it = std::find_if(subplot_scalars.begin(), subplot_scalars.end(), [=](Scalar* sig) {
-            return sig->id == new_scalar->id;
-        });
-        if (it == subplot_scalars.end()) {
-            subplot_scalars.push_back(new_scalar);
-        }
-    }
-
-    void removeScalar(Scalar* scalar) {
-        for (Subplot& subplot : subplots) {
-            remove(subplot.scalars, scalar);
-        }
-    }
-
-    void removeScalar(Scalar* scalar, int subplot_idx) {
-        if (subplot_idx >= 0 && subplot_idx < subplotCount()) {
-            remove(subplots[subplot_idx].scalars, scalar);
-        }
+        subplots[subplot_idx].addScalar(new_scalar);
     }
 
     std::vector<Scalar*> allScalars() const {
@@ -462,11 +515,13 @@ struct ScalarPlot : Window {
         return all_scalars;
     }
 
-    void clearScalars() {
+    void clearSignals() {
         for (Subplot& subplot : subplots) {
             subplot.scalars.clear();
+            subplot.vectors.clear();
+            subplot.spectrums.clear();
+            subplot.reference_frame_vector.reset();
         }
-        scalars.clear();
     }
 
     void contextMenu() {
@@ -489,90 +544,6 @@ struct ScalarPlot : Window {
     int m_cols = 1;
 };
 
-struct VectorPlot : Window {
-    VectorPlot(std::string const& name, uint64_t id)
-        : Window(name, id) {
-    }
-    VectorPlot(nlohmann::json const& j)
-        : Window(j) {
-        time_range = j.value("time_range", time_range);
-    }
-    nlohmann::json updateJson(nlohmann::json& j) const {
-        Window::updateJson(j);
-        j["time_range"] = time_range;
-        return j;
-    }
-
-    std::vector<Vector2D*> vectors;
-    Vector2D* reference_frame_vector = nullptr;
-    float time_range = 20e-3f;
-
-    void addVectorToPlot(Vector2D* new_vector) {
-        // Add vector if it is not already in the plot
-        auto it = std::find_if(vectors.begin(), vectors.end(), [=](Vector2D* sig) {
-            return sig->id == new_vector->id;
-        });
-        if (it == vectors.end()) {
-            vectors.push_back(new_vector);
-        }
-    }
-};
-
-struct SpectrumPlot : Window {
-    SpectrumPlot(std::string const& name, uint64_t id)
-        : Window(name, id) {
-    }
-    SpectrumPlot(nlohmann::json const& j)
-        : Window(j) {
-        time_range = j.value("time_range", time_range);
-        logarithmic_y_axis = j.value("logarithmic_y_axis", logarithmic_y_axis);
-        y_axis.min = j.value("y_axis_min", y_axis.min);
-        y_axis.max = j.value("y_axis_max", y_axis.max);
-        x_axis.min = j.value("x_axis_min", x_axis.min);
-        x_axis.max = j.value("x_axis_max", x_axis.max);
-    }
-    nlohmann::json updateJson(nlohmann::json& j) const {
-        Window::updateJson(j);
-        j["time_range"] = time_range;
-        j["logarithmic_y_axis"] = logarithmic_y_axis;
-        j["window"] = static_cast<int>(window);
-        j["x_axis_min"] = x_axis.min;
-        j["x_axis_max"] = x_axis.max;
-        j["y_axis_min"] = y_axis.min;
-        j["y_axis_max"] = y_axis.max;
-        return j;
-    }
-
-    double time_range = 1;
-    bool logarithmic_y_axis = false;
-    MinMax y_axis = {-0.1, 1.1};
-    MinMax x_axis = {-1000, 1000};
-
-    std::vector<Spectrum<Scalar>> spectrums;
-    SpectrumWindow window = SpectrumWindow::None;
-
-    void addToPlot(Scalar* real, Scalar* imag) {
-        for (auto& spec : spectrums) {
-            if (spec.real == real && spec.imag == imag) {
-                return;
-            }
-        }
-        spectrums.push_back(Spectrum<Scalar>(real, imag));
-    }
-
-    void removeFromPlot(Scalar* s) {
-        for (int i = int(spectrums.size() - 1); i >= 0; --i) {
-            if (spectrums[i].real == s || spectrums[i].imag == s) {
-                removed_scalars.push_back(spectrums[i].real);
-                removed_scalars.push_back(spectrums[i].imag);
-                spectrums.erase(spectrums.begin() + i);
-            }
-        }
-    }
-
-    std::vector<Scalar*> removed_scalars;
-};
-
 struct CustomWindow : Window {
     CustomWindow(std::string const& name, uint64_t id)
         : Window(name, id) {
@@ -590,7 +561,6 @@ struct CustomWindow : Window {
         }
     }
 
-  private:
     void sortSignals() {
         std::sort(scalars.begin(), scalars.end(), [](Scalar* l, Scalar* r) {
             if (l->group == r->group) {
@@ -610,14 +580,13 @@ struct GridWindow : Window {
         : Window(j) {
         rows = j.value("rows", rows);
         columns = j.value("columns", columns);
-        text_to_value_ratio = j.value("text_to_value_ratio", text_to_value_ratio);
+        text_to_value_ratio = std::clamp(j.value("text_to_value_ratio", text_to_value_ratio), 0.05f, 0.95f);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["rows"] = rows;
         j["columns"] = columns;
         j["text_to_value_ratio"] = text_to_value_ratio;
-        return j;
     }
 
     inline static const int MAX_ROWS = 20;
@@ -651,7 +620,7 @@ struct GridWindow : Window {
             ImGui::InputText("Name##window_context_menu", &name);
             ImGui::InputInt("Rows", &rows, 0, 0);
             ImGui::InputInt("Columms", &columns, 0, 0);
-            ImGui::InputFloat("Text to value ratio", &text_to_value_ratio, 0, 0, "%.2f");
+            ImGui::SliderFloat("Text to value ratio", &text_to_value_ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::EndPopup();
         }
     }
@@ -668,10 +637,9 @@ struct DockSpace : Window {
         : Window(j) {
         even_split = j.value("even_split", even_split);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["even_split"] = even_split;
-        return j;
     }
 
     void contextMenu() {
@@ -714,23 +682,17 @@ struct ScriptWindow : Window {
     ScriptWindow(DbgGui* gui, nlohmann::json const& j)
         : Window(j), m_gui(gui) {
         text = j.value("text", "");
-        if (j.contains("loop_count")) {
-            loop_count = std::max(j.value("loop_count", loop_count), 0);
-        } else {
-            // Migrate the former checkbox: enabled meant looping forever.
-            loop_count = j.value("loop", false) ? 0 : 1;
-        }
+        loop_count = std::max(j.value("loop_count", loop_count), 0);
         language = j.value("language", std::string{"legacy"}) == "lua" ? ScriptLanguage::Lua : ScriptLanguage::Legacy;
         run_on_startup = j.value("run_on_startup", false);
     }
-    nlohmann::json updateJson(nlohmann::json& j) const {
+    void updateJson(nlohmann::json& j) const {
         Window::updateJson(j);
         j["text"] = text;
         j["loop_count"] = std::max(loop_count, 0);
         j.erase("loop");
         j["language"] = language == ScriptLanguage::Lua ? "lua" : "legacy";
         j["run_on_startup"] = run_on_startup;
-        return j;
     }
 
     std::string text;

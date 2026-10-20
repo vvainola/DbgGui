@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2022 vvainola
+// Copyright (c) 2026 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,8 +22,16 @@
 
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <string>
 
-namespace imgui_settings {
+namespace settings_migration {
+inline constexpr int FORMAT_VERSION = 1;
+
+// Convert unversioned/version 0 settings in place. Return whether they changed.
+// Throws for unsupported versions or conflicting window IDs.
+bool migrate(nlohmann::json& settings);
+
+// Also used by CSV plotter, which stores its layout outside DbgGui settings.
 bool migrateLayoutIniHashes(std::string& layout);
-} // namespace imgui_settings
+} // namespace settings_migration

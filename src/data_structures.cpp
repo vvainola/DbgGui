@@ -30,7 +30,7 @@ bool SignalGroup<Scalar>::hasVisibleItems(std::string const& filter) {
         return m_has_visible_items;
     }
     m_filter_prev = filter;
-    m_has_visible_items = false;
+    m_has_visible_items = filter.empty() && !signals.empty();
 
     if (!filter.empty()) {
         for (std::string_view const& g : str::splitSv(full_name, '|')) {
@@ -41,38 +41,9 @@ bool SignalGroup<Scalar>::hasVisibleItems(std::string const& filter) {
         if (m_has_visible_items) {
             // No need to check further
             return m_has_visible_items;
-        } else if (filter.empty()) {
-            m_has_visible_items |= !scalar->hide_from_scalars_window;
-        } else if (!scalar->hide_from_scalars_window) {
+        } else {
             m_has_visible_items |= str::fuzzy_match(filter.c_str(), scalar->alias.c_str());
         }
-    }
-    for (auto& subgroup : subgroups) {
-        m_has_visible_items |= subgroup.second.hasVisibleItems(filter);
-    }
-
-    return m_has_visible_items;
-}
-
-template <>
-bool SignalGroup<Vector2D>::hasVisibleItems(std::string const& filter) {
-    if (filter == m_filter_prev && !filter.empty()) {
-        return m_has_visible_items;
-    }
-    m_filter_prev = filter;
-    m_has_visible_items = false;
-
-    if (!filter.empty()) {
-        for (std::string_view const& g : str::splitSv(full_name, '|')) {
-            m_has_visible_items |= str::fuzzy_match(filter.c_str(), g);
-        }
-    }
-    for (Vector2D* vector : signals) {
-        if (m_has_visible_items) {
-            // No need to check further
-            return m_has_visible_items;
-        }
-        m_has_visible_items |= str::fuzzy_match(filter.c_str(), vector->name.c_str());
     }
     for (auto& subgroup : subgroups) {
         m_has_visible_items |= subgroup.second.hasVisibleItems(filter);

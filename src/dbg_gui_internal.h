@@ -26,6 +26,7 @@
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
+#include "panel_window.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include "nlohmann/json.hpp"
@@ -58,10 +59,9 @@ inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
 
 namespace str {
-inline constexpr const char* ADD_SCALAR_PLOT = "Add scalar plot";
-inline constexpr const char* ADD_VECTOR_PLOT = "Add vector plot";
-inline constexpr const char* ADD_SPECTRUM_PLOT = "Add spectrum plot";
+inline constexpr const char* ADD_PLOT = "Add plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
+inline constexpr const char* ADD_PANEL = "Add panel";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
@@ -101,13 +101,13 @@ class DbgGui {
                         std::string name,
                         double scale = 1.0,
                         double offset = 0.0);
-    Vector2D* addVector(ValueSource const& x,
-                        ValueSource const& y,
-                        std::string group,
-                        std::string const& name_x,
-                        std::string const& name_y,
-                        double scale = 1.0,
-                        double offset = 0.0);
+    VectorPair addVector(ValueSource const& x,
+                         ValueSource const& y,
+                         std::string group,
+                         std::string const& name_x,
+                         std::string const& name_y,
+                         double scale = 1.0,
+                         double offset = 0.0);
     void logMessage(std::string message, MessageType type = MessageType::Error);
 
   private:
@@ -124,10 +124,26 @@ class DbgGui {
     void showLogWindow();
     void showScalarWindow();
     void showSymbolsWindow();
-    void showVectorWindow();
     void showCustomWindow();
     void showScriptWindow();
     void showGridWindow();
+    void showPanels();
+    // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
+    // to coordinate signal access with sampling and GUI changes to registered scalars.
+    LuaScriptHost createLuaScriptHost();
+    void processPanelScripts(double timestamp);
+    void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
+    void renderPanelValueGrid(PanelWidget& widget);
+    void renderPanelSliderGrid(PanelWidget& widget);
+    void renderPanelLedGrid(PanelWidget& widget);
+    nlohmann::json panelSettings(PanelWindow& panel);
+    void copyPanelWidgets(PanelWindow& panel);
+    void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
+    void exportPanel(PanelWindow& panel);
+    bool importPanel();
+    void addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id);
+    void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
+    void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
         std::string text;
@@ -140,9 +156,22 @@ class DbgGui {
     std::vector<CommandPaletteCommand> commandPaletteCommands(bool enable_sampling_hotkeys = true);
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
-    void showScalarPlots();
-    void showVectorPlots();
-    void showSpectrumPlots();
+    void showPlots();
+    void renderPlotContents(PlotWindow& plot_window);
+    void restorePanelPlotSettings(std::optional<uint64_t> registered_id = std::nullopt);
+    void reconcilePlotSettings(PlotWindow& plot, nlohmann::json& saved);
+    void renderScalarSubplot(PlotWindow::Subplot& subplot,
+                             int subplot_idx,
+                             double vertical_line_time,
+                             double& vertical_line_time_next);
+    void renderVectorSubplot(PlotWindow::Subplot& subplot,
+                             int subplot_idx,
+                             std::pair<int32_t, int32_t> time_idx);
+    void renderSpectrumSubplot(PlotWindow::Subplot& subplot,
+                               int subplot_idx,
+                               double time_range,
+                               SpectrumWindow window,
+                               bool logarithmic_y_axis);
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings();
@@ -153,7 +182,9 @@ class DbgGui {
     void copyAllScalarSamplesToClipboard();
     SampleClipboardData collectScalarSamples(std::vector<Scalar*> const& scalars, MinMax time_limits);
     void saveScalarsAsCsv(std::string filename, std::vector<Scalar*> const& scalars, MinMax time_limits);
-    void addScalarContextMenu(Scalar* scalar, bool show_delete = false);
+    // The caller handles removal from its placement or the scalar registry.
+    bool addScalarContextMenu(Scalar* scalar);
+    bool scalarContextMenuContents(Scalar* scalar);
     void addSymbolContextMenu(VariantSymbol& sym);
     struct SymbolSearchRenderState {
         bool show_hidden_symbols = false;
@@ -190,11 +221,11 @@ class DbgGui {
                                 std::string group,
                                 std::string const& name,
                                 std::string const& scale,
-                                std::string const& offset,
-                                bool restore_saved_vectors = true);
+                                std::string const& offset);
+    void moveScalarToGroup(Scalar* scalar,
+                           SignalGroup<Scalar>& source,
+                           SignalGroup<Scalar>& destination);
     Scalar* addScalarSymbol(VariantSymbol* scalar, std::string const& group);
-    Vector2D* addVectorSymbol(VariantSymbol* x, VariantSymbol* y, std::string const& group);
-    Vector2D* addVectorFromScalars(Scalar* x, Scalar* y);
     Scalar* findScalarByName(std::string_view name);
 
     DbgSymbols const& m_symbols;
@@ -213,8 +244,6 @@ class DbgGui {
     std::vector<VariantSymbol*> m_visible_tree_symbols;
     std::vector<Scalar*> m_selected_scalars;
     std::vector<Scalar*> m_visible_scalars;
-    std::vector<Vector2D*> m_selected_vectors;
-    std::vector<Vector2D*> m_visible_vectors;
     bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
@@ -223,23 +252,26 @@ class DbgGui {
     // name while m_scalars retains ownership and display order.
     std::unordered_map<std::string, Scalar*> m_scalars_by_name;
     std::map<std::string, SignalGroup<Scalar>> m_scalar_groups;
-    std::vector<std::unique_ptr<Vector2D>> m_vectors;
-    std::map<std::string, SignalGroup<Vector2D>> m_vector_groups;
     MinMax m_linked_scalar_x_axis_limits = {0, 1};
 
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
     std::vector<GridWindow> m_grid_windows;
+    std::vector<PanelWindow> m_panels;
+    struct {
+        // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
+        std::vector<std::weak_ptr<PanelLedState>> led_scripts;
+        std::vector<std::weak_ptr<PanelActionState>> actions;
+        std::atomic<bool> scripts_requested = false;
+        nlohmann::json widget_clipboard = nlohmann::json::array();
+    } m_panel;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
-    std::vector<ScalarPlot> m_scalar_plots;
-    std::vector<VectorPlot> m_vector_plots;
-    std::vector<SpectrumPlot> m_spectrum_plots;
+    std::vector<PlotWindow> m_plot_windows;
     std::vector<DockSpace> m_dockspaces;
     std::vector<PauseTrigger> m_pause_triggers;
     struct {
         Focus scalars;
-        Focus vectors;
         Focus symbols;
         Focus log;
     } m_window_focus;
@@ -318,6 +350,7 @@ class DbgGui {
 
     nlohmann::json m_settings;
     nlohmann::json m_settings_saved;
+    bool m_settings_load_failed = false;
     CommandHotkeyOverrides m_hotkey_overrides;
     std::filesystem::file_time_type m_last_settings_write_time;
     bool m_clear_saved_settings = false;
@@ -334,6 +367,7 @@ std::string getSourceValueStr(ValueSource src);
 std::optional<std::string> addScalarScaleInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 std::optional<std::string> addScalarOffsetInput(Scalar* scalar, std::vector<Scalar*> const& selected_scalars);
 Scalar* findScalar(std::vector<std::unique_ptr<Scalar>> const& scalars, uint64_t id);
-Vector2D* findVector(std::vector<std::unique_ptr<Vector2D>> const& vectors, uint64_t id);
 double getSymbolScale(VariantSymbol const& sym,
                       std::unordered_map<std::string, std::string> const& symbol_scale_settings);
+
+void addInputScalar(ValueSource const& value_src, std::string const& label, double scale, double offset, bool read_only);

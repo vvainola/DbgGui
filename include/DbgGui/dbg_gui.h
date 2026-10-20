@@ -33,6 +33,7 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 using ReadWriteFn = std::function<double(std::optional<double>)>;
 using ReadWriteFnCustomStr = std::function<std::pair<std::string, double>(std::optional<double>)>;
 using ValueSource = std::variant<
@@ -53,9 +54,37 @@ void DbgGui_addScalar(ValueSource const& src, std::string const& group, std::str
 void DbgGui_addVector(ValueSource const& x, ValueSource const& y, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 void DbgGui_addSymbol(std::string const& src, std::string const& group, std::string const& name, double scale = 1.0, double offset = 0.0);
 
-/// Resolve a function address to its demangled symbol name.
-/// Returns an empty string when the address cannot be resolved.
-std::string DbgGui_getSymbolName(std::uintptr_t address);
+/// Scalar metadata copied from the loaded debug symbols.
+enum class DbgGui_ScalarKind {
+    SignedInteger,
+    UnsignedInteger,
+    FloatingPoint,
+    Boolean,
+    Enum
+};
+
+struct DbgGui_BitfieldInfo {
+    // Offset in bits from the scalar address, starting at the least significant bit.
+    std::uint32_t bit_offset;
+    std::uint32_t bit_width;
+};
+
+struct DbgGui_ScalarInfo {
+    std::string full_name;
+    DbgGui_ScalarKind kind;
+    std::uintptr_t address;
+    std::uint32_t size_in_bytes;
+    // Value/name pairs; empty for non-enums. Keeps aliases with the same value.
+    std::vector<std::pair<std::int64_t, std::string>> enum_mapping;
+    // Present only for bitfields, including fields starting at bit zero.
+    std::optional<DbgGui_BitfieldInfo> bitfield = std::nullopt;
+};
+
+/// Enumerate all loaded arithmetic and enum symbols, including object members
+/// and expanded array elements. Does not follow pointers. Very large arrays
+/// omitted by the symbol loader are unavailable. Results own their metadata.
+/// For bitfields, size_in_bytes is the byte span containing the field.
+std::vector<DbgGui_ScalarInfo> DbgGui_getScalars();
 
 /// Read an arithmetic or enum symbol by name.
 /// Returns std::nullopt if the symbol does not exist or cannot be read as a scalar value.

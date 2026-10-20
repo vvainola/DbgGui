@@ -32,6 +32,7 @@ extern "C" {
 #include <cmath>
 #include <format>
 #include <limits>
+#include <memory>
 #include <regex>
 #include <sstream>
 #include <utility>
@@ -87,6 +88,19 @@ std::vector<LiteralSymbolTarget> findLiteralSymbolTargets(std::string const& sou
 }
 
 } // namespace
+
+std::expected<void, std::string> validateLuaSyntax(std::string_view source, std::string_view chunk_name) {
+    std::unique_ptr<lua_State, decltype(&lua_close)> state(luaL_newstate(), &lua_close);
+    if (!state) {
+        return std::unexpected("Could not create Lua state");
+    }
+    std::string const name(chunk_name);
+    if (luaL_loadbufferx(state.get(), source.data(), source.size(), name.c_str(), "t") != LUA_OK) {
+        char const* message = lua_tostring(state.get(), -1);
+        return std::unexpected(formatLuaError(chunk_name, message ? message : "Unknown Lua error", 0));
+    }
+    return {};
+}
 
 LuaScriptRunner::LuaScriptRunner(std::string source, LuaScriptHost host, std::string chunk_name)
     : m_source(std::move(source)), m_chunk_name(std::move(chunk_name)), m_host(std::move(host)) {}
@@ -151,6 +165,9 @@ std::expected<void, std::string> LuaScriptRunner::initialize(double timestamp) {
     if (load_status != LUA_OK) {
         return luaError();
     }
+
+    lua_pushvalue(m_thread, -1);
+    m_function_ref = luaL_ref(m_thread, LUA_REGISTRYINDEX);
 
     // The sampler owns execution. Arming the script here keeps UI actions from
     // writing values between two sampling instants. m_waiting makes the first
@@ -226,6 +243,9 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
         return luaError();
     }
 
+    if (result_count == 1 && lua_isboolean(m_thread, -1)) {
+        m_boolean_result = lua_toboolean(m_thread, -1) != 0;
+    }
     m_running = false;
     bool const restart = m_loops_remaining <= 0 || m_loops_remaining > 1;
     if (restart) {
@@ -256,8 +276,48 @@ void LuaScriptRunner::stop() {
     m_state = nullptr;
     m_thread = nullptr;
     m_thread_ref = LUA_NOREF;
+    m_function_ref = LUA_NOREF;
     m_running = false;
     m_waiting = false;
+    m_boolean_result.reset();
+}
+
+std::expected<bool, std::string> LuaScriptRunner::booleanResult() const {
+    if (m_running) {
+        return std::unexpected("Script has not finished; boolean result is unavailable");
+    }
+    if (!m_boolean_result.has_value()) {
+        return std::unexpected("Script must return exactly one boolean (true or false)");
+    }
+    return *m_boolean_result;
+}
+
+std::expected<bool, std::string> LuaScriptRunner::evaluateBoolean(double timestamp) {
+    if (m_state == nullptr) {
+        if (auto result = start(timestamp, 1); !result) {
+            return std::unexpected(result.error());
+        }
+    } else {
+        // Reuse the compiled chunk and VM, but start a fresh call each time.
+        lua_resetthread(m_thread);
+        lua_settop(m_thread, 0);
+        lua_rawgeti(m_thread, LUA_REGISTRYINDEX, m_function_ref);
+        m_boolean_result.reset();
+        m_wait_until_target.reset();
+        m_start_time = m_resume_time = m_next_resume_time = timestamp;
+        m_has_waited = false;
+        m_loops_remaining = 1;
+        m_running = m_waiting = true;
+    }
+    if (auto result = process(timestamp); !result) {
+        return std::unexpected(result.error());
+    }
+    auto result = booleanResult();
+    if (m_running) {
+        stop();
+        return std::unexpected("LED conditions must return immediately; waits are not supported");
+    }
+    return result;
 }
 
 bool LuaScriptRunner::running() const {

@@ -162,10 +162,12 @@ lib_gui = static_library('dbg_gui',
         'src/dbg_gui_plots.cpp',
         'src/dbg_gui_popups.cpp',
         'src/dbg_gui_windows.cpp',
+        'src/panel_window.cpp',
+        'src/panel_window_settings.cpp',
         'src/dbg_gui_wrapper.cpp',
         'src/dbg_gui.cpp',
         'src/imgui_helpers.cpp',
-        'src/imgui_settings_migration.cpp',
+        'src/settings_migration.cpp',
         'src/lua_script.cpp',
         'src/lua_script_editor.cpp',
         'src/lua_script.h',
@@ -248,7 +250,7 @@ csv_plotter = executable('csvplotter',
         'src/csv_plot/save_image.cpp',
         'src/custom_signal.cpp',
         'src/imgui_helpers.cpp',
-        'src/imgui_settings_migration.cpp',
+        'src/settings_migration.cpp',
         'src/lua_script_editor.cpp',
         'src/lua_syntax_highlighter.cpp',
         'src/plot_decimation.cpp',
@@ -286,21 +288,44 @@ lib_gui_dep = declare_dependency(
 
 
 if get_option('tests')
-    executable('tests',
+    if LINUX
+        current_module_library = shared_library('current_module_library',
+            sources : ['tests/current_module_library.cpp'],
+            dependencies : [lib_symbols_dep, deps],
+            include_directories : ['src'],
+        )
+        current_module_test = executable('current_module_test',
+            sources : ['tests/current_module_test.cpp'],
+            link_with : current_module_library,
+            dependencies : [dependency('catch2-with-main'), deps],
+            include_directories : ['include', 'src'],
+        )
+        test('Symbols from current shared library', current_module_test)
+    endif
+
+    main_tests = executable('tests',
         sources : [
             'src/csv_plot/csv_helpers.cpp',
             'src/csv_plot/csv_lua_signal.cpp',
-            'src/imgui_settings_migration.cpp',
+            'src/settings_migration.cpp',
             'src/lua_script.cpp',
+            'src/lua_script_editor.cpp',
+            'src/lua_syntax_highlighter.cpp',
             'src/plot_decimation.cpp',
             'src/sample_clipboard.cpp',
             'src/test_library_loader.cpp',
             'tests/csv_helpers_test.cpp',
             'tests/csv_lua_signal_test.cpp',
             'tests/fwd_decl_types.cpp',
-            'tests/imgui_settings_migration_test.cpp',
+            'tests/settings_migration_test.cpp',
             'tests/lua_script_test.cpp',
+            'tests/lua_script_editor_test.cpp',
+            'tests/plot_settings_test.cpp',
+            'src/panel_window_settings.cpp',
+            'tests/panel_settings_test.cpp',
+            'tests/panel_slider_test.cpp',
             'tests/sample_clipboard_test.cpp',
+            'tests/scrolling_buffer_test.cpp',
             'tests/script_window_settings_test.cpp',
             'tests/signal_cleanup_test.cpp',
             'tests/symbols_test.cpp',
@@ -315,4 +340,5 @@ if get_option('tests')
         link_depends : test_library,
         include_directories: inc + ['src', 'tests'],
     )
+    test('Main tests', main_tests, workdir : meson.current_build_dir())
 endif

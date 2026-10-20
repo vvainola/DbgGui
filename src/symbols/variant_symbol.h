@@ -57,7 +57,9 @@ class VariantSymbol {
     }
     VariantSymbol::Type getType() const { return m_type; }
     std::vector<std::unique_ptr<VariantSymbol>>& getChildren() { return m_children; }
+    std::vector<std::unique_ptr<VariantSymbol>> const& getChildren() const { return m_children; }
     MemoryAddress getAddress() const { return m_address; }
+    SymbolDescriptor const& getDescriptor() const { return *m_descriptor; }
     bool isConst() const { return m_is_const; }
 
     /// <summary>Return the pointed symbol or nullptr if the symbol is not found. Only valid for "Pointer" type symbols.</summary>

@@ -341,3 +341,83 @@ TEST_CASE("Lua add_scalar reports host exceptions as script errors") {
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().find("GUI thread is shutting down") != std::string::npos);
 }
+
+TEST_CASE("Lua scripts expose exactly one boolean return value") {
+    for (auto const& source : {"return true", "return false"}) {
+        LuaScriptRunner runner(source, {});
+        REQUIRE(runner.start(0, 1));
+        REQUIRE_FALSE(runner.booleanResult());
+        REQUIRE(runner.process(0));
+        auto const result = runner.booleanResult();
+        REQUIRE(result.has_value());
+        CHECK(*result == (std::string_view(source) == "return true"));
+        runner.stop();
+        CHECK_FALSE(runner.booleanResult());
+    }
+    for (auto const& source : {"return", "return nil", "return 1", "return 'true'", "return true, false"}) {
+        LuaScriptRunner runner(source, {});
+        REQUIRE(runner.start(0, 1));
+        REQUIRE(runner.process(0));
+        CHECK_FALSE(runner.booleanResult());
+    }
+}
+
+TEST_CASE("Lua boolean results are unavailable during waits and reset on restart") {
+    LuaScriptRunner waiting("wait(1)\nreturn true", {});
+    REQUIRE(waiting.start(0, 1));
+    REQUIRE(waiting.process(0));
+    CHECK_FALSE(waiting.booleanResult());
+    REQUIRE(waiting.process(1));
+    REQUIRE(waiting.booleanResult().has_value());
+    CHECK(*waiting.booleanResult());
+
+    double value = 1;
+    LuaScriptHost host;
+    host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
+    LuaScriptRunner runner("return read('value') > 0", std::move(host));
+    REQUIRE(runner.start(0, 1));
+    REQUIRE(runner.process(0));
+    REQUIRE(runner.booleanResult().has_value());
+    CHECK(*runner.booleanResult());
+    value = 0;
+    REQUIRE(runner.start(1, 1));
+    CHECK_FALSE(runner.booleanResult());
+    REQUIRE(runner.process(1));
+    REQUIRE(runner.booleanResult().has_value());
+    CHECK_FALSE(*runner.booleanResult());
+}
+
+TEST_CASE("Boolean conditions reuse their VM and read current host values") {
+    double value = 1;
+    LuaScriptHost host;
+    host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
+    LuaScriptRunner runner("calls = (calls or 0) + 1; return calls % 2 == 1 and read('value') > 0", std::move(host));
+    auto result = runner.evaluateBoolean(1);
+    REQUIRE(result.has_value());
+    CHECK(*result);
+    result = runner.evaluateBoolean(1);
+    REQUIRE(result.has_value());
+    CHECK_FALSE(*result);
+    value = 0;
+    result = runner.evaluateBoolean(2);
+    REQUIRE(result.has_value());
+    CHECK_FALSE(*result);
+}
+
+TEST_CASE("Immediate boolean conditions reject waits and invalid returns") {
+    for (auto const& source : {"wait(1); return true", "return 1"}) {
+        LuaScriptRunner runner(source, {});
+        auto const result = runner.evaluateBoolean(0);
+        REQUIRE_FALSE(result.has_value());
+        CHECK_FALSE(runner.running());
+    }
+}
+
+TEST_CASE("Lua syntax validation compiles without executing actions") {
+    REQUIRE(validateLuaSyntax("write('target', 1); pause(); save_csv('file'); wait(1)"));
+    REQUIRE(validateLuaSyntax("while true do end"));
+    REQUIRE(validateLuaSyntax(""));
+    auto result = validateLuaSyntax("local value = 1\nif value then", "Button action");
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().find("Button action:") != std::string::npos);
+}

@@ -52,3 +52,12 @@ DecimatedValues decimateValues(std::span<double const> x,
                                size_t end_idx,
                                int count,
                                DecimationTransform transform = {});
+
+// Decimate a chronological range directly from single-storage circular buffers.
+DecimatedValues decimateCircularValues(std::span<double const> x,
+                                       std::span<double const> y,
+                                       size_t start_idx,
+                                       size_t end_idx,
+                                       size_t ring_offset,
+                                       int count,
+                                       DecimationTransform transform = {});

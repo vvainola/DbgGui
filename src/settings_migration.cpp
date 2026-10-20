@@ -20,7 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "imgui_settings_migration.h"
+#include "settings_migration.h"
+#include "data_structures.h"
+
+#include <map>
+#include <stdexcept>
 
 #include "imgui/imgui.h"
 
@@ -208,7 +212,7 @@ bool replaceDockspaceIds(std::string& layout, std::unordered_map<std::string, st
 }
 } // namespace
 
-namespace imgui_settings {
+namespace settings_migration {
 bool migrateLayoutIniHashes(std::string& layout) {
 #if IMGUI_VERSION_NUM < 19260
     (void)layout;
@@ -221,4 +225,145 @@ bool migrateLayoutIniHashes(std::string& layout) {
     return changed;
 #endif
 }
-} // namespace imgui_settings
+} // namespace
+
+namespace settings_migration {
+// Version 0 used both signal-ID arrays and name-to-ID maps. Version 1 always
+// uses maps for scalar placements; names are optional labels, IDs are identity.
+void normalizeSignals(nlohmann::json& owner) {
+    if (!owner.contains("signals") || !owner["signals"].is_array()) {
+        return;
+    }
+    auto signals = nlohmann::json::object();
+    for (auto const& id : owner["signals"]) {
+        if (id.is_number_unsigned() || id.is_number_integer()) {
+            signals[std::to_string(id.get<uint64_t>())] = id;
+        }
+    }
+    owner["signals"] = std::move(signals);
+}
+
+// Migrate JSON before registering signals or constructing windows. No live
+// Vector2D objects or symbol lookup are needed, so absent symbols stay restorable.
+bool migrate(nlohmann::json& settings) {
+    int const version = settings.value("format_version", 0);
+    if (version > FORMAT_VERSION || version < 0) {
+        throw std::runtime_error("Unsupported settings format version " + std::to_string(version));
+    }
+    if (version == FORMAT_VERSION) {
+        return false;
+    }
+
+    // Old vector IDs were hashes of either the X name or "X+Y" and the group.
+    // Their saved definitions provide both component names and their scalar IDs.
+    std::map<uint64_t, nlohmann::json> vector_components;
+    for (auto const& definition : settings["vector_symbols"]) {
+        if (!definition.is_object()
+            || !definition.contains("x") || !definition["x"].is_string()
+            || !definition.contains("y") || !definition["y"].is_string()
+            || (definition.contains("group") && !definition["group"].is_string())
+            || (definition.contains("name") && !definition["name"].is_string())) {
+            continue;
+        }
+        std::string const x = definition.at("x");
+        std::string const y = definition.at("y");
+        std::string const group = definition.value("group", std::string{"debug"});
+        auto pair = nlohmann::json::array({signalId(x, group), signalId(y, group)});
+        vector_components[signalId(x, group)] = pair;
+        vector_components[signalId(x + "+" + y, group)] = pair;
+        vector_components[signalId(definition.value("name", x), group)] = pair;
+        for (auto const& name : {x, y}) {
+            std::string const key = name + " (" + group + ")";
+            if (!settings["scalar_symbols"].contains(key)) {
+                settings["scalar_symbols"][key] = {{"name", name}, {"group", group}};
+            }
+        }
+    }
+
+    auto& plots = settings["scalar_plots"];
+    if (plots.is_null()) {
+        plots = nlohmann::json::object();
+    }
+    for (auto& plot : plots) {
+        if (!plot.contains("subplots") || !plot["subplots"].is_array()) {
+            nlohmann::json subplot = nlohmann::json::object();
+            for (auto key : {"signals", "autofit_y", "y_min", "y_max"}) {
+                if (plot.contains(key)) {
+                    subplot[key] = plot[key];
+                }
+            }
+            plot["subplots"] = nlohmann::json::array({std::move(subplot)});
+        }
+        plot.erase("signals");
+        for (auto& subplot : plot["subplots"]) {
+            normalizeSignals(subplot);
+        }
+    }
+
+    auto add_plot = [&](nlohmann::json plot) {
+        std::string const key = std::to_string(plot.at("id").get<uint64_t>());
+        if (plots.contains(key)) {
+            throw std::runtime_error("Cannot migrate duplicate plot ID " + key);
+        }
+        plots[key] = std::move(plot);
+    };
+    for (auto plot : settings["vector_plots"]) {
+        auto pairs = nlohmann::json::array();
+        for (auto const& id : plot["signals"]) {
+            if ((!id.is_number_unsigned() && !id.is_number_integer())
+                || (id.is_number_integer() && !id.is_number_unsigned() && id.get<int64_t>() < 0)) {
+                continue;
+            }
+            auto const found = vector_components.find(id.get<uint64_t>());
+            if (found == vector_components.end()) {
+                // A vector ID alone cannot identify both components. Skip this
+                // placement without preventing other settings from loading.
+                continue;
+            }
+            if (std::find(pairs.begin(), pairs.end(), found->second) == pairs.end()) {
+                pairs.push_back(found->second);
+            }
+        }
+        plot["vector_time_range"] = plot.value("time_range", 0.020);
+        plot["rows"] = 1;
+        plot["cols"] = 1;
+        plot["subplots"] = nlohmann::json::array({{{"type", PlotType::Vector}, {"autofit_y", false}, {"vectors", std::move(pairs)}}});
+        plot.erase("signals");
+        plot.erase("time_range");
+        add_plot(std::move(plot));
+    }
+    for (auto plot : settings["spec_plots"]) {
+        nlohmann::json subplot = {
+          {"type", PlotType::Spectrum}, {"autofit_y", false}, {"spectrums", plot.value("signals", nlohmann::json::array())}, {"spectrum_x_min", plot.value("x_axis_min", -1000.0)}, {"spectrum_x_max", plot.value("x_axis_max", 1000.0)}, {"spectrum_y_min", plot.value("y_axis_min", -0.1)}, {"spectrum_y_max", plot.value("y_axis_max", 1.1)}};
+        plot["spectrum_time_range"] = plot.value("time_range", 1.0);
+        plot["spectrum_window"] = plot.value("window", SpectrumWindow::None);
+        plot["spectrum_logarithmic_y_axis"] = plot.value("logarithmic_y_axis", false);
+        plot["rows"] = 1;
+        plot["cols"] = 1;
+        plot["subplots"] = nlohmann::json::array({std::move(subplot)});
+        for (auto key : {"signals", "time_range", "window", "logarithmic_y_axis", "x_axis_min", "x_axis_max", "y_axis_min", "y_axis_max"}) {
+            plot.erase(key);
+        }
+        add_plot(std::move(plot));
+    }
+    for (auto& window : settings["custom_windows"]) {
+        normalizeSignals(window);
+    }
+    for (auto& script : settings["script_windows"]) {
+        if (!script.contains("loop_count")) {
+            script["loop_count"] = script.value("loop", false) ? 0 : 1;
+        }
+        script.erase("loop");
+    }
+    if (settings.contains("layout")) {
+        auto layout = settings["layout"].get<std::string>();
+        migrateLayoutIniHashes(layout);
+        settings["layout"] = std::move(layout);
+    }
+    for (auto key : {"vector_plots", "vector_symbols", "spec_plots"}) {
+        settings.erase(key);
+    }
+    settings["format_version"] = FORMAT_VERSION;
+    return true;
+}
+} // namespace settings_migration

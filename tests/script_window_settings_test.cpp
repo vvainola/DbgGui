@@ -23,6 +23,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "data_structures.h"
+#include "settings_migration.h"
 
 TEST_CASE("Script windows persist their configured loop count") {
     ScriptWindow script(nullptr, nlohmann::json{{"name", "Script"}, {"id", 1}});
@@ -67,6 +68,11 @@ TEST_CASE("Script windows migrate the former loop checkbox") {
       {"id", 2},
       {"loop", false},
     };
+
+    nlohmann::json saved = {{"script_windows", nlohmann::json::array({looping_settings, single_run_settings})}};
+    settings_migration::migrate(saved);
+    looping_settings = saved["script_windows"][0];
+    single_run_settings = saved["script_windows"][1];
 
     ScriptWindow looping(nullptr, looping_settings);
     ScriptWindow single_run(nullptr, single_run_settings);

@@ -32,24 +32,14 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     }
     static std::string window_or_plot_name;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
-    if (modal_name == str::ADD_SCALAR_PLOT) {
+    if (modal_name == str::ADD_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                ScalarPlot plot(window_or_plot_name, hashWithTime(window_or_plot_name));
+                PlotWindow plot(window_or_plot_name, hashWithTime(window_or_plot_name));
                 plot.x_axis = {0, 1};
                 plot.x_range = 1;
-                m_scalar_plots.push_back(plot);
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-    } else if (modal_name == str::ADD_VECTOR_PLOT) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Vector plot name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_vector_plots.push_back(VectorPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
+                m_plot_windows.push_back(std::move(plot));
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };
@@ -65,21 +55,29 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             };
             ImGui::EndPopup();
         }
+    } else if (modal_name == str::ADD_PANEL) {
+        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::IsWindowAppearing()) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            if (ImGui::InputText("Panel name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                m_panels.emplace_back(window_or_plot_name, hashWithTime(window_or_plot_name));
+                window_or_plot_name.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::Button("Import panel...")) {
+                if (importPanel()) {
+                    window_or_plot_name.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
     } else if (modal_name == str::ADD_GRID_WINDOW) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Grid window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_grid_windows.emplace_back(GridWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-    } else if (modal_name == str::ADD_SPECTRUM_PLOT) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Spectrum plot name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_spectrum_plots.push_back(SpectrumPlot(window_or_plot_name, hashWithTime(window_or_plot_name)));
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };

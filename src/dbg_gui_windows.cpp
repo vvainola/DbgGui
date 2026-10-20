@@ -302,55 +302,54 @@ void addInputScalar(ValueSource const& value_src,
     }
 }
 
-void DbgGui::addScalarContextMenu(Scalar* scalar, bool show_delete) {
+bool DbgGui::addScalarContextMenu(Scalar* scalar) {
+    bool delete_clicked = false;
     if (ImGui::BeginPopupContextItem((scalar->name_and_group + "_context_menu").c_str())) {
-        double pause_level = scalar->getScaledValue();
-        if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
-            m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
-            ImGui::CloseCurrentPopup();
-        }
-        if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
-            logMessage(*error);
-        }
-        if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
-            logMessage(*error);
-        }
-
-        if (ImGui::Button("Copy name")) {
-            ImGui::SetClipboardText(scalar->name.c_str());
-            ImGui::CloseCurrentPopup();
-        }
-        if (ImGui::Button("Copy alias")) {
-            ImGui::SetClipboardText(scalar->alias.c_str());
-            ImGui::CloseCurrentPopup();
-        }
-        if (ImGui::Button("Copy alias and value")) {
-            ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
-            ImGui::CloseCurrentPopup();
-        }
-
-        if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
-            if (scalar->alias.empty()) {
-                scalar->alias = scalar->name;
-            }
-            scalar->updateDisplayNames();
-        }
-        if (show_delete) {
-            ImGui::Separator();
-            if (ImGui::Button("Delete")) {
-                if (contains(m_selected_scalars, scalar)) {
-                    for (Scalar* selected_scalar : m_selected_scalars) {
-                        selected_scalar->deleted = true;
-                    }
-                    m_selected_scalars.clear();
-                } else {
-                    scalar->deleted = true;
-                }
-                ImGui::CloseCurrentPopup();
-            }
-        }
+        delete_clicked = scalarContextMenuContents(scalar);
         ImGui::EndPopup();
     }
+    return delete_clicked;
+}
+
+bool DbgGui::scalarContextMenuContents(Scalar* scalar) {
+    bool delete_clicked = false;
+    double pause_level = scalar->getScaledValue();
+    if (ImGui::InputDouble("Trigger level", &pause_level, 0, 0, "%g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+        m_pause_triggers.push_back(PauseTrigger(scalar, pause_level));
+        ImGui::CloseCurrentPopup();
+    }
+    if (std::optional<std::string> error = addScalarScaleInput(scalar, m_selected_scalars)) {
+        logMessage(*error);
+    }
+    if (std::optional<std::string> error = addScalarOffsetInput(scalar, m_selected_scalars)) {
+        logMessage(*error);
+    }
+
+    if (ImGui::Button("Copy name")) {
+        ImGui::SetClipboardText(scalar->name.c_str());
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::Button("Copy alias")) {
+        ImGui::SetClipboardText(scalar->alias.c_str());
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::Button("Copy alias and value")) {
+        ImGui::SetClipboardText((scalar->alias + " " + numberAsStr(scalar->getScaledValue())).c_str());
+        ImGui::CloseCurrentPopup();
+    }
+
+    if (ImGui::InputText("Alias##scalar_context_menu", &scalar->alias)) {
+        if (scalar->alias.empty()) {
+            scalar->alias = scalar->name;
+        }
+        scalar->updateDisplayNames();
+    }
+    ImGui::Separator();
+    if (ImGui::Button("Delete")) {
+        delete_clicked = true;
+        ImGui::CloseCurrentPopup();
+    }
+    return delete_clicked;
 }
 
 double getSymbolScale(VariantSymbol const& sym,
@@ -541,29 +540,13 @@ void DbgGui::showMainMenuBar() {
                 ImGui::OpenPopup("##Add");
             }
             if (ImGui::BeginPopup("##Add")) {
-                // Scalar plot
-                if (ImGui::Button("Scalar plot")) {
-                    ImGui::OpenPopup(str::ADD_SCALAR_PLOT);
+                // Plot
+                if (ImGui::Button("Plot")) {
+                    ImGui::OpenPopup(str::ADD_PLOT);
                 }
                 ImGui::SameLine();
-                HelpMarker(std::format("Hotkey to add new scalar plot is {}.", commandHotkeyName("add-scalar-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1)).c_str());
-                addPopupModal(str::ADD_SCALAR_PLOT);
-
-                // Vector plot
-                if (ImGui::Button("Vector plot")) {
-                    ImGui::OpenPopup(str::ADD_VECTOR_PLOT);
-                }
-                ImGui::SameLine();
-                HelpMarker(std::format("Hotkey to add new vector plot is {}.", commandHotkeyName("add-vector-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_2)).c_str());
-                addPopupModal(str::ADD_VECTOR_PLOT);
-
-                // Spectrum plot
-                if (ImGui::Button("Spectrum plot")) {
-                    ImGui::OpenPopup(str::ADD_SPECTRUM_PLOT);
-                }
-                ImGui::SameLine();
-                HelpMarker(std::format("Hotkey to add new spectrum plot is {}.", commandHotkeyName("add-spectrum-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_3)).c_str());
-                addPopupModal(str::ADD_SPECTRUM_PLOT);
+                HelpMarker(std::format("Hotkey to add new plot is {}.", commandHotkeyName("add-plot", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_1)).c_str());
+                addPopupModal(str::ADD_PLOT);
 
                 // Custom window
                 if (ImGui::Button("Custom window")) {
@@ -578,6 +561,11 @@ void DbgGui::showMainMenuBar() {
                     ImGui::OpenPopup(str::ADD_GRID_WINDOW);
                 }
                 addPopupModal(str::ADD_GRID_WINDOW);
+
+                if (ImGui::Button("Panel")) {
+                    ImGui::OpenPopup(str::ADD_PANEL);
+                }
+                addPopupModal(str::ADD_PANEL);
 
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
@@ -636,10 +624,10 @@ void DbgGui::showMainMenuBar() {
             themeCombo(m_options.theme, m_window);
 
             static int new_buffer_size = m_options.sampling_buffer_size;
-            if (ImGui::InputInt("Sampling buffer size", &new_buffer_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputInt("Sampling buffer capacity", &new_buffer_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 std::scoped_lock<std::mutex> lock(m_sampling_mutex);
                 m_options.sampling_buffer_size = new_buffer_size;
-                m_sampler.setBufferSize(new_buffer_size);
+                m_sampler.setCapacity(new_buffer_size);
             }
 
             if (ImGui::InputInt("Font size", &m_options.font_size, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -802,31 +790,18 @@ void DbgGui::showScalarWindow() {
             // Symbols can be dragged from one group to another for easier reorganizing if symbol
             // is initially added to wrong group
             if (ImGui::BeginDragDropTarget()) {
-                auto move_scalar_to_group = [&](Scalar* scalar) {
-                    if (scalar->group != group.full_name) {
-                        VariantSymbol* scalar_symbol = m_symbols.getSymbol(scalar->name);
-                        if (scalar_symbol) {
-                            Scalar* new_scalar = addScalarSymbol(scalar_symbol, group.full_name);
-                            new_scalar->alias = scalar->alias;
-                            new_scalar->updateDisplayNames();
-                            new_scalar->setScaleStr(scalar->getScaleStr());
-                            new_scalar->setOffsetStr(scalar->getOffsetStr());
-                            scalar->deleted = true;
-                            if (m_sampler.isScalarSampled(scalar)) {
-                                m_sampler.startSampling(new_scalar);
-                                m_sampler.copySamples(*scalar, *new_scalar);
-                            }
-                            scalar->replacement = new_scalar;
-                        }
-                    }
-                };
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
                     std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
                                             payload->DataSize / sizeof(uint64_t));
                     for (uint64_t id : ids) {
                         Scalar* scalar = findScalar(m_scalars, id);
-                        if (scalar) {
-                            move_scalar_to_group(scalar);
+                        if (scalar && m_symbols.getSymbol(scalar->name)) {
+                            auto const groups = str::split(scalar->group, '|');
+                            auto* source = &m_scalar_groups.at(groups[0]);
+                            for (size_t i = 1; i < groups.size(); ++i) {
+                                source = &source->subgroups.at(groups[i]);
+                            }
+                            moveScalarToGroup(scalar, *source, group);
                         }
                     }
                 }
@@ -851,7 +826,7 @@ void DbgGui::showScalarWindow() {
                     bool hide_by_filter = !scalar_name_filter.empty()
                                        && !str::fuzzy_match(scalar_name_filter.c_str(), scalar->alias.c_str())
                                        && !group_matches_filter;
-                    if (scalar->hide_from_scalars_window || hide_by_filter) {
+                    if (hide_by_filter) {
                         continue;
                     }
                     ImGui::TableNextRow();
@@ -904,7 +879,16 @@ void DbgGui::showScalarWindow() {
                     if ((ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete))) {
                         scalar->deleted = true;
                     }
-                    addScalarContextMenu(scalar, true);
+                    if (addScalarContextMenu(scalar)) {
+                        if (contains(m_selected_scalars, scalar)) {
+                            for (Scalar* selected_scalar : m_selected_scalars) {
+                                selected_scalar->deleted = true;
+                            }
+                            m_selected_scalars.clear();
+                        } else {
+                            scalar->deleted = true;
+                        }
+                    }
 
                     // Show value
                     ImGui::TableNextColumn();
@@ -936,188 +920,6 @@ void DbgGui::showScalarWindow() {
         }
 
         endMultiSelect(m_selected_scalars, m_visible_scalars);
-
-        ImGui::EndTable();
-    }
-    ImGui::EndChild();
-    ImGui::End();
-}
-
-void DbgGui::showVectorWindow() {
-    m_window_focus.vectors.focused = ImGui::Begin("Vectors", NULL, ImGuiWindowFlags_NoNavFocus);
-    if (!m_window_focus.vectors.focused) {
-        ImGui::End();
-        return;
-    }
-
-    static std::string vector_name_filter;
-    ImGui::InputText("Filter", &vector_name_filter);
-    ImGui::BeginChild("##vector_list", ImVec2(0, 0));
-
-    if (ImGui::BeginTable("vector_table",
-                          3,
-                          ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders)) {
-        const float num_width = ImGui::CalcTextSize("0xDDDDDDDDDDDDD").x;
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, num_width);
-        ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, num_width);
-
-        beginMultiSelect(m_selected_vectors, m_visible_vectors);
-        m_visible_vectors.clear();
-
-        std::function<void(SignalGroup<Vector2D>&, bool)> show_vector_group = [&](SignalGroup<Vector2D>& group, bool delete_entire_group) {
-            std::vector<Vector2D*> const& vectors = group.signals;
-            if (!group.hasVisibleItems(vector_name_filter)) {
-                return;
-            }
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-
-            // Group has to be opened automatically if signal in it matches the filter.
-            // If there is no filter, then it should be kept open if it has been opened
-            // manually before.
-            if (!vector_name_filter.empty()) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-            } else if (!group.opened_manually) {
-                ImGui::SetNextItemOpen(false, ImGuiCond_Always);
-            }
-            bool group_opened = ImGui::TreeNode(group.name.c_str());
-            if (vector_name_filter.empty()) {
-                group.opened_manually = group_opened;
-            }
-
-            // Symbols can be dragged from one group to another for easier reorganizing if symbol
-            // is initially added to wrong group
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VECTOR_ID")) {
-                    uint64_t id = *(uint64_t*)payload->Data;
-                    Vector2D* vector = findVector(m_vectors, id);
-                    // Do nothing if dragged to same group.
-                    // Old one will be deleted if new one is added.
-                    if (vector && vector->group != group.full_name) {
-                        VariantSymbol* x = m_symbols.getSymbol(vector->x->name);
-                        VariantSymbol* y = m_symbols.getSymbol(vector->y->name);
-                        if (x && y) {
-                            Vector2D* new_vector = addVectorSymbol(x, y, group.full_name);
-                            new_vector->x->setScaleStr(vector->x->getScaleStr());
-                            new_vector->y->setScaleStr(vector->y->getScaleStr());
-                            new_vector->x->setOffsetStr(vector->x->getOffsetStr());
-                            new_vector->y->setOffsetStr(vector->y->getOffsetStr());
-                            if (m_sampler.isScalarSampled(vector->x) || m_sampler.isScalarSampled(vector->y)) {
-                                m_sampler.startSampling(new_vector);
-                                m_sampler.copySamples(*vector, *new_vector);
-                            }
-                            vector->deleted = true;
-                            vector->replacement = new_vector;
-                            vector->x->replacement = new_vector->x;
-                            vector->y->replacement = new_vector->y;
-                        }
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
-
-            if (group_opened) {
-                // Show subgroups first
-                for (auto& subgroup : group.subgroups) {
-                    show_vector_group(subgroup.second, delete_entire_group);
-                }
-
-                // All vectors in a group are shown if the group name matches filter
-                bool group_matches_filter = str::fuzzy_match(vector_name_filter.c_str(), group.full_name.c_str());
-                for (Vector2D* vector : vectors) {
-                    if (!vector_name_filter.empty()
-                        && !str::fuzzy_match(vector_name_filter.c_str(), vector->name.c_str())
-                        && !group_matches_filter) {
-                        continue;
-                    }
-
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    bool const selected = contains(m_selected_vectors, vector);
-                    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
-                                             | ImGuiTreeNodeFlags_SpanAvailWidth
-                                             | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                    if (selected) {
-                        flags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    ImGui::SetNextItemSelectionUserData((ImGuiSelectionUserData)m_visible_vectors.size());
-                    ImGui::TreeNodeEx(std::format("{}##{}", vector->name, vector->name_and_group).c_str(), flags);
-                    m_visible_vectors.push_back(vector);
-
-                    if (ImGui::BeginPopupContextItem((vector->name_and_group + "_vector_context_menu").c_str())) {
-                        if (ImGui::Button("Copy name")) {
-                            ImGui::SetClipboardText(vector->name.c_str());
-                            ImGui::CloseCurrentPopup();
-                        }
-                        ImGui::Separator();
-                        if (ImGui::Button("Delete")) {
-                            if (contains(m_selected_vectors, vector)) {
-                                for (Vector2D* selected_vector : m_selected_vectors) {
-                                    selected_vector->deleted = true;
-                                }
-                                m_selected_vectors.clear();
-                            } else {
-                                vector->deleted = true;
-                            }
-                            ImGui::CloseCurrentPopup();
-                        }
-                        ImGui::EndPopup();
-                    }
-
-                    // Make text drag-and-droppable
-                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        ImGui::SetDragDropPayload("VECTOR_ID", &vector->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to vector plot\n  %s", vector->name_and_group.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-
-                    // Mark vector as deleted
-                    if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
-                        vector->deleted = true;
-                    }
-
-                    // Show x-value
-                    ImGui::TableNextColumn();
-                    ImGui::Selectable(std::format("##{}x", vector->x->name_and_group).c_str());
-                    if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->x->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot\n  %s", vector->x->name_and_group.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-                    ImGui::SameLine();
-                    if (vector->x->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", numberAsStr(vector->x->getScaledValue()).c_str());
-                    } else {
-                        ImGui::TextUnformatted(numberAsStr(vector->x->getValue()).c_str());
-                    }
-                    addScalarContextMenu(vector->x);
-
-                    // Show y-value
-                    ImGui::TableNextColumn();
-                    ImGui::Selectable(std::format("##{}y", vector->y->name_and_group).c_str());
-                    if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &vector->y->id, sizeof(uint64_t));
-                        ImGui::Text("Drag to plot\n  %s", vector->y->name_and_group.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-                    ImGui::SameLine();
-                    if (vector->y->customScaleOrOffset()) {
-                        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", numberAsStr(vector->y->getScaledValue()).c_str());
-                    } else {
-                        ImGui::TextUnformatted(numberAsStr(vector->y->getValue()).c_str());
-                    }
-                    addScalarContextMenu(vector->y);
-                }
-                ImGui::TreePop();
-            }
-        };
-        for (auto it = m_vector_groups.begin(); it != m_vector_groups.end(); it++) {
-            show_vector_group(it->second, false);
-        }
-
-        endMultiSelect(m_selected_vectors, m_visible_vectors);
 
         ImGui::EndTable();
     }
@@ -1242,7 +1044,9 @@ void DbgGui::showCustomWindow() {
                     ImGui::EndDragDropSource();
                 }
 
-                if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
+                bool const delete_pressed = ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete);
+                bool const delete_clicked = addScalarContextMenu(scalar);
+                if (delete_pressed || delete_clicked) {
                     if (contains(m_selected_scalars, scalar)) {
                         for (Scalar* selected_scalar : m_selected_scalars) {
                             if (contains(custom_window.scalars, selected_scalar)) {
@@ -1253,7 +1057,6 @@ void DbgGui::showCustomWindow() {
                         scalars_to_remove.push_back(scalar);
                     }
                 }
-                addScalarContextMenu(scalar);
 
                 // Show value
                 ImGui::TableNextColumn();
@@ -1840,10 +1643,10 @@ void DbgGui::showGridWindow() {
                         } else {
                             ImGui::TextUnformatted(scalar->alias_and_group.c_str());
                         }
-                        addScalarContextMenu(scalar);
-                        // Hide symbol on delete
-                        if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete)) {
-                            grid_window.scalars[row][col] = NULL;
+                        bool const delete_pressed = ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete);
+                        bool const delete_clicked = addScalarContextMenu(scalar);
+                        if (delete_pressed || delete_clicked) {
+                            grid_window.scalars[row][col] = 0;
                         }
                         ImGui::PopFont();
                         // Make text drag-and-droppable

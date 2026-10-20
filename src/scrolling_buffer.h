@@ -28,55 +28,26 @@
 // utility structure for realtime plot
 class ScrollingBuffer {
   public:
-    ScrollingBuffer(int32_t buffer_size)
-        : m_buffer_size(buffer_size),
-          m_time(2 * buffer_size) {}
+    ScrollingBuffer(int32_t capacity)
+        : m_capacity(std::max(1, capacity)) {}
 
-    void setBufferSize(int32_t buffer_size) {
-        // Copy the current data to temp buffer
-        std::vector<double> current_time;
-        if (m_full_buffer_looped) {
-            current_time = std::vector<double>(m_time.begin() + m_idx, m_time.begin() + m_idx + m_buffer_size);
-        } else {
-            current_time = std::vector<double>(m_time.begin(), m_time.begin() + m_idx);
-        }
-        // Keep newest up to buffer_size, drop oldest if necessary
-        if ((int32_t)current_time.size() > buffer_size) {
-            current_time = std::vector<double>(current_time.end() - buffer_size, current_time.end());
-        }
-
-        // Copy into new time buffer
-        m_time.assign(2 * buffer_size, NAN);
-        for (size_t i = 0; i < current_time.size(); ++i) {
-            m_time[i] = current_time[i];
-            m_time[i + buffer_size] = current_time[i];
-        }
-        m_time.shrink_to_fit();
-
-        // Copy scalar buffers
-        for (auto& [_scalar, buffer] : m_scalar_buffers) {
-            std::vector<double> current_buffer;
-            if (m_full_buffer_looped) {
-                current_buffer = std::vector<double>(buffer.begin() + m_idx, buffer.begin() + m_idx + m_buffer_size);
-            } else {
-                current_buffer = std::vector<double>(buffer.begin(), buffer.begin() + m_idx);
+    void setCapacity(int32_t capacity) {
+        capacity = std::max(1, capacity);
+        size_t retained = std::min(m_time.size(), size_t(capacity));
+        auto resize = [&](std::vector<double>& buffer) {
+            std::vector<double> newest;
+            newest.reserve(retained);
+            for (size_t i = m_time.size() - retained; i < m_time.size(); ++i) {
+                newest.push_back(buffer[physicalIndex(i)]);
             }
-            // Keep newest up to buffer_size, drop oldest if necessary
-            if ((int32_t)current_buffer.size() > buffer_size) {
-                current_buffer = std::vector<double>(current_buffer.end() - buffer_size, current_buffer.end());
-            }
-
-            buffer.assign(2 * buffer_size, NAN);
-            for (size_t i = 0; i < current_buffer.size(); ++i) {
-                buffer[i] = current_buffer[i];
-                buffer[i + buffer_size] = current_buffer[i];
-            }
-            buffer.shrink_to_fit();
+            buffer.swap(newest);
+        };
+        for (auto& [scalar, buffer] : m_scalar_buffers) {
+            resize(buffer);
         }
-
-        m_full_buffer_looped = current_time.size() >= buffer_size;
-        m_idx = m_full_buffer_looped ? 0 : current_time.size();
-        m_buffer_size = buffer_size;
+        resize(m_time);
+        m_capacity = capacity;
+        m_idx = 0;
     }
 
     void sample(double time) {
@@ -96,32 +67,11 @@ class ScrollingBuffer {
     }
 
     void emptyTempBuffers() {
-        // Empty time buffer first
-        int32_t start_idx = m_idx;
-        for (size_t i = 0; i < m_time_temp.size(); ++i) {
-            double time = m_time_temp[i];
-            m_time[m_idx] = time;
-            m_time[m_idx + m_buffer_size] = time;
-
-            m_idx = (m_idx + 1) % m_buffer_size;
-            if (m_idx == 0) {
-                m_full_buffer_looped = true;
-            }
-        }
-        m_time_temp.clear();
-
-        // Empty temp scalar buffers to same indices
+        // All channels share the same write position and grow only as samples arrive.
         for (auto& [scalar, buffer] : m_scalar_buffers) {
-            auto& temp_buffer = m_scalar_buffers_temp[scalar];
-            int32_t idx = start_idx;
-            for (size_t i = 0; i < temp_buffer.size(); ++i) {
-                double value = temp_buffer[i];
-                buffer[idx] = value;
-                buffer[idx + m_buffer_size] = value;
-                idx = (idx + 1) % m_buffer_size;
-            }
-            temp_buffer.clear();
+            append(buffer, m_scalar_buffers_temp.at(scalar));
         }
+        m_idx = append(m_time, m_time_temp);
     }
 
     DecimatedValues getValuesInRange(Scalar* scalar, int32_t start_idx, int32_t end_idx, int32_t n_points, double scale = 1, double offset = 0) {
@@ -135,12 +85,13 @@ class ScrollingBuffer {
         }
 
         auto const& data = m_scalar_buffers.at(scalar);
-        return decimateValues(m_time,
-                              data,
-                              size_t(start_idx),
-                              size_t(end_idx) + 1,
-                              n_points,
-                              {.y_scale = scale, .y_offset = offset});
+        return decimateCircularValues(m_time,
+                                      data,
+                                      size_t(start_idx),
+                                      size_t(end_idx) + 1,
+                                      m_idx,
+                                      n_points,
+                                      {.y_scale = scale, .y_offset = offset});
     }
 
     DecimatedValues getValuesInRange(Scalar* scalar, std::pair<int32_t, int32_t> times, int32_t n_points, double scale = 1, double offset = 0) {
@@ -155,7 +106,9 @@ class ScrollingBuffer {
         }
 
         time.reserve(size_t(times.second - times.first + 1));
-        time.insert(time.end(), m_time.begin() + times.first, m_time.begin() + times.second + 1);
+        for (int32_t i = times.first; i <= times.second; ++i) {
+            time.push_back(m_time[physicalIndex(i)]);
+        }
         return time;
     }
 
@@ -168,7 +121,7 @@ class ScrollingBuffer {
         auto const& data = m_scalar_buffers.at(scalar);
         samples.reserve(size_t(times.second - times.first + 1));
         for (int32_t i = times.first; i <= times.second; ++i) {
-            samples.push_back(scale * data[i] + offset);
+            samples.push_back(scale * data[physicalIndex(i)] + offset);
         }
         return samples;
     }
@@ -178,23 +131,27 @@ class ScrollingBuffer {
             return;
         } else {
             // Initialize buffer with NAN so that the non-existing samples are not plotted
-            m_scalar_buffers[scalar] = std::vector<double>(2 * m_buffer_size, NAN);
-            m_scalar_buffers_temp[scalar] = {};
+            m_scalar_buffers[scalar] = std::vector<double>(m_time.size(), NAN);
+            m_scalar_buffers_temp[scalar] = std::vector<double>(m_time_temp.size(), NAN);
         }
     }
 
-    void startSampling(Vector2D* vector) {
-        startSampling(vector->x);
-        startSampling(vector->y);
+    void startSampling(VectorPair const& vector) {
+        startSampling(vector.x);
+        startSampling(vector.y);
     }
 
     void copySamples(Scalar& from, Scalar& to) {
-        m_scalar_buffers[&to] = m_scalar_buffers[&from];
+        startSampling(&to);
+        if (auto source = m_scalar_buffers.find(&from); source != m_scalar_buffers.end()) {
+            m_scalar_buffers.at(&to) = source->second;
+            m_scalar_buffers_temp.at(&to) = m_scalar_buffers_temp.at(&from);
+        }
     }
 
-    void copySamples(Vector2D& from, Vector2D& to) {
-        m_scalar_buffers[to.x] = m_scalar_buffers[from.x];
-        m_scalar_buffers[to.y] = m_scalar_buffers[from.y];
+    void copySamples(VectorPair const& from, VectorPair& to) {
+        copySamples(*from.x, *to.x);
+        copySamples(*from.y, *to.y);
     }
 
     void stopSampling(Scalar* scalar) {
@@ -205,21 +162,12 @@ class ScrollingBuffer {
     }
 
     std::pair<int32_t, int32_t> getTimeIndices(double start_time, double end_time) {
-        double latest_sample_time = (m_idx == 0) ? m_time[m_buffer_size - 1] : m_time[m_idx - 1];
-        end_time = std::min(latest_sample_time, end_time);
-        int32_t start_idx = m_idx;
-        int32_t end_idx = m_idx - 1 + m_buffer_size;
-        if (!m_full_buffer_looped) {
-            // Nothing sampled yet
-            if (m_idx == 0) {
-                return {-1, -1};
-            }
-            start_idx = binarySearch(start_time, 0, m_idx - 1);
-            end_idx = binarySearch(end_time, start_idx, m_idx - 1);
-        } else {
-            start_idx = binarySearch(start_time, start_idx, end_idx);
-            end_idx = binarySearch(end_time, start_idx, end_idx);
+        if (m_time.empty()) {
+            return {-1, -1};
         }
+        end_time = std::min(m_time[physicalIndex(m_time.size() - 1)], end_time);
+        int32_t start_idx = binarySearch(start_time, 0, int32_t(m_time.size()) - 1);
+        int32_t end_idx = binarySearch(end_time, start_idx, int32_t(m_time.size()) - 1);
         end_idx = std::max(end_idx, start_idx);
         return {start_idx, end_idx};
     }
@@ -229,12 +177,34 @@ class ScrollingBuffer {
     }
 
   private:
+    int32_t append(std::vector<double>& buffer, std::vector<double>& pending) const {
+        int32_t idx = m_idx;
+        for (double value : pending) {
+            if (buffer.size() < size_t(m_capacity)) {
+                if (buffer.size() == buffer.capacity()) {
+                    buffer.reserve(std::min(size_t(m_capacity), std::max(size_t(1), buffer.size() * 2)));
+                }
+                buffer.push_back(value);
+            } else {
+                buffer[idx] = value;
+                idx = (idx + 1) % m_capacity;
+            }
+        }
+        pending.clear();
+        return idx;
+    }
+
+    // Public range indices are chronological, independent of the ring's write position.
+    size_t physicalIndex(size_t index) const {
+        return (m_idx + index) % m_time.size();
+    }
+
     int32_t binarySearch(double t, int32_t start, int32_t end) {
         int32_t original_start = start;
         int32_t mid = std::midpoint(start, end);
         while (start <= end) {
             mid = std::midpoint(start, end);
-            double val = m_time[mid];
+            double val = m_time[physicalIndex(mid)];
             if (val < t) {
                 start = mid + 1;
             } else if (val > t) {
@@ -247,10 +217,9 @@ class ScrollingBuffer {
     }
 
     int32_t m_idx = 0;
-    int32_t m_buffer_size;
+    int32_t m_capacity;
     std::vector<double> m_time;
     std::unordered_map<Scalar*, std::vector<double>> m_scalar_buffers;
     std::vector<double> m_time_temp;
     std::unordered_map<Scalar*, std::vector<double>> m_scalar_buffers_temp;
-    bool m_full_buffer_looped = false;
 };
