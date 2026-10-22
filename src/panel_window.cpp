@@ -211,7 +211,11 @@ bool drawPanelGroups(PanelWindow& panel, ImVec2 origin) {
 void drawPanelCanvas(PanelWindow& panel, ImVec2 origin, ImVec2 size) {
     auto const& io = ImGui::GetIO();
     bool const hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-    if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
+    // Ctrl gives canvas panning priority even when a plot owns the active item.
+    bool const pan_hovered = io.KeyCtrl
+        ? ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+        : hovered;
+    if (pan_hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
         panel.pan.x += io.MouseDelta.x;
         panel.pan.y += io.MouseDelta.y;
     }
@@ -1050,6 +1054,7 @@ void DbgGui::showPanels() {
                 }
                 ImGui::TextDisabled("Drag widget: move | Ctrl-click: select | Drag canvas: box select");
                 ImGui::TextDisabled("Middle drag: pan | Wheel on canvas: zoom");
+                ImGui::TextDisabled("Ctrl + middle drag: pan over widgets");
                 ImGui::TextDisabled("Ctrl + wheel: zoom over widgets");
                 ImGui::EndPopup();
             }
