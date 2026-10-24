@@ -791,6 +791,10 @@ void DbgGui::showPanels() {
             drawPanelCanvas(panel, origin, available);
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive()
                 && !io.WantTextInput && !panel.moving_widgets && !panel.resizing_widget) {
+                if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)
+                    && ImGui::Shortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteGlobal)) {
+                    panel.selected_widgets.clear();
+                }
                 if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal)) {
                     panel.groupSelected();
                 }
