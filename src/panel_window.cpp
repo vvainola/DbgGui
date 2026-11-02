@@ -39,17 +39,6 @@
 #include <vector>
 
 namespace {
-template <typename Cell>
-void editPanelGridDimensions(PanelControlGrid<Cell>& grid) {
-    int rows = grid.rows;
-    int columns = grid.columns;
-    bool const rows_changed = ImGui::InputInt("Rows", &rows);
-    bool const columns_changed = ImGui::InputInt("Columns", &columns);
-    if (rows_changed || columns_changed) {
-        grid.resize(rows, columns);
-    }
-}
-
 void zoomPanelToSelection(PanelWindow& panel, ImVec2 canvas_size) {
     ImVec2 min = {FLT_MAX, FLT_MAX};
     ImVec2 max = {-FLT_MAX, -FLT_MAX};
@@ -368,12 +357,7 @@ void DbgGui::showPanels() {
                 ImGui::SetCursorScreenPos(position);
                 ImGui::PushFont(ImGui::GetDefaultFont(), ImGui::GetFontSize() * panel.zoom);
                 bool const is_plot = widget.type == PanelWidgetType::Plot;
-                bool const is_buttons = widget.type == PanelWidgetType::ButtonGrid;
-                bool const is_checkbox = widget.type == PanelWidgetType::CheckboxGrid;
-                bool const is_values = widget.type == PanelWidgetType::ValueGrid;
-                bool const is_slider = widget.type == PanelWidgetType::SliderGrid;
-                bool const is_led = widget.type == PanelWidgetType::LedGrid;
-                bool const has_controls = is_plot || is_buttons || is_checkbox || is_values || is_slider || is_led;
+                bool const has_controls = widget.type != PanelWidgetType::TextNote;
                 float const content_padding = has_controls ? 12.0f * panel.zoom : 0.0f;
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(content_padding, 0));
                 bool const visible = ImGui::BeginChild("widget", size, has_controls ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -413,29 +397,8 @@ void DbgGui::showPanels() {
                         } else {
                             ImGui::InputText("Label", &widget.label);
                         }
-                        switch (widget.type) {
-                            case PanelWidgetType::ButtonGrid:
-                                editPanelGridDimensions(widget.buttons);
-                                break;
-                            case PanelWidgetType::CheckboxGrid:
-                                editPanelGridDimensions(widget.checkboxes);
-                                break;
-                            case PanelWidgetType::ValueGrid:
-                                editPanelGridDimensions(widget.values);
-                                break;
-                            case PanelWidgetType::SliderGrid:
-                                editPanelGridDimensions(widget.sliders);
-                                break;
-                            case PanelWidgetType::LedGrid:
-                                editPanelGridDimensions(widget.leds);
-                                break;
-                            case PanelWidgetType::Plot:
-                            case PanelWidgetType::TextNote:
-                                break;
-                        }
-                        if (is_values || is_slider) {
-                            float& ratio = is_values ? widget.values.text_to_value_ratio : widget.sliders.text_to_value_ratio;
-                            ImGui::SliderFloat("Text to value ratio", &ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+                        if (widget.grid) {
+                            editGridSettings(*widget.grid);
                         }
                         if (ImGui::Button("Delete widget")) {
                             ImGui::CloseCurrentPopup();
@@ -449,16 +412,25 @@ void DbgGui::showPanels() {
                                              widget.label.c_str());
                         if (is_plot) {
                             renderPlotContents(*widget.plot);
-                        } else if (is_buttons) {
-                            renderButtonGrid(widget, panel);
-                        } else if (is_checkbox) {
-                            renderCheckboxGrid(widget, panel);
-                        } else if (is_values) {
-                            renderValueGrid(widget);
-                        } else if (is_slider) {
-                            renderSliderGrid(widget);
-                        } else {
-                            renderLedGrid(widget);
+                        } else if (widget.grid) {
+                            if (ImGui::Button("Menu")) {
+                                ImGui::OpenPopup("grid_settings");
+                            }
+                            if (ImGui::BeginPopup("grid_settings")) {
+                                editGridSettings(*widget.grid);
+                                ImGui::EndPopup();
+                            }
+                            ImVec2 const grid_start = ImGui::GetCursorScreenPos();
+                            bool const selecting = io.KeyCtrl && !io.WantTextInput;
+                            if (selecting && !resize_target && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+                                && ImGui::IsMouseHoveringRect(grid_start, corner)
+                                && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+                                panel.selectWidget(widget.id, true);
+                                ImGui::ClearActiveID();
+                            }
+                            ImGui::BeginDisabled(selecting);
+                            renderGrid(*widget.grid);
+                            ImGui::EndDisabled();
                         }
                     } else {
                         ImGui::PushFont(ImGui::GetDefaultFont(), widget.note.font_size * panel.zoom);
@@ -514,37 +486,26 @@ void DbgGui::showPanels() {
                 ImVec2 const mouse = ImGui::GetMousePosOnOpeningCurrentPopup();
                 for (auto const& [label, type] : {
                        std::pair{"Plot", PanelWidgetType::Plot},
-                       {"Button grid", PanelWidgetType::ButtonGrid},
-                       {"Value grid", PanelWidgetType::ValueGrid},
-                       {"Checkbox grid", PanelWidgetType::CheckboxGrid},
-                       {"Slider grid", PanelWidgetType::SliderGrid},
-                       {"LED grid", PanelWidgetType::LedGrid},
+                       {"Control grid", PanelWidgetType::ControlGrid},
                        {"Text note", PanelWidgetType::TextNote}}) {
                     if (ImGui::MenuItem(label)) {
-                        PanelWidget widget;
+                        uint64_t id = 0;
                         for (auto const& existing : panel.widgets) {
-                            widget.id = std::max(widget.id, existing.id);
+                            id = std::max(id, existing.id);
                         }
-                        ++widget.id;
-                        widget.type = type;
+                        PanelWidget widget(id + 1, type, label);
                         switch (type) {
                             case PanelWidgetType::Plot:
                                 widget.size = {640, 384};
-                                widget.plot = std::make_shared<PlotWindow>(label, widget.id);
                                 break;
                             case PanelWidgetType::TextNote:
                                 widget.size = {320, 96};
                                 break;
-                            case PanelWidgetType::LedGrid:
-                            case PanelWidgetType::CheckboxGrid:
-                            case PanelWidgetType::SliderGrid:
-                                widget.size = {320, 160};
+                            case PanelWidgetType::ControlGrid:
                                 break;
-                            case PanelWidgetType::ButtonGrid:
-                            case PanelWidgetType::ValueGrid:
+                            default:
                                 break;
                         }
-                        widget.label = label;
                         widget.position = {snapToPanelGrid((mouse.x - origin.x - panel.pan.x) / panel.zoom),
                                            snapToPanelGrid((mouse.y - origin.y - panel.pan.y) / panel.zoom)};
                         widget.group = panel.groupAt(widget.position);

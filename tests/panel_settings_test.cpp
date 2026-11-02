@@ -1,28 +1,28 @@
 #include <catch2/catch_test_macros.hpp>
 #include "panel_window.h"
-#include "grid_window.h"
 #include "panel_file.h"
 #include "panel_clipboard.h"
+#include "grid_window.h"
 
 TEST_CASE("Panel widget geometry preserves saved control settings") {
     nlohmann::json saved = {
         {"id", 1}, {"name", "Panel"}, {"zoom", 1.5}, {"pan_x", -20}, {"pan_y", 30},
         {"widgets", nlohmann::json::array({{
-            {"id", 2}, {"type", PanelWidgetType::ButtonGrid}, {"label", "Controls"},
+            {"id", 2}, {"type", PanelWidgetType::ControlGrid}, {"label", "Controls"},
             {"x", 10}, {"y", 20}, {"width", 320}, {"height", 180},
-            {"cells", nlohmann::json::array({{{"script", "write('enabled', 1)"}}})}
+            {"grid", {{"cells", nlohmann::json::array({{{"type", ControlCellType::Button}, {"script", "write('enabled', 1)"}}})}}}
         }})}
     };
-    auto const cells = saved["widgets"][0]["cells"];
+    auto const cells = saved["widgets"][0]["grid"]["cells"];
     PanelWindow panel(saved);
     REQUIRE(panel.widgets.size() == 1);
-    REQUIRE(panel.widgets[0].type == PanelWidgetType::ButtonGrid);
+    REQUIRE(panel.widgets[0].type == PanelWidgetType::ControlGrid);
     REQUIRE(panel.zoom == 1.5f);
     REQUIRE(panel.pan.x == -20);
     panel.widgets[0].position = {50, -10};
     panel.widgets[0].size = {400, 200};
     panel.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["cells"][0]["script"] == cells[0]["script"]);
+    REQUIRE(saved["widgets"][0]["grid"]["cells"][0]["script"] == cells[0]["script"]);
     PanelWindow restored(saved);
     REQUIRE(restored.widgets[0].position.x == 50);
     REQUIRE(restored.widgets[0].position.y == -10);
@@ -33,20 +33,20 @@ TEST_CASE("Panel widget geometry preserves saved control settings") {
 TEST_CASE("Panel widget loading bounds geometry and skips unknown types") {
     PanelWindow panel(nlohmann::json{
         {"widgets", nlohmann::json::array({
-            {{"type", PanelWidgetType::SliderGrid}, {"width", -1}, {"height", 0}},
+            {{"type", PanelWidgetType::ControlGrid}, {"width", -1}, {"height", 0}},
             {{"type", 100}}
         })}
     });
     REQUIRE(panel.widgets.size() == 1);
-    REQUIRE(panel.widgets[0].size.x == 100);
-    REQUIRE(panel.widgets[0].size.y == 96);
+    REQUIRE(panel.widgets[0].size.x == 160);
+    REQUIRE(panel.widgets[0].size.y == 100);
 }
 
 TEST_CASE("Panel box selection and group movement use canvas coordinates") {
     PanelWindow panel("Panel", 1);
     panel.widgets = {
-        {1, PanelWidgetType::LedGrid, "LED", {10, 10}, {20, 20}},
-        {2, PanelWidgetType::CheckboxGrid, "Check", {50, 10}, {60, 20}},
+        {1, PanelWidgetType::ControlGrid, "LED", {10, 10}, {20, 20}},
+        {2, PanelWidgetType::ControlGrid, "Check", {50, 10}, {60, 20}},
         {3, PanelWidgetType::Plot, "Plot", {200, 200}, {320, 180}}
     };
     panel.selectWidgetsInBox({120, 40}, {0, 0}, false);
@@ -69,9 +69,9 @@ TEST_CASE("Panel box selection and group movement use canvas coordinates") {
     REQUIRE(restored.selected_widgets.empty());
 }
 
-TEST_CASE("LED grids allow rectangular layouts") {
+TEST_CASE("Panel control grids allow rectangular layouts") {
     PanelWidget grid;
-    grid.type = PanelWidgetType::LedGrid;
+    grid.type = PanelWidgetType::ControlGrid;
     grid.setSize({320, 160});
     REQUIRE(grid.size.x == 320);
     REQUIRE(grid.size.y == 160);
@@ -85,12 +85,12 @@ TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum s
     REQUIRE(snapToPanelGrid(17) == 32);
     REQUIRE(snapToPanelGrid(-17) == -32);
     PanelWidget slider;
-    slider.type = PanelWidgetType::SliderGrid;
+    slider.type = PanelWidgetType::ControlGrid;
     slider.resizeOnGrid({240, 30}, {-200, -100});
-    REQUIRE(slider.size.x == 128);
-    REQUIRE(slider.size.y == 96);
+    REQUIRE(slider.size.x == 160);
+    REQUIRE(slider.size.y == 128);
     PanelWidget led;
-    led.type = PanelWidgetType::LedGrid;
+    led.type = PanelWidgetType::ControlGrid;
     led.resizeOnGrid({40, 40}, {30, 0});
     REQUIRE(led.size.x == 160);
     REQUIRE(led.size.y == 128);
@@ -100,23 +100,21 @@ TEST_CASE("Panel grid snapping handles negative coordinates and widget minimum s
 }
 
 TEST_CASE("LED settings preserve the applied condition and color without saving drafts or runtime state") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.id = 2;
-    widget.type = PanelWidgetType::LedGrid;
-    widget.setSize({40, 40});
-    widget.leds.cells[0].condition = "return read('enabled') > 0";
-    widget.leds.cells[0].draft = "unfinished script";
-    widget.leds.cells[0].color = {0.9f, 0.3f, 0.1f, 1};
-    panel.widgets.push_back(std::move(widget));
+    GridWindow panel("Panel", 1);
+    ControlCell widget;
+    widget.type = ControlCellType::Led;
+    widget.led.condition = "return read('enabled') > 0";
+    widget.led.draft = "unfinished script";
+    widget.led.color = {0.9f, 0.3f, 0.1f, 1};
+    panel.grid.cells[0] = std::move(widget);
     nlohmann::json saved;
     panel.updateJson(saved);
-    PanelWindow restored(saved);
-    REQUIRE(restored.widgets[0].leds.cells[0].condition == "return read('enabled') > 0");
-    REQUIRE(restored.widgets[0].leds.cells[0].color.x == 0.9f);
-    REQUIRE(restored.widgets[0].leds.cells[0].color.y == 0.3f);
-    REQUIRE(restored.widgets[0].leds.cells[0].draft.empty());
-    REQUIRE_FALSE(restored.widgets[0].leds.cells[0].state);
+    GridWindow restored(saved);
+    REQUIRE(restored.grid.cells[0].led.condition == "return read('enabled') > 0");
+    REQUIRE(restored.grid.cells[0].led.color.x == 0.9f);
+    REQUIRE(restored.grid.cells[0].led.color.y == 0.3f);
+    REQUIRE(restored.grid.cells[0].led.draft.empty());
+    REQUIRE_FALSE(restored.grid.cells[0].led.state);
 }
 
 TEST_CASE("Panel plots preserve layout, styles, and unresolved placements") {
@@ -153,41 +151,6 @@ TEST_CASE("Panel plots preserve layout, styles, and unresolved placements") {
     PanelWindow restored(saved);
     REQUIRE(restored.widgets[0].plot->vector_time_range == 0.1f);
     REQUIRE(restored.widgets[0].plot->subplots[2].type == PlotType::Spectrum);
-}
-
-TEST_CASE("Button grids preserve cell coordinates when resized and save applied scripts") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.type = PanelWidgetType::ButtonGrid;
-    widget.id = 2;
-    widget.buttons.resize(2, 2);
-    widget.buttons.cells[2].label = "Enable";
-    widget.buttons.cells[2].script = "write('enabled', 1)";
-    widget.buttons.cells[2].draft = "unfinished script [";
-    widget.buttons.resize(3, 3);
-    REQUIRE(widget.buttons.cells[3].label == "Enable");
-    REQUIRE(widget.buttons.cells[3].script == "write('enabled', 1)");
-    REQUIRE(widget.buttons.cells[2].script.empty());
-    panel.widgets.push_back(std::move(widget));
-    nlohmann::json saved;
-    panel.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["rows"] == 3);
-    REQUIRE(saved["widgets"][0]["columns"] == 3);
-    REQUIRE(saved["widgets"][0]["cells"].size() == 9);
-    REQUIRE_FALSE(saved["widgets"][0]["cells"][3].contains("draft"));
-    REQUIRE_FALSE(saved["widgets"][0]["cells"][3].contains("action"));
-    PanelWindow restored(saved);
-    auto& grid = restored.widgets[0].buttons;
-    REQUIRE(grid.cells[3].label == "Enable");
-    REQUIRE(grid.cells[3].script == "write('enabled', 1)");
-    REQUIRE(grid.cells[3].draft.empty());
-    REQUIRE_FALSE(grid.cells[3].action);
-    grid.resize(2, 2);
-    REQUIRE(grid.cells[2].label == "Enable");
-    grid.resize(-1, 100);
-    REQUIRE(grid.rows == 1);
-    REQUIRE(grid.columns == 10);
-    REQUIRE(grid.cells.size() == 10);
 }
 
 TEST_CASE("Panel actions run only on sampling ticks and resume waits without repeating") {
@@ -291,27 +254,26 @@ TEST_CASE("Applying a valid button script does not stop or execute the running a
 }
 
 TEST_CASE("Checkbox settings save transition scripts without runtime state or drafts") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.type = PanelWidgetType::CheckboxGrid;
-    widget.id = 2;
-    widget.label = "Enable output";
-    widget.checkboxes.cells[0].checked = true;
-    widget.checkboxes.cells[0].on_enable.script = "write('enabled', 1)";
-    widget.checkboxes.cells[0].on_disable.script = "write('enabled', 0)";
-    widget.checkboxes.cells[0].on_enable.draft = "invalid [";
-    panel.widgets.push_back(std::move(widget));
+    GridWindow panel("Panel", 1);
+    ControlCell widget;
+    widget.type = ControlCellType::Checkbox;
+    widget.checkbox.label = "Enable output";
+    widget.checkbox.checked = true;
+    widget.checkbox.on_enable.script = "write('enabled', 1)";
+    widget.checkbox.on_disable.script = "write('enabled', 0)";
+    widget.checkbox.on_enable.draft = "invalid [";
+    panel.grid.cells[0] = std::move(widget);
     nlohmann::json saved;
     panel.updateJson(saved);
-    auto const& cell = saved["widgets"][0]["cells"][0];
+    auto const& cell = saved["grid"]["cells"][0];
     REQUIRE(cell["on_enable"] == "write('enabled', 1)");
     REQUIRE(cell["on_disable"] == "write('enabled', 0)");
     REQUIRE_FALSE(cell.contains("checked"));
     REQUIRE_FALSE(cell.contains("draft"));
     REQUIRE_FALSE(cell.contains("action"));
-    PanelWindow restored(saved);
-    REQUIRE(restored.widgets[0].label == "Enable output");
-    auto const& checkbox = restored.widgets[0].checkboxes.cells[0];
+    GridWindow restored(saved);
+    REQUIRE(restored.grid.cells[0].checkbox.label == "Enable output");
+    auto const& checkbox = restored.grid.cells[0].checkbox;
     REQUIRE_FALSE(checkbox.checked);
     REQUIRE(checkbox.on_enable.script == "write('enabled', 1)");
     REQUIRE(checkbox.on_disable.script == "write('enabled', 0)");
@@ -368,94 +330,20 @@ TEST_CASE("Checkbox transition editors apply and validate independently") {
     REQUIRE_FALSE(checkbox.on_disable.action);
 }
 
-TEST_CASE("Checkbox grids preserve cell state and scripts in their coordinates when resized") {
-    GridCheckboxGrid grid;
-    grid.resize(2, 2);
-    auto& cell = grid.cells[2];
-    cell.label = "Output";
-    cell.on_enable.script = "wait(1)";
-    auto action = cell.setChecked(true, LuaScriptHost{});
-    grid.resize(3, 3);
-    REQUIRE(grid.cells[3].label == "Output");
-    REQUIRE(grid.cells[3].checked);
-    REQUIRE(grid.cells[3].on_enable.script == "wait(1)");
-    REQUIRE(grid.cells[3].on_enable.action == action);
-    REQUIRE_FALSE(grid.cells[2].checked);
-    auto other = grid.cells[0].setChecked(true, LuaScriptHost{});
-    REQUIRE(other != action);
-    REQUIRE_FALSE(action->stop_requested.load());
-    grid.resize(2, 2);
-    REQUIRE(grid.cells[2].label == "Output");
-    REQUIRE(grid.cells[2].checked);
-    grid.resize(1, 1);
-    REQUIRE(grid.cells.size() == 1);
-    REQUIRE(grid.cells[0].checked);
-}
-
-TEST_CASE("Checkbox grids round trip multiple cell labels and transition scripts") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.id = 2;
-    widget.type = PanelWidgetType::CheckboxGrid;
-    widget.checkboxes.resize(2, 2);
-    widget.checkboxes.cells[3].label = "Power";
-    widget.checkboxes.cells[3].on_enable.script = "write('power', 1)";
-    widget.checkboxes.cells[3].on_disable.script = "write('power', 0)";
-    panel.widgets.push_back(std::move(widget));
+TEST_CASE("Control grids save their text to value ratio and default to 30 percent") {
+    Grid grid;
+    REQUIRE(grid.text_to_value_ratio == 0.3f);
+    grid.text_to_value_ratio = 0.45f;
+    grid.resize(1, 2);
+    grid.setCellType(1, ControlCellType::Slider);
     nlohmann::json saved;
-    panel.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["rows"] == 2);
-    REQUIRE(saved["widgets"][0]["columns"] == 2);
-    REQUIRE(saved["widgets"][0]["cells"].size() == 4);
-    PanelWindow restored(saved);
-    auto const& cell = restored.widgets[0].checkboxes.cells[3];
-    REQUIRE(cell.label == "Power");
-    REQUIRE(cell.on_enable.script == "write('power', 1)");
-    REQUIRE(cell.on_disable.script == "write('power', 0)");
-    REQUIRE_FALSE(cell.checked);
-}
-
-TEST_CASE("Panel value grids preserve unresolved bindings and empty cells") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.id = 2;
-    widget.type = PanelWidgetType::ValueGrid;
-    widget.values.resize(2, 2);
-    widget.values.cells[0].scalar_id = 0;
-    widget.values.cells[3].scalar_id = 1234;
-    panel.widgets.push_back(std::move(widget));
-
-    nlohmann::json saved;
-    panel.updateJson(saved);
-    PanelWindow restored(saved);
-    auto& grid = restored.widgets[0].values;
-    REQUIRE(grid.rows == 2);
-    REQUIRE(grid.columns == 2);
-    REQUIRE(grid.cells[0].scalar_id == 0);
-    REQUIRE_FALSE(grid.cells[1].scalar_id.has_value());
-    REQUIRE(grid.cells[3].scalar_id == 1234);
-
-    grid.resize(2, 3);
-    REQUIRE(grid.cells[4].scalar_id == 1234);
-    REQUIRE_FALSE(grid.cells[3].scalar_id.has_value());
-    grid.resize(1, 1);
-    restored.updateJson(saved);
-    REQUIRE(saved["widgets"][0]["cells"].size() == 1);
-    REQUIRE(saved["widgets"][0]["cells"][0]["scalar_id"] == 0);
-}
-
-TEST_CASE("Panel value grids save their text to value ratio and default to 30 percent") {
-    nlohmann::json saved = {{"widgets", nlohmann::json::array({{
-        {"id", 2}, {"type", PanelWidgetType::ValueGrid}
-    }})}};
-    PanelWindow panel(saved);
-    REQUIRE(panel.widgets[0].values.text_to_value_ratio == 0.3f);
-    panel.widgets[0].values.text_to_value_ratio = 0.45f;
-    panel.updateJson(saved);
-    PanelWindow restored(saved);
-    REQUIRE(restored.widgets[0].values.text_to_value_ratio == 0.45f);
-    saved["widgets"][0]["text_to_value_ratio"] = 2.0f;
-    REQUIRE(PanelWindow(saved).widgets[0].values.text_to_value_ratio == 0.95f);
+    grid.updateJson(saved);
+    REQUIRE(Grid(saved).text_to_value_ratio == 0.45f);
+    for (auto const& cell : saved["cells"]) {
+        REQUIRE_FALSE(cell.contains("text_to_value_ratio"));
+    }
+    saved["text_to_value_ratio"] = 2.0f;
+    REQUIRE(Grid(saved).text_to_value_ratio == 0.95f);
 }
 
 TEST_CASE("Panel action error indicators include syntax and completed runtime errors") {
@@ -476,92 +364,22 @@ TEST_CASE("Panel action error indicators include syntax and completed runtime er
     REQUIRE_FALSE(script.hasError());
 }
 
-TEST_CASE("Panel sliders round trip ranges and unresolved bindings") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.id = 2;
-    widget.type = PanelWidgetType::SliderGrid;
-    widget.sliders.resize(2, 2);
-    widget.sliders.text_to_value_ratio = 0.4f;
-    widget.sliders.cells[3].scalar_id = 5678;
-    widget.sliders.cells[3].maximum = 100;
-    widget.sliders.cells[0].scalar_id = 1234;
-    widget.sliders.cells[0].minimum = -10;
-    widget.sliders.cells[0].maximum = 20;
-    panel.widgets.push_back(std::move(widget));
-    nlohmann::json saved;
-    panel.updateJson(saved);
-    PanelWindow restored(saved);
-    REQUIRE(restored.widgets[0].sliders.text_to_value_ratio == 0.4f);
-    REQUIRE(restored.widgets[0].sliders.rows == 2);
-    REQUIRE(restored.widgets[0].sliders.columns == 2);
-    REQUIRE(restored.widgets[0].sliders.cells[3].scalar_id == 5678);
-    REQUIRE(restored.widgets[0].sliders.cells[3].maximum == 100);
-    REQUIRE(restored.widgets[0].sliders.cells[0].scalar_id == 1234);
-    REQUIRE(restored.widgets[0].sliders.cells[0].minimum == -10);
-    REQUIRE(restored.widgets[0].sliders.cells[0].maximum == 20);
-    restored.widgets[0].sliders.cells[0].scalar_id.reset();
-    restored.updateJson(saved);
-    REQUIRE_FALSE(saved["widgets"][0]["cells"][0].contains("scalar_id"));
-}
-
-TEST_CASE("Slider grid resizing preserves per-cell bindings and ranges") {
-    PanelControlGrid<GridSlider> grid;
-    grid.resize(2, 2);
-    grid.cells[3].scalar_id = 123;
-    grid.cells[3].minimum = -5;
-    grid.cells[3].maximum = 15;
-    grid.resize(2, 3);
-    REQUIRE(grid.cells[4].scalar_id == 123);
-    REQUIRE(grid.cells[4].minimum == -5);
-    REQUIRE(grid.cells[4].maximum == 15);
-    REQUIRE_FALSE(grid.cells[3].scalar_id.has_value());
-    REQUIRE(grid.cells[3].maximum == 1);
-}
-
-TEST_CASE("LED grids preserve independent cells and runtimes when resized") {
-    PanelWindow panel("Panel", 1);
-    PanelWidget widget;
-    widget.type = PanelWidgetType::LedGrid;
-    widget.leds.resize(2, 2);
-    auto& cell = widget.leds.cells[3];
-    cell.label = "Ready";
-    cell.condition = "return true";
-    cell.color = {1, 0, 0, 1};
-    cell.configure(LuaScriptHost{});
-    auto state = cell.state;
-    widget.leds.resize(2, 3);
-    REQUIRE(widget.leds.cells[4].state == state);
-    REQUIRE(widget.leds.cells[4].label == "Ready");
-    REQUIRE_FALSE(widget.leds.cells[3].state);
-    panel.widgets.push_back(std::move(widget));
-    nlohmann::json saved;
-    panel.updateJson(saved);
-    PanelWindow restored(saved);
-    auto const& grid = restored.widgets[0].leds;
-    REQUIRE(grid.rows == 2);
-    REQUIRE(grid.columns == 3);
-    REQUIRE(grid.cells[4].label == "Ready");
-    REQUIRE(grid.cells[4].condition == "return true");
-    REQUIRE(grid.cells[4].color.x == 1);
-    REQUIRE(grid.cells[4].color.y == 0);
-    REQUIRE_FALSE(grid.cells[4].state);
-    REQUIRE(grid.cells[0].condition == "return false");
-}
-
-
 TEST_CASE("Panel files preserve widgets and bindings while assigning new identities") {
     PanelWindow panel("Controls", 10);
     PanelWidget widget;
+    widget.grid = std::make_shared<Grid>();
     widget.id = 900;
-    widget.type = PanelWidgetType::SliderGrid;
-    widget.sliders.resize(2, 2);
-    widget.sliders.cells[3].scalar_id = 123;
-    widget.sliders.cells[3].minimum = -10;
+    widget.type = PanelWidgetType::ControlGrid;
+    widget.grid->resize(2, 2);
+    widget.grid->setCellType(3, ControlCellType::Slider);
+    widget.grid->cells[3].slider.scalar_id = 123;
+    widget.grid->cells[3].slider.minimum = -10;
     panel.widgets.push_back(std::move(widget));
     PanelWidget button;
+    button.grid = std::make_shared<Grid>();
     button.id = 900; // Local IDs are rebuilt even when the input has duplicates.
-    button.buttons.cells[0].script = "write('enabled', 1)";
+    button.grid->setCellType(0, ControlCellType::Button);
+    button.grid->cells[0].button.script = "write('enabled', 1)";
     panel.widgets.push_back(std::move(button));
     nlohmann::json saved;
     panel.updateJson(saved);
@@ -572,10 +390,10 @@ TEST_CASE("Panel files preserve widgets and bindings while assigning new identit
     REQUIRE(restored.name == "Controls");
     REQUIRE(restored.widgets[0].id == 1);
     REQUIRE(restored.widgets[1].id == 2);
-    REQUIRE(restored.widgets[0].sliders.cells[3].scalar_id == 123);
-    REQUIRE(restored.widgets[0].sliders.cells[3].minimum == -10);
-    REQUIRE(restored.widgets[1].buttons.cells[0].script == "write('enabled', 1)");
-    REQUIRE_FALSE(restored.widgets[1].buttons.cells[0].action);
+    REQUIRE(restored.widgets[0].grid->cells[3].slider.scalar_id == 123);
+    REQUIRE(restored.widgets[0].grid->cells[3].slider.minimum == -10);
+    REQUIRE(restored.widgets[1].grid->cells[0].button.script == "write('enabled', 1)");
+    REQUIRE_FALSE(restored.widgets[1].grid->cells[0].button.action);
     REQUIRE(saved["id"] == 10);
 }
 
@@ -607,10 +425,14 @@ TEST_CASE("Panel files retain unresolved plot placements") {
 
 TEST_CASE("Panel clipboard preserves relative positions and assigns destination IDs") {
     PanelWindow source("Source", 1);
-    source.widgets = {{7, PanelWidgetType::ButtonGrid, "First", {64, 96}},
-                      {8, PanelWidgetType::ValueGrid, "Second", {128, 32}}};
-    source.widgets[0].buttons.cells[0].script = "write('enabled', 1)";
-    source.widgets[1].values.cells[0].scalar_id = 123;
+    source.widgets = {{7, PanelWidgetType::ControlGrid, "First", {64, 96}},
+                      {8, PanelWidgetType::ControlGrid, "Second", {128, 32}}};
+    source.widgets[0].grid = std::make_shared<Grid>();
+    source.widgets[1].grid = std::make_shared<Grid>();
+    source.widgets[1].grid->setCellType(0, ControlCellType::Value);
+    source.widgets[0].grid->setCellType(0, ControlCellType::Button);
+    source.widgets[0].grid->cells[0].button.script = "write('enabled', 1)";
+    source.widgets[1].grid->cells[0].value.scalar_id = 123;
     nlohmann::json saved;
     source.updateJson(saved);
     auto clipboard = panel_clipboard::copy(saved, {7, 8});
@@ -625,8 +447,8 @@ TEST_CASE("Panel clipboard preserves relative positions and assigns destination 
     REQUIRE(restored.widgets[0].position.y == 160);
     REQUIRE(restored.widgets[1].position.x == 96);
     REQUIRE(restored.widgets[1].position.y == 96);
-    REQUIRE(restored.widgets[0].buttons.cells[0].script == "write('enabled', 1)");
-    REQUIRE(restored.widgets[1].values.cells[0].scalar_id == 123);
+    REQUIRE(restored.widgets[0].grid->cells[0].button.script == "write('enabled', 1)");
+    REQUIRE(restored.widgets[1].grid->cells[0].value.scalar_id == 123);
     REQUIRE(clipboard[0]["id"] == 7);
     REQUIRE(panel_clipboard::copy(saved, {8}).size() == 1);
     REQUIRE(panel_clipboard::copy(saved, {}).empty());
@@ -636,17 +458,19 @@ TEST_CASE("Pasted widgets omit drafts and script runtimes") {
     PanelWindow panel("Panel", 1);
     panel.widgets.emplace_back();
     auto& widget = panel.widgets[0];
+    widget.grid = std::make_shared<Grid>();
     widget.id = 2;
-    widget.buttons.cells[0].script = "return";
-    widget.buttons.cells[0].draft = "unsaved";
-    widget.buttons.cells[0].action = std::make_shared<GridActionState>("return", LuaScriptHost{});
+    widget.grid->setCellType(0, ControlCellType::Button);
+    widget.grid->cells[0].button.script = "return";
+    widget.grid->cells[0].button.draft = "unsaved";
+    widget.grid->cells[0].button.action = std::make_shared<GridActionState>("return", LuaScriptHost{});
     nlohmann::json saved;
     panel.updateJson(saved);
     auto clipboard = panel_clipboard::copy(saved, {2});
     PanelWindow pasted(nlohmann::json{{"widgets", panel_clipboard::place(clipboard, panel, {0, 0})}});
-    REQUIRE_FALSE(pasted.widgets[0].buttons.cells[0].action);
-    REQUIRE(pasted.widgets[0].buttons.cells[0].draft.empty());
-    REQUIRE(pasted.widgets[0].buttons.cells[0].script == "return");
+    REQUIRE_FALSE(pasted.widgets[0].grid->cells[0].button.action);
+    REQUIRE(pasted.widgets[0].grid->cells[0].button.draft.empty());
+    REQUIRE(pasted.widgets[0].grid->cells[0].button.script == "return");
 }
 
 TEST_CASE("Deleting a selected panel widget removes the whole selection") {
@@ -707,8 +531,8 @@ TEST_CASE("Panel text notes bound font sizes and support small rectangular geome
 
 TEST_CASE("Panel backgrounds do not couple widget selection or movement") {
     PanelWindow panel("Panel", 1);
-    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
-                     {2, PanelWidgetType::ValueGrid, "Two", {256, 64}, {160, 100}},
+    panel.widgets = {{1, PanelWidgetType::ControlGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ControlGrid, "Two", {256, 64}, {160, 100}},
                      {3, PanelWidgetType::TextNote, "Other", {600, 64}, {64, 32}}};
     panel.selected_widgets = {1, 2};
     panel.groupSelected();
@@ -743,9 +567,9 @@ TEST_CASE("Panel backgrounds do not couple widget selection or movement") {
 
 TEST_CASE("Panel placement finds the topmost background at the canvas position") {
     PanelWindow panel("Panel", 1);
-    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
-                     {2, PanelWidgetType::ButtonGrid, "Two", {128, 64}, {160, 100}},
-                     {3, PanelWidgetType::ButtonGrid, "Three", {64, 64}, {160, 100}}};
+    panel.widgets = {{1, PanelWidgetType::ControlGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ControlGrid, "Two", {128, 64}, {160, 100}},
+                     {3, PanelWidgetType::ControlGrid, "Three", {64, 64}, {160, 100}}};
     panel.selected_widgets = {1, 3};
     panel.groupSelected();
     auto const first = panel.widgets[0].group;
@@ -766,10 +590,10 @@ TEST_CASE("Panel placement finds the topmost background at the canvas position")
 
 TEST_CASE("Grouping one widget joins the background at its position") {
     PanelWindow panel("Panel", 1);
-    panel.widgets = {{1, PanelWidgetType::ButtonGrid, "One", {64, 64}, {160, 100}},
-                     {2, PanelWidgetType::ButtonGrid, "Two", {256, 64}, {160, 100}},
-                     {3, PanelWidgetType::ButtonGrid, "Inside", {128, 64}, {64, 64}},
-                     {4, PanelWidgetType::ButtonGrid, "Outside", {640, 64}, {64, 64}}};
+    panel.widgets = {{1, PanelWidgetType::ControlGrid, "One", {64, 64}, {160, 100}},
+                     {2, PanelWidgetType::ControlGrid, "Two", {256, 64}, {160, 100}},
+                     {3, PanelWidgetType::ControlGrid, "Inside", {128, 64}, {64, 64}},
+                     {4, PanelWidgetType::ControlGrid, "Outside", {640, 64}, {64, 64}}};
     panel.selected_widgets = {1, 2};
     panel.groupSelected();
     auto const group = panel.widgets[0].group;
@@ -815,35 +639,19 @@ TEST_CASE("Groups round trip and pasted groups are independent of existing group
     REQUIRE(group->title == "Controls");
 }
 
-TEST_CASE("Control grids save their text to value ratio and default to 30 percent") {
-    Grid grid;
-    REQUIRE(grid.text_to_value_ratio == 0.3f);
-    grid.text_to_value_ratio = 0.45f;
-    grid.resize(1, 2);
-    grid.setCellType(1, ControlCellType::Slider);
-    nlohmann::json saved;
-    grid.updateJson(saved);
-    REQUIRE(Grid(saved).text_to_value_ratio == 0.45f);
-    for (auto const& cell : saved["cells"]) {
-        REQUIRE_FALSE(cell.contains("text_to_value_ratio"));
-    }
-    saved["text_to_value_ratio"] = 2.0f;
-    REQUIRE(Grid(saved).text_to_value_ratio == 0.95f);
-}
-
 TEST_CASE("Mixed control grids preserve each cell's type and applied configuration") {
-    Grid grid;
-    grid.resize(2, 3);
+    GridWindow window("Controls", 42);
+    window.grid.resize(2, 3);
     constexpr std::array types = {ControlCellType::Button, ControlCellType::Value, ControlCellType::Checkbox,
                                   ControlCellType::Slider, ControlCellType::Led};
     for (size_t index = 0; index < types.size(); ++index) {
-        grid.setCellType(index, types[index]);
+        window.grid.setCellType(index, types[index]);
     }
-    auto& cells = grid.cells;
+    auto& cells = window.grid.cells;
     cells[0].button.label = "Start";
     cells[0].button.script = "write('enabled', 1)";
     cells[0].button.draft = "unfinished [";
-    grid.text_to_value_ratio = 0.6f;
+    window.grid.text_to_value_ratio = 0.6f;
     cells[1].value.scalar_id = 123;
     cells[2].checkbox.label = "Enable";
     cells[2].checkbox.on_enable.script = "write('enabled', 1)";
@@ -855,72 +663,245 @@ TEST_CASE("Mixed control grids preserve each cell's type and applied configurati
     cells[4].led.condition = "return read('enabled') == 1";
     cells[4].led.color = {0.1f, 0.2f, 0.3f, 1};
     nlohmann::json saved;
-    grid.updateJson(saved);
-    REQUIRE(saved["rows"] == 2);
-    REQUIRE(saved["columns"] == 3);
-    REQUIRE(saved["cells"].size() == 6);
-    REQUIRE(saved["cells"][0]["script"] == "write('enabled', 1)");
-    REQUIRE(saved["cells"][1]["scalar_id"] == 123);
-    REQUIRE(saved["cells"][2]["on_disable"] == "write('enabled', 0)");
-    REQUIRE(saved["cells"][3]["minimum"] == -10);
-    REQUIRE(saved["cells"][4]["label"] == "Running");
-    Grid restored(saved);
+    window.updateJson(saved);
+    REQUIRE(saved["grid"]["rows"] == 2);
+    REQUIRE(saved["grid"]["columns"] == 3);
+    REQUIRE(saved["grid"]["cells"].size() == 6);
+    REQUIRE(saved["grid"]["cells"][0]["script"] == "write('enabled', 1)");
+    REQUIRE(saved["grid"]["cells"][1]["scalar_id"] == 123);
+    REQUIRE(saved["grid"]["cells"][2]["on_disable"] == "write('enabled', 0)");
+    REQUIRE(saved["grid"]["cells"][3]["minimum"] == -10);
+    REQUIRE(saved["grid"]["cells"][4]["label"] == "Running");
+    GridWindow restored(saved);
     nlohmann::json roundtrip;
     restored.updateJson(roundtrip);
     REQUIRE(roundtrip == saved);
+    REQUIRE(restored.title() == window.title());
     for (size_t index = 0; index < types.size(); ++index) {
-        REQUIRE(restored.cells[index].type == types[index]);
+        REQUIRE(restored.grid.cells[index].type == types[index]);
     }
 }
 
+TEST_CASE("Mixed grid duplication copies all cells and resets their runtime state") {
+    GridWindow window("Actions", 1);
+    window.grid.resize(1, 3);
+    window.grid.setCellType(1, ControlCellType::Checkbox);
+    window.grid.setCellType(2, ControlCellType::Led);
+    window.grid.setCellType(0, ControlCellType::Button);
+    auto& button = window.grid.cells[0].button;
+    button.script = "wait(1)";
+    button.draft = "invalid [";
+    button.action = std::make_shared<GridActionState>(button.script, LuaScriptHost{});
+    auto& checkbox = window.grid.cells[1].checkbox;
+    checkbox.on_enable.script = "wait(1)";
+    checkbox.setChecked(true, LuaScriptHost{});
+    window.grid.cells[2].led.configure(LuaScriptHost{});
+    auto copy = window.duplicate(2);
+    REQUIRE(copy.id == 2);
+    REQUIRE(copy.name == "Actions copy");
+    REQUIRE(copy.grid.columns == 3);
+    REQUIRE(copy.grid.cells[0].button.script == "wait(1)");
+    REQUIRE(copy.grid.cells[0].button.draft.empty());
+    REQUIRE_FALSE(copy.grid.cells[0].button.action);
+    REQUIRE_FALSE(copy.grid.cells[1].checkbox.checked);
+    REQUIRE_FALSE(copy.grid.cells[1].checkbox.on_enable.action);
+    REQUIRE_FALSE(copy.grid.cells[2].led.state);
+    copy.grid.cells[0].button.label = "Changed";
+    REQUIRE(button.label == "Button");
+    REQUIRE(checkbox.checked);
+    REQUIRE(checkbox.on_enable.action);
+    REQUIRE(window.grid.cells[2].led.state);
+}
+
 TEST_CASE("Changing a cell type keeps its configuration and stops hidden actions") {
-    Grid grid;
-    grid.setCellType(0, ControlCellType::Button);
-    auto& cell = grid.cells[0];
+    GridWindow window("Controls", 1);
+    window.grid.setCellType(0, ControlCellType::Button);
+    auto& cell = window.grid.cells[0];
     cell.button.label = "Start";
     cell.button.script = "wait(1)";
     cell.button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
-    grid.setCellType(0, ControlCellType::Led);
+    window.grid.setCellType(0, ControlCellType::Led);
     REQUIRE(cell.button.action->stop_requested.load());
     cell.led.condition = "return true";
-    grid.setCellType(0, ControlCellType::Checkbox);
+    window.grid.setCellType(0, ControlCellType::Checkbox);
     auto& checkbox = cell.checkbox;
     checkbox.on_enable.script = "wait(1)";
     checkbox.setChecked(true, LuaScriptHost{});
-    grid.setCellType(0, ControlCellType::Button);
+    window.grid.setCellType(0, ControlCellType::Button);
     REQUIRE(checkbox.on_enable.action->stop_requested.load());
     REQUIRE(cell.button.label == "Start");
     REQUIRE(cell.button.script == "wait(1)");
     REQUIRE(cell.led.condition == "return true");
     REQUIRE(cell.type == ControlCellType::Button);
-    REQUIRE_THROWS(grid.setCellType(0, static_cast<ControlCellType>(100)));
-    REQUIRE_THROWS(grid.setCellType(0, static_cast<ControlCellType>(-1)));
+    REQUIRE_THROWS(window.grid.setCellType(0, static_cast<ControlCellType>(100)));
+    REQUIRE_THROWS(window.grid.setCellType(0, static_cast<ControlCellType>(-1)));
     REQUIRE(cell.type == ControlCellType::Button);
 }
 
 TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") {
-    Grid grid;
-    REQUIRE(grid.cells[0].type == ControlCellType::Value);
-    grid.resize(2, 2);
-    grid.setCellType(2, ControlCellType::Value);
-    grid.setCellType(3, ControlCellType::Slider);
-    grid.cells[2].value.scalar_id = 123;
-    grid.cells[3].slider.scalar_id = 123;
-    grid.resize(2, 3);
-    REQUIRE(grid.cells[3].type == ControlCellType::Value);
-    REQUIRE(grid.cells[4].type == ControlCellType::Slider);
-    REQUIRE(grid.cells[2].type == ControlCellType::Value);
-    grid.remapScalarId(123, 456);
+    GridWindow window("Bindings", 5);
+    REQUIRE(window.grid.cells[0].type == ControlCellType::Value);
+    window.grid.resize(2, 2);
+    window.grid.setCellType(2, ControlCellType::Value);
+    window.grid.setCellType(3, ControlCellType::Slider);
+    window.grid.cells[2].value.scalar_id = 123;
+    window.grid.cells[3].slider.scalar_id = 123;
+    window.grid.resize(2, 3);
+    REQUIRE(window.grid.cells[3].type == ControlCellType::Value);
+    REQUIRE(window.grid.cells[4].type == ControlCellType::Slider);
+    REQUIRE(window.grid.cells[2].type == ControlCellType::Value);
+    window.grid.remapScalarId(123, 456);
     nlohmann::json saved;
-    grid.updateJson(saved);
-    Grid restored(saved);
-    REQUIRE(restored.cells[3].value.scalar_id == 456);
-    REQUIRE(restored.cells[4].slider.scalar_id == 456);
+    window.updateJson(saved);
+    GridWindow restored(saved);
+    REQUIRE(restored.grid.cells[3].value.scalar_id == 456);
+    REQUIRE(restored.grid.cells[4].slider.scalar_id == 456);
+    REQUIRE(restored.id == 5);
 }
 
 TEST_CASE("Mixed grids reject unsupported cell types when loading") {
-    nlohmann::json saved = {{"cells", nlohmann::json::array({{{"type", 100}}})}};
-    REQUIRE_THROWS(Grid(saved));
+    nlohmann::json saved = {{"id", 1}, {"grid", {{"cells", nlohmann::json::array({{{"type", 100}}})}}}};
+    REQUIRE_THROWS(GridWindow(saved));
+}
+
+TEST_CASE("Panels preserve mixed control grids through files and clipboard") {
+    PanelWindow panel("Dashboard", 1);
+    PanelWidget widget;
+    widget.id = 4;
+    widget.type = PanelWidgetType::ControlGrid;
+    widget.label = "Controls";
+    widget.position = {64, 96};
+    widget.size = {640, 384};
+    widget.grid = std::make_shared<Grid>();
+    auto& mixed = *widget.grid;
+    mixed.resize(2, 2);
+    mixed.setCellType(0, ControlCellType::Button);
+    mixed.cells[0].button.script = "wait(1)";
+    mixed.cells[0].button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
+    mixed.setCellType(1, ControlCellType::Checkbox);
+    mixed.cells[1].checkbox.on_enable.script = "write('enabled', 1)";
+    mixed.setCellType(2, ControlCellType::Led);
+    mixed.cells[2].led.condition = "return true";
+    mixed.setCellType(3, ControlCellType::Slider);
+    mixed.cells[3].slider.scalar_id = 123;
+    mixed.cells[3].slider.minimum = -10;
+    panel.widgets.push_back(std::move(widget));
+    nlohmann::json saved;
+    panel.updateJson(saved);
+    auto imported = panel_file::decode(panel_file::encode(saved), 10);
+    PanelWindow restored(imported);
+    REQUIRE(restored.widgets[0].type == PanelWidgetType::ControlGrid);
+    REQUIRE(restored.widgets[0].position.x == 64);
+    REQUIRE(restored.widgets[0].size.y == 384);
+    REQUIRE(restored.widgets[0].grid->rows == 2);
+    REQUIRE(restored.widgets[0].grid->columns == 2);
+    REQUIRE(restored.widgets[0].grid->cells[1].checkbox.on_enable.script == "write('enabled', 1)");
+    REQUIRE(restored.widgets[0].grid->cells[2].led.condition == "return true");
+    REQUIRE(restored.widgets[0].grid->cells[3].slider.minimum == -10);
+
+    auto clipboard = panel_clipboard::copy(saved, {4});
+    auto placed = panel_clipboard::place(clipboard, panel, {320, 32});
+    PanelWindow pasted(nlohmann::json{{"widgets", placed}});
+    auto& copy = pasted.widgets[0];
+    REQUIRE(copy.id != 4);
+    REQUIRE(copy.grid.get() != panel.widgets[0].grid.get());
+    REQUIRE(copy.grid->cells[0].button.script == "wait(1)");
+    REQUIRE_FALSE(copy.grid->cells[0].button.action);
+    copy.grid->setCellType(0, ControlCellType::Led);
+    REQUIRE(panel.widgets[0].grid->cells[0].type == ControlCellType::Button);
+    copy.remapScalarId(123, 456);
+    REQUIRE(copy.grid->cells[3].slider.scalar_id == 456);
+    REQUIRE(panel.widgets[0].grid->cells[3].slider.scalar_id == 123);
+}
+
+TEST_CASE("Original panel control grids migrate without losing saved cells or metadata") {
+    for (int original_type = 1; original_type <= 5; ++original_type) {
+        DYNAMIC_SECTION("Original widget type " << original_type) {
+            auto cells = nlohmann::json::array();
+            for (int index = 0; index < 6; ++index) {
+                cells.push_back({{"label", "Cell " + std::to_string(index)},
+                                 {"script", "return true"}, {"scalar_id", 100 + index},
+                                 {"minimum", -10 - index}, {"maximum", 20 + index},
+                                 {"on_enable", "write('enabled', 1)"},
+                                 {"on_disable", "write('enabled', 0)"},
+                                 {"color", {0.1f, 0.2f, 0.3f, 1.0f}}});
+            }
+            nlohmann::json saved = {
+                {"id", 1}, {"name", "Old dashboard"}, {"zoom", 1.5}, {"pan_x", -32},
+                {"widgets", nlohmann::json::array({{
+                    {"id", 42}, {"type", original_type}, {"label", "Original controls"},
+                    {"x", 64}, {"y", 96}, {"width", 640}, {"height", 384},
+                    {"rows", 2}, {"columns", 3}, {"cells", cells}, {"text_to_value_ratio", 0.45f},
+                    {"group", {{"id", 8}, {"title", "Controls"}}}
+                }})}
+            };
+            auto const original = saved;
+            PanelWindow panel(saved);
+            REQUIRE(panel.widgets.size() == 1);
+            auto const& widget = panel.widgets[0];
+            REQUIRE(widget.id == 42);
+            REQUIRE(widget.type == PanelWidgetType::ControlGrid);
+            REQUIRE(widget.label == "Original controls");
+            REQUIRE(widget.position.x == 64);
+            REQUIRE(widget.position.y == 96);
+            REQUIRE(widget.size.x == 640);
+            REQUIRE(widget.size.y == 384);
+            REQUIRE(widget.group->title == "Controls");
+            REQUIRE(panel.zoom == 1.5f);
+            REQUIRE(panel.pan.x == -32);
+            REQUIRE(widget.grid->rows == 2);
+            REQUIRE(widget.grid->columns == 3);
+            REQUIRE(widget.grid->cells.size() == 6);
+            for (int index = 0; index < 6; ++index) {
+                auto const& cell = widget.grid->cells[index];
+                REQUIRE(cell.type == static_cast<ControlCellType>(original_type - 1));
+                switch (original_type) {
+                    case 1:
+                        REQUIRE(cell.button.label == "Cell " + std::to_string(index));
+                        REQUIRE(cell.button.script == "return true");
+                        break;
+                    case 2:
+                        REQUIRE(cell.value.scalar_id == 100 + index);
+                        REQUIRE(widget.grid->text_to_value_ratio == 0.45f);
+                        break;
+                    case 3:
+                        REQUIRE(cell.checkbox.label == "Cell " + std::to_string(index));
+                        REQUIRE(cell.checkbox.on_enable.script == "write('enabled', 1)");
+                        REQUIRE(cell.checkbox.on_disable.script == "write('enabled', 0)");
+                        break;
+                    case 4:
+                        REQUIRE(cell.slider.scalar_id == 100 + index);
+                        REQUIRE(cell.slider.minimum == -10 - index);
+                        REQUIRE(cell.slider.maximum == 20 + index);
+                        REQUIRE(widget.grid->text_to_value_ratio == 0.45f);
+                        break;
+                    case 5:
+                        REQUIRE(cell.led.label == "Cell " + std::to_string(index));
+                        REQUIRE(cell.led.condition == "return true");
+                        REQUIRE(cell.led.color.z == 0.3f);
+                        break;
+                }
+            }
+            // Saving against the original session must replace its old schema.
+            panel.updateJson(saved);
+            REQUIRE_FALSE(saved["widgets"][0].contains("cells"));
+            REQUIRE_FALSE(saved["widgets"][0].contains("rows"));
+            REQUIRE(saved["widgets"][0]["grid"]["cells"].size() == 6);
+            PanelWindow restored(saved);
+            auto roundtrip = saved;
+            restored.updateJson(roundtrip);
+            REQUIRE(roundtrip == saved);
+
+            // File import validates and returns the upgraded representation too.
+            auto decoded = panel_file::decode(panel_file::encode(original), 99);
+            REQUIRE(decoded["widgets"][0]["type"] == static_cast<int>(PanelWidgetType::ControlGrid));
+            PanelWindow imported(decoded);
+            REQUIRE(imported.widgets[0].id == 1);
+            nlohmann::json imported_settings;
+            imported.updateJson(imported_settings);
+            REQUIRE(imported_settings["widgets"][0]["grid"] == saved["widgets"][0]["grid"]);
+        }
+    }
 }
 
 TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindings") {
@@ -999,78 +980,4 @@ TEST_CASE("Value cell arrow navigation follows grid coordinates and skips other 
     controls.focus_cell = 5;
     controls.updateJson(saved);
     REQUIRE_FALSE(Grid(saved).focus_cell);
-}
-
-TEST_CASE("Mixed grid windows preserve each cell's type and applied configuration") {
-    GridWindow window("Controls", 42);
-    window.grid.resize(2, 3);
-    constexpr std::array types = {ControlCellType::Button, ControlCellType::Value, ControlCellType::Checkbox,
-                                  ControlCellType::Slider, ControlCellType::Led};
-    for (size_t index = 0; index < types.size(); ++index) {
-        window.grid.setCellType(index, types[index]);
-    }
-    auto& cells = window.grid.cells;
-    cells[0].button.label = "Start";
-    cells[0].button.script = "write('enabled', 1)";
-    cells[0].button.draft = "unfinished [";
-    window.grid.text_to_value_ratio = 0.6f;
-    cells[1].value.scalar_id = 123;
-    cells[2].checkbox.label = "Enable";
-    cells[2].checkbox.on_enable.script = "write('enabled', 1)";
-    cells[2].checkbox.on_disable.script = "write('enabled', 0)";
-    cells[3].slider.scalar_id = 456;
-    cells[3].slider.minimum = -10;
-    cells[3].slider.maximum = 20;
-    cells[4].led.label = "Running";
-    cells[4].led.condition = "return read('enabled') == 1";
-    cells[4].led.color = {0.1f, 0.2f, 0.3f, 1};
-    nlohmann::json saved;
-    window.updateJson(saved);
-    REQUIRE(saved["grid"]["rows"] == 2);
-    REQUIRE(saved["grid"]["columns"] == 3);
-    REQUIRE(saved["grid"]["cells"].size() == 6);
-    REQUIRE(saved["grid"]["cells"][0]["script"] == "write('enabled', 1)");
-    REQUIRE(saved["grid"]["cells"][1]["scalar_id"] == 123);
-    REQUIRE(saved["grid"]["cells"][2]["on_disable"] == "write('enabled', 0)");
-    REQUIRE(saved["grid"]["cells"][3]["minimum"] == -10);
-    REQUIRE(saved["grid"]["cells"][4]["label"] == "Running");
-    GridWindow restored(saved);
-    nlohmann::json roundtrip;
-    restored.updateJson(roundtrip);
-    REQUIRE(roundtrip == saved);
-    REQUIRE(restored.title() == window.title());
-    for (size_t index = 0; index < types.size(); ++index) {
-        REQUIRE(restored.grid.cells[index].type == types[index]);
-    }
-}
-
-TEST_CASE("Mixed grid duplication copies all cells and resets their runtime state") {
-    GridWindow window("Actions", 1);
-    window.grid.resize(1, 3);
-    window.grid.setCellType(1, ControlCellType::Checkbox);
-    window.grid.setCellType(2, ControlCellType::Led);
-    window.grid.setCellType(0, ControlCellType::Button);
-    auto& button = window.grid.cells[0].button;
-    button.script = "wait(1)";
-    button.draft = "invalid [";
-    button.action = std::make_shared<GridActionState>(button.script, LuaScriptHost{});
-    auto& checkbox = window.grid.cells[1].checkbox;
-    checkbox.on_enable.script = "wait(1)";
-    checkbox.setChecked(true, LuaScriptHost{});
-    window.grid.cells[2].led.configure(LuaScriptHost{});
-    auto copy = window.duplicate(2);
-    REQUIRE(copy.id == 2);
-    REQUIRE(copy.name == "Actions copy");
-    REQUIRE(copy.grid.columns == 3);
-    REQUIRE(copy.grid.cells[0].button.script == "wait(1)");
-    REQUIRE(copy.grid.cells[0].button.draft.empty());
-    REQUIRE_FALSE(copy.grid.cells[0].button.action);
-    REQUIRE_FALSE(copy.grid.cells[1].checkbox.checked);
-    REQUIRE_FALSE(copy.grid.cells[1].checkbox.on_enable.action);
-    REQUIRE_FALSE(copy.grid.cells[2].led.state);
-    copy.grid.cells[0].button.label = "Changed";
-    REQUIRE(button.label == "Button");
-    REQUIRE(checkbox.checked);
-    REQUIRE(checkbox.on_enable.action);
-    REQUIRE(window.grid.cells[2].led.state);
 }

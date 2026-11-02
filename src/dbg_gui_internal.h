@@ -131,11 +131,6 @@ class DbgGui {
     void showGridWindows();
     void editGridSettings(Grid& grid);
     void renderGrid(Grid& grid);
-    void renderButtonGrid(PanelWidget& widget, PanelWindow& panel);
-    void renderValueGrid(PanelWidget& widget);
-    void renderSliderGrid(PanelWidget& widget);
-    void renderLedGrid(PanelWidget& widget);
-    void renderCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
     bool renderControlCell(ControlCell& widget, float text_to_value_ratio, bool focus_value = false, std::function<void()> const& cell_menu = {});
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.

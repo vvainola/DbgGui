@@ -263,35 +263,3 @@ struct Grid {
         }
     }
 };
-
-template <typename Cell>
-struct PanelControlGrid {
-    int rows = 1;
-    int columns = 1;
-    std::vector<Cell> cells{1};
-
-    void resize(int new_rows, int new_columns) {
-        new_rows = std::clamp(new_rows, 1, 20);
-        new_columns = std::clamp(new_columns, 1, 10);
-        std::vector<Cell> resized(new_rows * new_columns);
-        for (int row = 0; row < std::min(rows, new_rows); ++row) {
-            for (int col = 0; col < std::min(columns, new_columns); ++col) {
-                resized[row * new_columns + col] = std::move(cells[row * columns + col]);
-            }
-        }
-        rows = new_rows;
-        columns = new_columns;
-        cells = std::move(resized);
-    }
-};
-
-using PanelButtonGrid = PanelControlGrid<GridButtonCell>;
-using GridCheckboxGrid = PanelControlGrid<GridCheckbox>;
-
-struct PanelValueGrid : PanelControlGrid<GridValueCell> {
-    float text_to_value_ratio = 0.3f;
-};
-
-struct GridSliderGrid : PanelControlGrid<GridSlider> {
-    float text_to_value_ratio = 0.3f;
-};

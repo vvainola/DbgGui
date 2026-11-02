@@ -42,14 +42,21 @@ inline float snapToPanelGrid(float value) {
 
 // Numeric values are stored in panel files and session settings.
 enum class PanelWidgetType {
-    Plot,
-    ButtonGrid,
-    ValueGrid,
-    CheckboxGrid,
-    SliderGrid,
-    LedGrid,
-    TextNote
+    Plot = 0,
+    TextNote = 6,
+    ControlGrid = 7
 };
+
+inline bool isPanelWidgetType(int type) {
+    switch (static_cast<PanelWidgetType>(type)) {
+        case PanelWidgetType::Plot:
+        case PanelWidgetType::TextNote:
+        case PanelWidgetType::ControlGrid: return true;
+    }
+    return false;
+}
+
+void migratePanelWidgetSettings(nlohmann::json& data);
 
 struct PanelGroup {
     // Canvas units; shared by the background bounds and its title area.
@@ -62,19 +69,20 @@ struct PanelGroup {
 };
 
 struct PanelWidget {
+    PanelWidget(uint64_t id = 0, PanelWidgetType type = PanelWidgetType::ControlGrid,
+                std::string label = "Widget", ImVec2 position = {30, 30}, ImVec2 size = {320, 180});
+    static PanelWidget fromJson(nlohmann::json const& data);
+    void updateJson(nlohmann::json& data) const;
+    void remapScalarId(uint64_t old_id, uint64_t new_id);
     uint64_t id = 0;
-    PanelWidgetType type = PanelWidgetType::ButtonGrid;
+    PanelWidgetType type = PanelWidgetType::ControlGrid;
     std::string label = "Widget";
     ImVec2 position = {30, 30};
     ImVec2 size = {320, 180};
     std::shared_ptr<PanelGroup> group;
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
-    PanelButtonGrid buttons;
-    GridCheckboxGrid checkboxes;
-    PanelValueGrid values;
-    GridSliderGrid sliders;
-    PanelControlGrid<GridLedCell> leds;
+    std::shared_ptr<Grid> grid;
     struct {
         std::string text = "Text note";
         float font_size = 20;
@@ -83,9 +91,6 @@ struct PanelWidget {
     ImVec2 minimumSize() const {
         switch (type) {
             case PanelWidgetType::TextNote: return {64, 32};
-            case PanelWidgetType::ButtonGrid:
-            case PanelWidgetType::CheckboxGrid: return {64, 64};
-            case PanelWidgetType::SliderGrid: return {100, 96};
             default: return {160, 100};
         }
     }

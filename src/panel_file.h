@@ -27,8 +27,9 @@ inline nlohmann::json decode(nlohmann::json const& file, uint64_t panel_id) {
         if (!widget.is_object()) {
             throw std::runtime_error("Invalid panel widget");
         }
+        migratePanelWidgetSettings(widget);
         int const type = widget.at("type").get<int>();
-        if (type < 0 || type > static_cast<int>(PanelWidgetType::TextNote)) {
+        if (!isPanelWidgetType(type)) {
             throw std::runtime_error("Unsupported panel widget type");
         }
         widget["id"] = ++id;

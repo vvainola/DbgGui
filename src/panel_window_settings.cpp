@@ -21,121 +21,144 @@
 // SOFTWARE.
 
 #include "panel_window.h"
+#include "control_grid.h"
 
 #include <map>
+
+PanelWidget::PanelWidget(uint64_t id, PanelWidgetType type, std::string label, ImVec2 position, ImVec2 size)
+    : id(id), type(type), label(std::move(label)), position(position), size(size) {
+    if (type == PanelWidgetType::ControlGrid) {
+        grid = std::make_shared<Grid>();
+    } else if (type == PanelWidgetType::Plot) {
+        plot = std::make_shared<PlotWindow>(this->label, id);
+    }
+}
+
+void migratePanelWidgetSettings(nlohmann::json& data) {
+    if (!data.is_object()) {
+        return;
+    }
+    // Types 1–5 were the original homogeneous panel grids.
+    int const type = data.value("type", static_cast<int>(PanelWidgetType::ControlGrid));
+    ControlCellType cell_type;
+    switch (type) {
+        case 1: cell_type = ControlCellType::Button; break;
+        case 2: cell_type = ControlCellType::Value; break;
+        case 3: cell_type = ControlCellType::Checkbox; break;
+        case 4: cell_type = ControlCellType::Slider; break;
+        case 5: cell_type = ControlCellType::Led; break;
+        default: return;
+    }
+    int const rows = std::clamp(data.value("rows", 1), 1, 20);
+    int const columns = std::clamp(data.value("columns", 1), 1, 10);
+    auto const previous_cells = data.value("cells", nlohmann::json::array());
+    auto cells = nlohmann::json::array();
+    for (int index = 0; index < rows * columns; ++index) {
+        auto const previous = index < static_cast<int>(previous_cells.size()) ? previous_cells[index] : nlohmann::json::object();
+        auto cell = previous;
+        cell["type"] = cell_type;
+        cells.push_back(std::move(cell));
+    }
+    data["type"] = PanelWidgetType::ControlGrid;
+    data["grid"] = {{"rows", rows}, {"columns", columns}, {"cells", std::move(cells)},
+                    {"text_to_value_ratio", data.value("text_to_value_ratio", 0.3f)}};
+    for (auto key : {"rows", "columns", "cells", "text_to_value_ratio"}) {
+        data.erase(key);
+    }
+}
+
+PanelWidget PanelWidget::fromJson(nlohmann::json const& data) {
+    int const type = data.value("type", static_cast<int>(PanelWidgetType::ControlGrid));
+    if (type >= 1 && type <= 5) {
+        auto migrated = data;
+        migratePanelWidgetSettings(migrated);
+        return fromJson(migrated);
+    }
+    PanelWidget widget(data.value("id", uint64_t{0}), data.value("type", PanelWidgetType::ControlGrid),
+                       data.value("label", std::string{"Widget"}));
+    if (data.contains("group") && data["group"].is_object()) {
+        auto const& saved = data["group"];
+        uint64_t const id = saved.at("id").get<uint64_t>();
+        auto group = std::make_shared<PanelGroup>();
+        group->id = id;
+        group->title = saved.value("title", group->title);
+        group->padding = std::clamp(saved.value("padding", group->padding), 0.0f, 64.0f);
+        auto const color = saved.value("color", std::vector<float>{0.15f, 0.25f, 0.3f, 0.7f});
+        if (color.size() == 4) {
+            group->color = {color[0], color[1], color[2], color[3]};
+        }
+        widget.group = group;
+    }
+    widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
+    widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
+    switch (widget.type) {
+        case PanelWidgetType::ControlGrid:
+            widget.grid = std::make_shared<Grid>(data.value("grid", nlohmann::json::object()));
+            break;
+        case PanelWidgetType::Plot: {
+            auto plot_data = data.value("plot", nlohmann::json::object());
+            plot_data["name"] = widget.label;
+            plot_data["id"] = widget.id;
+            widget.plot = std::make_shared<PlotWindow>(plot_data);
+            break;
+        }
+        case PanelWidgetType::TextNote: {
+            widget.note.text = data.value("text", widget.note.text);
+            widget.note.font_size = std::clamp(data.value("font_size", 20.0f), 8.0f, 100.0f);
+            auto const color = data.value("text_color", std::vector<float>{1, 1, 1, 1});
+            if (color.size() == 4) {
+                widget.note.color = {color[0], color[1], color[2], color[3]};
+            }
+            break;
+        }
+    }
+    return widget;
+}
+
+void PanelWidget::updateJson(nlohmann::json& data) const {
+    migratePanelWidgetSettings(data);
+    data["id"] = id;
+    data["type"] = static_cast<int>(type);
+    data["label"] = label;
+    data["x"] = position.x;
+    data["y"] = position.y;
+    data["width"] = size.x;
+    data["height"] = size.y;
+    data.erase("group");
+    if (group) {
+        auto const& group = *this->group;
+        data["group"] = {{"id", group.id}, {"title", group.title}, {"padding", group.padding}, {"color", {group.color.x, group.color.y, group.color.z, group.color.w}}};
+    }
+    switch (type) {
+        case PanelWidgetType::ControlGrid:
+            grid->updateJson(data["grid"]);
+            break;
+        case PanelWidgetType::Plot:
+            plot->updateJson(data["plot"]);
+            break;
+        case PanelWidgetType::TextNote: {
+            data["text"] = note.text;
+            data["font_size"] = note.font_size;
+            data["text_color"] = {note.color.x, note.color.y, note.color.z, note.color.w};
+            break;
+        }
+    }
+}
 
 PanelWindow::PanelWindow(nlohmann::json const& j) : Window(j) {
     zoom = std::clamp(j.value("zoom", 1.0f), 0.25f, 3.0f);
     pan = {j.value("pan_x", 0.0f), j.value("pan_y", 0.0f)};
-    // Each widget saves its group metadata. Reconnect matching IDs to one
-    // shared background so title and color edits apply to all its members.
     std::map<uint64_t, std::shared_ptr<PanelGroup>> groups;
-    for (auto const& data : j.value("widgets", nlohmann::json::array())) {
-        int const type = data.value("type", static_cast<int>(PanelWidgetType::ButtonGrid));
-        if (type < 0 || type > static_cast<int>(PanelWidgetType::TextNote)) {
+    for (auto data : j.value("widgets", nlohmann::json::array())) {
+        migratePanelWidgetSettings(data);
+        int const type = data.value("type", static_cast<int>(PanelWidgetType::ControlGrid));
+        if (!isPanelWidgetType(type)) {
             continue;
         }
-        PanelWidget widget;
-        widget.id = data.value("id", uint64_t(widgets.size() + 1));
-        widget.type = static_cast<PanelWidgetType>(type);
-        widget.label = data.value("label", widget.label);
-        if (data.contains("group") && data["group"].is_object()) {
-            auto const& saved = data["group"];
-            uint64_t const id = saved.at("id").get<uint64_t>();
-            auto& group = groups[id];
-            if (!group) {
-                group = std::make_shared<PanelGroup>();
-                group->id = id;
-                group->title = saved.value("title", group->title);
-                group->padding = std::clamp(saved.value("padding", group->padding), 0.0f, 64.0f);
-                auto const color = saved.value("color", std::vector<float>{0.15f, 0.25f, 0.3f, 0.7f});
-                if (color.size() == 4) {
-                    group->color = {color[0], color[1], color[2], color[3]};
-                }
-            }
-            widget.group = group;
-        }
-        widget.position = {data.value("x", 30.0f), data.value("y", 30.0f)};
-        widget.setSize({data.value("width", 320.0f), data.value("height", 180.0f)});
-        switch (widget.type) {
-            case PanelWidgetType::TextNote: {
-                widget.note.text = data.value("text", widget.note.text);
-                widget.note.font_size = std::clamp(data.value("font_size", 20.0f), 8.0f, 100.0f);
-                auto const color = data.value("text_color", std::vector<float>{1, 1, 1, 1});
-                if (color.size() == 4) {
-                    widget.note.color = {color[0], color[1], color[2], color[3]};
-                }
-                break;
-            }
-            case PanelWidgetType::LedGrid: {
-                widget.leds.resize(data.value("rows", 1), data.value("columns", 1));
-                auto const cells = data.value("cells", nlohmann::json::array());
-                for (size_t index = 0; index < widget.leds.cells.size(); ++index) {
-                    auto& cell = widget.leds.cells[index];
-                    auto const saved = index < cells.size() ? cells[index] : nlohmann::json::object();
-                    cell.label = saved.value("label", cell.label);
-                    cell.condition = saved.value("script", cell.condition);
-                    auto const color = saved.value("color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
-                    if (color.size() == 4) {
-                        cell.color = {color[0], color[1], color[2], color[3]};
-                    }
-                }
-                break;
-            }
-            case PanelWidgetType::SliderGrid: {
-                widget.sliders.resize(data.value("rows", 1), data.value("columns", 1));
-                widget.sliders.text_to_value_ratio = std::clamp(data.value("text_to_value_ratio", 0.3f), 0.05f, 0.95f);
-                auto const cells = data.value("cells", nlohmann::json::array());
-                for (size_t index = 0; index < cells.size() && index < widget.sliders.cells.size(); ++index) {
-                    auto& cell = widget.sliders.cells[index];
-                    if (cells[index].contains("scalar_id") && !cells[index]["scalar_id"].is_null()) {
-                        cell.scalar_id = cells[index]["scalar_id"].get<uint64_t>();
-                    }
-                    cell.minimum = cells[index].value("minimum", 0.0);
-                    cell.maximum = cells[index].value("maximum", 1.0);
-                }
-                break;
-            }
-            case PanelWidgetType::ValueGrid: {
-                widget.values.resize(data.value("rows", 1), data.value("columns", 1));
-                widget.values.text_to_value_ratio = std::clamp(data.value("text_to_value_ratio", 0.3f), 0.05f, 0.95f);
-                auto const cells = data.value("cells", nlohmann::json::array());
-                for (size_t index = 0; index < cells.size() && index < widget.values.cells.size(); ++index) {
-                    auto const scalar = cells[index].find("scalar_id");
-                    if (scalar != cells[index].end() && !scalar->is_null()) {
-                        widget.values.cells[index].scalar_id = scalar->get<uint64_t>();
-                    }
-                }
-                break;
-            }
-            case PanelWidgetType::CheckboxGrid: {
-                widget.checkboxes.resize(data.value("rows", 1), data.value("columns", 1));
-                auto const cells = data.value("cells", nlohmann::json::array());
-                for (size_t index = 0; index < cells.size() && index < widget.checkboxes.cells.size(); ++index) {
-                    auto& cell = widget.checkboxes.cells[index];
-                    cell.label = cells[index].value("label", cell.label);
-                    cell.on_enable.script = cells[index].value("on_enable", std::string{});
-                    cell.on_disable.script = cells[index].value("on_disable", std::string{});
-                }
-                break;
-            }
-            case PanelWidgetType::ButtonGrid: {
-                widget.buttons.resize(data.value("rows", 1), data.value("columns", 1));
-                auto const cells = data.value("cells", nlohmann::json::array());
-                for (size_t index = 0; index < cells.size() && index < widget.buttons.cells.size(); ++index) {
-                    auto& cell = widget.buttons.cells[index];
-                    cell.label = cells[index].value("label", cell.label);
-                    cell.script = cells[index].value("script", cell.script);
-                }
-                break;
-            }
-            case PanelWidgetType::Plot: {
-                auto plot_data = data.value("plot", nlohmann::json::object());
-                plot_data["name"] = widget.label;
-                plot_data["id"] = widget.id;
-                widget.plot = std::make_shared<PlotWindow>(plot_data);
-                break;
-            }
+        data["id"] = data.value("id", uint64_t(widgets.size() + 1));
+        auto widget = PanelWidget::fromJson(data);
+        if (widget.group) {
+            widget.group = groups.try_emplace(widget.group->id, widget.group).first->second;
         }
         widgets.push_back(std::move(widget));
     }
@@ -157,87 +180,14 @@ void PanelWindow::updateJson(nlohmann::json& j) const {
                 break;
             }
         }
-        data["id"] = widget.id;
-        data["type"] = static_cast<int>(widget.type);
-        data["label"] = widget.label;
-        data["x"] = widget.position.x;
-        data["y"] = widget.position.y;
-        data["width"] = widget.size.x;
-        data["height"] = widget.size.y;
-        data.erase("group");
-        if (widget.group) {
-            auto const& group = *widget.group;
-            data["group"] = {{"id", group.id}, {"title", group.title}, {"padding", group.padding}, {"color", {group.color.x, group.color.y, group.color.z, group.color.w}}};
-        }
-        switch (widget.type) {
-            case PanelWidgetType::TextNote: {
-                data["text"] = widget.note.text;
-                data["font_size"] = widget.note.font_size;
-                data["text_color"] = {widget.note.color.x, widget.note.color.y, widget.note.color.z, widget.note.color.w};
-                break;
-            }
-            case PanelWidgetType::LedGrid: {
-                data["rows"] = widget.leds.rows;
-                data["columns"] = widget.leds.columns;
-                data["cells"] = nlohmann::json::array();
-                for (auto const& cell : widget.leds.cells) {
-                    data["cells"].push_back({{"label", cell.label}, {"script", cell.condition}, {"color", {cell.color.x, cell.color.y, cell.color.z, cell.color.w}}});
-                }
-                break;
-            }
-            case PanelWidgetType::SliderGrid: {
-                data["text_to_value_ratio"] = widget.sliders.text_to_value_ratio;
-                data["rows"] = widget.sliders.rows;
-                data["columns"] = widget.sliders.columns;
-                data["cells"] = nlohmann::json::array();
-                for (auto const& cell : widget.sliders.cells) {
-                    nlohmann::json saved = {{"minimum", cell.minimum}, {"maximum", cell.maximum}};
-                    if (cell.scalar_id) {
-                        saved["scalar_id"] = *cell.scalar_id;
-                    }
-                    data["cells"].push_back(std::move(saved));
-                }
-                break;
-            }
-            case PanelWidgetType::ValueGrid: {
-                data["text_to_value_ratio"] = widget.values.text_to_value_ratio;
-                data["rows"] = widget.values.rows;
-                data["columns"] = widget.values.columns;
-                data["cells"] = nlohmann::json::array();
-                for (auto const& cell : widget.values.cells) {
-                    auto saved = nlohmann::json::object();
-                    if (cell.scalar_id) {
-                        saved["scalar_id"] = *cell.scalar_id;
-                    }
-                    data["cells"].push_back(std::move(saved));
-                }
-                break;
-            }
-            case PanelWidgetType::CheckboxGrid: {
-                data["rows"] = widget.checkboxes.rows;
-                data["columns"] = widget.checkboxes.columns;
-                data["cells"] = nlohmann::json::array();
-                for (auto const& cell : widget.checkboxes.cells) {
-                    data["cells"].push_back({{"label", cell.label}, {"on_enable", cell.on_enable.script}, {"on_disable", cell.on_disable.script}});
-                }
-                break;
-            }
-            case PanelWidgetType::ButtonGrid: {
-                data["rows"] = widget.buttons.rows;
-                data["columns"] = widget.buttons.columns;
-                data["cells"] = nlohmann::json::array();
-                for (auto const& cell : widget.buttons.cells) {
-                    data["cells"].push_back({{"label", cell.label}, {"script", cell.script}});
-                }
-                break;
-            }
-            case PanelWidgetType::Plot:
-                break;
-        }
-        if (widget.plot) {
-            widget.plot->updateJson(data["plot"]);
-        }
+        widget.updateJson(data);
         saved_widgets.push_back(std::move(data));
     }
     j["widgets"] = std::move(saved_widgets);
+}
+
+void PanelWidget::remapScalarId(uint64_t old_id, uint64_t new_id) {
+    if (grid) {
+        grid->remapScalarId(old_id, new_id);
+    }
 }
