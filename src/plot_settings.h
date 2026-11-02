@@ -153,7 +153,7 @@ inline std::vector<Scalar*> restoreSpectra(PlotWindow::Subplot& subplot,
     return to_sample;
 }
 
-// Restore all styles through the same path for standalone and embedded plots.
+// Restore scalar, vector, and spectrum placements through the same path.
 inline std::vector<Scalar*> restorePlot(PlotWindow& plot,
                                         nlohmann::json const& saved,
                                         std::vector<std::unique_ptr<Scalar>> const& scalars,
