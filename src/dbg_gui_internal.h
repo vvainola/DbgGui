@@ -153,7 +153,7 @@ class DbgGui {
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showPlots();
-    void renderPlotContents(PlotWindow& plot_window);
+    void renderPlotContents(PlotWindow& plot_window, double vertical_line_time, double& vertical_line_time_next);
     void reconcilePlotSettings(PlotWindow& plot, nlohmann::json& saved);
     void renderScalarSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,

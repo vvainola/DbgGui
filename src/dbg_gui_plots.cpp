@@ -124,6 +124,10 @@ void renderVectorPair(ScrollingBuffer& sampler,
 } // namespace
 
 void DbgGui::showPlots() {
+    // All plot windows display the cursor time collected during the previous frame.
+    static double vertical_line_time_next = NAN;
+    double const vertical_line_time = vertical_line_time_next;
+    vertical_line_time_next = NAN;
     for (auto& plot : m_plot_windows) {
         if (!plot.open) {
             continue;
@@ -132,7 +136,7 @@ void DbgGui::showPlots() {
         plot.closeOnMiddleClick();
         plot.contextMenu();
         if (plot.focus.focused) {
-            renderPlotContents(plot);
+            renderPlotContents(plot, vertical_line_time, vertical_line_time_next);
         } else {
             plot.last_frame_timestamp = m_plot_timestamp;
         }
@@ -140,16 +144,7 @@ void DbgGui::showPlots() {
     }
 }
 
-void DbgGui::renderPlotContents(PlotWindow& plot_window) {
-    // Share the previous frame's cursor time across plot windows.
-    static int last_frame = -1;
-    static double vertical_line_time = NAN;
-    static double vertical_line_time_next = NAN;
-    if (last_frame != ImGui::GetFrameCount()) {
-        last_frame = ImGui::GetFrameCount();
-        vertical_line_time = vertical_line_time_next;
-        vertical_line_time_next = NAN;
-    }
+void DbgGui::renderPlotContents(PlotWindow& plot_window, double vertical_line_time, double& vertical_line_time_next) {
     // Menu
     if (ImGui::Button("Menu")) {
         ImGui::OpenPopup("##Menu");
