@@ -224,16 +224,16 @@ void drawGridScriptErrorBorder() {
                                         2.0f);
 }
 
-void showGridScriptError(std::string_view error) {
+void showGridScriptError(std::string_view error, float width) {
     if (error.empty()) {
         return;
     }
     auto const& style = ImGui::GetStyle();
-    float const wrap_width = GRID_SCRIPT_EDITOR_SIZE.x - 2 * style.WindowPadding.x - style.ScrollbarSize;
+    float const wrap_width = width - 2 * style.WindowPadding.x - style.ScrollbarSize;
     float const text_height = ImGui::CalcTextSize(error.data(), error.data() + error.size(), false, wrap_width).y;
     float const height = std::min(text_height, 4 * ImGui::GetTextLineHeight()) + 2 * style.WindowPadding.y;
     if (ImGui::BeginChild("script_error",
-                          {GRID_SCRIPT_EDITOR_SIZE.x, height},
+                          {width, height},
                           ImGuiChildFlags_AlwaysUseWindowPadding,
                           ImGuiWindowFlags_NoBackground)) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap_width);
@@ -246,7 +246,8 @@ void showGridScriptError(std::string_view error) {
 }
 
 void showGridActionEditor(GridActionScript& script) {
-    inputScriptTextWithLineNumbers(script.editor.draft, GRID_SCRIPT_EDITOR_SIZE, true);
+    ImVec2 const editor_size = scriptEditorSizeToFit(script.editor.draft, GRID_SCRIPT_EDITOR_SIZE);
+    inputScriptTextWithLineNumbers(script.editor.draft, editor_size, true);
     if (ImGui::Button("Apply script")) {
         script.applyScript();
     }
@@ -262,7 +263,7 @@ void showGridActionEditor(GridActionScript& script) {
             error = script.action->error;
         }
     }
-    showGridScriptError(error);
+    showGridScriptError(error, editor_size.x);
 }
 
 void editGridSettings(GridWindow& grid) {
@@ -632,13 +633,14 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
         ImGui::ColorEdit4("##lit_color", &cell.color.x, ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();
         HelpMarker("Return true to light the LED, false to turn it off");
-        inputScriptTextWithLineNumbers(cell.editor.draft, GRID_SCRIPT_EDITOR_SIZE, true);
+        ImVec2 const editor_size = scriptEditorSizeToFit(cell.editor.draft, GRID_SCRIPT_EDITOR_SIZE);
+        inputScriptTextWithLineNumbers(cell.editor.draft, editor_size, true);
         apply = ImGui::Button("Apply condition");
         ImGui::SameLine();
         if (ImGui::Button("Close")) {
             ImGui::CloseCurrentPopup();
         }
-        showGridScriptError(result->error);
+        showGridScriptError(result->error, editor_size.x);
         ImGui::EndPopup();
     }
     if (apply) {

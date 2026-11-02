@@ -79,6 +79,17 @@ ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
 
 } // namespace
 
+ImVec2 scriptEditorSizeToFit(std::string_view text, ImVec2 minimum_size) {
+    auto const& style = ImGui::GetStyle();
+    float const text_width = ImGui::CalcTextSize(text.data(), text.data() + text.size(), false).x;
+    // Leave room for line numbers, input padding, the scrollbar, and the caret.
+    float const width = text_width + scriptLineNumberGutterWidth(scriptLineCount(text))
+                      + 2 * style.FramePadding.x + style.ScrollbarSize + 1;
+    float const viewport_width = ImGui::GetWindowViewport()->WorkSize.x
+                               - 2 * (style.WindowPadding.x + style.WindowBorderSize);
+    return {std::max(minimum_size.x, std::min(width, viewport_width)), minimum_size.y};
+}
+
 void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua) {
     ImGuiID const input_id = ImGui::GetID("##source");
     float const gutter_width = scriptLineNumberGutterWidth(scriptLineCount(text));
@@ -116,13 +127,17 @@ void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlig
     float const scroll_y = input_window ? input_window->Scroll.y :
                            input_state  ? input_state->Scroll.y :
                                           0.0f;
-    float const scroll_x = input_window ? input_window->Scroll.x :
-                           input_state  ? input_state->Scroll.x :
-                                          0.0f;
+    // Horizontal text scrolling belongs to the input state, not its child window.
+    // ImGui also retains it while dragging the editor's vertical scrollbar.
+    ImGuiID const active_id = ImGui::GetActiveID();
+    bool const input_active = active_id == input_id;
+    bool const scrollbar_active = input_window && active_id == ImGui::GetWindowScrollbarID(input_window, ImGuiAxis_Y);
+    bool const editing = input_active || scrollbar_active;
+    float const scroll_x = input_state && editing ? input_state->Scroll.x : 0.0f;
     drawScriptLineNumberGutter(text, gutter_min, gutter_max, scroll_y);
     if (highlight_lua && input_window && !input_window->SkipItems) {
         ImDrawList* draw_list = input_window->DrawList;
-        int const cursor_position = input_state && ImGui::GetActiveID() == input_id ? input_state->GetCursorPos() : -1;
+        int const cursor_position = input_state && input_active ? input_state->GetCursorPos() : -1;
         drawLuaSyntaxHighlightOverlay(draw_list,
                                       editor_font,
                                       editor_font_size,

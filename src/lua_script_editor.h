@@ -25,5 +25,9 @@
 #include "imgui.h"
 
 #include <string>
+#include <string_view>
+
+// Keep the minimum height and expand width for the longest line, up to the viewport.
+ImVec2 scriptEditorSizeToFit(std::string_view text, ImVec2 minimum_size);
 
 void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua);
