@@ -5,8 +5,24 @@
 #include "lua_script_editor.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
+
+namespace {
+struct ControlCellKind {
+    ControlCellType type;
+    const char* label;
+};
+
+constexpr std::array CONTROL_CELL_KINDS = {
+    ControlCellKind{ControlCellType::Value, "Value"},
+    ControlCellKind{ControlCellType::Button, "Button"},
+    ControlCellKind{ControlCellType::Checkbox, "Checkbox"},
+    ControlCellKind{ControlCellType::Slider, "Slider"},
+    ControlCellKind{ControlCellType::Led, "LED"}
+};
+} // namespace
 
 ControlCell ControlCell::fromJson(nlohmann::json const& data) {
     ControlCell cell;
@@ -187,16 +203,6 @@ constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
 constexpr ImU32 SCRIPT_ERROR_RED = IM_COL32(255, 64, 64, 255);
 
-void editGridDimensions(GridWindow& grid) {
-    int rows = grid.rows;
-    int columns = grid.columns;
-    bool const rows_changed = ImGui::InputInt("Rows", &rows);
-    bool const columns_changed = ImGui::InputInt("Columns", &columns);
-    if (rows_changed || columns_changed) {
-        grid.resize(rows, columns);
-    }
-}
-
 bool editControlCellType(GridWindow& grid, size_t index, char const* label) {
     auto const type = grid.cells[index].type;
     auto kind = std::ranges::find(CONTROL_CELL_KINDS, type, &ControlCellKind::type);
@@ -285,10 +291,14 @@ void showGridActionEditor(GridActionScript& script) {
     showGridScriptError(error);
 }
 
-} // namespace
-
-void DbgGui::editGridSettings(GridWindow& grid) {
-    editGridDimensions(grid);
+void editGridSettings(GridWindow& grid) {
+    int rows = grid.rows;
+    int columns = grid.columns;
+    bool const rows_changed = ImGui::InputInt("Rows", &rows);
+    bool const columns_changed = ImGui::InputInt("Columns", &columns);
+    if (rows_changed || columns_changed) {
+        grid.resize(rows, columns);
+    }
     ImGui::SliderFloat("Text to value ratio", &grid.text_to_value_ratio,
                        0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
     float type_width = 0;
@@ -310,6 +320,8 @@ void DbgGui::editGridSettings(GridWindow& grid) {
         ImGui::EndTable();
     }
 }
+
+} // namespace
 
 void DbgGui::processGridScripts(double timestamp) {
     // Called with m_sampling_mutex held. Keep active actions alive while Lua

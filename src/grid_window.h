@@ -6,7 +6,6 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <array>
 #include <stdexcept>
 #include <atomic>
 #include <cstdint>
@@ -160,19 +159,6 @@ struct ControlCell {
     GridValueCell value;
     GridSlider slider;
     GridLedCell led;
-};
-
-struct ControlCellKind {
-    ControlCellType type;
-    const char* label;
-};
-
-inline constexpr std::array CONTROL_CELL_KINDS = {
-    ControlCellKind{ControlCellType::Value, "Value"},
-    ControlCellKind{ControlCellType::Button, "Button"},
-    ControlCellKind{ControlCellType::Checkbox, "Checkbox"},
-    ControlCellKind{ControlCellType::Slider, "Slider"},
-    ControlCellKind{ControlCellType::Led, "LED"}
 };
 
 struct GridWindow : Window {
