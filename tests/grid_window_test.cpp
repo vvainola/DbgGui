@@ -8,15 +8,15 @@ TEST_CASE("LED settings preserve the applied condition and color without saving 
     widget.led.condition = "return read('enabled') > 0";
     widget.led.draft = "unfinished script";
     widget.led.color = {0.9f, 0.3f, 0.1f, 1};
-    window.grid.cells[0] = std::move(widget);
+    window.cells[0] = std::move(widget);
     nlohmann::json saved;
     window.updateJson(saved);
     GridWindow restored(saved);
-    REQUIRE(restored.grid.cells[0].led.condition == "return read('enabled') > 0");
-    REQUIRE(restored.grid.cells[0].led.color.x == 0.9f);
-    REQUIRE(restored.grid.cells[0].led.color.y == 0.3f);
-    REQUIRE(restored.grid.cells[0].led.draft.empty());
-    REQUIRE_FALSE(restored.grid.cells[0].led.state);
+    REQUIRE(restored.cells[0].led.condition == "return read('enabled') > 0");
+    REQUIRE(restored.cells[0].led.color.x == 0.9f);
+    REQUIRE(restored.cells[0].led.color.y == 0.3f);
+    REQUIRE(restored.cells[0].led.draft.empty());
+    REQUIRE_FALSE(restored.cells[0].led.state);
 }
 
 TEST_CASE("Grid actions run only on sampling ticks and resume waits without repeating") {
@@ -128,7 +128,7 @@ TEST_CASE("Checkbox settings save transition scripts without runtime state or dr
     widget.checkbox.on_enable.script = "write('enabled', 1)";
     widget.checkbox.on_disable.script = "write('enabled', 0)";
     widget.checkbox.on_enable.draft = "invalid [";
-    window.grid.cells[0] = std::move(widget);
+    window.cells[0] = std::move(widget);
     nlohmann::json saved;
     window.updateJson(saved);
     auto const& cell = saved["grid"]["cells"][0];
@@ -138,8 +138,8 @@ TEST_CASE("Checkbox settings save transition scripts without runtime state or dr
     REQUIRE_FALSE(cell.contains("draft"));
     REQUIRE_FALSE(cell.contains("action"));
     GridWindow restored(saved);
-    REQUIRE(restored.grid.cells[0].checkbox.label == "Enable output");
-    auto const& checkbox = restored.grid.cells[0].checkbox;
+    REQUIRE(restored.cells[0].checkbox.label == "Enable output");
+    auto const& checkbox = restored.cells[0].checkbox;
     REQUIRE_FALSE(checkbox.checked);
     REQUIRE(checkbox.on_enable.script == "write('enabled', 1)");
     REQUIRE(checkbox.on_disable.script == "write('enabled', 0)");
@@ -197,19 +197,19 @@ TEST_CASE("Checkbox transition editors apply and validate independently") {
 }
 
 TEST_CASE("Control grids save their text to value ratio and default to 30 percent") {
-    Grid grid;
+    GridWindow grid("Grid", 1);
     REQUIRE(grid.text_to_value_ratio == 0.3f);
     grid.text_to_value_ratio = 0.45f;
     grid.resize(1, 2);
     grid.setCellType(1, ControlCellType::Slider);
     nlohmann::json saved;
     grid.updateJson(saved);
-    REQUIRE(Grid(saved).text_to_value_ratio == 0.45f);
-    for (auto const& cell : saved["cells"]) {
+    REQUIRE(GridWindow(saved).text_to_value_ratio == 0.45f);
+    for (auto const& cell : saved["grid"]["cells"]) {
         REQUIRE_FALSE(cell.contains("text_to_value_ratio"));
     }
-    saved["text_to_value_ratio"] = 2.0f;
-    REQUIRE(Grid(saved).text_to_value_ratio == 0.95f);
+    saved["grid"]["text_to_value_ratio"] = 2.0f;
+    REQUIRE(GridWindow(saved).text_to_value_ratio == 0.95f);
 }
 
 TEST_CASE("Grid action error indicators include syntax and completed runtime errors") {
@@ -232,17 +232,17 @@ TEST_CASE("Grid action error indicators include syntax and completed runtime err
 
 TEST_CASE("Mixed control grids preserve each cell's type and applied configuration") {
     GridWindow window("Controls", 42);
-    window.grid.resize(2, 3);
+    window.resize(2, 3);
     constexpr std::array types = {ControlCellType::Button, ControlCellType::Value, ControlCellType::Checkbox,
                                   ControlCellType::Slider, ControlCellType::Led};
     for (size_t index = 0; index < types.size(); ++index) {
-        window.grid.setCellType(index, types[index]);
+        window.setCellType(index, types[index]);
     }
-    auto& cells = window.grid.cells;
+    auto& cells = window.cells;
     cells[0].button.label = "Start";
     cells[0].button.script = "write('enabled', 1)";
     cells[0].button.draft = "unfinished [";
-    window.grid.text_to_value_ratio = 0.6f;
+    window.text_to_value_ratio = 0.6f;
     cells[1].value.scalar_id = 123;
     cells[2].checkbox.label = "Enable";
     cells[2].checkbox.on_enable.script = "write('enabled', 1)";
@@ -269,84 +269,84 @@ TEST_CASE("Mixed control grids preserve each cell's type and applied configurati
     REQUIRE(roundtrip == saved);
     REQUIRE(restored.title() == window.title());
     for (size_t index = 0; index < types.size(); ++index) {
-        REQUIRE(restored.grid.cells[index].type == types[index]);
+        REQUIRE(restored.cells[index].type == types[index]);
     }
 }
 
 TEST_CASE("Mixed grid duplication copies all cells and resets their runtime state") {
     GridWindow window("Actions", 1);
-    window.grid.resize(1, 3);
-    window.grid.setCellType(1, ControlCellType::Checkbox);
-    window.grid.setCellType(2, ControlCellType::Led);
-    window.grid.setCellType(0, ControlCellType::Button);
-    auto& button = window.grid.cells[0].button;
+    window.resize(1, 3);
+    window.setCellType(1, ControlCellType::Checkbox);
+    window.setCellType(2, ControlCellType::Led);
+    window.setCellType(0, ControlCellType::Button);
+    auto& button = window.cells[0].button;
     button.script = "wait(1)";
     button.draft = "invalid [";
     button.action = std::make_shared<GridActionState>(button.script, LuaScriptHost{});
-    auto& checkbox = window.grid.cells[1].checkbox;
+    auto& checkbox = window.cells[1].checkbox;
     checkbox.on_enable.script = "wait(1)";
     checkbox.setChecked(true, LuaScriptHost{});
-    window.grid.cells[2].led.configure(LuaScriptHost{});
+    window.cells[2].led.configure(LuaScriptHost{});
     auto copy = window.duplicate(2);
     REQUIRE(copy.id == 2);
     REQUIRE(copy.name == "Actions copy");
-    REQUIRE(copy.grid.columns == 3);
-    REQUIRE(copy.grid.cells[0].button.script == "wait(1)");
-    REQUIRE(copy.grid.cells[0].button.draft.empty());
-    REQUIRE_FALSE(copy.grid.cells[0].button.action);
-    REQUIRE_FALSE(copy.grid.cells[1].checkbox.checked);
-    REQUIRE_FALSE(copy.grid.cells[1].checkbox.on_enable.action);
-    REQUIRE_FALSE(copy.grid.cells[2].led.state);
-    copy.grid.cells[0].button.label = "Changed";
+    REQUIRE(copy.columns == 3);
+    REQUIRE(copy.cells[0].button.script == "wait(1)");
+    REQUIRE(copy.cells[0].button.draft.empty());
+    REQUIRE_FALSE(copy.cells[0].button.action);
+    REQUIRE_FALSE(copy.cells[1].checkbox.checked);
+    REQUIRE_FALSE(copy.cells[1].checkbox.on_enable.action);
+    REQUIRE_FALSE(copy.cells[2].led.state);
+    copy.cells[0].button.label = "Changed";
     REQUIRE(button.label == "Button");
     REQUIRE(checkbox.checked);
     REQUIRE(checkbox.on_enable.action);
-    REQUIRE(window.grid.cells[2].led.state);
+    REQUIRE(window.cells[2].led.state);
 }
 
 TEST_CASE("Changing a cell type keeps its configuration and stops hidden actions") {
     GridWindow window("Controls", 1);
-    window.grid.setCellType(0, ControlCellType::Button);
-    auto& cell = window.grid.cells[0];
+    window.setCellType(0, ControlCellType::Button);
+    auto& cell = window.cells[0];
     cell.button.label = "Start";
     cell.button.script = "wait(1)";
     cell.button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
-    window.grid.setCellType(0, ControlCellType::Led);
+    window.setCellType(0, ControlCellType::Led);
     REQUIRE(cell.button.action->stop_requested.load());
     cell.led.condition = "return true";
-    window.grid.setCellType(0, ControlCellType::Checkbox);
+    window.setCellType(0, ControlCellType::Checkbox);
     auto& checkbox = cell.checkbox;
     checkbox.on_enable.script = "wait(1)";
     checkbox.setChecked(true, LuaScriptHost{});
-    window.grid.setCellType(0, ControlCellType::Button);
+    window.setCellType(0, ControlCellType::Button);
     REQUIRE(checkbox.on_enable.action->stop_requested.load());
     REQUIRE(cell.button.label == "Start");
     REQUIRE(cell.button.script == "wait(1)");
     REQUIRE(cell.led.condition == "return true");
     REQUIRE(cell.type == ControlCellType::Button);
-    REQUIRE_THROWS(window.grid.setCellType(0, static_cast<ControlCellType>(100)));
-    REQUIRE_THROWS(window.grid.setCellType(0, static_cast<ControlCellType>(-1)));
+    REQUIRE_THROWS(window.setCellType(0, static_cast<ControlCellType>(100)));
+    REQUIRE_THROWS(window.setCellType(0, static_cast<ControlCellType>(-1)));
     REQUIRE(cell.type == ControlCellType::Button);
 }
 
 TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") {
     GridWindow window("Bindings", 5);
-    REQUIRE(window.grid.cells[0].type == ControlCellType::Value);
-    window.grid.resize(2, 2);
-    window.grid.setCellType(2, ControlCellType::Value);
-    window.grid.setCellType(3, ControlCellType::Slider);
-    window.grid.cells[2].value.scalar_id = 123;
-    window.grid.cells[3].slider.scalar_id = 123;
-    window.grid.resize(2, 3);
-    REQUIRE(window.grid.cells[3].type == ControlCellType::Value);
-    REQUIRE(window.grid.cells[4].type == ControlCellType::Slider);
-    REQUIRE(window.grid.cells[2].type == ControlCellType::Value);
-    window.grid.remapScalarId(123, 456);
+    REQUIRE(window.cells[0].type == ControlCellType::Value);
+    window.resize(2, 2);
+    window.setCellType(2, ControlCellType::Value);
+    window.setCellType(3, ControlCellType::Slider);
+    window.cells[2].value.scalar_id = 123;
+    window.cells[3].slider.scalar_id = 123;
+    window.resize(2, 3);
+    REQUIRE(window.cells[3].type == ControlCellType::Value);
+    REQUIRE(window.cells[4].type == ControlCellType::Slider);
+    REQUIRE(window.cells[2].type == ControlCellType::Value);
+    window.remapScalarId(123, 456);
     nlohmann::json saved;
     window.updateJson(saved);
     GridWindow restored(saved);
-    REQUIRE(restored.grid.cells[3].value.scalar_id == 456);
-    REQUIRE(restored.grid.cells[4].slider.scalar_id == 456);
+    REQUIRE(restored.cells[3].value.scalar_id == 456);
+    REQUIRE(restored.cells[4].slider.scalar_id == 456);
     REQUIRE(restored.id == 5);
 }
 
@@ -382,7 +382,7 @@ TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindi
 }
 
 TEST_CASE("Mixed grid resizing preserves individual cell actions and LED runtimes") {
-    Grid mixed;
+    GridWindow mixed("Grid", 1);
     mixed.resize(2, 2);
     mixed.setCellType(2, ControlCellType::Button);
     mixed.cells[2].button.script = "wait(1)";
@@ -401,7 +401,7 @@ TEST_CASE("Mixed grid resizing preserves individual cell actions and LED runtime
     REQUIRE_FALSE(action->stop_requested.load());
     nlohmann::json saved;
     mixed.updateJson(saved);
-    Grid restored(saved);
+    GridWindow restored(saved);
     REQUIRE(restored.cells[3].button.script == "wait(1)");
     REQUIRE_FALSE(restored.cells[3].button.action);
     REQUIRE(restored.cells[4].led.label == "Ready");
@@ -409,7 +409,7 @@ TEST_CASE("Mixed grid resizing preserves individual cell actions and LED runtime
 }
 
 TEST_CASE("Value cell arrow navigation follows grid coordinates and skips other controls") {
-    Grid controls;
+    GridWindow controls("Grid", 1);
     controls.resize(3, 3);
     for (size_t index = 0; index < controls.cells.size(); ++index) {
         controls.cells[index].value.scalar_id = 100 + index;
@@ -430,5 +430,5 @@ TEST_CASE("Value cell arrow navigation follows grid coordinates and skips other 
     nlohmann::json saved;
     controls.focus_cell = 5;
     controls.updateJson(saved);
-    REQUIRE_FALSE(Grid(saved).focus_cell);
+    REQUIRE_FALSE(GridWindow(saved).focus_cell);
 }

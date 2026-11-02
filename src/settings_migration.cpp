@@ -22,7 +22,7 @@
 
 #include "settings_migration.h"
 #include "data_structures.h"
-#include "control_grid.h"
+#include "grid_window.h"
 
 #include <map>
 #include <stdexcept>

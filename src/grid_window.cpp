@@ -8,6 +8,178 @@
 #include <cmath>
 #include <limits>
 
+ControlCell ControlCell::fromJson(nlohmann::json const& data) {
+    ControlCell cell;
+    cell.type = data.value("type", ControlCellType::Value);
+    switch (cell.type) {
+        case ControlCellType::Button:
+            cell.button.label = data.value("label", cell.button.label);
+            cell.button.script = data.value("script", cell.button.script);
+            break;
+        case ControlCellType::Checkbox:
+            cell.checkbox.label = data.value("label", cell.checkbox.label);
+            cell.checkbox.on_enable.script = data.value("on_enable", std::string{});
+            cell.checkbox.on_disable.script = data.value("on_disable", std::string{});
+            break;
+        case ControlCellType::Value:
+        case ControlCellType::Slider: {
+            auto& value = cell.type == ControlCellType::Value ? cell.value : cell.slider;
+            if (data.contains("scalar_id") && !data["scalar_id"].is_null()) {
+                value.scalar_id = data["scalar_id"].get<uint64_t>();
+            }
+            cell.slider.minimum = data.value("minimum", 0.0);
+            cell.slider.maximum = data.value("maximum", 1.0);
+            break;
+        }
+        case ControlCellType::Led: {
+            cell.led.label = data.value("label", cell.led.label);
+            cell.led.condition = data.value("script", cell.led.condition);
+            auto const color = data.value("color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
+            if (color.size() == 4) {
+                cell.led.color = {color[0], color[1], color[2], color[3]};
+            }
+            break;
+        }
+    }
+    return cell;
+}
+
+void ControlCell::updateJson(nlohmann::json& data) const {
+    data = {{"type", type}};
+    switch (type) {
+        case ControlCellType::Button:
+            data["label"] = button.label;
+            data["script"] = button.script;
+            break;
+        case ControlCellType::Checkbox:
+            data["label"] = checkbox.label;
+            data["on_enable"] = checkbox.on_enable.script;
+            data["on_disable"] = checkbox.on_disable.script;
+            break;
+        case ControlCellType::Value:
+        case ControlCellType::Slider: {
+            auto const& settings = type == ControlCellType::Value ? value : slider;
+            if (settings.scalar_id) {
+                data["scalar_id"] = *settings.scalar_id;
+            }
+            if (type == ControlCellType::Slider) {
+                data["minimum"] = slider.minimum;
+                data["maximum"] = slider.maximum;
+            }
+            break;
+        }
+        case ControlCellType::Led:
+            data["label"] = led.label;
+            data["script"] = led.condition;
+            data["color"] = {led.color.x, led.color.y, led.color.z, led.color.w};
+            break;
+    }
+}
+
+void ControlCell::remapScalarId(uint64_t old_id, uint64_t new_id) {
+    for (auto* binding : {&value.scalar_id, &slider.scalar_id}) {
+        if (*binding == old_id) {
+            *binding = new_id;
+        }
+    }
+}
+
+GridWindow::GridWindow(std::string const& name, uint64_t id) : Window(name, id) {}
+
+GridWindow::GridWindow(nlohmann::json const& data) : Window(data) {
+    auto const& saved = data.at("grid");
+    text_to_value_ratio = std::clamp(saved.value("text_to_value_ratio", 0.3f), 0.05f, 0.95f);
+    resize(saved.value("rows", 1), saved.value("columns", 1));
+    auto const saved_cells = saved.value("cells", nlohmann::json::array());
+    for (size_t index = 0; index < saved_cells.size() && index < cells.size(); ++index) {
+        validateType(saved_cells[index].value("type", ControlCellType::Value));
+        cells[index] = ControlCell::fromJson(saved_cells[index]);
+    }
+}
+
+void GridWindow::updateJson(nlohmann::json& data) const {
+    Window::updateJson(data);
+    auto saved_cells = nlohmann::json::array();
+    for (auto const& cell : cells) {
+        nlohmann::json saved;
+        cell.updateJson(saved);
+        saved_cells.push_back(std::move(saved));
+    }
+    data["grid"] = {{"rows", rows}, {"columns", columns}, {"cells", std::move(saved_cells)},
+                    {"text_to_value_ratio", text_to_value_ratio}};
+}
+
+GridWindow GridWindow::duplicate(uint64_t new_id) const {
+    nlohmann::json data;
+    updateJson(data);
+    data["id"] = new_id;
+    data["name"] = name + " copy";
+    data["initial_focus"] = false;
+    return GridWindow(data);
+}
+
+void GridWindow::resize(int new_rows, int new_columns) {
+    new_rows = std::clamp(new_rows, 1, 20);
+    new_columns = std::clamp(new_columns, 1, 10);
+    std::vector<ControlCell> resized(new_rows * new_columns);
+    for (int row = 0; row < std::min(rows, new_rows); ++row) {
+        for (int col = 0; col < std::min(columns, new_columns); ++col) {
+            resized[row * new_columns + col] = std::move(cells[row * columns + col]);
+        }
+    }
+    rows = new_rows;
+    columns = new_columns;
+    cells = std::move(resized);
+    focus_cell.reset();
+}
+
+void GridWindow::setCellType(size_t index, ControlCellType type) {
+    validateType(type);
+    auto& cell = cells.at(index);
+    if (cell.type == type) {
+        return;
+    }
+    // Hidden controls must not continue delayed simulation writes.
+    for (auto* script : {static_cast<GridActionScript*>(&cell.button),
+                         &cell.checkbox.on_enable, &cell.checkbox.on_disable}) {
+        if (script->action && script->action->running.load()) {
+            script->action->stop_requested.store(true);
+        }
+    }
+    cell.type = type;
+    if (focus_cell == index && type != ControlCellType::Value) {
+        focus_cell.reset();
+    }
+}
+
+std::optional<size_t> GridWindow::valueCellInDirection(size_t from, int row_delta, int column_delta) const {
+    if (from >= cells.size() || (row_delta == 0 && column_delta == 0)) {
+        return std::nullopt;
+    }
+    int row = static_cast<int>(from) / columns + row_delta;
+    int column = static_cast<int>(from) % columns + column_delta;
+    for (; row >= 0 && row < rows && column >= 0 && column < columns;
+         row += row_delta, column += column_delta) {
+        size_t const index = row * columns + column;
+        if (cells[index].type == ControlCellType::Value && cells[index].value.scalar_id) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
+void GridWindow::remapScalarId(uint64_t old_id, uint64_t new_id) {
+    for (auto& cell : cells) {
+        cell.remapScalarId(old_id, new_id);
+    }
+}
+
+void GridWindow::validateType(ControlCellType type) {
+    if (!std::ranges::any_of(CONTROL_CELL_KINDS, [type](auto const& kind) { return kind.type == type; })) {
+        throw std::runtime_error("Unsupported control cell type");
+    }
+}
+
 namespace {
 constexpr ImVec2 GRID_SCRIPT_EDITOR_SIZE = {420, 180};
 constexpr ImVec4 RUNNING_BUTTON_GREEN = {0.15f, 0.5f, 0.2f, 1.0f};
@@ -15,7 +187,7 @@ constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
 constexpr ImU32 SCRIPT_ERROR_RED = IM_COL32(255, 64, 64, 255);
 
-void editGridDimensions(Grid& grid) {
+void editGridDimensions(GridWindow& grid) {
     int rows = grid.rows;
     int columns = grid.columns;
     bool const rows_changed = ImGui::InputInt("Rows", &rows);
@@ -25,7 +197,7 @@ void editGridDimensions(Grid& grid) {
     }
 }
 
-bool editControlCellType(Grid& grid, size_t index, char const* label) {
+bool editControlCellType(GridWindow& grid, size_t index, char const* label) {
     auto const type = grid.cells[index].type;
     auto kind = std::ranges::find(CONTROL_CELL_KINDS, type, &ControlCellKind::type);
     bool changed = false;
@@ -108,7 +280,7 @@ void showGridActionEditor(GridActionScript& script) {
 
 } // namespace
 
-void DbgGui::editGridSettings(Grid& grid) {
+void DbgGui::editGridSettings(GridWindow& grid) {
     editGridDimensions(grid);
     ImGui::SliderFloat("Text to value ratio", &grid.text_to_value_ratio,
                        0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
@@ -523,7 +695,7 @@ bool DbgGui::renderControlCell(ControlCell& widget, float text_to_value_ratio, b
     return false;
 }
 
-void DbgGui::renderGrid(Grid& grid) {
+void DbgGui::renderGrid(GridWindow& grid) {
     bool navigation_handled = false;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
     if (ImGui::BeginTable("control_grid", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
@@ -578,7 +750,7 @@ void DbgGui::showGridWindows() {
         }
         if (ImGui::BeginPopup("grid_window_settings")) {
             ImGui::InputText("Name", &window.name);
-            editGridSettings(window.grid);
+            editGridSettings(window);
             ImGui::Separator();
             if (ImGui::MenuItem("Duplicate window")) {
                 duplicate = window.duplicate(hashWithTime(window.name));
@@ -589,7 +761,7 @@ void DbgGui::showGridWindows() {
             ImGui::EndPopup();
         }
         if (window.focus.focused && window.open) {
-            renderGrid(window.grid);
+            renderGrid(window);
         }
         ImGui::End();
     }

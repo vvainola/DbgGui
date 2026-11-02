@@ -1187,7 +1187,7 @@ void DbgGui::moveScalarToGroup(Scalar* scalar, SignalGroup<Scalar>& source, Sign
 
     plot_settings::remapScalarId(m_settings, old_id, old_group, *scalar);
     for (auto& window : m_grid_windows) {
-        window.grid.remapScalarId(old_id, new_id);
+        window.remapScalarId(old_id, new_id);
     }
     for (auto& window : m_custom_windows) {
         window.sortSignals();
