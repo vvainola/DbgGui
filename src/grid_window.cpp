@@ -231,7 +231,9 @@ char const* renderGridScalarLabel(Scalar const* scalar, bool bound, float font_s
     char const* label = scalar ? scalar->alias_and_group.c_str()
                      : bound ? "Unavailable scalar" : "Drop a scalar here";
     pushGridFontToFit(label, font_size, ImGui::GetContentRegionAvail().x, MIN_FONT_SIZE);
-    if (scalar && scalar->customScaleOrOffset()) {
+    if (!scalar) {
+        ImGui::TextDisabled("%s", label);
+    } else if (scalar->customScaleOrOffset()) {
         ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", label);
     } else {
         ImGui::TextUnformatted(label);
