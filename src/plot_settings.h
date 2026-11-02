@@ -286,13 +286,6 @@ inline void remapScalarId(nlohmann::json& settings,
     for (auto& plot : settings["scalar_plots"]) {
         remap_plot(plot);
     }
-    for (auto& panel : settings["panels"]) {
-        for (auto& widget : panel["widgets"]) {
-            if (widget.contains("plot")) {
-                remap_plot(widget["plot"]);
-            }
-        }
-    }
     for (auto& window : settings["custom_windows"]) {
         remap_signals(window, old_custom_key, scalar.group + " " + scalar.name);
     }

@@ -4,7 +4,7 @@
 
 // The caller supplies the current scalar value each frame. ImGui owns the
 // pending text buffer; only dragging or pressing Enter may write it back.
-inline bool panelSliderDouble(char const* label, double* value, double minimum, double maximum) {
+inline bool gridSliderDouble(char const* label, double* value, double minimum, double maximum) {
     ImGuiID const id = ImGui::GetID(label);
     bool const was_typing = ImGui::TempInputIsActive(id);
     bool const changed = ImGui::SliderScalar(label, ImGuiDataType_Double, value, &minimum, &maximum,

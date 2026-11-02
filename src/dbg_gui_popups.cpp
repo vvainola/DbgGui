@@ -71,24 +71,6 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             };
             ImGui::EndPopup();
         }
-    } else if (modal_name == str::ADD_PANEL) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::IsWindowAppearing()) {
-                ImGui::SetKeyboardFocusHere();
-            }
-            if (ImGui::InputText("Panel name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_panels.emplace_back(window_or_plot_name, hashWithTime(window_or_plot_name));
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            }
-            if (ImGui::Button("Import panel...")) {
-                if (importPanel()) {
-                    window_or_plot_name.clear();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            ImGui::EndPopup();
-        }
     } else if (modal_name == str::ADD_DOCKSPACE) {
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {

@@ -141,7 +141,7 @@ void DbgGui::showPlots() {
 }
 
 void DbgGui::renderPlotContents(PlotWindow& plot_window) {
-    // Share the previous frame's cursor time across standalone and panel plots.
+    // Share the previous frame's cursor time across plot windows.
     static int last_frame = -1;
     static double vertical_line_time = NAN;
     static double vertical_line_time_next = NAN;

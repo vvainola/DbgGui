@@ -1,7 +1,7 @@
 #include "dbg_gui_internal.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
-#include "panel_slider.h"
+#include "grid_slider.h"
 #include "lua_script_editor.h"
 
 #include <algorithm>
@@ -349,7 +349,7 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
     ImGui::BeginGroup();
     ImGui::BeginDisabled(!writable);
     ImGui::SetNextItemWidth(-1);
-    if (panelSliderDouble("##slider", &value, minimum, maximum) && writable) {
+    if (gridSliderDouble("##slider", &value, minimum, maximum) && writable) {
         scalar->setScaledValue(value);
     }
     ImGui::EndDisabled();

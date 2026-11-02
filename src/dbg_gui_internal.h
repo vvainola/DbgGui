@@ -26,7 +26,6 @@
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
-#include "panel_window.h"
 #include "grid_window.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
@@ -62,7 +61,6 @@ inline constexpr int32_t MAX_FONT_SIZE = 100;
 namespace str {
 inline constexpr const char* ADD_PLOT = "Add plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
-inline constexpr const char* ADD_PANEL = "Add panel";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
@@ -127,7 +125,6 @@ class DbgGui {
     void showSymbolsWindow();
     void showCustomWindow();
     void showScriptWindow();
-    void showPanels();
     void showGridWindows();
     void editGridSettings(Grid& grid);
     void renderGrid(Grid& grid);
@@ -140,11 +137,6 @@ class DbgGui {
     bool renderValueCell(GridValueCell& cell, float text_to_value_ratio, bool focus_value, std::function<void()> const& cell_menu = {});
     void renderSliderCell(GridSlider& slider, float text_to_value_ratio, std::function<void()> const& cell_menu = {});
     void renderLedCell(GridLedCell& cell, std::function<void()> const& cell_menu = {});
-    nlohmann::json panelSettings(PanelWindow& panel);
-    void copyPanelWidgets(PanelWindow& panel);
-    void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
-    void exportPanel(PanelWindow& panel);
-    bool importPanel();
     void addGridScalarDropTarget(std::optional<uint64_t>& scalar_id);
     void addGridScalarBinding(std::optional<uint64_t>& scalar_id, std::function<void()> const& cell_menu = {});
     void renderCheckboxCell(GridCheckbox& cell, std::function<void()> const& cell_menu = {});
@@ -162,7 +154,6 @@ class DbgGui {
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showPlots();
     void renderPlotContents(PlotWindow& plot_window);
-    void restorePanelPlotSettings(std::optional<uint64_t> registered_id = std::nullopt);
     void reconcilePlotSettings(PlotWindow& plot, nlohmann::json& saved);
     void renderScalarSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
@@ -259,7 +250,6 @@ class DbgGui {
 
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
-    std::vector<PanelWindow> m_panels;
     std::vector<GridWindow> m_grid_windows;
     struct {
         // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
@@ -267,7 +257,6 @@ class DbgGui {
         std::vector<std::weak_ptr<GridActionState>> actions;
         std::atomic<bool> scripts_requested = false;
     } m_grid_scripts;
-    nlohmann::json m_panel_widget_clipboard = nlohmann::json::array();
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_plot_windows;
