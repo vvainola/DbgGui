@@ -128,18 +128,18 @@ class DbgGui {
     void showGridWindows();
     void editGridSettings(GridWindow& grid);
     void renderGrid(GridWindow& grid);
-    bool renderControlCell(ControlCell& widget, float text_to_value_ratio, bool focus_value = false, std::function<void()> const& cell_menu = {});
+    bool renderControlCell(GridWindow& grid, size_t index, bool focus_value);
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();
     void processGridScripts(double timestamp);
-    void renderButtonCell(GridButtonCell& cell, std::function<void()> const& cell_menu = {});
-    bool renderValueCell(GridValueCell& cell, float text_to_value_ratio, bool focus_value, std::function<void()> const& cell_menu = {});
-    void renderSliderCell(GridSlider& slider, float text_to_value_ratio, std::function<void()> const& cell_menu = {});
-    void renderLedCell(GridLedCell& cell, std::function<void()> const& cell_menu = {});
+    void renderButtonCell(GridWindow& grid, size_t index);
+    bool renderValueCell(GridWindow& grid, size_t index, bool focus_value);
+    void renderSliderCell(GridWindow& grid, size_t index);
+    void renderLedCell(GridWindow& grid, size_t index);
     void addGridScalarDropTarget(std::optional<uint64_t>& scalar_id);
-    void addGridScalarBinding(std::optional<uint64_t>& scalar_id, std::function<void()> const& cell_menu = {});
-    void renderCheckboxCell(GridCheckbox& cell, std::function<void()> const& cell_menu = {});
+    void addGridScalarBinding(GridWindow& grid, size_t index, std::optional<uint64_t>& scalar_id);
+    void renderCheckboxCell(GridWindow& grid, size_t index);
 
     struct Message {
         std::string text;

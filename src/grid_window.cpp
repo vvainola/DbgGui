@@ -213,6 +213,13 @@ bool editControlCellType(GridWindow& grid, size_t index, char const* label) {
     return changed;
 }
 
+void showCellTypeMenu(GridWindow& grid, size_t index) {
+    if (editControlCellType(grid, index, "Type")) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::Separator();
+}
+
 float gridCellFontHeight(float cell_height) {
     auto const& style = ImGui::GetStyle();
     return std::max(1.0f, cell_height - 2 * style.FramePadding.y - 2 * style.ItemSpacing.y);
@@ -347,7 +354,8 @@ void DbgGui::processGridScripts(double timestamp) {
     }
 }
 
-void DbgGui::renderButtonCell(GridButtonCell& cell, std::function<void()> const& cell_menu) {
+void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
+    auto& cell = grid.cells[index].button;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
     bool const running = cell.action && cell.action->running.load();
     if (running) {
@@ -373,9 +381,7 @@ void DbgGui::renderButtonCell(GridButtonCell& cell, std::function<void()> const&
 
     bool const editor_open = ImGui::BeginPopupContextItem("button_settings");
     if (editor_open) {
-        if (cell_menu) {
-            cell_menu();
-        }
+        showCellTypeMenu(grid, index);
         if (ImGui::IsWindowAppearing() && cell.syntax_error.empty()) {
             cell.draft = cell.script;
         }
@@ -391,7 +397,8 @@ void DbgGui::renderButtonCell(GridButtonCell& cell, std::function<void()> const&
     cell.editor_open = editor_open;
 }
 
-bool DbgGui::renderValueCell(GridValueCell& cell, float text_to_value_ratio, bool focus_value, std::function<void()> const& cell_menu) {
+bool DbgGui::renderValueCell(GridWindow& grid, size_t index, bool focus_value) {
+    auto& cell = grid.cells[index].value;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
     ImGui::BeginGroup();
     ImVec2 const start = ImGui::GetCursorScreenPos();
@@ -405,7 +412,7 @@ bool DbgGui::renderValueCell(GridValueCell& cell, float text_to_value_ratio, boo
     float const font_height = gridCellFontHeight(cell_height);
     float const cell_width = ImGui::GetContentRegionAvail().x;
     // Split the cell height between its label and value.
-    pushGridFontToFit(label, font_height * text_to_value_ratio, cell_width, MIN_FONT_SIZE);
+    pushGridFontToFit(label, font_height * grid.text_to_value_ratio, cell_width, MIN_FONT_SIZE);
     if (available && scalar->customScaleOrOffset()) {
         ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", label);
     } else {
@@ -420,7 +427,7 @@ bool DbgGui::renderValueCell(GridValueCell& cell, float text_to_value_ratio, boo
         ImGui::TextUnformatted(scalar->alias_and_group.c_str());
         ImGui::EndDragDropSource();
     }
-    float const value_font_size = std::max(float(MIN_FONT_SIZE), font_height * (1.0f - text_to_value_ratio));
+    float const value_font_size = std::max(float(MIN_FONT_SIZE), font_height * (1.0f - grid.text_to_value_ratio));
     bool input_focused = false;
     if (available) {
         std::string const value = numberAsStr(scalar->getScaledValue());
@@ -442,7 +449,7 @@ bool DbgGui::renderValueCell(GridValueCell& cell, float text_to_value_ratio, boo
     if (ImGui::IsItemHovered() && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete)) {
         cell.scalar_id.reset();
     }
-    addGridScalarBinding(cell.scalar_id, cell_menu);
+    addGridScalarBinding(grid, index, cell.scalar_id);
     return input_focused;
 }
 
@@ -465,14 +472,12 @@ void DbgGui::addGridScalarDropTarget(std::optional<uint64_t>& scalar_id) {
     }
 }
 
-void DbgGui::addGridScalarBinding(std::optional<uint64_t>& scalar_id, std::function<void()> const& cell_menu) {
+void DbgGui::addGridScalarBinding(GridWindow& grid, size_t index, std::optional<uint64_t>& scalar_id) {
     Scalar* scalar = scalar_id ? findScalar(m_scalars, *scalar_id) : nullptr;
     bool const available = scalar && !scalar->deleted;
     addGridScalarDropTarget(scalar_id);
     if (ImGui::BeginPopupContextItem("value_settings")) {
-        if (cell_menu) {
-            cell_menu();
-        }
+        showCellTypeMenu(grid, index);
         if (available) {
             if (scalarContextMenuContents(scalar)) {
                 scalar_id.reset();
@@ -484,7 +489,8 @@ void DbgGui::addGridScalarBinding(std::optional<uint64_t>& scalar_id, std::funct
     }
 }
 
-void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std::function<void()> const& cell_menu) {
+void DbgGui::renderSliderCell(GridWindow& grid, size_t index) {
+    auto& slider = grid.cells[index].slider;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
     ImVec2 const start = ImGui::GetCursorScreenPos();
     Scalar* scalar = slider.scalar_id ? findScalar(m_scalars, *slider.scalar_id) : nullptr;
@@ -496,7 +502,7 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
                           scalar->alias_and_group.c_str() :
                         slider.scalar_id ? "Unavailable scalar" :
                                            "Drop a scalar here";
-    pushGridFontToFit(label, font_height * text_to_value_ratio, cell_width, MIN_FONT_SIZE);
+    pushGridFontToFit(label, font_height * grid.text_to_value_ratio, cell_width, MIN_FONT_SIZE);
     ImGui::TextUnformatted(label);
     ImGui::PopFont();
     if (ImGui::IsItemHovered()) {
@@ -507,7 +513,7 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
         ImGui::TextUnformatted(scalar->alias_and_group.c_str());
         ImGui::EndDragDropSource();
     }
-    addGridScalarBinding(slider.scalar_id, cell_menu);
+    addGridScalarBinding(grid, index, slider.scalar_id);
     bool const valid_range = std::isfinite(slider.minimum) && std::isfinite(slider.maximum)
                           && slider.minimum < slider.maximum
                           && slider.minimum >= -std::numeric_limits<double>::max() / 2
@@ -517,7 +523,7 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
     double value = available ? scalar->getScaledValue() : minimum;
     bool const writable = available && !scalar->read_only && scalar->getScale() != 0 && valid_range;
     float const input_width = std::max(1.0f, cell_width - 2 * style.FramePadding.x);
-    pushGridFontToFit(numberAsStr(value).c_str(), font_height * (1.0f - text_to_value_ratio), input_width, MIN_FONT_SIZE);
+    pushGridFontToFit(numberAsStr(value).c_str(), font_height * (1.0f - grid.text_to_value_ratio), input_width, MIN_FONT_SIZE);
     ImGui::BeginGroup();
     ImGui::BeginDisabled(!writable);
     ImGui::SetNextItemWidth(-1);
@@ -532,9 +538,7 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
     }
     addGridScalarDropTarget(slider.scalar_id);
     if (ImGui::BeginPopupContextItem("slider_settings")) {
-        if (cell_menu) {
-            cell_menu();
-        }
+        showCellTypeMenu(grid, index);
         if (available && scalarContextMenuContents(scalar)) {
             slider.scalar_id.reset();
         }
@@ -556,7 +560,8 @@ void DbgGui::renderSliderCell(GridSlider& slider, float text_to_value_ratio, std
     ImGui::Dummy({ImGui::GetContentRegionAvail().x, std::max(0.0f, remaining)});
 }
 
-void DbgGui::renderCheckboxCell(GridCheckbox& cell, std::function<void()> const& cell_menu) {
+void DbgGui::renderCheckboxCell(GridWindow& grid, size_t index) {
+    auto& cell = grid.cells[index].checkbox;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
     bool const checked = cell.checked;
     if (checked) {
@@ -587,9 +592,7 @@ void DbgGui::renderCheckboxCell(GridCheckbox& cell, std::function<void()> const&
 
     bool const editor_open = ImGui::BeginPopupContextItem("checkbox_settings");
     if (editor_open) {
-        if (cell_menu) {
-            cell_menu();
-        }
+        showCellTypeMenu(grid, index);
         if (ImGui::IsWindowAppearing()) {
             for (auto* script : {&cell.on_enable, &cell.on_disable}) {
                 if (script->syntax_error.empty()) {
@@ -623,7 +626,8 @@ void DbgGui::renderCheckboxCell(GridCheckbox& cell, std::function<void()> const&
     cell.editor_open = editor_open;
 }
 
-void DbgGui::renderLedCell(GridLedCell& cell, std::function<void()> const& cell_menu) {
+void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
+    auto& cell = grid.cells[index].led;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
     if (!cell.state) {
         cell.configure(createLuaScriptHost());
@@ -654,9 +658,7 @@ void DbgGui::renderLedCell(GridLedCell& cell, std::function<void()> const& cell_
     bool apply = false;
     bool const editor_open = ImGui::BeginPopupContextItem("led_settings");
     if (editor_open) {
-        if (cell_menu) {
-            cell_menu();
-        }
+        showCellTypeMenu(grid, index);
         if (ImGui::IsWindowAppearing()) {
             cell.draft = cell.condition;
         }
@@ -683,13 +685,13 @@ void DbgGui::renderLedCell(GridLedCell& cell, std::function<void()> const& cell_
     cell.editor_open = editor_open;
 }
 
-bool DbgGui::renderControlCell(ControlCell& widget, float text_to_value_ratio, bool focus_value, std::function<void()> const& cell_menu) {
-    switch (widget.type) {
-        case ControlCellType::Button: renderButtonCell(widget.button, cell_menu); break;
-        case ControlCellType::Value: return renderValueCell(widget.value, text_to_value_ratio, focus_value, cell_menu);
-        case ControlCellType::Checkbox: renderCheckboxCell(widget.checkbox, cell_menu); break;
-        case ControlCellType::Slider: renderSliderCell(widget.slider, text_to_value_ratio, cell_menu); break;
-        case ControlCellType::Led: renderLedCell(widget.led, cell_menu); break;
+bool DbgGui::renderControlCell(GridWindow& grid, size_t index, bool focus_value) {
+    switch (grid.cells[index].type) {
+        case ControlCellType::Button: renderButtonCell(grid, index); break;
+        case ControlCellType::Value: return renderValueCell(grid, index, focus_value);
+        case ControlCellType::Checkbox: renderCheckboxCell(grid, index); break;
+        case ControlCellType::Slider: renderSliderCell(grid, index); break;
+        case ControlCellType::Led: renderLedCell(grid, index); break;
         default: break;
     }
     return false;
@@ -708,12 +710,7 @@ void DbgGui::renderGrid(GridWindow& grid) {
                 if (focus) {
                     grid.focus_cell.reset();
                 }
-                bool const focused = renderControlCell(grid.cells[index], grid.text_to_value_ratio, focus, [&] {
-                    if (editControlCellType(grid, index, "Type")) {
-                        ImGui::CloseCurrentPopup();
-                    }
-                    ImGui::Separator();
-                });
+                bool const focused = renderControlCell(grid, index, focus);
                 if (focused && !navigation_handled) {
                     int const row_delta = ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? -1 : 0;
                     int const column_delta = ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -1 : 0;
