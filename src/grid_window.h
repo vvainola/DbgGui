@@ -128,9 +128,6 @@ struct GridCheckbox {
 struct GridValueCell {
     // Keep the ID even when the scalar is unavailable so it can resolve later.
     std::optional<uint64_t> scalar_id;
-};
-
-struct GridSlider : GridValueCell {
     double minimum = 0;
     double maximum = 1;
 };
@@ -151,12 +148,10 @@ struct GridLedCell {
 struct GridCell {
     static GridCell fromJson(nlohmann::json const& data);
     void updateJson(nlohmann::json& data) const;
-    void remapScalarId(uint64_t old_id, uint64_t new_id);
     GridCellType type = GridCellType::Value;
     GridButtonCell button;
     GridCheckbox checkbox;
     GridValueCell value;
-    GridSlider slider;
     GridLedCell led;
 };
 

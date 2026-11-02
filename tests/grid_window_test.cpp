@@ -247,9 +247,9 @@ TEST_CASE("Mixed grids preserve each cell's type and applied configuration") {
     cells[2].checkbox.label = "Enable";
     cells[2].checkbox.on_enable.script = "write('enabled', 1)";
     cells[2].checkbox.on_disable.script = "write('enabled', 0)";
-    cells[3].slider.scalar_id = 456;
-    cells[3].slider.minimum = -10;
-    cells[3].slider.maximum = 20;
+    cells[3].value.scalar_id = 456;
+    cells[3].value.minimum = -10;
+    cells[3].value.maximum = 20;
     cells[4].led.label = "Running";
     cells[4].led.condition = "return read('enabled') == 1";
     cells[4].led.color = {0.1f, 0.2f, 0.3f, 1};
@@ -338,7 +338,7 @@ TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") 
     window.setCellType(2, GridCellType::Value);
     window.setCellType(3, GridCellType::Slider);
     window.cells[2].value.scalar_id = 123;
-    window.cells[3].slider.scalar_id = 123;
+    window.cells[3].value.scalar_id = 123;
     window.resize(2, 3);
     REQUIRE(window.cells[3].type == GridCellType::Value);
     REQUIRE(window.cells[4].type == GridCellType::Slider);
@@ -348,8 +348,36 @@ TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") 
     window.updateJson(saved);
     GridWindow restored(saved);
     REQUIRE(restored.cells[3].value.scalar_id == 456);
-    REQUIRE(restored.cells[4].slider.scalar_id == 456);
+    REQUIRE(restored.cells[4].value.scalar_id == 456);
     REQUIRE(restored.id == 5);
+}
+
+TEST_CASE("Value and slider cells share bindings and preserve ranges when switching types") {
+    GridWindow window("Grid", 1);
+    auto& value = window.cells[0].value;
+    value.scalar_id = 42;
+    value.minimum = -10;
+    value.maximum = 20;
+    window.setCellType(0, GridCellType::Slider);
+    REQUIRE(window.cells[0].value.scalar_id == 42);
+    REQUIRE(window.cells[0].value.minimum == -10);
+    REQUIRE(window.cells[0].value.maximum == 20);
+
+    window.cells[0].value.scalar_id = 99;
+    window.setCellType(0, GridCellType::Value);
+    REQUIRE(window.cells[0].value.scalar_id == 99);
+    window.setCellType(0, GridCellType::Slider);
+    REQUIRE(window.cells[0].value.minimum == -10);
+    REQUIRE(window.cells[0].value.maximum == 20);
+
+    nlohmann::json saved;
+    window.updateJson(saved);
+    GridWindow restored(saved);
+    restored.setCellType(0, GridCellType::Value);
+    REQUIRE(restored.cells[0].value.scalar_id == 99);
+    restored.cells[0].value.scalar_id.reset();
+    restored.setCellType(0, GridCellType::Slider);
+    REQUIRE_FALSE(restored.cells[0].value.scalar_id);
 }
 
 TEST_CASE("Unsupported grid cell types restore as values and preserve scalar bindings") {
@@ -371,10 +399,10 @@ TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindi
         for (auto binding : {std::optional<uint64_t>{}, std::optional<uint64_t>{0}, std::optional<uint64_t>{123}}) {
             GridCell cell;
             cell.type = type;
-            auto& settings = type == GridCellType::Value ? cell.value : cell.slider;
+            auto& settings = cell.value;
             settings.scalar_id = binding;
-            cell.slider.minimum = -10;
-            cell.slider.maximum = 20;
+            cell.value.minimum = -10;
+            cell.value.maximum = 20;
             nlohmann::json saved;
             cell.updateJson(saved);
             REQUIRE_FALSE(saved.contains("cells"));
@@ -382,11 +410,11 @@ TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindi
             REQUIRE_FALSE(saved.contains("columns"));
             REQUIRE(saved.contains("scalar_id") == binding.has_value());
             auto restored = GridCell::fromJson(saved);
-            auto const& restored_settings = type == GridCellType::Value ? restored.value : restored.slider;
+            auto const& restored_settings = restored.value;
             REQUIRE(restored_settings.scalar_id == binding);
             if (type == GridCellType::Slider) {
-                REQUIRE(restored.slider.minimum == -10);
-                REQUIRE(restored.slider.maximum == 20);
+                REQUIRE(restored.value.minimum == -10);
+                REQUIRE(restored.value.maximum == 20);
             }
         }
     }

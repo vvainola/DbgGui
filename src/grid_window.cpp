@@ -27,12 +27,11 @@ GridCell GridCell::fromJson(nlohmann::json const& data) {
             break;
         case GridCellType::Value:
         case GridCellType::Slider: {
-            auto& value = cell.type == GridCellType::Value ? cell.value : cell.slider;
             if (data.contains("scalar_id") && !data["scalar_id"].is_null()) {
-                value.scalar_id = data["scalar_id"].get<uint64_t>();
+                cell.value.scalar_id = data["scalar_id"].get<uint64_t>();
             }
-            cell.slider.minimum = data.value("minimum", 0.0);
-            cell.slider.maximum = data.value("maximum", 1.0);
+            cell.value.minimum = data.value("minimum", 0.0);
+            cell.value.maximum = data.value("maximum", 1.0);
             break;
         }
         case GridCellType::LED: {
@@ -62,13 +61,12 @@ void GridCell::updateJson(nlohmann::json& data) const {
             break;
         case GridCellType::Value:
         case GridCellType::Slider: {
-            auto const& settings = type == GridCellType::Value ? value : slider;
-            if (settings.scalar_id) {
-                data["scalar_id"] = *settings.scalar_id;
+            if (value.scalar_id) {
+                data["scalar_id"] = *value.scalar_id;
             }
             if (type == GridCellType::Slider) {
-                data["minimum"] = slider.minimum;
-                data["maximum"] = slider.maximum;
+                data["minimum"] = value.minimum;
+                data["maximum"] = value.maximum;
             }
             break;
         }
@@ -77,14 +75,6 @@ void GridCell::updateJson(nlohmann::json& data) const {
             data["script"] = led.condition;
             data["color"] = {led.color.x, led.color.y, led.color.z, led.color.w};
             break;
-    }
-}
-
-void GridCell::remapScalarId(uint64_t old_id, uint64_t new_id) {
-    for (auto* binding : {&value.scalar_id, &slider.scalar_id}) {
-        if (*binding == old_id) {
-            *binding = new_id;
-        }
     }
 }
 
@@ -175,7 +165,9 @@ std::optional<size_t> GridWindow::valueCellInDirection(size_t from, int row_delt
 
 void GridWindow::remapScalarId(uint64_t old_id, uint64_t new_id) {
     for (auto& cell : cells) {
-        cell.remapScalarId(old_id, new_id);
+        if (cell.value.scalar_id == old_id) {
+            cell.value.scalar_id = new_id;
+        }
     }
 }
 
@@ -484,7 +476,7 @@ void DbgGui::addGridScalarBinding(GridWindow& grid, size_t index, std::optional<
 }
 
 void DbgGui::renderSliderCell(GridWindow& grid, size_t index) {
-    auto& slider = grid.cells[index].slider;
+    auto& slider = grid.cells[index].value;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y);
     ImVec2 const start = ImGui::GetCursorScreenPos();
     Scalar* scalar = slider.scalar_id ? findScalar(m_scalars, *slider.scalar_id) : nullptr;
