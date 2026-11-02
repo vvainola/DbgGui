@@ -166,7 +166,11 @@ TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved co
         }})}
     };
     settings["custom_windows"]["custom"] = {{"signals", {{"old x", 1}, {"pending", 99}}}};
-    settings["grid_windows"]["grid"] = {{"id", 1}, {"rows", 1}, {"signals", {1, 99, 0}}};
+    settings["grid_windows"] = nlohmann::json::array({{
+        {"id", 1}, {"grid", {{"rows", 1}, {"cells", nlohmann::json::array({
+            {{"scalar_id", 1}}, {{"scalar_id", 99}}, nlohmann::json::object()
+        })}}}
+    }});
     settings["scalars"]["x (old)"] = {{"alias", "Alias"}};
     settings["scalar_symbols"]["x (old)"] = {{"name", "x"}, {"group", "old"}};
 
@@ -182,9 +186,11 @@ TEST_CASE("Regrouping remaps saved scalar references and preserves unresolved co
     REQUIRE(subplot["spectrums"] == nlohmann::json::array({{2, 0}, {99, 2}}));
     REQUIRE(subplot["reference_frame"] == nlohmann::json::array({2, 99}));
     REQUIRE(settings["custom_windows"]["custom"]["signals"] == nlohmann::json({{"new x", 2}, {"pending", 99}}));
-    REQUIRE(settings["grid_windows"]["grid"]["signals"] == nlohmann::json::array({2, 99, 0}));
-    REQUIRE(settings["grid_windows"]["grid"]["id"] == 1);
-    REQUIRE(settings["grid_windows"]["grid"]["rows"] == 1);
+    REQUIRE(settings["grid_windows"][0]["grid"]["cells"][0]["scalar_id"] == 2);
+    REQUIRE(settings["grid_windows"][0]["grid"]["cells"][1]["scalar_id"] == 99);
+    REQUIRE_FALSE(settings["grid_windows"][0]["grid"]["cells"][2].contains("scalar_id"));
+    REQUIRE(settings["grid_windows"][0]["id"] == 1);
+    REQUIRE(settings["grid_windows"][0]["grid"]["rows"] == 1);
     REQUIRE_FALSE(settings["scalars"].contains("x (old)"));
     REQUIRE(settings["scalars"]["x (new)"]["id"] == 2);
     REQUIRE(settings["scalars"]["x (new)"]["alias"] == "Alias");

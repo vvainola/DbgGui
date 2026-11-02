@@ -22,6 +22,7 @@
 
 #include "settings_migration.h"
 #include "data_structures.h"
+#include "control_grid.h"
 
 #include <map>
 #include <stdexcept>
@@ -243,6 +244,47 @@ void normalizeSignals(nlohmann::json& owner) {
     owner["signals"] = std::move(signals);
 }
 
+namespace {
+bool migrateGridWindows(nlohmann::json& settings) {
+    auto const windows = settings.find("grid_windows");
+    if (windows == settings.end() || !std::ranges::any_of(*windows, [](auto const& window) { return window.contains("signals"); })) {
+        return false;
+    }
+    auto migrated = nlohmann::json::array();
+    for (auto window : *windows) {
+        auto const id = window.at("id").get<uint64_t>();
+        if (std::ranges::any_of(migrated, [id](auto const& saved) { return saved.at("id").template get<uint64_t>() == id; })) {
+            throw std::runtime_error("Cannot migrate duplicate grid window ID " + std::to_string(id));
+        }
+        if (window.contains("signals")) {
+            int const rows = std::clamp(window.value("rows", 1), 1, 20);
+            int const columns = std::clamp(window.value("columns", 1), 1, 10);
+            auto const signals = window.value("signals", nlohmann::json::array());
+            auto cells = nlohmann::json::array();
+            for (int row = 0; row < rows; ++row) {
+                for (int column = 0; column < columns; ++column) {
+                    nlohmann::json cell = {{"type", ControlCellType::Value}};
+                    // The old array always used ten columns, including hidden cells.
+                    size_t const index = row * 10 + column;
+                    if (index < signals.size() && signals[index] != 0) {
+                        cell["scalar_id"] = signals[index];
+                    }
+                    cells.push_back(std::move(cell));
+                }
+            }
+            window["grid"] = {{"rows", rows}, {"columns", columns}, {"cells", std::move(cells)},
+                              {"text_to_value_ratio", window.value("text_to_value_ratio", 0.3f)}};
+            for (auto key : {"rows", "columns", "signals", "text_to_value_ratio"}) {
+                window.erase(key);
+            }
+        }
+        migrated.push_back(std::move(window));
+    }
+    settings["grid_windows"] = std::move(migrated);
+    return true;
+}
+} // namespace
+
 // Migrate JSON before registering signals or constructing windows. No live
 // Vector2D objects or symbol lookup are needed, so absent symbols stay restorable.
 bool migrate(nlohmann::json& settings) {
@@ -251,7 +293,7 @@ bool migrate(nlohmann::json& settings) {
         throw std::runtime_error("Unsupported settings format version " + std::to_string(version));
     }
     if (version == FORMAT_VERSION) {
-        return false;
+        return migrateGridWindows(settings);
     }
 
     // Old vector IDs were hashes of either the X name or "X+Y" and the group.
@@ -363,6 +405,7 @@ bool migrate(nlohmann::json& settings) {
     for (auto key : {"vector_plots", "vector_symbols", "spec_plots"}) {
         settings.erase(key);
     }
+    migrateGridWindows(settings);
     settings["format_version"] = FORMAT_VERSION;
     return true;
 }

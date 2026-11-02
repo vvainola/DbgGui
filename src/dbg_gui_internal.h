@@ -27,6 +27,7 @@
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
 #include "panel_window.h"
+#include "grid_window.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include "nlohmann/json.hpp"
@@ -126,24 +127,32 @@ class DbgGui {
     void showSymbolsWindow();
     void showCustomWindow();
     void showScriptWindow();
-    void showGridWindow();
     void showPanels();
-    // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
-    // to coordinate signal access with sampling and GUI changes to registered scalars.
-    LuaScriptHost createLuaScriptHost();
-    void processGridScripts(double timestamp);
+    void showGridWindows();
+    void editGridSettings(Grid& grid);
+    void renderGrid(Grid& grid);
     void renderButtonGrid(PanelWidget& widget, PanelWindow& panel);
     void renderValueGrid(PanelWidget& widget);
     void renderSliderGrid(PanelWidget& widget);
     void renderLedGrid(PanelWidget& widget);
+    void renderCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
+    bool renderControlCell(ControlCell& widget, float text_to_value_ratio, bool focus_value = false, std::function<void()> const& cell_menu = {});
+    // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
+    // to coordinate signal access with sampling and GUI changes to registered scalars.
+    LuaScriptHost createLuaScriptHost();
+    void processGridScripts(double timestamp);
+    void renderButtonCell(GridButtonCell& cell, std::function<void()> const& cell_menu = {});
+    bool renderValueCell(GridValueCell& cell, float text_to_value_ratio, bool focus_value, std::function<void()> const& cell_menu = {});
+    void renderSliderCell(GridSlider& slider, float text_to_value_ratio, std::function<void()> const& cell_menu = {});
+    void renderLedCell(GridLedCell& cell, std::function<void()> const& cell_menu = {});
     nlohmann::json panelSettings(PanelWindow& panel);
     void copyPanelWidgets(PanelWindow& panel);
     void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
     void exportPanel(PanelWindow& panel);
     bool importPanel();
-    void addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id);
-    void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
-    void renderCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
+    void addGridScalarDropTarget(std::optional<uint64_t>& scalar_id);
+    void addGridScalarBinding(std::optional<uint64_t>& scalar_id, std::function<void()> const& cell_menu = {});
+    void renderCheckboxCell(GridCheckbox& cell, std::function<void()> const& cell_menu = {});
 
     struct Message {
         std::string text;
@@ -174,7 +183,7 @@ class DbgGui {
                                bool logarithmic_y_axis);
     void showCustomSignalCreator();
     void loadPreviousSessionSettings();
-    void updateSavedSettings();
+    void updateSavedSettings(bool force = false);
     void saveSettings();
     void loadSettings();
     void setInitialFocus();
@@ -213,7 +222,6 @@ class DbgGui {
                                   bool filter_to_search_path);
     void showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name);
     void addPopupModal(std::string const& modal_name);
-    void addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col);
     void saveSnapshot();
     void loadSnapshot();
 
@@ -256,8 +264,8 @@ class DbgGui {
 
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
-    std::vector<GridWindow> m_grid_windows;
     std::vector<PanelWindow> m_panels;
+    std::vector<GridWindow> m_grid_windows;
     struct {
         // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
         std::vector<std::weak_ptr<GridLedState>> led_scripts;

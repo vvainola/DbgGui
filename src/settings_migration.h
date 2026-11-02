@@ -28,7 +28,7 @@
 namespace settings_migration {
 inline constexpr int FORMAT_VERSION = 1;
 
-// Convert unversioned/version 0 settings in place. Return whether they changed.
+// Upgrade older saved representations in place. Return whether they changed.
 // Throws for unsupported versions or conflicting window IDs.
 bool migrate(nlohmann::json& settings);
 

@@ -198,3 +198,64 @@ TEST_CASE("Malformed vector entries do not prevent valid settings from migrating
     REQUIRE(settings["scalar_plots"]["2"]["subplots"][0]["signals"]["pending"] == 99);
     REQUIRE(settings["scalar_symbols"].size() == 2);
 }
+
+TEST_CASE("Original Grid windows upgrade with stable IDs and dock layout") {
+    std::vector<uint64_t> signals(200, 0);
+    signals[0] = 11;
+    signals[1] = 12;
+    signals[10] = 21;
+    signals[11] = 22;
+    signals[2] = 999; // Hidden column: it must not become the next visible row.
+    std::string const layout = "[Window][Values###42]\nPos=20,30\nSize=400,200\nDockId=0x1234,1\n";
+    nlohmann::json original = {
+        {"format_version", 1}, {"layout", layout},
+        {"grid_windows", {{"42", {{"id", 42}, {"name", "Values"}, {"initial_focus", true},
+            {"rows", 2}, {"columns", 2}, {"text_to_value_ratio", 0.45f}, {"signals", signals}}}}}
+    };
+    SECTION("Current format") {}
+    SECTION("Unversioned settings") { original.erase("format_version"); }
+    auto settings = original;
+    REQUIRE(settings_migration::migrate(settings));
+    REQUIRE(settings["grid_windows"].is_array());
+    REQUIRE(settings["layout"] == layout);
+    REQUIRE(settings["grid_windows"].size() == 1);
+    auto const& window = settings["grid_windows"][0];
+    REQUIRE(window["id"] == 42);
+    REQUIRE(window["name"] == "Values");
+    REQUIRE(window["initial_focus"] == true);
+    REQUIRE(window["grid"]["rows"] == 2);
+    REQUIRE(window["grid"]["columns"] == 2);
+    REQUIRE(window["grid"]["text_to_value_ratio"] == 0.45f);
+    REQUIRE(window["grid"]["cells"].size() == 4);
+    REQUIRE(window["grid"]["cells"][0]["scalar_id"] == 11);
+    REQUIRE(window["grid"]["cells"][1]["scalar_id"] == 12);
+    REQUIRE(window["grid"]["cells"][2]["scalar_id"] == 21);
+    REQUIRE(window["grid"]["cells"][3]["scalar_id"] == 22);
+    auto const migrated = settings;
+    REQUIRE_FALSE(settings_migration::migrate(settings));
+    REQUIRE(settings == migrated);
+}
+
+TEST_CASE("Grid window migration keeps empty cells unbound and rejects conflicting IDs") {
+    nlohmann::json settings = {{"format_version", 1}, {"grid_windows", {{"1", {
+        {"id", 1}, {"name", "Empty"}, {"rows", 1}, {"columns", 2}, {"signals", {0, 99}}
+    }}}}};
+    SECTION("Empty and unresolved bindings") {
+        REQUIRE(settings_migration::migrate(settings));
+        REQUIRE_FALSE(settings["grid_windows"][0]["grid"]["cells"][0].contains("scalar_id"));
+        REQUIRE(settings["grid_windows"][0]["grid"]["cells"][1]["scalar_id"] == 99);
+    }
+    SECTION("Conflicting IDs") {
+        settings["grid_windows"]["duplicate"] = settings["grid_windows"]["1"];
+        auto const before = settings;
+        REQUIRE_THROWS(settings_migration::migrate(settings));
+        REQUIRE(settings == before);
+    }
+}
+
+TEST_CASE("Grid window creation keeps its committed hotkey ID") {
+    nlohmann::json settings = {{"format_version", 1}, {"hotkeys", {{"add-grid-window", 123}}}};
+    auto const before = settings;
+    REQUIRE_FALSE(settings_migration::migrate(settings));
+    REQUIRE(settings == before);
+}

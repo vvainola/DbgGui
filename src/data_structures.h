@@ -572,63 +572,6 @@ struct CustomWindow : Window {
     }
 };
 
-struct GridWindow : Window {
-    GridWindow(std::string const& name, uint64_t id)
-        : Window(name, id) {
-    }
-    GridWindow(nlohmann::json const& j)
-        : Window(j) {
-        rows = j.value("rows", rows);
-        columns = j.value("columns", columns);
-        text_to_value_ratio = std::clamp(j.value("text_to_value_ratio", text_to_value_ratio), 0.05f, 0.95f);
-    }
-    void updateJson(nlohmann::json& j) const {
-        Window::updateJson(j);
-        j["rows"] = rows;
-        j["columns"] = columns;
-        j["text_to_value_ratio"] = text_to_value_ratio;
-    }
-
-    inline static const int MAX_ROWS = 20;
-    inline static const int MAX_COLUMNS = 10;
-    std::array<std::array<uint64_t, MAX_COLUMNS>, MAX_ROWS> scalars = {};
-    int rows = 1;
-    int columns = 1;
-    float text_to_value_ratio = 0.3f;
-
-    using Cell = std::pair<int, int>;
-
-    void focusCell(Cell cell) {
-        m_focus_cell = cell;
-    }
-
-    bool isCellFocused(Cell cell) {
-        if (m_focus_cell) {
-            bool is_focused = m_focus_cell->first == cell.first && m_focus_cell->second == cell.second;
-            if (is_focused) {
-                m_focus_cell = std::nullopt;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void contextMenu() {
-        rows = std::clamp(rows, 1, MAX_ROWS);
-        columns = std::clamp(columns, 1, MAX_COLUMNS);
-        if (ImGui::BeginPopupContextItem((title() + "_context_menu").c_str())) {
-            ImGui::InputText("Name##window_context_menu", &name);
-            ImGui::InputInt("Rows", &rows, 0, 0);
-            ImGui::InputInt("Columms", &columns, 0, 0);
-            ImGui::SliderFloat("Text to value ratio", &text_to_value_ratio, 0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::EndPopup();
-        }
-    }
-
-  private:
-    std::optional<Cell> m_focus_cell = std::nullopt;
-};
-
 struct DockSpace : Window {
     DockSpace(std::string const& name, uint64_t id)
         : Window(name, id) {

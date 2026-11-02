@@ -289,7 +289,7 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"add-custom-window", "Add custom window", "Open the add-custom-window dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4, [&] { ImGui::OpenPopup(str::ADD_CUSTOM_WINDOW); }},
       {"add-dockspace", "Add dockspace", "Open the add-dockspace dialog.", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_6, [&] { ImGui::OpenPopup(str::ADD_DOCKSPACE); }},
       {"add-panel", "Add panel", "Open the add-panel dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_PANEL); }},
-      {"add-grid-window", "Add grid window", "Open the add-grid-window dialog.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
+      {"add-grid-window", "Add grid window", "Create a dockable grid with mixed control types.", ImGuiKey_None, [&] { ImGui::OpenPopup(str::ADD_GRID_WINDOW); }},
       {"copy-visible-samples", "Copy visible samples to clipboard", "Copy visible scalar samples for import into CsvPlotter.", ImGuiMod_Ctrl | ImGuiKey_T, [&] { copyAllScalarSamplesToClipboard(); }},
       {"save-plots-csv", "Save all plots as CSV", "Export visible scalar samples from all plots to a CSV file.", ImGuiKey_None, save_all_plots_as_csv},
       {"reset-plot-colors", "Reset plot colors", "Reassign colors for all plot items from the current colormap.", ImGuiKey_None, [&] { ImPlot::BustColorCache(); }},
@@ -322,6 +322,7 @@ void DbgGui::saveSettings() {
 
     std::string out_path = getFilenameToSave("json", std::format("{}/.dbg_gui/", env));
     if (!out_path.empty()) {
+        updateSavedSettings(true);
         std::ofstream(out_path) << std::setw(4) << m_settings;
     }
 }
@@ -406,8 +407,8 @@ void DbgGui::updateLoop() {
         addPopupModal(str::ADD_PLOT);
         addPopupModal(str::ADD_CUSTOM_WINDOW);
         addPopupModal(str::ADD_DOCKSPACE);
-        addPopupModal(str::ADD_GRID_WINDOW);
         addPopupModal(str::ADD_PANEL);
+        addPopupModal(str::ADD_GRID_WINDOW);
         addPopupModal(str::PAUSE_AFTER);
         addPopupModal(str::PAUSE_AT);
 
@@ -425,8 +426,8 @@ void DbgGui::updateLoop() {
         showCustomWindow();
         showSymbolsWindow();
         showScriptWindow();
-        showGridWindow();
         showPanels();
+        showGridWindows();
         showPlots();
         showCustomSignalCreator();
         setInitialFocus();
@@ -721,12 +722,8 @@ void DbgGui::loadPreviousSessionSettings() {
         restorePanelPlotSettings();
 
         m_grid_windows.clear();
-        for (auto grid_window_data : m_settings["grid_windows"]) {
-            GridWindow& grid_window = m_grid_windows.emplace_back(grid_window_data);
-            std::vector<uint64_t> signal_ids = grid_window_data["signals"];
-            for (int i = 0; i < std::min((int)signal_ids.size(), GridWindow::MAX_ROWS * GridWindow::MAX_COLUMNS); ++i) {
-                grid_window.scalars[i / GridWindow::MAX_COLUMNS][i % GridWindow::MAX_COLUMNS] = signal_ids[i];
-            }
+        for (auto const& data : m_settings["grid_windows"]) {
+            m_grid_windows.emplace_back(data);
         }
 
         TRY(for (std::string hidden_symbol : m_settings["hidden_symbols"]) {
@@ -769,14 +766,14 @@ void DbgGui::restorePanelPlotSettings(std::optional<uint64_t> registered_id) {
     }
 }
 
-void DbgGui::updateSavedSettings() {
+void DbgGui::updateSavedSettings(bool force) {
     // Checking settings on every frame can be slow if there are a lot of signals. However,
     // adding a flag when to update them is noisy on the rest of the code so check with some
     // small interval that settings are fairly guaranteed to get updated if user changes
     // something but not too often to slow the GUI down.
     static auto last_check_time = std::chrono::system_clock::now();
     auto now = std::chrono::system_clock::now();
-    if (now - last_check_time < std::chrono::milliseconds(SETTINGS_CHECK_INTERVAL_MS)) {
+    if (!force && now - last_check_time < std::chrono::milliseconds(SETTINGS_CHECK_INTERVAL_MS)) {
         return;
     }
     last_check_time = now;
@@ -922,25 +919,15 @@ void DbgGui::updateSavedSettings() {
         saved_panels.push_back(panelSettings(panel));
     }
     m_settings["panels"] = std::move(saved_panels);
-
-    for (GridWindow& grid_window : m_grid_windows) {
-        if (!grid_window.open) {
-            m_settings["grid_windows"].erase(std::to_string(grid_window.id));
-            continue;
+    auto saved_grids = nlohmann::json::array();
+    for (auto const& window : m_grid_windows) {
+        if (window.open) {
+            nlohmann::json data;
+            window.updateJson(data);
+            saved_grids.push_back(std::move(data));
         }
-        if (grid_window.id == 0) {
-            grid_window.id = hashWithTime(grid_window.name);
-        }
-        nlohmann::json& j = m_settings["grid_windows"][std::to_string(grid_window.id)];
-        grid_window.updateJson(j);
-        std::vector<uint64_t> signal_ids;
-        for (int row = 0; row < GridWindow::MAX_ROWS; ++row) {
-            for (int col = 0; col < GridWindow::MAX_COLUMNS; ++col) {
-                signal_ids.push_back(grid_window.scalars[row][col]);
-            }
-        }
-        j["signals"] = signal_ids;
     }
+    m_settings["grid_windows"] = std::move(saved_grids);
 
     // Remove deleted scalars from scalar groups
     for (auto& scalar_group : m_scalar_groups) {
@@ -1061,6 +1048,13 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
+    for (auto& window : m_grid_windows) {
+        ImGui::Begin(window.title().c_str());
+        if (window.focus.initial_focus) {
+            ImGui::SetWindowFocus(window.title().c_str());
+        }
+        ImGui::End();
+    }
     for (PanelWindow& panel : m_panels) {
         ImGui::Begin(panel.title().c_str());
         if (panel.focus.initial_focus) {
@@ -1068,13 +1062,7 @@ void DbgGui::setInitialFocus() {
         }
         ImGui::End();
     }
-    for (GridWindow& grid_window : m_grid_windows) {
-        ImGui::Begin(grid_window.title().c_str());
-        if (grid_window.focus.initial_focus) {
-            ImGui::SetWindowFocus(grid_window.title().c_str());
-        }
-        ImGui::End();
-    }
+
 }
 
 Scalar* DbgGui::addScalarSymbol(VariantSymbol* sym, std::string const& group) {
@@ -1255,18 +1243,13 @@ void DbgGui::moveScalarToGroup(Scalar* scalar, SignalGroup<Scalar>& source, Sign
             }
         }
     }
+    for (auto& window : m_grid_windows) {
+        window.grid.remapScalarId(old_id, new_id);
+    }
     for (auto& window : m_custom_windows) {
         window.sortSignals();
     }
-    for (auto& window : m_grid_windows) {
-        for (auto& row : window.scalars) {
-            for (auto& id : row) {
-                if (id == old_id) {
-                    id = new_id;
-                }
-            }
-        }
-    }
+
 }
 
 VectorPair DbgGui::addVector(ValueSource const& x, ValueSource const& y, std::string group, std::string const& name_x, std::string const& name_y, double scale, double offset) {

@@ -297,7 +297,11 @@ inline void remapScalarId(nlohmann::json& settings,
         remap_signals(window, old_custom_key, scalar.group + " " + scalar.name);
     }
     for (auto& window : settings["grid_windows"]) {
-        remap_ids(remap_ids, window["signals"]);
+        for (auto& cell : window["grid"]["cells"]) {
+            if (cell.contains("scalar_id")) {
+                remap_ids(remap_ids, cell["scalar_id"]);
+            }
+        }
     }
     for (auto key : {"scalars", "scalar_symbols"}) {
         auto& entries = settings[key];
