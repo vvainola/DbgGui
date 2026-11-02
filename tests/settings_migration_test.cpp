@@ -2,6 +2,7 @@
 
 #include "imgui/imgui.h"
 #include "settings_migration.h"
+#include "grid_window.h"
 #include "plot_settings.h"
 
 namespace {
@@ -206,6 +207,7 @@ TEST_CASE("Original Grid windows upgrade with stable IDs and dock layout") {
     signals[10] = 21;
     signals[11] = 22;
     signals[2] = 999; // Hidden column: it must not become the next visible row.
+    signals[199] = 9999; // Hidden row and column must also survive migration.
     std::string const layout = "[Window][Values###42]\nPos=20,30\nSize=400,200\nDockId=0x1234,1\n";
     nlohmann::json original = {
         {"format_version", 1}, {"layout", layout},
@@ -226,11 +228,17 @@ TEST_CASE("Original Grid windows upgrade with stable IDs and dock layout") {
     REQUIRE(window["grid"]["rows"] == 2);
     REQUIRE(window["grid"]["columns"] == 2);
     REQUIRE(window["grid"]["text_to_value_ratio"] == 0.45f);
-    REQUIRE(window["grid"]["cells"].size() == 4);
+    REQUIRE(window["grid"]["cells"].size() == 200);
     REQUIRE(window["grid"]["cells"][0]["scalar_id"] == 11);
     REQUIRE(window["grid"]["cells"][1]["scalar_id"] == 12);
-    REQUIRE(window["grid"]["cells"][2]["scalar_id"] == 21);
-    REQUIRE(window["grid"]["cells"][3]["scalar_id"] == 22);
+    REQUIRE(window["grid"]["cells"][10]["scalar_id"] == 21);
+    REQUIRE(window["grid"]["cells"][11]["scalar_id"] == 22);
+    REQUIRE(window["grid"]["cells"][2]["scalar_id"] == 999);
+    REQUIRE(window["grid"]["cells"][199]["scalar_id"] == 9999);
+    GridWindow restored(window);
+    restored.resize(20, 10);
+    REQUIRE(restored.cells[2].value.scalar_id == 999);
+    REQUIRE(restored.cells[199].value.scalar_id == 9999);
     auto const migrated = settings;
     REQUIRE_FALSE(settings_migration::migrate(settings));
     REQUIRE(settings == migrated);

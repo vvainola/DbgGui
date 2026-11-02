@@ -266,8 +266,9 @@ TEST_CASE("Mixed grids preserve each cell's type and applied configuration") {
     window.resize(2, 3);
     constexpr std::array types = {GridCellType::Button, GridCellType::Value, GridCellType::Checkbox,
                                   GridCellType::Slider, GridCellType::LED};
+    constexpr std::array<size_t, 5> positions = {0, 1, 2, 10, 11};
     for (size_t index = 0; index < types.size(); ++index) {
-        window.setCellType(index, types[index]);
+        window.setCellType(positions[index], types[index]);
     }
     auto& cells = window.cells;
     cells[0].button.label = "Start";
@@ -278,29 +279,29 @@ TEST_CASE("Mixed grids preserve each cell's type and applied configuration") {
     cells[2].checkbox.label = "Enable";
     cells[2].checkbox.on_enable.script = "write('enabled', 1)";
     cells[2].checkbox.on_disable.script = "write('enabled', 0)";
-    cells[3].value.scalar_id = 456;
-    cells[3].value.minimum = -10;
-    cells[3].value.maximum = 20;
-    cells[4].led.label = "Running";
-    cells[4].led.condition = "return read('enabled') == 1";
-    cells[4].led.color = {0.1f, 0.2f, 0.3f, 1};
+    cells[10].value.scalar_id = 456;
+    cells[10].value.minimum = -10;
+    cells[10].value.maximum = 20;
+    cells[11].led.label = "Running";
+    cells[11].led.condition = "return read('enabled') == 1";
+    cells[11].led.color = {0.1f, 0.2f, 0.3f, 1};
     nlohmann::json saved;
     window.updateJson(saved);
     REQUIRE(saved["grid"]["rows"] == 2);
     REQUIRE(saved["grid"]["columns"] == 3);
-    REQUIRE(saved["grid"]["cells"].size() == 6);
+    REQUIRE(saved["grid"]["cells"].size() == window.cells.size());
     REQUIRE(saved["grid"]["cells"][0]["script"] == "write('enabled', 1)");
     REQUIRE(saved["grid"]["cells"][1]["scalar_id"] == 123);
     REQUIRE(saved["grid"]["cells"][2]["on_disable"] == "write('enabled', 0)");
-    REQUIRE(saved["grid"]["cells"][3]["minimum"] == -10);
-    REQUIRE(saved["grid"]["cells"][4]["label"] == "Running");
+    REQUIRE(saved["grid"]["cells"][10]["minimum"] == -10);
+    REQUIRE(saved["grid"]["cells"][11]["label"] == "Running");
     GridWindow restored(saved);
     nlohmann::json roundtrip;
     restored.updateJson(roundtrip);
     REQUIRE(roundtrip == saved);
     REQUIRE(restored.title() == window.title());
     for (size_t index = 0; index < types.size(); ++index) {
-        REQUIRE(restored.cells[index].type == types[index]);
+        REQUIRE(restored.cells[positions[index]].type == types[index]);
     }
 }
 
@@ -366,20 +367,20 @@ TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") 
     GridWindow window("Bindings", 5);
     REQUIRE(window.cells[0].type == GridCellType::Value);
     window.resize(2, 2);
-    window.setCellType(2, GridCellType::Value);
-    window.setCellType(3, GridCellType::Slider);
-    window.cells[2].value.scalar_id = 123;
-    window.cells[3].value.scalar_id = 123;
+    window.setCellType(10, GridCellType::Value);
+    window.setCellType(11, GridCellType::Slider);
+    window.cells[10].value.scalar_id = 123;
+    window.cells[11].value.scalar_id = 123;
     window.resize(2, 3);
-    REQUIRE(window.cells[3].type == GridCellType::Value);
-    REQUIRE(window.cells[4].type == GridCellType::Slider);
+    REQUIRE(window.cells[10].type == GridCellType::Value);
+    REQUIRE(window.cells[11].type == GridCellType::Slider);
     REQUIRE(window.cells[2].type == GridCellType::Value);
     window.remapScalarId(123, 456);
     nlohmann::json saved;
     window.updateJson(saved);
     GridWindow restored(saved);
-    REQUIRE(restored.cells[3].value.scalar_id == 456);
-    REQUIRE(restored.cells[4].value.scalar_id == 456);
+    REQUIRE(restored.cells[10].value.scalar_id == 456);
+    REQUIRE(restored.cells[11].value.scalar_id == 456);
     REQUIRE(restored.id == 5);
 }
 
@@ -454,28 +455,33 @@ TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindi
 TEST_CASE("Mixed grid resizing preserves individual cell actions and LED runtimes") {
     GridWindow mixed("Grid", 1);
     mixed.resize(2, 2);
-    mixed.setCellType(2, GridCellType::Button);
-    mixed.cells[2].button.script = "wait(1)";
-    mixed.cells[2].button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
-    auto action = mixed.cells[2].button.action;
-    mixed.setCellType(3, GridCellType::LED);
-    mixed.cells[3].led.label = "Ready";
-    mixed.cells[3].led.configure(LuaScriptHost{});
-    auto state = mixed.cells[3].led.state;
+    mixed.setCellType(10, GridCellType::Button);
+    mixed.cells[10].button.script = "wait(1)";
+    mixed.cells[10].button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
+    auto action = mixed.cells[10].button.action;
+    mixed.setCellType(11, GridCellType::LED);
+    mixed.cells[11].led.label = "Ready";
+    mixed.cells[11].led.configure(LuaScriptHost{});
+    auto state = mixed.cells[11].led.state;
     mixed.resize(2, 3);
-    REQUIRE(mixed.cells[3].button.action == action);
-    REQUIRE(mixed.cells[3].button.script == "wait(1)");
-    REQUIRE(mixed.cells[4].led.state == state);
-    REQUIRE(mixed.cells[4].led.label == "Ready");
-    REQUIRE_FALSE(mixed.cells[2].button.action);
+    REQUIRE(mixed.cells[10].button.action == action);
+    REQUIRE(mixed.cells[10].button.script == "wait(1)");
+    REQUIRE(mixed.cells[11].led.state == state);
+    REQUIRE(mixed.cells[11].led.label == "Ready");
     REQUIRE_FALSE(action->stop_requested.load());
+    state->requested.store(true);
+    mixed.resize(1, 1);
+    REQUIRE(mixed.cells[10].button.action == action);
+    REQUIRE(mixed.cells[11].led.state == state);
+    REQUIRE(action->stop_requested.load());
+    REQUIRE_FALSE(state->requested.load());
     nlohmann::json saved;
     mixed.updateJson(saved);
     GridWindow restored(saved);
-    REQUIRE(restored.cells[3].button.script == "wait(1)");
-    REQUIRE_FALSE(restored.cells[3].button.action);
-    REQUIRE(restored.cells[4].led.label == "Ready");
-    REQUIRE_FALSE(restored.cells[4].led.state);
+    REQUIRE(restored.cells[10].button.script == "wait(1)");
+    REQUIRE_FALSE(restored.cells[10].button.action);
+    REQUIRE(restored.cells[11].led.label == "Ready");
+    REQUIRE_FALSE(restored.cells[11].led.state);
 }
 
 TEST_CASE("Value cell arrow navigation follows grid coordinates and skips other controls") {
@@ -485,20 +491,138 @@ TEST_CASE("Value cell arrow navigation follows grid coordinates and skips other 
         controls.cells[index].value.scalar_id = 100 + index;
     }
     controls.setCellType(1, GridCellType::Button);
-    controls.setCellType(3, GridCellType::Slider);
-    controls.cells[7].value.scalar_id.reset();
+    controls.setCellType(10, GridCellType::Slider);
+    controls.cells[21].value.scalar_id.reset();
     REQUIRE(controls.valueCellInDirection(0, 0, 1) == 2);
-    REQUIRE(controls.valueCellInDirection(0, 1, 0) == 6);
-    REQUIRE(controls.valueCellInDirection(8, 0, -1) == 6);
-    REQUIRE(controls.valueCellInDirection(8, -1, 0) == 5);
+    REQUIRE(controls.valueCellInDirection(0, 1, 0) == 20);
+    REQUIRE(controls.valueCellInDirection(22, 0, -1) == 20);
+    REQUIRE(controls.valueCellInDirection(22, -1, 0) == 12);
     REQUIRE_FALSE(controls.valueCellInDirection(2, 0, 1));
     REQUIRE_FALSE(controls.valueCellInDirection(0, -1, 0));
     REQUIRE_FALSE(controls.valueCellInDirection(0, 0, 0));
+    REQUIRE_FALSE(controls.valueCellInDirection(3, 0, -1));
+    REQUIRE_FALSE(controls.valueCellInDirection(30, -1, 0));
     controls.focus_cell = 2;
     controls.setCellType(2, GridCellType::LED);
     REQUIRE_FALSE(controls.focus_cell);
     nlohmann::json saved;
-    controls.focus_cell = 5;
+    controls.focus_cell = 12;
     controls.updateJson(saved);
     REQUIRE_FALSE(GridWindow(saved).focus_cell);
+}
+
+TEST_CASE("Shrinking grids retains all cell types across resizing, saving, and duplication") {
+    GridWindow window("Retained", 1);
+    window.resize(3, 5);
+    auto& cells = window.cells;
+    window.setCellType(20, GridCellType::Button);
+    cells[20].button.label = "Start";
+    cells[20].button.script = "wait(1)";
+    cells[21].value.scalar_id = 0;
+    window.setCellType(22, GridCellType::Checkbox);
+    cells[22].checkbox.label = "Power";
+    cells[22].checkbox.on_enable.script = "write('power', 1)";
+    cells[22].checkbox.on_disable.script = "write('power', 0)";
+    window.setCellType(23, GridCellType::Slider);
+    cells[23].value.scalar_id = 123;
+    cells[23].value.minimum = -10;
+    cells[23].value.maximum = 20;
+    window.setCellType(24, GridCellType::LED);
+    cells[24].led.label = "Ready";
+    cells[24].led.condition = "return true";
+    cells[24].led.color = {1, 0, 0, 1};
+    auto* const original_cell = &cells[23];
+    window.focus_cell = 23;
+    window.resize(1, 1);
+    REQUIRE_FALSE(window.focus_cell);
+    REQUIRE(&window.cells[23] == original_cell);
+    window.remapScalarId(123, 456);
+    nlohmann::json saved;
+    window.updateJson(saved);
+    GridWindow restored(saved);
+    auto copy = window.duplicate(2);
+    for (auto* grid : {&window, &restored, &copy}) {
+        REQUIRE(grid->rows == 1);
+        REQUIRE(grid->columns == 1);
+        grid->resize(4, 2);
+        grid->resize(2, 5);
+        grid->resize(3, 5);
+        REQUIRE(grid->cells[20].type == GridCellType::Button);
+        REQUIRE(grid->cells[20].button.label == "Start");
+        REQUIRE(grid->cells[20].button.script == "wait(1)");
+        REQUIRE(grid->cells[21].type == GridCellType::Value);
+        REQUIRE(grid->cells[21].value.scalar_id == 0);
+        REQUIRE(grid->cells[22].type == GridCellType::Checkbox);
+        REQUIRE(grid->cells[22].checkbox.label == "Power");
+        REQUIRE(grid->cells[22].checkbox.on_enable.script == "write('power', 1)");
+        REQUIRE(grid->cells[22].checkbox.on_disable.script == "write('power', 0)");
+        REQUIRE(grid->cells[23].type == GridCellType::Slider);
+        REQUIRE(grid->cells[23].value.scalar_id == 456);
+        REQUIRE(grid->cells[23].value.minimum == -10);
+        REQUIRE(grid->cells[23].value.maximum == 20);
+        REQUIRE(grid->cells[24].type == GridCellType::LED);
+        REQUIRE(grid->cells[24].led.label == "Ready");
+        REQUIRE(grid->cells[24].led.condition == "return true");
+        REQUIRE(grid->cells[24].led.color.x == 1);
+        REQUIRE(grid->cells[24].led.color.y == 0);
+    }
+    window.resize(-1, 100);
+    REQUIRE(window.rows == 1);
+    REQUIRE(window.columns == GridWindow::MAX_COLUMNS);
+    window.resize(100, -1);
+    REQUIRE(window.rows == GridWindow::MAX_ROWS);
+    REQUIRE(window.columns == 1);
+}
+
+TEST_CASE("Resizing cancels newly hidden actions without restarting them on expansion") {
+    std::vector<double> writes;
+    LuaScriptHost host;
+    host.write = [&](std::string_view, double value) -> std::expected<void, std::string> {
+        writes.push_back(value);
+        return {};
+    };
+    GridWindow window("Actions", 1);
+    window.resize(2, 4);
+    window.setCellType(0, GridCellType::Button);
+    auto& visible = window.cells[0].button;
+    visible.script = "wait(1); write('target', 1)";
+    visible.action = std::make_shared<GridActionState>(visible.script, host);
+    window.setCellType(11, GridCellType::Button);
+    auto& button = window.cells[11].button;
+    button.script = "wait(1); write('target', 2)";
+    button.action = std::make_shared<GridActionState>(button.script, host);
+    window.setCellType(12, GridCellType::Checkbox);
+    auto& checkbox = window.cells[12].checkbox;
+    checkbox.on_enable.script = "wait(1); write('target', 3)";
+    checkbox.on_disable.script = "wait(1); write('target', 4)";
+    auto const enabled_action = checkbox.setChecked(true, host);
+    window.setCellType(13, GridCellType::LED);
+    auto& led = window.cells[13].led;
+    led.condition = "return true";
+    led.configure(host);
+    led.state->requested.store(true);
+    visible.action->process(0);
+    button.action->process(0);
+    enabled_action->process(0);
+    REQUIRE(writes.empty());
+    SECTION("Reduce rows") { window.resize(1, 4); }
+    SECTION("Reduce columns") { window.resize(2, 1); }
+    REQUIRE_FALSE(visible.action->stop_requested.load());
+    REQUIRE(button.action->stop_requested.load());
+    REQUIRE(enabled_action->stop_requested.load());
+    REQUIRE_FALSE(led.state->requested.load());
+    visible.action->process(1);
+    button.action->process(1);
+    enabled_action->process(1);
+    REQUIRE(writes == std::vector<double>{1});
+    REQUIRE_FALSE(button.action->running.load());
+    REQUIRE_FALSE(enabled_action->running.load());
+    window.resize(2, 4);
+    button.action->process(2);
+    enabled_action->process(2);
+    REQUIRE(writes == std::vector<double>{1});
+    REQUIRE(button.script == "wait(1); write('target', 2)");
+    REQUIRE(checkbox.checked);
+    REQUIRE(checkbox.on_disable.script == "wait(1); write('target', 4)");
+    REQUIRE(led.condition == "return true");
 }

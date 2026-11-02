@@ -257,20 +257,17 @@ bool migrateGridWindows(nlohmann::json& settings) {
             throw std::runtime_error("Cannot migrate duplicate grid window ID " + std::to_string(id));
         }
         if (window.contains("signals")) {
-            int const rows = std::clamp(window.value("rows", 1), 1, 20);
-            int const columns = std::clamp(window.value("columns", 1), 1, 10);
+            int const rows = std::clamp(window.value("rows", 1), 1, GridWindow::MAX_ROWS);
+            int const columns = std::clamp(window.value("columns", 1), 1, GridWindow::MAX_COLUMNS);
             auto const signals = window.value("signals", nlohmann::json::array());
             auto cells = nlohmann::json::array();
-            for (int row = 0; row < rows; ++row) {
-                for (int column = 0; column < columns; ++column) {
-                    nlohmann::json cell = {{"type", GridCellType::Value}};
-                    // The old array always used ten columns, including hidden cells.
-                    size_t const index = row * 10 + column;
-                    if (index < signals.size() && signals[index] != 0) {
-                        cell["scalar_id"] = signals[index];
-                    }
-                    cells.push_back(std::move(cell));
+            // The saved "signals" array includes hidden cells; migrate all 200 bindings.
+            for (size_t index = 0; index < GridWindow::MAX_ROWS * GridWindow::MAX_COLUMNS; ++index) {
+                nlohmann::json cell = {{"type", GridCellType::Value}};
+                if (index < signals.size() && signals[index] != 0) {
+                    cell["scalar_id"] = signals[index];
                 }
+                cells.push_back(std::move(cell));
             }
             window["grid"] = {{"rows", rows}, {"columns", columns}, {"cells", std::move(cells)},
                               {"text_to_value_ratio", window.value("text_to_value_ratio", 0.3f)}};

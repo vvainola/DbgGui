@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -175,6 +176,9 @@ struct GridCell {
 };
 
 struct GridWindow : Window {
+    static constexpr int MAX_ROWS = 20;
+    static constexpr int MAX_COLUMNS = 10;
+
     GridWindow(std::string const& name, uint64_t id);
     explicit GridWindow(nlohmann::json const& data);
     void updateJson(nlohmann::json& data) const;
@@ -186,7 +190,8 @@ struct GridWindow : Window {
 
     int rows = 1;
     int columns = 1;
-    std::vector<GridCell> cells{1};
+    // Visible dimensions do not change storage; hidden cells retain their coordinates.
+    std::array<GridCell, MAX_ROWS * MAX_COLUMNS> cells;
     float text_to_value_ratio = 0.3f;
     std::optional<size_t> focus_cell;
 
