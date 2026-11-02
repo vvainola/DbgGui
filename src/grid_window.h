@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+// Numeric values are persisted in grid cell settings.
 enum class GridCellType {
     Value,
     Button,
@@ -190,7 +191,7 @@ struct GridWindow : Window {
 
     int rows = 1;
     int columns = 1;
-    // Visible dimensions do not change storage; hidden cells retain their coordinates.
+    // Storage and saved cells use a fixed MAX_COLUMNS stride; rows/columns only control visibility.
     std::array<GridCell, MAX_ROWS * MAX_COLUMNS> cells;
     float text_to_value_ratio = 0.3f;
     std::optional<size_t> focus_cell;
