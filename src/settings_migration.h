@@ -26,7 +26,8 @@
 #include <string>
 
 namespace settings_migration {
-inline constexpr int FORMAT_VERSION = 1;
+// Version 2 stores mixed grid cells; version 1 readers require "signals" arrays.
+inline constexpr int FORMAT_VERSION = 2;
 
 // Upgrade older saved representations in place. Return whether they changed.
 // Throws for unsupported versions or conflicting window IDs.

@@ -245,10 +245,10 @@ void normalizeSignals(nlohmann::json& owner) {
 }
 
 namespace {
-bool migrateGridWindows(nlohmann::json& settings) {
+void migrateGridWindows(nlohmann::json& settings) {
     auto const windows = settings.find("grid_windows");
     if (windows == settings.end() || !std::ranges::any_of(*windows, [](auto const& window) { return window.contains("signals"); })) {
-        return false;
+        return;
     }
     auto migrated = nlohmann::json::array();
     for (auto window : *windows) {
@@ -278,7 +278,6 @@ bool migrateGridWindows(nlohmann::json& settings) {
         migrated.push_back(std::move(window));
     }
     settings["grid_windows"] = std::move(migrated);
-    return true;
 }
 } // namespace
 
@@ -290,7 +289,13 @@ bool migrate(nlohmann::json& settings) {
         throw std::runtime_error("Unsupported settings format version " + std::to_string(version));
     }
     if (version == FORMAT_VERSION) {
-        return migrateGridWindows(settings);
+        return false;
+    }
+    if (version == 1) {
+        // Version 1 plots and scripts are already normalized; only grids changed.
+        migrateGridWindows(settings);
+        settings["format_version"] = FORMAT_VERSION;
+        return true;
     }
 
     // Old vector IDs were hashes of either the X name or "X+Y" and the group.
