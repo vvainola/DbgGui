@@ -23,10 +23,9 @@
 #pragma once
 
 #include "data_structures.h"
-#include "lua_script.h"
+#include "control_grid.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cfloat>
 #include <cstdint>
@@ -52,164 +51,6 @@ enum class PanelWidgetType {
     TextNote
 };
 
-struct PanelLedResult {
-    bool lit = false;
-    std::string error;
-};
-
-struct PanelLedState {
-    PanelLedState(std::string condition, LuaScriptHost host)
-        : runner(std::move(condition), std::move(host), "LED condition") {
-    }
-    // The runner is used only by the sampling thread. GUI reads published results.
-    LuaScriptRunner runner;
-    std::atomic<bool> requested = false;
-    std::atomic<std::shared_ptr<PanelLedResult const>> result{std::make_shared<PanelLedResult>()};
-};
-
-// One invocation of a panel action. Execution belongs to the sampling thread;
-// the GUI only reads the published status and error.
-struct PanelActionState {
-    PanelActionState(std::string source, LuaScriptHost host)
-        : runner(std::move(source), std::move(host), "Panel action") {
-    }
-    void process(double timestamp) {
-        if (!running.load()) {
-            return;
-        }
-        if (stop_requested.load()) {
-            runner.stop();
-            running.store(false);
-            return;
-        }
-        std::expected<void, std::string> result;
-        if (!started) {
-            started = true;
-            result = runner.start(timestamp, 1);
-        }
-        if (result) {
-            result = runner.process(timestamp);
-        }
-        if (!result) {
-            error = result.error();
-        }
-        running.store(runner.running());
-    }
-    LuaScriptRunner runner;
-    bool started = false;
-    std::atomic<bool> running = true;
-    std::atomic<bool> stop_requested = false;
-    // Written before running becomes false; GUI reads it only after completion.
-    std::string error;
-};
-
-struct PanelActionScript {
-    std::string script;
-    std::string draft;
-    std::shared_ptr<PanelActionState> action;
-    std::string syntax_error;
-
-    bool hasError() const {
-        return !syntax_error.empty() || (action && !action->running.load() && !action->error.empty());
-    }
-
-    void applyScript() {
-        if (auto result = validateLuaSyntax(draft, "Panel action"); !result) {
-            syntax_error = result.error();
-            return;
-        }
-        syntax_error.clear();
-        script = draft;
-        if (action && !action->running.load()) {
-            action.reset();
-        }
-    }
-};
-
-struct PanelButtonCell : PanelActionScript {
-    bool editor_open = false;
-    std::string label = "Button";
-};
-
-struct PanelCheckbox {
-    bool editor_open = false;
-    std::string label = "Checkbox";
-    bool checked = false;
-    PanelActionScript on_enable;
-    PanelActionScript on_disable;
-
-    std::shared_ptr<PanelActionState> setChecked(bool value, LuaScriptHost host) {
-        if (checked == value) {
-            return nullptr;
-        }
-        checked = value;
-        // A delayed action from the previous state must not undo this transition.
-        for (auto* script : {&on_enable, &on_disable}) {
-            if (script->action && script->action->running.load()) {
-                script->action->stop_requested.store(true);
-            }
-        }
-        auto& script = checked ? on_enable : on_disable;
-        script.action = std::make_shared<PanelActionState>(script.script, std::move(host));
-        return script.action;
-    }
-};
-
-template <typename Cell>
-struct PanelControlGrid {
-    int rows = 1;
-    int columns = 1;
-    std::vector<Cell> cells{1};
-
-    void resize(int new_rows, int new_columns) {
-        new_rows = std::clamp(new_rows, 1, 20);
-        new_columns = std::clamp(new_columns, 1, 10);
-        std::vector<Cell> resized(new_rows * new_columns);
-        for (int row = 0; row < std::min(rows, new_rows); ++row) {
-            for (int col = 0; col < std::min(columns, new_columns); ++col) {
-                resized[row * new_columns + col] = std::move(cells[row * columns + col]);
-            }
-        }
-        rows = new_rows;
-        columns = new_columns;
-        cells = std::move(resized);
-    }
-};
-
-using PanelButtonGrid = PanelControlGrid<PanelButtonCell>;
-using PanelCheckboxGrid = PanelControlGrid<PanelCheckbox>;
-
-struct PanelValueCell {
-    // Keep the ID even when the scalar is unavailable so it can resolve later.
-    std::optional<uint64_t> scalar_id;
-};
-
-struct PanelValueGrid : PanelControlGrid<PanelValueCell> {
-    float text_to_value_ratio = 0.3f;
-};
-
-struct PanelSlider : PanelValueCell {
-    double minimum = 0;
-    double maximum = 1;
-};
-
-struct PanelSliderGrid : PanelControlGrid<PanelSlider> {
-    float text_to_value_ratio = 0.3f;
-};
-
-struct PanelLedCell {
-    std::string label = "LED";
-    bool editor_open = false;
-    std::string condition = "return false";
-    std::string draft;
-    ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
-    std::shared_ptr<PanelLedState> state;
-
-    void configure(LuaScriptHost host) {
-        state = std::make_shared<PanelLedState>(condition, std::move(host));
-    }
-};
-
 struct PanelGroup {
     // Canvas units; shared by the background bounds and its title area.
     static constexpr float TITLE_HEIGHT = 20;
@@ -230,10 +71,10 @@ struct PanelWidget {
     // Stable addresses keep plot drag/drop payloads valid when adding widgets.
     std::shared_ptr<PlotWindow> plot;
     PanelButtonGrid buttons;
-    PanelCheckboxGrid checkboxes;
+    GridCheckboxGrid checkboxes;
     PanelValueGrid values;
-    PanelSliderGrid sliders;
-    PanelControlGrid<PanelLedCell> leds;
+    GridSliderGrid sliders;
+    PanelControlGrid<GridLedCell> leds;
     struct {
         std::string text = "Text note";
         float font_size = 20;

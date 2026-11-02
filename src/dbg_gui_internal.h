@@ -131,11 +131,11 @@ class DbgGui {
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();
-    void processPanelScripts(double timestamp);
-    void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
-    void renderPanelValueGrid(PanelWidget& widget);
-    void renderPanelSliderGrid(PanelWidget& widget);
-    void renderPanelLedGrid(PanelWidget& widget);
+    void processGridScripts(double timestamp);
+    void renderButtonGrid(PanelWidget& widget, PanelWindow& panel);
+    void renderValueGrid(PanelWidget& widget);
+    void renderSliderGrid(PanelWidget& widget);
+    void renderLedGrid(PanelWidget& widget);
     nlohmann::json panelSettings(PanelWindow& panel);
     void copyPanelWidgets(PanelWindow& panel);
     void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
@@ -143,7 +143,7 @@ class DbgGui {
     bool importPanel();
     void addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id);
     void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
-    void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
+    void renderCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
 
     struct Message {
         std::string text;
@@ -260,11 +260,11 @@ class DbgGui {
     std::vector<PanelWindow> m_panels;
     struct {
         // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
-        std::vector<std::weak_ptr<PanelLedState>> led_scripts;
-        std::vector<std::weak_ptr<PanelActionState>> actions;
+        std::vector<std::weak_ptr<GridLedState>> led_scripts;
+        std::vector<std::weak_ptr<GridActionState>> actions;
         std::atomic<bool> scripts_requested = false;
-        nlohmann::json widget_clipboard = nlohmann::json::array();
-    } m_panel;
+    } m_grid_scripts;
+    nlohmann::json m_panel_widget_clipboard = nlohmann::json::array();
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_plot_windows;

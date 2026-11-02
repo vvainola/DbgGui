@@ -196,7 +196,7 @@ TEST_CASE("Panel actions run only on sampling ticks and resume waits without rep
         writes.push_back(value);
         return {};
     };
-    PanelActionState action("write('target', 1); wait(1); write('target', 2)", std::move(host));
+    GridActionState action("write('target', 1); wait(1); write('target', 2)", std::move(host));
     REQUIRE(writes.empty());
     REQUIRE(action.running.load());
     action.process(5);
@@ -214,15 +214,15 @@ TEST_CASE("Panel actions run only on sampling ticks and resume waits without rep
 }
 
 TEST_CASE("Panel action errors are published without executing drafts") {
-    PanelButtonCell cell;
+    GridButtonCell cell;
     cell.script = "return";
     cell.draft = "unfinished [";
-    cell.action = std::make_shared<PanelActionState>(cell.script, LuaScriptHost{});
+    cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
     cell.action->process(0);
     REQUIRE(cell.action->error.empty());
     REQUIRE_FALSE(cell.action->running.load());
     cell.script = cell.draft;
-    cell.action = std::make_shared<PanelActionState>(cell.script, LuaScriptHost{});
+    cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
     cell.action->process(0);
     REQUIRE_FALSE(cell.action->error.empty());
     REQUIRE_FALSE(cell.action->running.load());
@@ -236,7 +236,7 @@ TEST_CASE("Panel actions stop on the sampling thread before starting or resuming
         return {};
     };
     SECTION("Stop an action before its first sample") {
-        PanelActionState action("write('target', 1)", host);
+        GridActionState action("write('target', 1)", host);
         action.stop_requested.store(true);
         action.process(0);
         REQUIRE(writes.empty());
@@ -244,7 +244,7 @@ TEST_CASE("Panel actions stop on the sampling thread before starting or resuming
         REQUIRE(action.error.empty());
     }
     SECTION("Stop an action while it waits") {
-        PanelActionState action("write('target', 1); wait(1); write('target', 2)", host);
+        GridActionState action("write('target', 1); wait(1); write('target', 2)", host);
         action.process(0);
         REQUIRE(writes == std::vector<double>{1});
         action.stop_requested.store(true);
@@ -258,7 +258,7 @@ TEST_CASE("Panel actions stop on the sampling thread before starting or resuming
 }
 
 TEST_CASE("Applying a button script checks syntax and keeps the previous script on errors") {
-    PanelButtonCell cell;
+    GridButtonCell cell;
     cell.script = "write('target', 1)";
     cell.draft = "unfinished [";
     cell.applyScript();
@@ -266,7 +266,7 @@ TEST_CASE("Applying a button script checks syntax and keeps the previous script 
     REQUIRE(cell.script == "write('target', 1)");
     REQUIRE_FALSE(cell.action);
 
-    cell.action = std::make_shared<PanelActionState>("invalid [", LuaScriptHost{});
+    cell.action = std::make_shared<GridActionState>("invalid [", LuaScriptHost{});
     cell.action->process(0);
     REQUIRE_FALSE(cell.action->error.empty());
     cell.draft = "write('target', 2)";
@@ -277,8 +277,8 @@ TEST_CASE("Applying a button script checks syntax and keeps the previous script 
 }
 
 TEST_CASE("Applying a valid button script does not stop or execute the running action") {
-    PanelButtonCell cell;
-    cell.action = std::make_shared<PanelActionState>("wait(1)", LuaScriptHost{});
+    GridButtonCell cell;
+    cell.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
     cell.action->process(0);
     auto action = cell.action;
     cell.draft = "write('target', 2)";
@@ -326,7 +326,7 @@ TEST_CASE("Checkbox transitions queue the matching script and cancel the previou
         writes.push_back(value);
         return {};
     };
-    PanelCheckbox checkbox;
+    GridCheckbox checkbox;
     checkbox.on_enable.script = "write('target', 1); wait(1); write('target', 9)";
     checkbox.on_disable.script = "write('target', 0)";
     REQUIRE_FALSE(checkbox.setChecked(false, host));
@@ -353,7 +353,7 @@ TEST_CASE("Checkbox transitions queue the matching script and cancel the previou
 }
 
 TEST_CASE("Checkbox transition editors apply and validate independently") {
-    PanelCheckbox checkbox;
+    GridCheckbox checkbox;
     checkbox.on_enable.script = "return";
     checkbox.on_enable.draft = "invalid [";
     checkbox.on_disable.draft = "write('target', 0)";
@@ -368,7 +368,7 @@ TEST_CASE("Checkbox transition editors apply and validate independently") {
 }
 
 TEST_CASE("Checkbox grids preserve cell state and scripts in their coordinates when resized") {
-    PanelCheckboxGrid grid;
+    GridCheckboxGrid grid;
     grid.resize(2, 2);
     auto& cell = grid.cells[2];
     cell.label = "Output";
@@ -458,7 +458,7 @@ TEST_CASE("Panel value grids save their text to value ratio and default to 30 pe
 }
 
 TEST_CASE("Panel action error indicators include syntax and completed runtime errors") {
-    PanelActionScript script;
+    GridActionScript script;
     REQUIRE_FALSE(script.hasError());
     script.draft = "unfinished [";
     script.applyScript();
@@ -467,7 +467,7 @@ TEST_CASE("Panel action error indicators include syntax and completed runtime er
     script.applyScript();
     REQUIRE_FALSE(script.hasError());
 
-    script.action = std::make_shared<PanelActionState>("error('failed')", LuaScriptHost{});
+    script.action = std::make_shared<GridActionState>("error('failed')", LuaScriptHost{});
     REQUIRE_FALSE(script.hasError());
     script.action->process(0);
     REQUIRE(script.hasError());
@@ -505,7 +505,7 @@ TEST_CASE("Panel sliders round trip ranges and unresolved bindings") {
 }
 
 TEST_CASE("Slider grid resizing preserves per-cell bindings and ranges") {
-    PanelControlGrid<PanelSlider> grid;
+    PanelControlGrid<GridSlider> grid;
     grid.resize(2, 2);
     grid.cells[3].scalar_id = 123;
     grid.cells[3].minimum = -5;
@@ -638,7 +638,7 @@ TEST_CASE("Pasted widgets omit drafts and script runtimes") {
     widget.id = 2;
     widget.buttons.cells[0].script = "return";
     widget.buttons.cells[0].draft = "unsaved";
-    widget.buttons.cells[0].action = std::make_shared<PanelActionState>("return", LuaScriptHost{});
+    widget.buttons.cells[0].action = std::make_shared<GridActionState>("return", LuaScriptHost{});
     nlohmann::json saved;
     panel.updateJson(saved);
     auto clipboard = panel_clipboard::copy(saved, {2});

@@ -206,7 +206,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
             for (ScriptWindow& script_window : m_script_windows) {
                 script_window.shiftScriptSchedule(time_offset);
             }
-            for (auto const& action : m_panel.actions) {
+            for (auto const& action : m_grid_scripts.actions) {
                 if (auto state = action.lock()) {
                     state->runner.shiftSchedule(time_offset);
                 }
@@ -220,7 +220,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
                 logMessage(error);
             }
         }
-        processPanelScripts(m_sample_timestamp);
+        processGridScripts(m_sample_timestamp);
         m_sampler.sample(m_sample_timestamp);
 
         // Check pause triggers
@@ -243,7 +243,7 @@ void DbgGui::sampleWithTimestamp(double timestamp) {
     while (m_paused) {
         {
             std::scoped_lock lock(m_sampling_mutex);
-            processPanelScripts(m_sample_timestamp);
+            processGridScripts(m_sample_timestamp);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         // Set sync time to 0 so that if speed is changed while paused, it will
