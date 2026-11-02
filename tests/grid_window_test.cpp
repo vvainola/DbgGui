@@ -402,9 +402,19 @@ TEST_CASE("Value and slider cells share bindings and preserve ranges when switch
     REQUIRE(window.cells[0].value.minimum == -10);
     REQUIRE(window.cells[0].value.maximum == 20);
 
+    window.setCellType(0, GridCellType::Value);
     nlohmann::json saved;
     window.updateJson(saved);
     GridWindow restored(saved);
+    REQUIRE(restored.cells[0].type == GridCellType::Value);
+    restored.setCellType(0, GridCellType::Slider);
+    REQUIRE(restored.cells[0].value.minimum == -10);
+    REQUIRE(restored.cells[0].value.maximum == 20);
+    auto copy = window.duplicate(2);
+    copy.setCellType(0, GridCellType::Slider);
+    REQUIRE(copy.cells[0].value.scalar_id == 99);
+    REQUIRE(copy.cells[0].value.minimum == -10);
+    REQUIRE(copy.cells[0].value.maximum == 20);
     restored.setCellType(0, GridCellType::Value);
     REQUIRE(restored.cells[0].value.scalar_id == 99);
     restored.cells[0].value.scalar_id.reset();

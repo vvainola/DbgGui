@@ -79,10 +79,8 @@ void GridCell::updateJson(nlohmann::json& data) const {
             if (value.scalar_id) {
                 data["scalar_id"] = *value.scalar_id;
             }
-            if (type == GridCellType::Slider) {
-                data["minimum"] = value.minimum;
-                data["maximum"] = value.maximum;
-            }
+            data["minimum"] = value.minimum;
+            data["maximum"] = value.maximum;
             break;
         }
         case GridCellType::LED:
