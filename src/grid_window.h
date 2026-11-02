@@ -6,7 +6,6 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <stdexcept>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -177,6 +176,4 @@ struct GridWindow : Window {
     float text_to_value_ratio = 0.3f;
     std::optional<size_t> focus_cell;
 
-  private:
-    static void validateType(GridCellType type);
 };

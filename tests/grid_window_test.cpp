@@ -324,9 +324,11 @@ TEST_CASE("Changing a cell type keeps its configuration and stops hidden actions
     REQUIRE(cell.button.script == "wait(1)");
     REQUIRE(cell.led.condition == "return true");
     REQUIRE(cell.type == GridCellType::Button);
-    REQUIRE_THROWS(window.setCellType(0, static_cast<GridCellType>(100)));
-    REQUIRE_THROWS(window.setCellType(0, static_cast<GridCellType>(-1)));
-    REQUIRE(cell.type == GridCellType::Button);
+    window.setCellType(0, static_cast<GridCellType>(100));
+    REQUIRE(cell.type == GridCellType::Value);
+    window.setCellType(0, GridCellType::Button);
+    window.setCellType(0, static_cast<GridCellType>(-1));
+    REQUIRE(cell.type == GridCellType::Value);
 }
 
 TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") {
@@ -350,9 +352,18 @@ TEST_CASE("Mixed grid resizing preserves cell coordinates and scalar bindings") 
     REQUIRE(restored.id == 5);
 }
 
-TEST_CASE("Mixed grids reject unsupported cell types when loading") {
-    nlohmann::json saved = {{"id", 1}, {"grid", {{"cells", nlohmann::json::array({{{"type", 100}}})}}}};
-    REQUIRE_THROWS(GridWindow(saved));
+TEST_CASE("Unsupported grid cell types restore as values and preserve scalar bindings") {
+    for (int const type : {100, -1}) {
+        nlohmann::json saved = {{"id", 1}, {"grid", {{"cells", nlohmann::json::array({{
+            {"type", type}, {"scalar_id", 42}
+        }})}}}};
+        GridWindow restored(saved);
+        REQUIRE(restored.cells[0].type == GridCellType::Value);
+        REQUIRE(restored.cells[0].value.scalar_id == 42);
+        restored.updateJson(saved);
+        REQUIRE(saved["grid"]["cells"][0]["type"] == nlohmann::json(GridCellType::Value));
+        REQUIRE(saved["grid"]["cells"][0]["scalar_id"] == 42);
+    }
 }
 
 TEST_CASE("Flat value and slider cells preserve empty, zero and unresolved bindings") {

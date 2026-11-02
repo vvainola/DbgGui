@@ -12,6 +12,9 @@
 GridCell GridCell::fromJson(nlohmann::json const& data) {
     GridCell cell;
     cell.type = data.value("type", GridCellType::Value);
+    if (!magic_enum::enum_contains(cell.type)) {
+        cell.type = GridCellType::Value;
+    }
     switch (cell.type) {
         case GridCellType::Button:
             cell.button.label = data.value("label", cell.button.label);
@@ -93,7 +96,6 @@ GridWindow::GridWindow(nlohmann::json const& data) : Window(data) {
     resize(saved.value("rows", 1), saved.value("columns", 1));
     auto const saved_cells = saved.value("cells", nlohmann::json::array());
     for (size_t index = 0; index < saved_cells.size() && index < cells.size(); ++index) {
-        validateType(saved_cells[index].value("type", GridCellType::Value));
         cells[index] = GridCell::fromJson(saved_cells[index]);
     }
 }
@@ -135,7 +137,9 @@ void GridWindow::resize(int new_rows, int new_columns) {
 }
 
 void GridWindow::setCellType(size_t index, GridCellType type) {
-    validateType(type);
+    if (!magic_enum::enum_contains(type)) {
+        type = GridCellType::Value;
+    }
     auto& cell = cells.at(index);
     if (cell.type == type) {
         return;
@@ -172,12 +176,6 @@ std::optional<size_t> GridWindow::valueCellInDirection(size_t from, int row_delt
 void GridWindow::remapScalarId(uint64_t old_id, uint64_t new_id) {
     for (auto& cell : cells) {
         cell.remapScalarId(old_id, new_id);
-    }
-}
-
-void GridWindow::validateType(GridCellType type) {
-    if (!magic_enum::enum_contains(type)) {
-        throw std::runtime_error("Unsupported grid cell type");
     }
 }
 
