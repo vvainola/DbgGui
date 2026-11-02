@@ -127,7 +127,7 @@ class DbgGui {
     void showScriptWindow();
     void showGridWindows();
     void renderGrid(GridWindow& grid);
-    bool renderControlCell(GridWindow& grid, size_t index, bool focus_value);
+    bool renderGridCell(GridWindow& grid, size_t index, bool focus_value);
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();

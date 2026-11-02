@@ -3,43 +3,28 @@
 #include "imgui_stdlib.h"
 #include "grid_slider.h"
 #include "lua_script_editor.h"
+#include "magic_enum.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 
-namespace {
-struct ControlCellKind {
-    ControlCellType type;
-    const char* label;
-};
-
-constexpr std::array CONTROL_CELL_KINDS = {
-    ControlCellKind{ControlCellType::Value, "Value"},
-    ControlCellKind{ControlCellType::Button, "Button"},
-    ControlCellKind{ControlCellType::Checkbox, "Checkbox"},
-    ControlCellKind{ControlCellType::Slider, "Slider"},
-    ControlCellKind{ControlCellType::Led, "LED"}
-};
-} // namespace
-
-ControlCell ControlCell::fromJson(nlohmann::json const& data) {
-    ControlCell cell;
-    cell.type = data.value("type", ControlCellType::Value);
+GridCell GridCell::fromJson(nlohmann::json const& data) {
+    GridCell cell;
+    cell.type = data.value("type", GridCellType::Value);
     switch (cell.type) {
-        case ControlCellType::Button:
+        case GridCellType::Button:
             cell.button.label = data.value("label", cell.button.label);
             cell.button.script = data.value("script", cell.button.script);
             break;
-        case ControlCellType::Checkbox:
+        case GridCellType::Checkbox:
             cell.checkbox.label = data.value("label", cell.checkbox.label);
             cell.checkbox.on_enable.script = data.value("on_enable", std::string{});
             cell.checkbox.on_disable.script = data.value("on_disable", std::string{});
             break;
-        case ControlCellType::Value:
-        case ControlCellType::Slider: {
-            auto& value = cell.type == ControlCellType::Value ? cell.value : cell.slider;
+        case GridCellType::Value:
+        case GridCellType::Slider: {
+            auto& value = cell.type == GridCellType::Value ? cell.value : cell.slider;
             if (data.contains("scalar_id") && !data["scalar_id"].is_null()) {
                 value.scalar_id = data["scalar_id"].get<uint64_t>();
             }
@@ -47,7 +32,7 @@ ControlCell ControlCell::fromJson(nlohmann::json const& data) {
             cell.slider.maximum = data.value("maximum", 1.0);
             break;
         }
-        case ControlCellType::Led: {
+        case GridCellType::LED: {
             cell.led.label = data.value("label", cell.led.label);
             cell.led.condition = data.value("script", cell.led.condition);
             auto const color = data.value("color", std::vector<float>{0.2f, 0.9f, 0.3f, 1});
@@ -60,31 +45,31 @@ ControlCell ControlCell::fromJson(nlohmann::json const& data) {
     return cell;
 }
 
-void ControlCell::updateJson(nlohmann::json& data) const {
+void GridCell::updateJson(nlohmann::json& data) const {
     data = {{"type", type}};
     switch (type) {
-        case ControlCellType::Button:
+        case GridCellType::Button:
             data["label"] = button.label;
             data["script"] = button.script;
             break;
-        case ControlCellType::Checkbox:
+        case GridCellType::Checkbox:
             data["label"] = checkbox.label;
             data["on_enable"] = checkbox.on_enable.script;
             data["on_disable"] = checkbox.on_disable.script;
             break;
-        case ControlCellType::Value:
-        case ControlCellType::Slider: {
-            auto const& settings = type == ControlCellType::Value ? value : slider;
+        case GridCellType::Value:
+        case GridCellType::Slider: {
+            auto const& settings = type == GridCellType::Value ? value : slider;
             if (settings.scalar_id) {
                 data["scalar_id"] = *settings.scalar_id;
             }
-            if (type == ControlCellType::Slider) {
+            if (type == GridCellType::Slider) {
                 data["minimum"] = slider.minimum;
                 data["maximum"] = slider.maximum;
             }
             break;
         }
-        case ControlCellType::Led:
+        case GridCellType::LED:
             data["label"] = led.label;
             data["script"] = led.condition;
             data["color"] = {led.color.x, led.color.y, led.color.z, led.color.w};
@@ -92,7 +77,7 @@ void ControlCell::updateJson(nlohmann::json& data) const {
     }
 }
 
-void ControlCell::remapScalarId(uint64_t old_id, uint64_t new_id) {
+void GridCell::remapScalarId(uint64_t old_id, uint64_t new_id) {
     for (auto* binding : {&value.scalar_id, &slider.scalar_id}) {
         if (*binding == old_id) {
             *binding = new_id;
@@ -108,8 +93,8 @@ GridWindow::GridWindow(nlohmann::json const& data) : Window(data) {
     resize(saved.value("rows", 1), saved.value("columns", 1));
     auto const saved_cells = saved.value("cells", nlohmann::json::array());
     for (size_t index = 0; index < saved_cells.size() && index < cells.size(); ++index) {
-        validateType(saved_cells[index].value("type", ControlCellType::Value));
-        cells[index] = ControlCell::fromJson(saved_cells[index]);
+        validateType(saved_cells[index].value("type", GridCellType::Value));
+        cells[index] = GridCell::fromJson(saved_cells[index]);
     }
 }
 
@@ -137,7 +122,7 @@ GridWindow GridWindow::duplicate(uint64_t new_id) const {
 void GridWindow::resize(int new_rows, int new_columns) {
     new_rows = std::clamp(new_rows, 1, 20);
     new_columns = std::clamp(new_columns, 1, 10);
-    std::vector<ControlCell> resized(new_rows * new_columns);
+    std::vector<GridCell> resized(new_rows * new_columns);
     for (int row = 0; row < std::min(rows, new_rows); ++row) {
         for (int col = 0; col < std::min(columns, new_columns); ++col) {
             resized[row * new_columns + col] = std::move(cells[row * columns + col]);
@@ -149,7 +134,7 @@ void GridWindow::resize(int new_rows, int new_columns) {
     focus_cell.reset();
 }
 
-void GridWindow::setCellType(size_t index, ControlCellType type) {
+void GridWindow::setCellType(size_t index, GridCellType type) {
     validateType(type);
     auto& cell = cells.at(index);
     if (cell.type == type) {
@@ -163,7 +148,7 @@ void GridWindow::setCellType(size_t index, ControlCellType type) {
         }
     }
     cell.type = type;
-    if (focus_cell == index && type != ControlCellType::Value) {
+    if (focus_cell == index && type != GridCellType::Value) {
         focus_cell.reset();
     }
 }
@@ -177,7 +162,7 @@ std::optional<size_t> GridWindow::valueCellInDirection(size_t from, int row_delt
     for (; row >= 0 && row < rows && column >= 0 && column < columns;
          row += row_delta, column += column_delta) {
         size_t const index = row * columns + column;
-        if (cells[index].type == ControlCellType::Value && cells[index].value.scalar_id) {
+        if (cells[index].type == GridCellType::Value && cells[index].value.scalar_id) {
             return index;
         }
     }
@@ -190,9 +175,9 @@ void GridWindow::remapScalarId(uint64_t old_id, uint64_t new_id) {
     }
 }
 
-void GridWindow::validateType(ControlCellType type) {
-    if (!std::ranges::any_of(CONTROL_CELL_KINDS, [type](auto const& kind) { return kind.type == type; })) {
-        throw std::runtime_error("Unsupported control cell type");
+void GridWindow::validateType(GridCellType type) {
+    if (!magic_enum::enum_contains(type)) {
+        throw std::runtime_error("Unsupported grid cell type");
     }
 }
 
@@ -203,14 +188,13 @@ constexpr ImVec4 RUNNING_BUTTON_HOVERED_LIGHT_GREEN = {0.2f, 0.6f, 0.25f, 1.0f};
 constexpr ImVec4 RUNNING_BUTTON_PRESSED_DARK_GREEN = {0.1f, 0.4f, 0.15f, 1.0f};
 constexpr ImU32 SCRIPT_ERROR_RED = IM_COL32(255, 64, 64, 255);
 
-bool editControlCellType(GridWindow& grid, size_t index, char const* label) {
+bool editGridCellType(GridWindow& grid, size_t index, char const* label) {
     auto const type = grid.cells[index].type;
-    auto kind = std::ranges::find(CONTROL_CELL_KINDS, type, &ControlCellKind::type);
     bool changed = false;
-    if (ImGui::BeginCombo(label, kind->label)) {
-        for (auto const& option : CONTROL_CELL_KINDS) {
-            if (ImGui::Selectable(option.label, option.type == type) && option.type != type) {
-                grid.setCellType(index, option.type);
+    if (ImGui::BeginCombo(label, magic_enum::enum_name(type).data())) {
+        for (auto const option : magic_enum::enum_values<GridCellType>()) {
+            if (ImGui::Selectable(magic_enum::enum_name(option).data(), option == type) && option != type) {
+                grid.setCellType(index, option);
                 changed = true;
             }
         }
@@ -220,7 +204,7 @@ bool editControlCellType(GridWindow& grid, size_t index, char const* label) {
 }
 
 void showCellTypeMenu(GridWindow& grid, size_t index) {
-    if (editControlCellType(grid, index, "Type")) {
+    if (editGridCellType(grid, index, "Type")) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::Separator();
@@ -302,11 +286,11 @@ void editGridSettings(GridWindow& grid) {
     ImGui::SliderFloat("Text to value ratio", &grid.text_to_value_ratio,
                        0.05f, 0.95f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
     float type_width = 0;
-    for (auto const& kind : CONTROL_CELL_KINDS) {
-        type_width = std::max(type_width, ImGui::CalcTextSize(kind.label).x);
+    for (auto const type : magic_enum::enum_values<GridCellType>()) {
+        type_width = std::max(type_width, ImGui::CalcTextSize(magic_enum::enum_name(type).data()).x);
     }
     type_width += ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().FramePadding.x;
-    if (ImGui::BeginTable("##ControlTypes", grid.columns, ImGuiTableFlags_Borders)) {
+    if (ImGui::BeginTable("##GridCellTypes", grid.columns, ImGuiTableFlags_Borders)) {
         for (int row = 0; row < grid.rows; ++row) {
             ImGui::TableNextRow();
             for (int column = 0; column < grid.columns; ++column) {
@@ -314,7 +298,7 @@ void editGridSettings(GridWindow& grid) {
                 int const index = row * grid.columns + column;
                 auto const id = std::format("##Type{}", index);
                 ImGui::SetNextItemWidth(type_width);
-                editControlCellType(grid, index, id.c_str());
+                editGridCellType(grid, index, id.c_str());
             }
         }
         ImGui::EndTable();
@@ -697,13 +681,13 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
     cell.editor_open = editor_open;
 }
 
-bool DbgGui::renderControlCell(GridWindow& grid, size_t index, bool focus_value) {
+bool DbgGui::renderGridCell(GridWindow& grid, size_t index, bool focus_value) {
     switch (grid.cells[index].type) {
-        case ControlCellType::Button: renderButtonCell(grid, index); break;
-        case ControlCellType::Value: return renderValueCell(grid, index, focus_value);
-        case ControlCellType::Checkbox: renderCheckboxCell(grid, index); break;
-        case ControlCellType::Slider: renderSliderCell(grid, index); break;
-        case ControlCellType::Led: renderLedCell(grid, index); break;
+        case GridCellType::Button: renderButtonCell(grid, index); break;
+        case GridCellType::Value: return renderValueCell(grid, index, focus_value);
+        case GridCellType::Checkbox: renderCheckboxCell(grid, index); break;
+        case GridCellType::Slider: renderSliderCell(grid, index); break;
+        case GridCellType::LED: renderLedCell(grid, index); break;
         default: break;
     }
     return false;
@@ -712,7 +696,7 @@ bool DbgGui::renderControlCell(GridWindow& grid, size_t index, bool focus_value)
 void DbgGui::renderGrid(GridWindow& grid) {
     bool navigation_handled = false;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
-    if (ImGui::BeginTable("control_grid", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
+    if (ImGui::BeginTable("grid", grid.columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX)) {
         for (size_t index = 0; index < grid.cells.size(); ++index) {
             ImGui::TableNextColumn();
             ImGui::PushID(static_cast<int>(index));
@@ -722,7 +706,7 @@ void DbgGui::renderGrid(GridWindow& grid) {
                 if (focus) {
                     grid.focus_cell.reset();
                 }
-                bool const focused = renderControlCell(grid, index, focus);
+                bool const focused = renderGridCell(grid, index, focus);
                 if (focused && !navigation_handled) {
                     int const row_delta = ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? -1 : 0;
                     int const column_delta = ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -1 : 0;

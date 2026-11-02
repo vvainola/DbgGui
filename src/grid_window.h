@@ -15,12 +15,12 @@
 #include <utility>
 #include <vector>
 
-enum class ControlCellType {
-    Button,
+enum class GridCellType {
     Value,
+    Button,
     Checkbox,
     Slider,
-    Led
+    LED
 };
 
 struct GridLedResult {
@@ -149,11 +149,11 @@ struct GridLedCell {
     }
 };
 
-struct ControlCell {
-    static ControlCell fromJson(nlohmann::json const& data);
+struct GridCell {
+    static GridCell fromJson(nlohmann::json const& data);
     void updateJson(nlohmann::json& data) const;
     void remapScalarId(uint64_t old_id, uint64_t new_id);
-    ControlCellType type = ControlCellType::Value;
+    GridCellType type = GridCellType::Value;
     GridButtonCell button;
     GridCheckbox checkbox;
     GridValueCell value;
@@ -167,16 +167,16 @@ struct GridWindow : Window {
     void updateJson(nlohmann::json& data) const;
     GridWindow duplicate(uint64_t new_id) const;
     void resize(int new_rows, int new_columns);
-    void setCellType(size_t index, ControlCellType type);
+    void setCellType(size_t index, GridCellType type);
     std::optional<size_t> valueCellInDirection(size_t from, int row_delta, int column_delta) const;
     void remapScalarId(uint64_t old_id, uint64_t new_id);
 
     int rows = 1;
     int columns = 1;
-    std::vector<ControlCell> cells{1};
+    std::vector<GridCell> cells{1};
     float text_to_value_ratio = 0.3f;
     std::optional<size_t> focus_cell;
 
   private:
-    static void validateType(ControlCellType type);
+    static void validateType(GridCellType type);
 };

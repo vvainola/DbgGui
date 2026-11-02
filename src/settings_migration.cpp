@@ -263,7 +263,7 @@ bool migrateGridWindows(nlohmann::json& settings) {
             auto cells = nlohmann::json::array();
             for (int row = 0; row < rows; ++row) {
                 for (int column = 0; column < columns; ++column) {
-                    nlohmann::json cell = {{"type", ControlCellType::Value}};
+                    nlohmann::json cell = {{"type", GridCellType::Value}};
                     // The old array always used ten columns, including hidden cells.
                     size_t const index = row * 10 + column;
                     if (index < signals.size() && signals[index] != 0) {
