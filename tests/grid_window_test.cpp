@@ -6,7 +6,7 @@ TEST_CASE("LED settings preserve the applied condition and color without saving 
     GridCell widget;
     widget.type = GridCellType::LED;
     widget.led.condition = "return read('enabled') > 0";
-    widget.led.draft = "unfinished script";
+    widget.led.editor.draft = "unfinished script";
     widget.led.color = {0.9f, 0.3f, 0.1f, 1};
     window.cells[0] = std::move(widget);
     nlohmann::json saved;
@@ -15,8 +15,39 @@ TEST_CASE("LED settings preserve the applied condition and color without saving 
     REQUIRE(restored.cells[0].led.condition == "return read('enabled') > 0");
     REQUIRE(restored.cells[0].led.color.x == 0.9f);
     REQUIRE(restored.cells[0].led.color.y == 0.3f);
-    REQUIRE(restored.cells[0].led.draft.empty());
+    REQUIRE(restored.cells[0].led.editor.draft.empty());
     REQUIRE_FALSE(restored.cells[0].led.state);
+}
+
+TEST_CASE("Script drafts initialize on opening and apply changes only when closing") {
+    GridScriptDraft editor;
+    REQUIRE_FALSE(editor.update(true, "return false"));
+    REQUIRE(editor.draft == "return false");
+    editor.draft = "return true";
+    REQUIRE_FALSE(editor.update(true, "return false"));
+    REQUIRE(editor.draft == "return true");
+    REQUIRE(editor.update(false, "return false"));
+    REQUIRE_FALSE(editor.update(false, "return false"));
+    REQUIRE_FALSE(editor.update(true, "return false"));
+    REQUIRE(editor.draft == "return false");
+    REQUIRE_FALSE(editor.update(false, "return false"));
+}
+
+TEST_CASE("Action editors retain invalid drafts across reopening without replacing applied scripts") {
+    GridActionScript script;
+    script.script = "return";
+    script.updateEditor(true);
+    script.editor.draft = "invalid [";
+    script.updateEditor(false);
+    REQUIRE(script.script == "return");
+    REQUIRE_FALSE(script.syntax_error.empty());
+    script.updateEditor(true);
+    REQUIRE(script.editor.draft == "invalid [");
+    script.editor.draft = "wait(1)";
+    script.updateEditor(false);
+    REQUIRE(script.script == "wait(1)");
+    REQUIRE(script.syntax_error.empty());
+    REQUIRE_FALSE(script.action);
 }
 
 TEST_CASE("Grid actions run only on sampling ticks and resume waits without repeating") {
@@ -46,12 +77,12 @@ TEST_CASE("Grid actions run only on sampling ticks and resume waits without repe
 TEST_CASE("Grid action errors are published without executing drafts") {
     GridButtonCell cell;
     cell.script = "return";
-    cell.draft = "unfinished [";
+    cell.editor.draft = "unfinished [";
     cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
     cell.action->process(0);
     REQUIRE(cell.action->error.empty());
     REQUIRE_FALSE(cell.action->running.load());
-    cell.script = cell.draft;
+    cell.script = cell.editor.draft;
     cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
     cell.action->process(0);
     REQUIRE_FALSE(cell.action->error.empty());
@@ -90,7 +121,7 @@ TEST_CASE("Grid actions stop on the sampling thread before starting or resuming"
 TEST_CASE("Applying a button script checks syntax and keeps the previous script on errors") {
     GridButtonCell cell;
     cell.script = "write('target', 1)";
-    cell.draft = "unfinished [";
+    cell.editor.draft = "unfinished [";
     cell.applyScript();
     REQUIRE_FALSE(cell.syntax_error.empty());
     REQUIRE(cell.script == "write('target', 1)");
@@ -99,7 +130,7 @@ TEST_CASE("Applying a button script checks syntax and keeps the previous script 
     cell.action = std::make_shared<GridActionState>("invalid [", LuaScriptHost{});
     cell.action->process(0);
     REQUIRE_FALSE(cell.action->error.empty());
-    cell.draft = "write('target', 2)";
+    cell.editor.draft = "write('target', 2)";
     cell.applyScript();
     REQUIRE(cell.syntax_error.empty());
     REQUIRE(cell.script == "write('target', 2)");
@@ -111,12 +142,12 @@ TEST_CASE("Applying a valid button script does not stop or execute the running a
     cell.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
     cell.action->process(0);
     auto action = cell.action;
-    cell.draft = "write('target', 2)";
+    cell.editor.draft = "write('target', 2)";
     cell.applyScript();
     REQUIRE(cell.action == action);
     REQUIRE(cell.action->running.load());
     REQUIRE_FALSE(cell.action->stop_requested.load());
-    REQUIRE(cell.script == cell.draft);
+    REQUIRE(cell.script == cell.editor.draft);
 }
 
 TEST_CASE("Checkbox settings save transition scripts without runtime state or drafts") {
@@ -127,7 +158,7 @@ TEST_CASE("Checkbox settings save transition scripts without runtime state or dr
     widget.checkbox.checked = true;
     widget.checkbox.on_enable.script = "write('enabled', 1)";
     widget.checkbox.on_disable.script = "write('enabled', 0)";
-    widget.checkbox.on_enable.draft = "invalid [";
+    widget.checkbox.on_enable.editor.draft = "invalid [";
     window.cells[0] = std::move(widget);
     nlohmann::json saved;
     window.updateJson(saved);
@@ -143,7 +174,7 @@ TEST_CASE("Checkbox settings save transition scripts without runtime state or dr
     REQUIRE_FALSE(checkbox.checked);
     REQUIRE(checkbox.on_enable.script == "write('enabled', 1)");
     REQUIRE(checkbox.on_disable.script == "write('enabled', 0)");
-    REQUIRE(checkbox.on_enable.draft.empty());
+    REQUIRE(checkbox.on_enable.editor.draft.empty());
     REQUIRE_FALSE(checkbox.on_enable.action);
     REQUIRE_FALSE(checkbox.on_disable.action);
 }
@@ -184,8 +215,8 @@ TEST_CASE("Checkbox transitions queue the matching script and cancel the previou
 TEST_CASE("Checkbox transition editors apply and validate independently") {
     GridCheckbox checkbox;
     checkbox.on_enable.script = "return";
-    checkbox.on_enable.draft = "invalid [";
-    checkbox.on_disable.draft = "write('target', 0)";
+    checkbox.on_enable.editor.draft = "invalid [";
+    checkbox.on_disable.editor.draft = "write('target', 0)";
     checkbox.on_enable.applyScript();
     checkbox.on_disable.applyScript();
     REQUIRE_FALSE(checkbox.on_enable.syntax_error.empty());
@@ -215,10 +246,10 @@ TEST_CASE("Grid windows save their text to value ratio and default to 30 percent
 TEST_CASE("Grid action error indicators include syntax and completed runtime errors") {
     GridActionScript script;
     REQUIRE_FALSE(script.hasError());
-    script.draft = "unfinished [";
+    script.editor.draft = "unfinished [";
     script.applyScript();
     REQUIRE(script.hasError());
-    script.draft = "return";
+    script.editor.draft = "return";
     script.applyScript();
     REQUIRE_FALSE(script.hasError());
 
@@ -241,7 +272,7 @@ TEST_CASE("Mixed grids preserve each cell's type and applied configuration") {
     auto& cells = window.cells;
     cells[0].button.label = "Start";
     cells[0].button.script = "write('enabled', 1)";
-    cells[0].button.draft = "unfinished [";
+    cells[0].button.editor.draft = "unfinished [";
     window.text_to_value_ratio = 0.6f;
     cells[1].value.scalar_id = 123;
     cells[2].checkbox.label = "Enable";
@@ -281,7 +312,7 @@ TEST_CASE("Mixed grid duplication copies all cells and resets their runtime stat
     window.setCellType(0, GridCellType::Button);
     auto& button = window.cells[0].button;
     button.script = "wait(1)";
-    button.draft = "invalid [";
+    button.editor.draft = "invalid [";
     button.action = std::make_shared<GridActionState>(button.script, LuaScriptHost{});
     auto& checkbox = window.cells[1].checkbox;
     checkbox.on_enable.script = "wait(1)";
@@ -292,7 +323,7 @@ TEST_CASE("Mixed grid duplication copies all cells and resets their runtime stat
     REQUIRE(copy.name == "Actions copy");
     REQUIRE(copy.columns == 3);
     REQUIRE(copy.cells[0].button.script == "wait(1)");
-    REQUIRE(copy.cells[0].button.draft.empty());
+    REQUIRE(copy.cells[0].button.editor.draft.empty());
     REQUIRE_FALSE(copy.cells[0].button.action);
     REQUIRE_FALSE(copy.cells[1].checkbox.checked);
     REQUIRE_FALSE(copy.cells[1].checkbox.on_enable.action);

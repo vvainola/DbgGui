@@ -246,7 +246,7 @@ void showGridScriptError(std::string_view error) {
 }
 
 void showGridActionEditor(GridActionScript& script) {
-    inputScriptTextWithLineNumbers(script.draft, GRID_SCRIPT_EDITOR_SIZE, true);
+    inputScriptTextWithLineNumbers(script.editor.draft, GRID_SCRIPT_EDITOR_SIZE, true);
     if (ImGui::Button("Apply script")) {
         script.applyScript();
     }
@@ -366,21 +366,15 @@ void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
     }
 
     bool const editor_open = ImGui::BeginPopupContextItem("button_settings");
+    cell.updateEditor(editor_open);
     if (editor_open) {
         showCellTypeMenu(grid, index);
-        if (ImGui::IsWindowAppearing() && cell.syntax_error.empty()) {
-            cell.draft = cell.script;
-        }
         ImGui::InputText("Label", &cell.label);
         ImGui::SameLine();
         HelpMarker("Runs once when clicked. Clicking again stops the action. Lua waits use simulation time.");
         showGridActionEditor(cell);
         ImGui::EndPopup();
     }
-    if (cell.editor_open && !editor_open && (cell.draft != cell.script || !cell.syntax_error.empty())) {
-        cell.applyScript();
-    }
-    cell.editor_open = editor_open;
 }
 
 bool DbgGui::renderValueCell(GridWindow& grid, size_t index, bool focus_value) {
@@ -577,15 +571,11 @@ void DbgGui::renderCheckboxCell(GridWindow& grid, size_t index) {
     }
 
     bool const editor_open = ImGui::BeginPopupContextItem("checkbox_settings");
+    for (auto* script : {&cell.on_enable, &cell.on_disable}) {
+        script->updateEditor(editor_open);
+    }
     if (editor_open) {
         showCellTypeMenu(grid, index);
-        if (ImGui::IsWindowAppearing()) {
-            for (auto* script : {&cell.on_enable, &cell.on_disable}) {
-                if (script->syntax_error.empty()) {
-                    script->draft = script->script;
-                }
-            }
-        }
         ImGui::InputText("Label", &cell.label);
         ImGui::SameLine();
         HelpMarker("Runs the selected transition script when checked or unchecked. Lua waits use simulation time.");
@@ -602,14 +592,6 @@ void DbgGui::renderCheckboxCell(GridWindow& grid, size_t index) {
         }
         ImGui::EndPopup();
     }
-    if (cell.editor_open && !editor_open) {
-        for (auto* script : {&cell.on_enable, &cell.on_disable}) {
-            if (script->draft != script->script || !script->syntax_error.empty()) {
-                script->applyScript();
-            }
-        }
-    }
-    cell.editor_open = editor_open;
 }
 
 void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
@@ -641,19 +623,16 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
     draw->AddText({label_x, center.y - ImGui::GetFontSize() * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text), cell.label.c_str());
     ImGui::PopFont();
 
-    bool apply = false;
     bool const editor_open = ImGui::BeginPopupContextItem("led_settings");
+    bool apply = cell.editor.update(editor_open, cell.condition);
     if (editor_open) {
         showCellTypeMenu(grid, index);
-        if (ImGui::IsWindowAppearing()) {
-            cell.draft = cell.condition;
-        }
         ImGui::InputText("Label", &cell.label);
         ImGui::SameLine();
         ImGui::ColorEdit4("##lit_color", &cell.color.x, ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();
         HelpMarker("Return true to light the LED, false to turn it off");
-        inputScriptTextWithLineNumbers(cell.draft, GRID_SCRIPT_EDITOR_SIZE, true);
+        inputScriptTextWithLineNumbers(cell.editor.draft, GRID_SCRIPT_EDITOR_SIZE, true);
         apply = ImGui::Button("Apply condition");
         ImGui::SameLine();
         if (ImGui::Button("Close")) {
@@ -662,13 +641,12 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
         showGridScriptError(result->error);
         ImGui::EndPopup();
     }
-    if (apply || (cell.editor_open && !editor_open && cell.draft != cell.condition)) {
-        cell.condition = cell.draft;
+    if (apply) {
+        cell.condition = cell.editor.draft;
         cell.configure(createLuaScriptHost());
         std::scoped_lock lock(m_sampling_mutex);
         m_grid_scripts.led_scripts.push_back(cell.state);
     }
-    cell.editor_open = editor_open;
 }
 
 bool DbgGui::renderGridCell(GridWindow& grid, size_t index, bool focus_value) {

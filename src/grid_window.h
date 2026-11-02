@@ -73,9 +73,25 @@ struct GridActionState {
     std::string error;
 };
 
+struct GridScriptDraft {
+    std::string draft;
+    bool editor_open = false;
+
+    // Return true when closing should apply the draft.
+    // Preserve invalid drafts on reopening and revalidate them on close.
+    bool update(bool open, std::string const& applied, bool preserve_draft = false) {
+        if (open && !editor_open && !preserve_draft) {
+            draft = applied;
+        }
+        bool const apply = editor_open && !open && (draft != applied || preserve_draft);
+        editor_open = open;
+        return apply;
+    }
+};
+
 struct GridActionScript {
     std::string script;
-    std::string draft;
+    GridScriptDraft editor;
     std::shared_ptr<GridActionState> action;
     std::string syntax_error;
 
@@ -83,13 +99,19 @@ struct GridActionScript {
         return !syntax_error.empty() || (action && !action->running.load() && !action->error.empty());
     }
 
+    void updateEditor(bool open) {
+        if (editor.update(open, script, !syntax_error.empty())) {
+            applyScript();
+        }
+    }
+
     void applyScript() {
-        if (auto result = validateLuaSyntax(draft, "Grid action"); !result) {
+        if (auto result = validateLuaSyntax(editor.draft, "Grid action"); !result) {
             syntax_error = result.error();
             return;
         }
         syntax_error.clear();
-        script = draft;
+        script = editor.draft;
         if (action && !action->running.load()) {
             action.reset();
         }
@@ -97,12 +119,10 @@ struct GridActionScript {
 };
 
 struct GridButtonCell : GridActionScript {
-    bool editor_open = false;
     std::string label = "Button";
 };
 
 struct GridCheckbox {
-    bool editor_open = false;
     std::string label = "Checkbox";
     bool checked = false;
     GridActionScript on_enable;
@@ -134,9 +154,8 @@ struct GridValueCell {
 
 struct GridLedCell {
     std::string label = "LED";
-    bool editor_open = false;
     std::string condition = "return false";
-    std::string draft;
+    GridScriptDraft editor;
     ImVec4 color = {0.2f, 0.9f, 0.3f, 1};
     std::shared_ptr<GridLedState> state;
 
