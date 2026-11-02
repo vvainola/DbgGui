@@ -649,18 +649,6 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
     }
 }
 
-bool DbgGui::renderGridCell(GridWindow& grid, size_t index, bool focus_value) {
-    switch (grid.cells[index].type) {
-        case GridCellType::Button: renderButtonCell(grid, index); break;
-        case GridCellType::Value: return renderValueCell(grid, index, focus_value);
-        case GridCellType::Checkbox: renderCheckboxCell(grid, index); break;
-        case GridCellType::Slider: renderSliderCell(grid, index); break;
-        case GridCellType::LED: renderLedCell(grid, index); break;
-        default: break;
-    }
-    return false;
-}
-
 void DbgGui::renderGrid(GridWindow& grid) {
     bool navigation_handled = false;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y / grid.rows - 2 * ImGui::GetStyle().CellPadding.y);
@@ -674,7 +662,15 @@ void DbgGui::renderGrid(GridWindow& grid) {
                 if (focus) {
                     grid.focus_cell.reset();
                 }
-                bool const focused = renderGridCell(grid, index, focus);
+                bool focused = false;
+                switch (grid.cells[index].type) {
+                    case GridCellType::Value: focused = renderValueCell(grid, index, focus); break;
+                    case GridCellType::Button: renderButtonCell(grid, index); break;
+                    case GridCellType::Checkbox: renderCheckboxCell(grid, index); break;
+                    case GridCellType::Slider: renderSliderCell(grid, index); break;
+                    case GridCellType::LED: renderLedCell(grid, index); break;
+                    default: break;
+                }
                 if (focused && !navigation_handled) {
                     int const row_delta = ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? -1 : 0;
                     int const column_delta = ImGui::IsKeyPressed(ImGuiKey_RightArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_LeftArrow) ? -1 : 0;
