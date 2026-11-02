@@ -227,6 +227,27 @@ void pushGridFontToFit(char const* text, float font_size, float width, float min
     }
 }
 
+char const* renderGridScalarLabel(Scalar const* scalar, bool bound, float font_size) {
+    char const* label = scalar ? scalar->alias_and_group.c_str()
+                     : bound ? "Unavailable scalar" : "Drop a scalar here";
+    pushGridFontToFit(label, font_size, ImGui::GetContentRegionAvail().x, MIN_FONT_SIZE);
+    if (scalar && scalar->customScaleOrOffset()) {
+        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", label);
+    } else {
+        ImGui::TextUnformatted(label);
+    }
+    ImGui::PopFont();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", label);
+    }
+    if (scalar && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(scalar->id));
+        ImGui::TextUnformatted(scalar->alias_and_group.c_str());
+        ImGui::EndDragDropSource();
+    }
+    return label;
+}
+
 void drawGridScriptErrorBorder() {
     ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),
                                         ImGui::GetItemRectMax(),
@@ -397,29 +418,10 @@ bool DbgGui::renderValueCell(GridWindow& grid, size_t index, bool focus_value) {
     ImVec2 const start = ImGui::GetCursorScreenPos();
     Scalar* scalar = cell.scalar_id ? findScalar(m_scalars, *cell.scalar_id) : nullptr;
     bool const available = scalar && !scalar->deleted;
-    char const* label = available ?
-                          scalar->alias_and_group.c_str() :
-                        cell.scalar_id ? "Unavailable scalar" :
-                                         "Drop a scalar here";
     auto const& style = ImGui::GetStyle();
     float const font_height = gridCellFontHeight(cell_height);
     float const cell_width = ImGui::GetContentRegionAvail().x;
-    // Split the cell height between its label and value.
-    pushGridFontToFit(label, font_height * grid.text_to_value_ratio, cell_width, MIN_FONT_SIZE);
-    if (available && scalar->customScaleOrOffset()) {
-        ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", label);
-    } else {
-        ImGui::TextUnformatted(label);
-    }
-    ImGui::PopFont();
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", label);
-    }
-    if (available && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(scalar->id));
-        ImGui::TextUnformatted(scalar->alias_and_group.c_str());
-        ImGui::EndDragDropSource();
-    }
+    renderGridScalarLabel(available ? scalar : nullptr, cell.scalar_id.has_value(), font_height * grid.text_to_value_ratio);
     float const value_font_size = std::max(float(MIN_FONT_SIZE), font_height * (1.0f - grid.text_to_value_ratio));
     bool input_focused = false;
     if (available) {
@@ -491,21 +493,8 @@ void DbgGui::renderSliderCell(GridWindow& grid, size_t index) {
     auto const& style = ImGui::GetStyle();
     float const font_height = gridCellFontHeight(cell_height);
     float const cell_width = ImGui::GetContentRegionAvail().x;
-    char const* label = available ?
-                          scalar->alias_and_group.c_str() :
-                        slider.scalar_id ? "Unavailable scalar" :
-                                           "Drop a scalar here";
-    pushGridFontToFit(label, font_height * grid.text_to_value_ratio, cell_width, MIN_FONT_SIZE);
-    ImGui::TextUnformatted(label);
-    ImGui::PopFont();
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", label);
-    }
-    if (available && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-        ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(scalar->id));
-        ImGui::TextUnformatted(scalar->alias_and_group.c_str());
-        ImGui::EndDragDropSource();
-    }
+    char const* label = renderGridScalarLabel(available ? scalar : nullptr, slider.scalar_id.has_value(),
+                                            font_height * grid.text_to_value_ratio);
     addGridScalarBinding(grid, index, slider.scalar_id);
     bool const valid_range = std::isfinite(slider.minimum) && std::isfinite(slider.maximum)
                           && slider.minimum < slider.maximum
