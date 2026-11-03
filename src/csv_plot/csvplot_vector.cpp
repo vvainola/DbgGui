@@ -69,6 +69,8 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
 
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
+        ImPlotAxisFlags axis_flags = m_options.autofit_y_axis ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+        ImPlot::SetupAxes(nullptr, nullptr, axis_flags, axis_flags);
         // Plot unit circle
         ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
         ImPlot::PlotLine("##Unit circle",
