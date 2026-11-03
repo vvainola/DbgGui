@@ -56,7 +56,9 @@ const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
     VectorPlot& plot = std::get<VectorPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
-    ImGui::Begin(name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoNavFocus
+        | (visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_None);
+    ImGui::Begin(name.c_str(), nullptr, flags);
     if (showPlotContextMenu(plot_base)) {
         ImGui::End();
         return;

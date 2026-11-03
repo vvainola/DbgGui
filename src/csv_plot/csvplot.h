@@ -180,9 +180,9 @@ class CsvPlotter {
     bool m_save_settings = true;
     int m_rows = 1;
     int m_cols = 1;
-    // Docked plots are stored in stable row/column slots: row * MAX_PLOTS + col.
-    // plotAt() still receives a visible row-major index from render loops, but maps
-    // it through the current grid dimensions so adding columns does not move lower rows.
+    // Grid plots use fixed slots (row * MAX_PLOTS + column) to preserve contents
+    // when the grid is resized. plotAt() maps visible indices to these slots.
+    // Floating plots stay undocked because the grid layout is rebuilt every frame.
     int m_undocked_plot_count = 0;
     float m_signals_window_width = 0.15f;
     struct {

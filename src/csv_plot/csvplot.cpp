@@ -2323,7 +2323,8 @@ void CsvPlotter::showPlots() {
 void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next) {
     ScalarPlot& plot = std::get<ScalarPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
-    ImGui::Begin(name.c_str());
+    ImGuiWindowFlags flags = visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_None;
+    ImGui::Begin(name.c_str(), nullptr, flags);
     if (showPlotContextMenu(plot_base)) {
         ImGui::End();
         return;
