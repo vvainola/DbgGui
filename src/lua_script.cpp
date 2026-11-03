@@ -29,6 +29,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <format>
 #include <limits>
@@ -243,9 +244,6 @@ std::expected<void, std::string> LuaScriptRunner::resume(double timestamp) {
         return luaError();
     }
 
-    if (result_count == 1 && lua_isboolean(m_thread, -1)) {
-        m_boolean_result = lua_toboolean(m_thread, -1) != 0;
-    }
     m_running = false;
     bool const restart = m_loops_remaining <= 0 || m_loops_remaining > 1;
     if (restart) {
@@ -279,20 +277,9 @@ void LuaScriptRunner::stop() {
     m_function_ref = LUA_NOREF;
     m_running = false;
     m_waiting = false;
-    m_boolean_result.reset();
 }
 
-std::expected<bool, std::string> LuaScriptRunner::booleanResult() const {
-    if (m_running) {
-        return std::unexpected("Script has not finished; boolean result is unavailable");
-    }
-    if (!m_boolean_result.has_value()) {
-        return std::unexpected("Script must return exactly one boolean (true or false)");
-    }
-    return *m_boolean_result;
-}
-
-std::expected<bool, std::string> LuaScriptRunner::evaluateBoolean(double timestamp) {
+std::expected<LuaLedResult, std::string> LuaScriptRunner::evaluateLed(double timestamp) {
     if (m_state == nullptr) {
         if (auto result = start(timestamp, 1); !result) {
             return std::unexpected(result.error());
@@ -302,7 +289,6 @@ std::expected<bool, std::string> LuaScriptRunner::evaluateBoolean(double timesta
         lua_resetthread(m_thread);
         lua_settop(m_thread, 0);
         lua_rawgeti(m_thread, LUA_REGISTRYINDEX, m_function_ref);
-        m_boolean_result.reset();
         m_wait_until_target.reset();
         m_start_time = m_resume_time = m_next_resume_time = timestamp;
         m_has_waited = false;
@@ -312,12 +298,42 @@ std::expected<bool, std::string> LuaScriptRunner::evaluateBoolean(double timesta
     if (auto result = process(timestamp); !result) {
         return std::unexpected(result.error());
     }
-    auto result = booleanResult();
     if (m_running) {
         stop();
         return std::unexpected("LED conditions must return immediately; waits are not supported");
     }
-    return result;
+    // A completed coroutine keeps its return values until the next evaluation.
+    int const count = lua_gettop(m_thread);
+    if (count == 1 && lua_isboolean(m_thread, -1)) {
+        return LuaLedResult{lua_toboolean(m_thread, -1) != 0, std::nullopt};
+    }
+    if (count == 1 && lua_type(m_thread, -1) == LUA_TNUMBER) {
+        // Lua considers zero truthy; LED numeric results deliberately use zero as off.
+        return LuaLedResult{lua_tonumber(m_thread, -1) != 0, std::nullopt};
+    }
+    if (count == 2 && lua_type(m_thread, -2) == LUA_TSTRING && lua_type(m_thread, -1) == LUA_TSTRING) {
+        std::string color = lua_tostring(m_thread, -1);
+        std::transform(color.begin(), color.end(), color.begin(), [](unsigned char c) { return std::tolower(c); });
+        static constexpr std::pair<std::string_view, std::array<float, 4>> colors[] = {
+            {"red", {1, 0, 0, 1}},
+            {"green", {0, 1, 0, 1}},
+            {"yellow", {1, 1, 0, 1}},
+            {"orange", {1, 0.5f, 0, 1}},
+            {"blue", {0, 0, 1, 1}},
+            {"cyan", {0, 1, 1, 1}},
+            {"magenta", {1, 0, 1, 1}},
+            {"white", {1, 1, 1, 1}},
+            {"gray", {0.5f, 0.5f, 0.5f, 1}},
+            {"black", {0, 0, 0, 1}},
+        };
+        for (auto const& [name, rgba] : colors) {
+            if (color == name) {
+                return LuaLedResult{true, LuaLedAppearance{lua_tostring(m_thread, -2), rgba}};
+            }
+        }
+        return std::unexpected(std::format("Unknown LED color '{}'", color));
+    }
+    return std::unexpected("LED script must return a boolean, a number, or two strings: text, color");
 }
 
 bool LuaScriptRunner::running() const {

@@ -24,19 +24,16 @@ enum class GridCellType {
     LED
 };
 
-struct GridLedResult {
-    bool lit = false;
-    std::string error;
-};
-
 struct GridLedState {
+    using Result = std::expected<LuaLedResult, std::string>;
+
     GridLedState(std::string condition, LuaScriptHost host)
         : runner(std::move(condition), std::move(host), "LED condition") {
     }
     // The runner is used only by the sampling thread. GUI reads published results.
     LuaScriptRunner runner;
     std::atomic<bool> requested = false;
-    std::atomic<std::shared_ptr<GridLedResult const>> result{std::make_shared<GridLedResult>()};
+    std::atomic<std::shared_ptr<Result const>> result{std::make_shared<Result>()};
 };
 
 // One invocation of a grid action. Execution belongs to the sampling thread;

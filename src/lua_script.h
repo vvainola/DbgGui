@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <array>
 #include <expected>
 #include <functional>
 #include <optional>
@@ -49,6 +50,17 @@ struct LuaScriptHost {
 // Compile source without executing it or accessing host callbacks.
 std::expected<void, std::string> validateLuaSyntax(std::string_view source, std::string_view chunk_name = "Lua script");
 
+struct LuaLedAppearance {
+    std::string text;
+    std::array<float, 4> color;
+};
+
+struct LuaLedResult {
+    bool lit = false;
+    // Absent for boolean/numeric results, which use the cell's configured appearance.
+    std::optional<LuaLedAppearance> appearance;
+};
+
 class LuaScriptRunner {
   public:
     LuaScriptRunner(std::string source, LuaScriptHost host, std::string chunk_name = "Lua script");
@@ -62,8 +74,7 @@ class LuaScriptRunner {
     void shiftSchedule(double time_offset);
     void stop();
 
-    std::expected<bool, std::string> booleanResult() const;
-    std::expected<bool, std::string> evaluateBoolean(double timestamp);
+    std::expected<LuaLedResult, std::string> evaluateLed(double timestamp);
     bool running() const;
     int loopsRemaining() const;
     int currentLine() const;
@@ -103,7 +114,6 @@ class LuaScriptRunner {
     std::optional<double> m_wait_until_target;
     int m_current_line = 0;
     int m_loops_remaining = 0;
-    std::optional<bool> m_boolean_result;
     bool m_running = false;
     bool m_waiting = false;
     // Used to reject looping scripts that would otherwise restart without

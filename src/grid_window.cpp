@@ -363,16 +363,10 @@ void DbgGui::processGridScripts(double timestamp) {
     // Host callbacks can release the sampling mutex to register symbols on the GUI
     // thread. Keep runtimes alive without iterating the mutable registry during Lua.
     for (auto const& state : scripts) {
-        if (!state->requested.exchange(false) || !state->result.load()->error.empty()) {
+        if (!state->requested.exchange(false) || !state->result.load()->has_value()) {
             continue;
         }
-        auto result = state->runner.evaluateBoolean(timestamp);
-        auto published = std::make_shared<GridLedResult>();
-        published->lit = result.value_or(false);
-        if (!result) {
-            published->error = result.error();
-        }
-        state->result.store(std::move(published));
+        state->result.store(std::make_shared<GridLedState::Result>(state->runner.evaluateLed(timestamp)));
     }
 }
 
@@ -613,18 +607,26 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
     ImGui::InvisibleButton("led", {width, cell_height});
     cell.state->requested.store(true);
     m_grid_scripts.scripts_requested.store(true);
-    auto result = cell.state->result.load();
+    GridLedState::Result const result = *cell.state->result.load();
+    ImVec4 color = cell.color;
+    char const* label = cell.label.c_str();
+    if (result && result->appearance) {
+        LuaLedAppearance const& appearance = *result->appearance;
+        std::array<float, 4> const& rgba = appearance.color;
+        color = {rgba[0], rgba[1], rgba[2], rgba[3]};
+        label = appearance.text.c_str();
+    }
     auto* draw = ImGui::GetWindowDrawList();
     draw->AddCircleFilled(center,
                           diameter * 0.5f,
-                          result->lit ? ImGui::GetColorU32(cell.color) : IM_COL32(60, 60, 60, 255));
-    if (!result->error.empty()) {
+                          result && result->lit ? ImGui::GetColorU32(color) : IM_COL32(60, 60, 60, 255));
+    if (!result) {
         draw->AddCircle(center, diameter * 0.5f, SCRIPT_ERROR_RED, 0, 2.0f);
     }
     float const label_x = position.x + diameter + 4 + ImGui::GetStyle().ItemInnerSpacing.x;
     float const label_width = std::max(1.0f, position.x + width - label_x);
-    pushGridFontToFit(cell.label.c_str(), diameter * 0.5f, label_width);
-    draw->AddText({label_x, center.y - ImGui::GetFontSize() * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text), cell.label.c_str());
+    pushGridFontToFit(label, diameter * 0.5f, label_width);
+    draw->AddText({label_x, center.y - ImGui::GetFontSize() * 0.5f}, ImGui::GetColorU32(ImGuiCol_Text), label);
     ImGui::PopFont();
 
     bool const editor_open = ImGui::BeginPopupContextItem("led_settings");
@@ -635,7 +637,10 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
         ImGui::SameLine();
         ImGui::ColorEdit4("##lit_color", &cell.color.x, ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();
-        HelpMarker("Return true to light the LED, false to turn it off");
+        HelpMarker("Return true or a nonzero number to light the LED using the configured label and color.\n"
+                   "Return false or zero to turn it off.\n"
+                   "Return two strings to set the text and color: return \"Tripped\", \"red\"\n"
+                   "Colors (case insensitive): red, green, yellow, orange, blue, cyan, magenta, white, gray, black.");
         ImVec2 const editor_size = scriptEditorSizeToFit(cell.editor.draft, GRID_SCRIPT_EDITOR_SIZE);
         inputScriptTextWithLineNumbers(cell.editor.draft, editor_size, true);
         apply = ImGui::Button("Apply condition");
@@ -643,7 +648,9 @@ void DbgGui::renderLedCell(GridWindow& grid, size_t index) {
         if (ImGui::Button("Close")) {
             ImGui::CloseCurrentPopup();
         }
-        showGridScriptError(result->error, editor_size.x);
+        if (!result) {
+            showGridScriptError(result.error(), editor_size.x);
+        }
         ImGui::EndPopup();
     }
     if (apply) {

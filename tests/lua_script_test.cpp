@@ -342,75 +342,99 @@ TEST_CASE("Lua add_scalar reports host exceptions as script errors") {
     CHECK(result.error().find("GUI thread is shutting down") != std::string::npos);
 }
 
-TEST_CASE("Lua scripts expose exactly one boolean return value") {
+TEST_CASE("LED scripts accept boolean return values and can restart after stopping") {
     for (auto const& source : {"return true", "return false"}) {
         LuaScriptRunner runner(source, {});
-        REQUIRE(runner.start(0, 1));
-        REQUIRE_FALSE(runner.booleanResult());
-        REQUIRE(runner.process(0));
-        auto const result = runner.booleanResult();
-        REQUIRE(result.has_value());
-        CHECK(*result == (std::string_view(source) == "return true"));
-        runner.stop();
-        CHECK_FALSE(runner.booleanResult());
-    }
-    for (auto const& source : {"return", "return nil", "return 1", "return 'true'", "return true, false"}) {
-        LuaScriptRunner runner(source, {});
-        REQUIRE(runner.start(0, 1));
-        REQUIRE(runner.process(0));
-        CHECK_FALSE(runner.booleanResult());
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            auto const result = runner.evaluateLed(attempt);
+            REQUIRE(result.has_value());
+            CHECK(result->lit == (std::string_view(source) == "return true"));
+            CHECK_FALSE(result->appearance);
+            runner.stop();
+        }
     }
 }
 
-TEST_CASE("Lua boolean results are unavailable during waits and reset on restart") {
-    LuaScriptRunner waiting("wait(1)\nreturn true", {});
-    REQUIRE(waiting.start(0, 1));
-    REQUIRE(waiting.process(0));
-    CHECK_FALSE(waiting.booleanResult());
-    REQUIRE(waiting.process(1));
-    REQUIRE(waiting.booleanResult().has_value());
-    CHECK(*waiting.booleanResult());
-
-    double value = 1;
-    LuaScriptHost host;
-    host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
-    LuaScriptRunner runner("return read('value') > 0", std::move(host));
-    REQUIRE(runner.start(0, 1));
-    REQUIRE(runner.process(0));
-    REQUIRE(runner.booleanResult().has_value());
-    CHECK(*runner.booleanResult());
-    value = 0;
-    REQUIRE(runner.start(1, 1));
-    CHECK_FALSE(runner.booleanResult());
-    REQUIRE(runner.process(1));
-    REQUIRE(runner.booleanResult().has_value());
-    CHECK_FALSE(*runner.booleanResult());
-}
-
-TEST_CASE("Boolean conditions reuse their VM and read current host values") {
+TEST_CASE("LED conditions reuse their VM and read current host values") {
     double value = 1;
     LuaScriptHost host;
     host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
     LuaScriptRunner runner("calls = (calls or 0) + 1; return calls % 2 == 1 and read('value') > 0", std::move(host));
-    auto result = runner.evaluateBoolean(1);
+    auto result = runner.evaluateLed(1);
     REQUIRE(result.has_value());
-    CHECK(*result);
-    result = runner.evaluateBoolean(1);
+    CHECK(result->lit);
+    result = runner.evaluateLed(1);
     REQUIRE(result.has_value());
-    CHECK_FALSE(*result);
+    CHECK_FALSE(result->lit);
     value = 0;
-    result = runner.evaluateBoolean(2);
+    result = runner.evaluateLed(2);
     REQUIRE(result.has_value());
-    CHECK_FALSE(*result);
+    CHECK_FALSE(result->lit);
 }
 
-TEST_CASE("Immediate boolean conditions reject waits and invalid returns") {
-    for (auto const& source : {"wait(1); return true", "return 1"}) {
+TEST_CASE("Immediate LED conditions reject waits and invalid returns") {
+    for (auto const& source : {"wait(1); return true", "return {}"}) {
         LuaScriptRunner runner(source, {});
-        auto const result = runner.evaluateBoolean(0);
+        auto const result = runner.evaluateLed(0);
         REQUIRE_FALSE(result.has_value());
         CHECK_FALSE(runner.running());
     }
+}
+
+TEST_CASE("LED numeric results treat zero as off and nonzero as on") {
+    double value = 0;
+    LuaScriptHost host;
+    host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
+    LuaScriptRunner runner("return read('value')", std::move(host));
+    for (double number : {0.0, 1.0, -2.0, 0.5, 0.0}) {
+        value = number;
+        auto result = runner.evaluateLed(0);
+        REQUIRE(result.has_value());
+        CHECK(result->lit == (number != 0));
+        CHECK_FALSE(result->appearance);
+    }
+}
+
+TEST_CASE("LED appearance overrides update text and color without retaining previous overrides") {
+    double value = 0;
+    LuaScriptHost host;
+    host.read = [&](std::string_view) -> std::expected<double, std::string> { return value; };
+    LuaScriptRunner runner(R"(
+        local state = read('state')
+        if state == 0 then return "OK", "Green"
+        elseif state == 1 then return "Tripped", "red"
+        elseif state == 2 then return "Warning", "YELLOW"
+        elseif state == 3 then return true
+        else return false end
+    )", std::move(host));
+    for (int state = 0; state < 5; ++state) {
+        value = state;
+        auto result = runner.evaluateLed(state);
+        REQUIRE(result.has_value());
+        CHECK(result->lit == (state != 4));
+        if (state < 3) {
+            REQUIRE(result->appearance);
+            CHECK(result->appearance->text == std::array{"OK", "Tripped", "Warning"}[state]);
+            std::array<std::array<float, 4>, 3> colors = {{{0, 1, 0, 1}, {1, 0, 0, 1}, {1, 1, 0, 1}}};
+            CHECK(result->appearance->color == colors[state]);
+        } else {
+            CHECK_FALSE(result->appearance);
+        }
+    }
+}
+
+TEST_CASE("LED scripts report invalid appearance results and unknown colors") {
+    for (auto source : {"return", "return true, false", "return 'OK'", "return 'OK', 1", "return 1, 'red'", "return 'OK', 'red', true",
+                        "return nil", "return {}"}) {
+        LuaScriptRunner runner(source, {});
+        auto result = runner.evaluateLed(0);
+        REQUIRE_FALSE(result.has_value());
+        CHECK(result.error().find("LED script must return") != std::string::npos);
+    }
+    LuaScriptRunner runner("return 'Tripped', 'reed'", {});
+    auto result = runner.evaluateLed(0);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error() == "Unknown LED color 'reed'");
 }
 
 TEST_CASE("Lua syntax validation compiles without executing actions") {
