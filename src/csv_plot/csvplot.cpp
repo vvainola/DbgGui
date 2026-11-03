@@ -230,42 +230,38 @@ void CsvPlotter::applySignalTransforms(CsvFileData& file) {
     }
 }
 
-void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
-    auto apply_plot_settings = [&](PlotBase& plot) {
-        CsvPlotSignalSettings const& settings = plot.settings;
-        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
-            for (std::string const& signal_name : settings.scalar_signals) {
-                if (CsvSignal* signal = findSignalByName(file, signal_name)) {
-                    scalar_plot->addSignal(signal);
-                }
-            }
-        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
-            for (auto const& signal_names : settings.signal_pairs) {
-                CsvSignal* x = findSignalByName(file, signal_names.first);
-                CsvSignal* y = findSignalByName(file, signal_names.second);
-                if (x && y) {
-                    vector_plot->addSignal({x, y});
-                }
-            }
-        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
-            for (auto const& signal_names : settings.signal_pairs) {
-                CsvSignal* real = findSignalByName(file, signal_names.first);
-                CsvSignal* imag = signal_names.second.empty() ? nullptr : findSignalByName(file, signal_names.second);
-                if (real && (signal_names.second.empty() || imag)) {
-                    spectrum_plot->addSignal(real, imag);
-                }
+// Add matching signals from this file without removing signals from other files.
+static void applyPlotSignals(PlotBase& plot, CsvFileData& file, CsvPlotSignalSettings const& settings) {
+    if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+        for (std::string const& signal_name : settings.scalar_signals) {
+            if (CsvSignal* signal = findSignalByName(file, signal_name)) {
+                scalar_plot->addSignal(signal);
             }
         }
-    };
+    } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+        for (auto const& signal_names : settings.signal_pairs) {
+            CsvSignal* x = findSignalByName(file, signal_names.first);
+            CsvSignal* y = findSignalByName(file, signal_names.second);
+            if (x && y) {
+                vector_plot->addSignal({x, y});
+            }
+        }
+    } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+        for (auto const& signal_names : settings.signal_pairs) {
+            CsvSignal* real = findSignalByName(file, signal_names.first);
+            CsvSignal* imag = signal_names.second.empty() ? nullptr : findSignalByName(file, signal_names.second);
+            if (real && (signal_names.second.empty() || imag)) {
+                spectrum_plot->addSignal(real, imag);
+            }
+        }
+    }
+}
 
-    // Apply settings to every stored slot, including hidden docked/undocked plots,
-    // so increasing rows/columns or undocked count later reveals already-restored state.
-    for (PlotBase& plot : m_docked_plots) {
-        apply_plot_settings(plot);
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        apply_plot_settings(plot);
-    }
+void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
+    // Include hidden plots so expanding the layout reveals their restored bindings.
+    forEachPlot([&](PlotBase& plot) {
+        applyPlotSignals(plot, file, plot.settings);
+    });
 }
 
 static CsvPlotSignalSettings plottedSignalSettings(PlotBase const& plot) {
@@ -299,37 +295,11 @@ void CsvPlotter::showComparisonFile(CsvFileData& file) {
     // Series IDs contain the file name, so reset ImPlot's cache to assign the
     // colormap in the same snapshot order for every comparison file.
     ImPlot::BustColorCache();
-    auto populate_plot = [&](PlotBase& plot) {
-        CsvPlotSignalSettings const& settings = plot.comparison_settings;
-        // Discard manual additions from the previous comparison file before
-        // rebuilding this plot from the session's original name-based layout.
+    forEachPlot([&](PlotBase& plot) {
+        // Rebuild from the comparison snapshot so missing signals can return in later files.
         plot.clearPlot();
-        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
-            for (std::string const& signal_name : settings.scalar_signals) {
-                if (CsvSignal* signal = findSignalByName(file, signal_name)) {
-                    scalar_plot->addSignal(signal);
-                }
-            }
-        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
-            for (auto const& signal_names : settings.signal_pairs) {
-                CsvSignal* x = findSignalByName(file, signal_names.first);
-                CsvSignal* y = findSignalByName(file, signal_names.second);
-                if (x && y) {
-                    vector_plot->addSignal({x, y});
-                }
-            }
-        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
-            for (auto const& signal_names : settings.signal_pairs) {
-                CsvSignal* real = findSignalByName(file, signal_names.first);
-                CsvSignal* imag = signal_names.second.empty() ? nullptr : findSignalByName(file, signal_names.second);
-                if (real && (signal_names.second.empty() || imag)) {
-                    spectrum_plot->addSignal(real, imag);
-                }
-            }
-        }
-    };
-
-    forEachPlot(populate_plot);
+        applyPlotSignals(plot, file, plot.comparison_settings);
+    });
 }
 
 void CsvPlotter::updateComparisonMode() {
@@ -388,7 +358,7 @@ void CsvPlotter::updatePlottedSignalSettings() {
         }
     }
 
-    auto update_plot_settings = [&](PlotBase& plot) {
+    forEachPlot([&](PlotBase& plot) {
         CsvPlotSignalSettings const current_settings = plottedSignalSettings(plot);
 
         // Merge: keep a saved name if still plotted or a ghost; drop cleared
@@ -421,14 +391,7 @@ void CsvPlotter::updatePlottedSignalSettings() {
             addUniquePair(updated.signal_pairs, pair);
         }
         plot.settings = std::move(updated);
-    };
-
-    for (PlotBase& plot : m_docked_plots) {
-        update_plot_settings(plot);
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        update_plot_settings(plot);
-    }
+    });
 }
 
 int CsvPlotter::dockedPlotCount() const {
@@ -522,12 +485,9 @@ std::vector<CsvSignal*> CsvPlotter::sameNamedSignalsFromOpenFiles(std::vector<Cs
 }
 
 void CsvPlotter::removeSignalFromAllPlots(CsvSignal* signal) {
-    for (PlotBase& plot : m_docked_plots) {
+    forEachPlot([&](PlotBase& plot) {
         plot.removeSignal(signal);
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        plot.removeSignal(signal);
-    }
+    });
 }
 
 void CsvPlotter::replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& new_file) {
@@ -594,12 +554,7 @@ void CsvPlotter::replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& 
         }
     };
 
-    for (PlotBase& plot : m_docked_plots) {
-        replace_plot_signals(plot);
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        replace_plot_signals(plot);
-    }
+    forEachPlot(replace_plot_signals);
 
     for (int i = 0; i < (int)old_file.signals.size(); ++i) {
         for (int j = 0; j < (int)m_selected_signals.size(); ++j) {
@@ -767,12 +722,9 @@ void CsvPlotter::openFilesFromDialog() {
 }
 
 void CsvPlotter::clearPlots() {
-    for (PlotBase& plot : m_docked_plots) {
+    forEachPlot([](PlotBase& plot) {
         plot.clearPlot();
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        plot.clearPlot();
-    }
+    });
 }
 
 std::vector<CommandPaletteCommand> CsvPlotter::commandPaletteCommands(bool enable_hotkeys) {
@@ -1444,15 +1396,10 @@ void CsvPlotter::loadSettings() {
     std::filesystem::copy_file(in, settings_dir + "settings.json", std::filesystem::copy_options::overwrite_existing);
 
     // Reset state that is restored from settings before applying the imported configuration.
-    clearPlots();
-    for (PlotBase& plot : m_docked_plots) {
-        plot.settings = {};
-        plot.setPlotType(CsvPlotType::Scalar);
-    }
-    for (PlotBase& plot : m_undocked_plots) {
-        plot.settings = {};
-        plot.setPlotType(CsvPlotType::Scalar);
-    }
+    m_comparison = {};
+    forEachPlot([](PlotBase& plot) {
+        plot = PlotBase{};
+    });
     m_signal_transform_settings.clear();
     m_signal_plot_style_settings.clear();
     m_signal_alias_settings.clear();

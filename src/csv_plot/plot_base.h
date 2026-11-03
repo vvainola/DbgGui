@@ -71,12 +71,6 @@ struct ScalarPlot {
         }
         remove(signals, signal);
     }
-
-    void clear() {
-        for (int i = (int)signals.size() - 1; i >= 0; --i) {
-            removeSignal(signals[i]);
-        }
-    }
 };
 
 struct VectorPlot {

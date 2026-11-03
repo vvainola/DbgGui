@@ -61,7 +61,7 @@ void PlotBase::clearPlot() {
     // "ghost" entries for signals not present in any open file. This way, newly
     // opened files containing those ghost signals still have them restored.
     if (auto* scalar_plot = std::get_if<ScalarPlot>(&variant)) {
-        scalar_plot->clear();
+        scalar_plot->signals.clear();
     } else if (auto* vector_plot = std::get_if<VectorPlot>(&variant)) {
         vector_plot->signals.clear();
     } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&variant)) {
