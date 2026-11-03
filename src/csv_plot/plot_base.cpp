@@ -51,10 +51,11 @@ void PlotBase::setPlotType(CsvPlotType type) {
             break;
     }
     settings = {};
+    comparison_settings = {};
 }
 
 void PlotBase::clearPlot() {
-    // Clear only the live plot data, leaving `settings` intact. The persisted
+    // Clear only live data, retaining saved bindings and the comparison snapshot. The persisted
     // signal names are pruned by CsvPlotter::updatePlottedSignalSettings(), which
     // drops names of signals that are loaded but no longer plotted while keeping
     // "ghost" entries for signals not present in any open file. This way, newly

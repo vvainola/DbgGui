@@ -268,43 +268,39 @@ void CsvPlotter::applyPlottedSignals(CsvFileData& file) {
     }
 }
 
-void CsvPlotter::snapshotComparisonPlotSettings() {
-    // Store names instead of CsvSignal pointers: a later file has different signal
-    // instances, and a signal missing from one file must be eligible to return later.
-    auto snapshot_plot = [](PlotBase const& plot) {
-        CsvPlotSignalSettings settings;
-        if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
-            for (CsvSignal const* signal : scalar_plot->signals) {
-                if (!contains(settings.scalar_signals, signal->name)) {
-                    settings.scalar_signals.push_back(signal->name);
-                }
-            }
-        } else if (auto const* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
-            for (auto const& signals : vector_plot->signals) {
-                addUniquePair(settings.signal_pairs, {signals.first->name, signals.second->name});
-            }
-        } else if (auto const* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
-            for (auto const& spectrum : spectrum_plot->spectrum) {
-                addUniquePair(settings.signal_pairs,
-                              {spectrum.real->name, spectrum.imag == nullptr ? "" : spectrum.imag->name});
+static CsvPlotSignalSettings plottedSignalSettings(PlotBase const& plot) {
+    CsvPlotSignalSettings settings;
+    if (auto const* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
+        for (CsvSignal const* signal : scalar_plot->signals) {
+            if (!contains(settings.scalar_signals, signal->name)) {
+                settings.scalar_signals.push_back(signal->name);
             }
         }
-        return settings;
-    };
+    } else if (auto const* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
+        for (auto const& signals : vector_plot->signals) {
+            addUniquePair(settings.signal_pairs, {signals.first->name, signals.second->name});
+        }
+    } else if (auto const* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
+        for (auto const& spectrum : spectrum_plot->spectrum) {
+            addUniquePair(settings.signal_pairs,
+                          {spectrum.real->name, spectrum.imag == nullptr ? "" : spectrum.imag->name});
+        }
+    }
+    return settings;
+}
 
-    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
-        m_comparison.docked_plot_settings[i] = snapshot_plot(m_docked_plots[i]);
-    }
-    for (int i = 0; i < MAX_UNDOCKED_PLOTS; ++i) {
-        m_comparison.undocked_plot_settings[i] = snapshot_plot(m_undocked_plots[i]);
-    }
+void CsvPlotter::snapshotComparisonPlotSettings() {
+    forEachPlot([](PlotBase& plot) {
+        plot.comparison_settings = plottedSignalSettings(plot);
+    });
 }
 
 void CsvPlotter::showComparisonFile(CsvFileData& file) {
     // Series IDs contain the file name, so reset ImPlot's cache to assign the
     // colormap in the same snapshot order for every comparison file.
     ImPlot::BustColorCache();
-    auto populate_plot = [&](PlotBase& plot, CsvPlotSignalSettings const& settings) {
+    auto populate_plot = [&](PlotBase& plot) {
+        CsvPlotSignalSettings const& settings = plot.comparison_settings;
         // Discard manual additions from the previous comparison file before
         // rebuilding this plot from the session's original name-based layout.
         plot.clearPlot();
@@ -333,12 +329,7 @@ void CsvPlotter::showComparisonFile(CsvFileData& file) {
         }
     };
 
-    for (int i = 0; i < MAX_PLOT_WINDOWS; ++i) {
-        populate_plot(m_docked_plots[i], m_comparison.docked_plot_settings[i]);
-    }
-    for (int i = 0; i < MAX_UNDOCKED_PLOTS; ++i) {
-        populate_plot(m_undocked_plots[i], m_comparison.undocked_plot_settings[i]);
-    }
+    forEachPlot(populate_plot);
 }
 
 void CsvPlotter::updateComparisonMode() {
@@ -398,25 +389,7 @@ void CsvPlotter::updatePlottedSignalSettings() {
     }
 
     auto update_plot_settings = [&](PlotBase& plot) {
-        // Snapshot names of signals currently in the active variant.
-        CsvPlotSignalSettings current_settings;
-        if (auto* scalar_plot = std::get_if<ScalarPlot>(&plot.variant)) {
-            for (CsvSignal* signal : scalar_plot->signals) {
-                if (!contains(current_settings.scalar_signals, signal->name)) {
-                    current_settings.scalar_signals.push_back(signal->name);
-                }
-            }
-        } else if (auto* vector_plot = std::get_if<VectorPlot>(&plot.variant)) {
-            for (auto const& signals : vector_plot->signals) {
-                addUniquePair(current_settings.signal_pairs,
-                              {signals.first->name, signals.second->name});
-            }
-        } else if (auto* spectrum_plot = std::get_if<SpectrumPlot>(&plot.variant)) {
-            for (auto const& spec : spectrum_plot->spectrum) {
-                addUniquePair(current_settings.signal_pairs,
-                              {spec.real->name, spec.imag == nullptr ? "" : spec.imag->name});
-            }
-        }
+        CsvPlotSignalSettings const current_settings = plottedSignalSettings(plot);
 
         // Merge: keep a saved name if still plotted or a ghost; drop cleared
         // loaded ones. Then append any newly plotted names.
@@ -2349,12 +2322,6 @@ void CsvPlotter::showPlots() {
         auto [source, target] = *m_pending_plot_swap;
         // Swapping variants during rendering would invalidate references to their active plot types.
         std::swap(*source, *target);
-        if (m_comparison.active) {
-            // File cycling restores these snapshots; keep them aligned with the swapped plot types.
-            size_t const source_index = static_cast<size_t>(source - m_docked_plots.data());
-            size_t const target_index = static_cast<size_t>(target - m_docked_plots.data());
-            std::swap(m_comparison.docked_plot_settings[source_index], m_comparison.docked_plot_settings[target_index]);
-        }
         for (PlotBase* plot : {source, target}) {
             if (auto* scalar = std::get_if<ScalarPlot>(&plot->variant)) {
                 scalar->autofit_next_frame = true;

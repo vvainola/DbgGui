@@ -305,9 +305,11 @@ if get_option('tests')
     main_tests = executable('tests',
         sources : [
             'src/csv_plot/csv_lua_signal.cpp',
+            'src/csv_plot/plot_base.cpp',
             'src/test_library_loader.cpp',
             'tests/csv_helpers_test.cpp',
             'tests/csv_lua_signal_test.cpp',
+            'tests/csv_plot_base_test.cpp',
             'tests/fwd_decl_types.cpp',
             'tests/settings_migration_test.cpp',
             'tests/lua_script_test.cpp',
