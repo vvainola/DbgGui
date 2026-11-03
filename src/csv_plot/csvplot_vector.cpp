@@ -57,9 +57,9 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
     VectorPlot& plot = std::get<VectorPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoNavFocus
-        | (visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_None);
+        | (visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_NoMove);
     ImGui::Begin(name.c_str(), nullptr, flags);
-    if (showPlotContextMenu(plot_base)) {
+    if (showPlotHeader(plot_base)) {
         ImGui::End();
         return;
     }

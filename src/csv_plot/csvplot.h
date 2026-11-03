@@ -121,7 +121,7 @@ class CsvPlotter {
     void showVectorPlot(PlotBase& plot_base, int visible_plot_idx);
     void showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx);
     void showXSignalCombo();
-    bool showPlotContextMenu(PlotBase& plot);
+    bool showPlotHeader(PlotBase& plot);
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
@@ -227,4 +227,5 @@ class CsvPlotter {
     std::vector<CsvSignal*> m_visible_signals;
     std::array<PlotBase, MAX_PLOT_WINDOWS> m_docked_plots;
     std::array<PlotBase, MAX_UNDOCKED_PLOTS> m_undocked_plots;
+    std::optional<std::pair<PlotBase*, PlotBase*>> m_pending_plot_swap;
 };

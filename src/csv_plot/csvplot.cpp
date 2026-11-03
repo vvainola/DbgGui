@@ -637,7 +637,28 @@ void CsvPlotter::replaceReloadedFileSignals(CsvFileData& old_file, CsvFileData& 
     }
 }
 
-bool CsvPlotter::showPlotContextMenu(PlotBase& plot) {
+bool CsvPlotter::showPlotHeader(PlotBase& plot) {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->DockIsActive) {
+        // Begin() exposes MoveId for the title, but docked tab drags use TabId.
+        ImGui::GetCurrentContext()->LastItemData.ID = window->TabId;
+        if (ImGui::BeginDragDropSource()) {
+            PlotBase* source = &plot;
+            ImGui::SetDragDropPayload("CSV_PLOT", &source, sizeof(source));
+            ImGui::TextUnformatted("Drop onto another plot to swap contents");
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            // Highlight the tab itself instead of drawing a drop-target border.
+            if (ImGuiPayload const* payload = ImGui::AcceptDragDropPayload(
+                  "CSV_PLOT", ImGuiDragDropFlags_AcceptDrawAsHovered | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+                PlotBase* source = *static_cast<PlotBase* const*>(payload->Data);
+                m_pending_plot_swap = std::pair{source, &plot};
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::SetItemTooltip("Drag onto another plot to swap contents");
+    }
     bool plot_type_changed = false;
     if (ImGui::BeginPopupContextItem("Plot_context_menu")) {
         CsvPlotType current_type = plot.plotType();
@@ -663,6 +684,7 @@ bool CsvPlotter::showPlotContextMenu(PlotBase& plot) {
         }
         ImGui::EndPopup();
     }
+
     return plot_type_changed;
 }
 
@@ -2323,14 +2345,33 @@ void CsvPlotter::showPlots() {
             showSpectrumPlot(plot, visible_plot_idx);
         }
     }
+    if (m_pending_plot_swap) {
+        auto [source, target] = *m_pending_plot_swap;
+        // Swapping variants during rendering would invalidate references to their active plot types.
+        std::swap(*source, *target);
+        if (m_comparison.active) {
+            // File cycling restores these snapshots; keep them aligned with the swapped plot types.
+            size_t const source_index = static_cast<size_t>(source - m_docked_plots.data());
+            size_t const target_index = static_cast<size_t>(target - m_docked_plots.data());
+            std::swap(m_comparison.docked_plot_settings[source_index], m_comparison.docked_plot_settings[target_index]);
+        }
+        for (PlotBase* plot : {source, target}) {
+            if (auto* scalar = std::get_if<ScalarPlot>(&plot->variant)) {
+                scalar->autofit_next_frame = true;
+            } else if (auto* vector = std::get_if<VectorPlot>(&plot->variant)) {
+                vector->autofit_next_frame = true;
+            }
+        }
+        m_pending_plot_swap.reset();
+    }
 }
 
 void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, double& vertical_line_time, double& vertical_line_time_next) {
     ScalarPlot& plot = std::get<ScalarPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
-    ImGuiWindowFlags flags = visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_None;
+    ImGuiWindowFlags flags = visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_NoMove;
     ImGui::Begin(name.c_str(), nullptr, flags);
-    if (showPlotContextMenu(plot_base)) {
+    if (showPlotHeader(plot_base)) {
         ImGui::End();
         return;
     }
