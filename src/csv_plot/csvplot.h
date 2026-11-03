@@ -157,6 +157,7 @@ class CsvPlotter {
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
     void openFilesFromDialog();
+    std::vector<std::string> openDialogMultiple();
     void clearPlots();
     void copyPlottedSignalArgumentsToClipboard();
     void addClipboardFileFromClipboard();
@@ -167,6 +168,7 @@ class CsvPlotter {
     };
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
+    std::string m_last_opened_directory = std::filesystem::current_path().string();
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
     std::map<std::string, std::string> m_signal_alias_settings;

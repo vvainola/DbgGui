@@ -93,8 +93,6 @@ inline float COMPARISON_MODE_ACTIVATION_TIME = 0.5f;
 std::vector<double> ASCENDING_NUMBERS;
 
 std::unique_ptr<CsvFileData> parseCsvData(std::string filename);
-std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog();
-std::vector<std::string> openDialogMultiple();
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width);
 std::pair<int32_t, int32_t> getTimeIndices(std::span<double const> time, double start_time, double end_time);
 
@@ -754,7 +752,12 @@ void CsvPlotter::removeAllFiles() {
 }
 
 void CsvPlotter::openFilesFromDialog() {
-    std::vector<std::unique_ptr<CsvFileData>> csv_datas = openCsvFromFileDialog();
+    std::vector<std::unique_ptr<CsvFileData>> csv_datas;
+    for (std::string const& path : openDialogMultiple()) {
+        if (auto csv_data = parseCsvData(path)) {
+            csv_datas.push_back(std::move(csv_data));
+        }
+    }
     if (!csv_datas.empty() && m_save_settings) {
         // Opening files interactively resumes saved plotted signal restore in normal GUI sessions.
         m_use_saved_plotted_signals = true;
@@ -1191,6 +1194,7 @@ void CsvPlotter::loadPreviousSessionSettings() {
 
         try {
             auto settings = nlohmann::json::parse(f);
+            m_last_opened_directory = settings.value("last_opened_directory", m_last_opened_directory);
 
             if (settings.contains("layout")) {
                 std::string layout = settings["layout"];
@@ -1474,6 +1478,7 @@ void CsvPlotter::updateSavedSettings(bool force) {
     }
 
     nlohmann::json settings;
+    settings["last_opened_directory"] = m_last_opened_directory;
     settings["window"] = m_settings_saved["window"];
     bool const maximized = glfwGetWindowAttrib(m_window, GLFW_MAXIMIZED);
     bool const iconified = glfwGetWindowAttrib(m_window, GLFW_ICONIFIED);
@@ -2605,33 +2610,25 @@ void CsvPlotter::showScalarPlot(PlotBase& plot_base, int visible_plot_idx, doubl
     ImGui::End();
 }
 
-std::vector<std::string> openDialogMultiple() {
+std::vector<std::string> CsvPlotter::openDialogMultiple() {
     nfdpathset_t path_set;
-    static std::filesystem::path dir = std::filesystem::current_path();
-    nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", dir.string().c_str(), &path_set);
+    std::error_code error;
+    if (!std::filesystem::is_directory(m_last_opened_directory, error)) {
+        m_last_opened_directory = std::filesystem::current_path().string();
+    }
+    nfdresult_t result = NFD_OpenDialogMultiple("csv,inf", m_last_opened_directory.c_str(), &path_set);
     std::vector<std::string> paths;
     if (result == NFD_OKAY) {
-        for (int i = 0; i < path_set.count; ++i) {
+        for (size_t i = 0; i < path_set.count; ++i) {
             std::string out(NFD_PathSet_GetPath(&path_set, i));
             paths.push_back(out);
-            dir = std::filesystem::path(out).parent_path();
+            m_last_opened_directory = std::filesystem::path(out).parent_path().string();
         }
         NFD_PathSet_Free(&path_set);
     } else if (result == NFD_ERROR) {
         std::cerr << NFD_GetError() << std::endl;
     }
     return paths;
-}
-
-std::vector<std::unique_ptr<CsvFileData>> openCsvFromFileDialog() {
-    std::vector<std::unique_ptr<CsvFileData>> csv_datas;
-    for (std::string const& path : openDialogMultiple()) {
-        std::unique_ptr<CsvFileData> csv_data = parseCsvData(path);
-        if (csv_data) {
-            csv_datas.push_back(std::move(csv_data));
-        }
-    }
-    return csv_datas;
 }
 
 void setLayout(ImGuiID main_dock, int rows, int cols, float signals_window_width) {
