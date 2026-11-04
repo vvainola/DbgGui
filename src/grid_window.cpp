@@ -12,7 +12,7 @@
 namespace {
 void stopCellScripts(GridCell& cell) {
     // Lua runs on the sampling thread; retain its state and request cancellation.
-    for (auto* script : {static_cast<GridActionScript*>(&cell.button),
+    for (auto* script : {&cell.button.on_click,
                          &cell.checkbox.on_enable, &cell.checkbox.on_disable}) {
         if (script->action && script->action->running.load()) {
             script->action->stop_requested.store(true);
@@ -33,7 +33,7 @@ GridCell GridCell::fromJson(nlohmann::json const& data) {
     switch (cell.type) {
         case GridCellType::Button:
             cell.button.label = data.value("label", cell.button.label);
-            cell.button.script = data.value("script", cell.button.script);
+            cell.button.on_click.script = data.value("script", cell.button.on_click.script);
             break;
         case GridCellType::Checkbox:
             cell.checkbox.label = data.value("label", cell.checkbox.label);
@@ -67,7 +67,7 @@ void GridCell::updateJson(nlohmann::json& data) const {
     switch (type) {
         case GridCellType::Button:
             data["label"] = button.label;
-            data["script"] = button.script;
+            data["script"] = button.on_click.script;
             break;
         case GridCellType::Checkbox:
             data["label"] = checkbox.label;
@@ -372,8 +372,9 @@ void DbgGui::processGridScripts(double timestamp) {
 
 void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
     auto& cell = grid.cells[index].button;
+    GridActionScript& on_click = cell.on_click;
     float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
-    bool const running = cell.action && cell.action->running.load();
+    bool const running = on_click.action && on_click.action->running.load();
     if (running) {
         ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
@@ -381,28 +382,28 @@ void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
     }
     if (ImGui::Button((cell.label + "###action").c_str(), {-1, cell_height})) {
         if (running) {
-            cell.action->stop_requested.store(true);
+            on_click.action->stop_requested.store(true);
         } else {
-            cell.action = std::make_shared<GridActionState>(cell.script, createLuaScriptHost());
+            on_click.action = std::make_shared<GridActionState>(on_click.script, createLuaScriptHost());
             std::scoped_lock lock(m_sampling_mutex);
-            m_grid_scripts.actions.push_back(cell.action);
+            m_grid_scripts.actions.push_back(on_click.action);
         }
     }
     if (running) {
         ImGui::PopStyleColor(3);
     }
-    if (cell.hasError()) {
+    if (on_click.hasError()) {
         drawGridScriptErrorBorder();
     }
 
     bool const editor_open = ImGui::BeginPopupContextItem("button_settings");
-    cell.updateEditor(editor_open);
+    on_click.updateEditor(editor_open);
     if (editor_open) {
         showCellTypeMenu(grid, index);
         ImGui::InputText("Label", &cell.label);
         ImGui::SameLine();
         HelpMarker("Runs once when clicked. Clicking again stops the action. Lua waits use simulation time.");
-        showGridActionEditor(cell);
+        showGridActionEditor(on_click);
         ImGui::EndPopup();
     }
 }

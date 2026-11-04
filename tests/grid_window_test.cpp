@@ -76,17 +76,17 @@ TEST_CASE("Grid actions run only on sampling ticks and resume waits without repe
 
 TEST_CASE("Grid action errors are published without executing drafts") {
     GridButtonCell cell;
-    cell.script = "return";
-    cell.editor.draft = "unfinished [";
-    cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
-    cell.action->process(0);
-    REQUIRE(cell.action->error.empty());
-    REQUIRE_FALSE(cell.action->running.load());
-    cell.script = cell.editor.draft;
-    cell.action = std::make_shared<GridActionState>(cell.script, LuaScriptHost{});
-    cell.action->process(0);
-    REQUIRE_FALSE(cell.action->error.empty());
-    REQUIRE_FALSE(cell.action->running.load());
+    cell.on_click.script = "return";
+    cell.on_click.editor.draft = "unfinished [";
+    cell.on_click.action = std::make_shared<GridActionState>(cell.on_click.script, LuaScriptHost{});
+    cell.on_click.action->process(0);
+    REQUIRE(cell.on_click.action->error.empty());
+    REQUIRE_FALSE(cell.on_click.action->running.load());
+    cell.on_click.script = cell.on_click.editor.draft;
+    cell.on_click.action = std::make_shared<GridActionState>(cell.on_click.script, LuaScriptHost{});
+    cell.on_click.action->process(0);
+    REQUIRE_FALSE(cell.on_click.action->error.empty());
+    REQUIRE_FALSE(cell.on_click.action->running.load());
 }
 
 TEST_CASE("Grid actions stop on the sampling thread before starting or resuming") {
@@ -120,34 +120,34 @@ TEST_CASE("Grid actions stop on the sampling thread before starting or resuming"
 
 TEST_CASE("Applying a button script checks syntax and keeps the previous script on errors") {
     GridButtonCell cell;
-    cell.script = "write('target', 1)";
-    cell.editor.draft = "unfinished [";
-    cell.applyScript();
-    REQUIRE_FALSE(cell.syntax_error.empty());
-    REQUIRE(cell.script == "write('target', 1)");
-    REQUIRE_FALSE(cell.action);
+    cell.on_click.script = "write('target', 1)";
+    cell.on_click.editor.draft = "unfinished [";
+    cell.on_click.applyScript();
+    REQUIRE_FALSE(cell.on_click.syntax_error.empty());
+    REQUIRE(cell.on_click.script == "write('target', 1)");
+    REQUIRE_FALSE(cell.on_click.action);
 
-    cell.action = std::make_shared<GridActionState>("invalid [", LuaScriptHost{});
-    cell.action->process(0);
-    REQUIRE_FALSE(cell.action->error.empty());
-    cell.editor.draft = "write('target', 2)";
-    cell.applyScript();
-    REQUIRE(cell.syntax_error.empty());
-    REQUIRE(cell.script == "write('target', 2)");
-    REQUIRE_FALSE(cell.action);
+    cell.on_click.action = std::make_shared<GridActionState>("invalid [", LuaScriptHost{});
+    cell.on_click.action->process(0);
+    REQUIRE_FALSE(cell.on_click.action->error.empty());
+    cell.on_click.editor.draft = "write('target', 2)";
+    cell.on_click.applyScript();
+    REQUIRE(cell.on_click.syntax_error.empty());
+    REQUIRE(cell.on_click.script == "write('target', 2)");
+    REQUIRE_FALSE(cell.on_click.action);
 }
 
 TEST_CASE("Applying a valid button script does not stop or execute the running action") {
     GridButtonCell cell;
-    cell.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
-    cell.action->process(0);
-    auto action = cell.action;
-    cell.editor.draft = "write('target', 2)";
-    cell.applyScript();
-    REQUIRE(cell.action == action);
-    REQUIRE(cell.action->running.load());
-    REQUIRE_FALSE(cell.action->stop_requested.load());
-    REQUIRE(cell.script == cell.editor.draft);
+    cell.on_click.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
+    cell.on_click.action->process(0);
+    auto action = cell.on_click.action;
+    cell.on_click.editor.draft = "write('target', 2)";
+    cell.on_click.applyScript();
+    REQUIRE(cell.on_click.action == action);
+    REQUIRE(cell.on_click.action->running.load());
+    REQUIRE_FALSE(cell.on_click.action->stop_requested.load());
+    REQUIRE(cell.on_click.script == cell.on_click.editor.draft);
 }
 
 TEST_CASE("Checkbox settings save transition scripts without runtime state or drafts") {
@@ -272,8 +272,8 @@ TEST_CASE("Mixed grids preserve each cell's type and applied configuration") {
     }
     auto& cells = window.cells;
     cells[0].button.label = "Start";
-    cells[0].button.script = "write('enabled', 1)";
-    cells[0].button.editor.draft = "unfinished [";
+    cells[0].button.on_click.script = "write('enabled', 1)";
+    cells[0].button.on_click.editor.draft = "unfinished [";
     window.text_to_value_ratio = 0.6f;
     cells[1].value.scalar_id = 123;
     cells[2].checkbox.label = "Enable";
@@ -312,9 +312,9 @@ TEST_CASE("Mixed grid duplication copies all cells and resets their runtime stat
     window.setCellType(2, GridCellType::LED);
     window.setCellType(0, GridCellType::Button);
     auto& button = window.cells[0].button;
-    button.script = "wait(1)";
-    button.editor.draft = "invalid [";
-    button.action = std::make_shared<GridActionState>(button.script, LuaScriptHost{});
+    button.on_click.script = "wait(1)";
+    button.on_click.editor.draft = "invalid [";
+    button.on_click.action = std::make_shared<GridActionState>(button.on_click.script, LuaScriptHost{});
     auto& checkbox = window.cells[1].checkbox;
     checkbox.on_enable.script = "wait(1)";
     checkbox.setChecked(true, LuaScriptHost{});
@@ -323,9 +323,9 @@ TEST_CASE("Mixed grid duplication copies all cells and resets their runtime stat
     REQUIRE(copy.id == 2);
     REQUIRE(copy.name == "Actions copy");
     REQUIRE(copy.columns == 3);
-    REQUIRE(copy.cells[0].button.script == "wait(1)");
-    REQUIRE(copy.cells[0].button.editor.draft.empty());
-    REQUIRE_FALSE(copy.cells[0].button.action);
+    REQUIRE(copy.cells[0].button.on_click.script == "wait(1)");
+    REQUIRE(copy.cells[0].button.on_click.editor.draft.empty());
+    REQUIRE_FALSE(copy.cells[0].button.on_click.action);
     REQUIRE_FALSE(copy.cells[1].checkbox.checked);
     REQUIRE_FALSE(copy.cells[1].checkbox.on_enable.action);
     REQUIRE_FALSE(copy.cells[2].led.state);
@@ -341,10 +341,10 @@ TEST_CASE("Changing a cell type keeps its configuration and stops hidden actions
     window.setCellType(0, GridCellType::Button);
     auto& cell = window.cells[0];
     cell.button.label = "Start";
-    cell.button.script = "wait(1)";
-    cell.button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
+    cell.button.on_click.script = "wait(1)";
+    cell.button.on_click.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
     window.setCellType(0, GridCellType::LED);
-    REQUIRE(cell.button.action->stop_requested.load());
+    REQUIRE(cell.button.on_click.action->stop_requested.load());
     cell.led.condition = "return true";
     window.setCellType(0, GridCellType::Checkbox);
     auto& checkbox = cell.checkbox;
@@ -353,7 +353,7 @@ TEST_CASE("Changing a cell type keeps its configuration and stops hidden actions
     window.setCellType(0, GridCellType::Button);
     REQUIRE(checkbox.on_enable.action->stop_requested.load());
     REQUIRE(cell.button.label == "Start");
-    REQUIRE(cell.button.script == "wait(1)");
+    REQUIRE(cell.button.on_click.script == "wait(1)");
     REQUIRE(cell.led.condition == "return true");
     REQUIRE(cell.type == GridCellType::Button);
     window.setCellType(0, static_cast<GridCellType>(100));
@@ -466,30 +466,30 @@ TEST_CASE("Mixed grid resizing preserves individual cell actions and LED runtime
     GridWindow mixed("Grid", 1);
     mixed.resize(2, 2);
     mixed.setCellType(10, GridCellType::Button);
-    mixed.cells[10].button.script = "wait(1)";
-    mixed.cells[10].button.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
-    auto action = mixed.cells[10].button.action;
+    mixed.cells[10].button.on_click.script = "wait(1)";
+    mixed.cells[10].button.on_click.action = std::make_shared<GridActionState>("wait(1)", LuaScriptHost{});
+    auto action = mixed.cells[10].button.on_click.action;
     mixed.setCellType(11, GridCellType::LED);
     mixed.cells[11].led.label = "Ready";
     mixed.cells[11].led.configure(LuaScriptHost{});
     auto state = mixed.cells[11].led.state;
     mixed.resize(2, 3);
-    REQUIRE(mixed.cells[10].button.action == action);
-    REQUIRE(mixed.cells[10].button.script == "wait(1)");
+    REQUIRE(mixed.cells[10].button.on_click.action == action);
+    REQUIRE(mixed.cells[10].button.on_click.script == "wait(1)");
     REQUIRE(mixed.cells[11].led.state == state);
     REQUIRE(mixed.cells[11].led.label == "Ready");
     REQUIRE_FALSE(action->stop_requested.load());
     state->requested.store(true);
     mixed.resize(1, 1);
-    REQUIRE(mixed.cells[10].button.action == action);
+    REQUIRE(mixed.cells[10].button.on_click.action == action);
     REQUIRE(mixed.cells[11].led.state == state);
     REQUIRE(action->stop_requested.load());
     REQUIRE_FALSE(state->requested.load());
     nlohmann::json saved;
     mixed.updateJson(saved);
     GridWindow restored(saved);
-    REQUIRE(restored.cells[10].button.script == "wait(1)");
-    REQUIRE_FALSE(restored.cells[10].button.action);
+    REQUIRE(restored.cells[10].button.on_click.script == "wait(1)");
+    REQUIRE_FALSE(restored.cells[10].button.on_click.action);
     REQUIRE(restored.cells[11].led.label == "Ready");
     REQUIRE_FALSE(restored.cells[11].led.state);
 }
@@ -527,7 +527,7 @@ TEST_CASE("Shrinking grids retains all cell types across resizing, saving, and d
     auto& cells = window.cells;
     window.setCellType(20, GridCellType::Button);
     cells[20].button.label = "Start";
-    cells[20].button.script = "wait(1)";
+    cells[20].button.on_click.script = "wait(1)";
     cells[21].value.scalar_id = 0;
     window.setCellType(22, GridCellType::Checkbox);
     cells[22].checkbox.label = "Power";
@@ -559,7 +559,7 @@ TEST_CASE("Shrinking grids retains all cell types across resizing, saving, and d
         grid->resize(3, 5);
         REQUIRE(grid->cells[20].type == GridCellType::Button);
         REQUIRE(grid->cells[20].button.label == "Start");
-        REQUIRE(grid->cells[20].button.script == "wait(1)");
+        REQUIRE(grid->cells[20].button.on_click.script == "wait(1)");
         REQUIRE(grid->cells[21].type == GridCellType::Value);
         REQUIRE(grid->cells[21].value.scalar_id == 0);
         REQUIRE(grid->cells[22].type == GridCellType::Checkbox);
@@ -595,12 +595,12 @@ TEST_CASE("Resizing cancels newly hidden actions without restarting them on expa
     window.resize(2, 4);
     window.setCellType(0, GridCellType::Button);
     auto& visible = window.cells[0].button;
-    visible.script = "wait(1); write('target', 1)";
-    visible.action = std::make_shared<GridActionState>(visible.script, host);
+    visible.on_click.script = "wait(1); write('target', 1)";
+    visible.on_click.action = std::make_shared<GridActionState>(visible.on_click.script, host);
     window.setCellType(11, GridCellType::Button);
     auto& button = window.cells[11].button;
-    button.script = "wait(1); write('target', 2)";
-    button.action = std::make_shared<GridActionState>(button.script, host);
+    button.on_click.script = "wait(1); write('target', 2)";
+    button.on_click.action = std::make_shared<GridActionState>(button.on_click.script, host);
     window.setCellType(12, GridCellType::Checkbox);
     auto& checkbox = window.cells[12].checkbox;
     checkbox.on_enable.script = "wait(1); write('target', 3)";
@@ -611,27 +611,27 @@ TEST_CASE("Resizing cancels newly hidden actions without restarting them on expa
     led.condition = "return true";
     led.configure(host);
     led.state->requested.store(true);
-    visible.action->process(0);
-    button.action->process(0);
+    visible.on_click.action->process(0);
+    button.on_click.action->process(0);
     enabled_action->process(0);
     REQUIRE(writes.empty());
     SECTION("Reduce rows") { window.resize(1, 4); }
     SECTION("Reduce columns") { window.resize(2, 1); }
-    REQUIRE_FALSE(visible.action->stop_requested.load());
-    REQUIRE(button.action->stop_requested.load());
+    REQUIRE_FALSE(visible.on_click.action->stop_requested.load());
+    REQUIRE(button.on_click.action->stop_requested.load());
     REQUIRE(enabled_action->stop_requested.load());
     REQUIRE_FALSE(led.state->requested.load());
-    visible.action->process(1);
-    button.action->process(1);
+    visible.on_click.action->process(1);
+    button.on_click.action->process(1);
     enabled_action->process(1);
     REQUIRE(writes == std::vector<double>{1});
-    REQUIRE_FALSE(button.action->running.load());
+    REQUIRE_FALSE(button.on_click.action->running.load());
     REQUIRE_FALSE(enabled_action->running.load());
     window.resize(2, 4);
-    button.action->process(2);
+    button.on_click.action->process(2);
     enabled_action->process(2);
     REQUIRE(writes == std::vector<double>{1});
-    REQUIRE(button.script == "wait(1); write('target', 2)");
+    REQUIRE(button.on_click.script == "wait(1); write('target', 2)");
     REQUIRE(checkbox.checked);
     REQUIRE(checkbox.on_disable.script == "wait(1); write('target', 4)");
     REQUIRE(led.condition == "return true");

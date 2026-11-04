@@ -117,8 +117,9 @@ struct GridActionScript {
     }
 };
 
-struct GridButtonCell : GridActionScript {
+struct GridButtonCell {
     std::string label = "Button";
+    GridActionScript on_click;
 };
 
 struct GridCheckbox {
