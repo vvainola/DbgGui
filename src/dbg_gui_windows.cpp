@@ -1234,13 +1234,6 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     ImGui::TreePop();
     m_visible_tree_symbols.push_back(sym);
 
-    // The multi-select API handles plain-click select, ctrl-toggle (with toggle-off),
-    // shift-range, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
-    // the Custom Signal Creator, since that is an application-specific action.
-    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift) {
-        m_show_custom_signal_creator = true;
-    }
-
     bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
                                  || sym->getType() == VariantSymbol::Type::Enum;
     if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {

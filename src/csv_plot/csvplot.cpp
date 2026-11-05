@@ -48,7 +48,6 @@ inline const std::string SETTINGS_LOCATION = "HOME";
 #include "save_image.h"
 #include "multi_select_helpers.h"
 #include "csv_helpers.h"
-#include "custom_signal.hpp"
 #include "settings_migration.h"
 #include "minmax.h"
 #include "sample_clipboard.h"

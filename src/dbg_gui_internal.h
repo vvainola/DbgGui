@@ -164,7 +164,6 @@ class DbgGui {
                                double time_range,
                                SpectrumWindow window,
                                bool logarithmic_y_axis);
-    void showCustomSignalCreator();
     void loadPreviousSessionSettings();
     void updateSavedSettings(bool force = false);
     void saveSettings();
@@ -235,7 +234,6 @@ class DbgGui {
     std::vector<VariantSymbol*> m_visible_tree_symbols;
     std::vector<Scalar*> m_selected_scalars;
     std::vector<Scalar*> m_visible_scalars;
-    bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
     std::vector<std::unique_ptr<Scalar>> m_scalars;

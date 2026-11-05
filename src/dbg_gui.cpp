@@ -25,7 +25,6 @@
 #include "dbg_gui_internal.h"
 #include "themes.h"
 #include "str_helpers.h"
-#include "custom_signal.hpp"
 #include "signal_cleanup.h"
 #include "plot_settings.h"
 #include "settings_migration.h"
@@ -296,7 +295,6 @@ std::vector<CommandPaletteCommand> DbgGui::commandPaletteCommands(bool enable_sa
       {"load-snapshot", "Load snapshot", "Restore global variable values from a snapshot.", ImGuiMod_Ctrl | ImGuiKey_R, [&] { loadSnapshot(); }},
       {"save-settings", "Save settings", "Save the current DbgGui configuration to a JSON file.", ImGuiKey_None, [&] { saveSettings(); }},
       {"load-settings", "Load settings", "Load a DbgGui configuration from a JSON file.", ImGuiKey_None, [&] { loadSettings(); }},
-      {"custom-signal-tip", "Create custom signal", "Select symbols, then Ctrl+Shift-click a symbol in the Symbols tree to open the Custom Signal Creator.", ImGuiKey_None, {}},
     };
 }
 
@@ -426,7 +424,6 @@ void DbgGui::updateLoop() {
         showScriptWindow();
         showGridWindows();
         showPlots();
-        showCustomSignalCreator();
         setInitialFocus();
         updateSavedSettings();
 
@@ -627,36 +624,6 @@ void DbgGui::loadPreviousSessionSettings() {
                       || sym->getType() == VariantSymbol::Type::Pointer)) {
                   addScalarSymbol(sym, symbol["group"]);
               })
-        }
-
-        for (auto custom_signal : m_settings["custom_signals"]) {
-            std::string eq = custom_signal["equation"];
-            std::string name = custom_signal["name"];
-            std::string group = custom_signal["group"];
-            std::vector<VariantSymbol*> selected_symbols;
-            bool all_symbols_exist = true;
-            for (auto& symbol_name : custom_signal["symbols"]) {
-                VariantSymbol* sym = m_symbols.getSymbol(symbol_name);
-                if (sym) {
-                    selected_symbols.push_back(sym);
-                } else {
-                    all_symbols_exist = false;
-                }
-            }
-            if (!all_symbols_exist) {
-                continue;
-            }
-
-            ReadWriteFn eq_fn = [selected_symbols, eq](std::optional<double> /*write*/) {
-                std::vector<double> values;
-                for (VariantSymbol* symbol : selected_symbols) {
-                    values.push_back(getSourceValue(symbol->getValueSource()));
-                }
-                std::expected<double, std::string> expr_value = str::evaluateExpression(getFormattedEqForSample(eq, values));
-                assert(expr_value.has_value());
-                return expr_value.value();
-            };
-            addScalar(eq_fn, group, name);
         }
 
         m_dockspaces.clear();
@@ -926,9 +893,6 @@ void DbgGui::updateSavedSettings(bool force) {
             if (!has_live_duplicate) {
                 m_settings["scalars"].erase(scalar->name_and_group);
                 m_settings["scalar_symbols"].erase(scalar->name_and_group);
-            }
-            if (!has_live_duplicate && m_settings["custom_signals"].contains(scalar->name_and_group)) {
-                m_settings["custom_signals"].erase(scalar->name_and_group);
             }
             remove(m_scalars, scalar);
         }
