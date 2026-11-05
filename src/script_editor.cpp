@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "lua_script_editor.h"
+#include "script_editor.h"
 
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
@@ -78,6 +78,36 @@ ImGuiWindow* findChildWindowByChildId(ImGuiID child_id) {
 }
 
 } // namespace
+
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua) {
+    int const line_count = static_cast<int>(lines.size());
+    float const gutter_width = scriptLineNumberGutterWidth(line_count);
+    if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("##line", ImGuiTableColumnFlags_WidthFixed, gutter_width);
+        ImGui::TableSetupColumn("##source", ImGuiTableColumnFlags_WidthStretch);
+        bool inside_block_comment = false;
+        for (int i = 0; i < line_count; ++i) {
+            if (i == current_line) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TableNextColumn();
+                ImGui::Separator();
+            }
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            std::string line_number = std::to_string(i + 1);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - ImGui::GetStyle().FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x);
+            ImGui::TextDisabled("%s", line_number.c_str());
+            ImGui::TableNextColumn();
+            if (highlight_lua) {
+                showLuaHighlightedText(lines[i], inside_block_comment);
+            } else {
+                ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
+            }
+        }
+        ImGui::EndTable();
+    }
+}
 
 ImVec2 scriptEditorSizeToFit(std::string_view text, ImVec2 minimum_size) {
     auto const& style = ImGui::GetStyle();

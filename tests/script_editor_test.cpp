@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "imgui_internal.h"
-#include "lua_script_editor.h"
+#include "script_editor.h"
 
 #include <memory>
 #include <string>

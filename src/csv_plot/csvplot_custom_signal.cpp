@@ -25,7 +25,7 @@
 #include "csv_lua_signal.h"
 #include "imgui_helpers.h"
 #include "imgui_stdlib.h"
-#include "lua_script_editor.h"
+#include "script_editor.h"
 #include "lua_syntax_highlighter.h"
 
 #include <algorithm>

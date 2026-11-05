@@ -2,7 +2,7 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "grid_slider.h"
-#include "lua_script_editor.h"
+#include "script_editor.h"
 #include "magic_enum.hpp"
 
 #include <algorithm>

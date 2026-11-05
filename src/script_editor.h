@@ -26,8 +26,12 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Keep the minimum height and expand width for the longest line, up to the viewport.
 ImVec2 scriptEditorSizeToFit(std::string_view text, ImVec2 minimum_size);
 
 void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua);
+
+// Read-only script view with a progress separator after current_line source lines.
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua);
