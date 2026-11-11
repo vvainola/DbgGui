@@ -717,6 +717,7 @@ void DbgGui::showGridWindows() {
         }
         ImGui::SetNextWindowSize({360, 220}, ImGuiCond_FirstUseEver);
         window.focus.focused = ImGui::Begin(window.title().c_str(), nullptr);
+        window.closeOnMiddleClick();
         ImGui::OpenPopupOnItemClick("grid_window_settings", ImGuiPopupFlags_MouseButtonRight);
         if (window.focus.focused && ImGui::Button("Menu")) {
             ImGui::OpenPopup("grid_window_settings");
