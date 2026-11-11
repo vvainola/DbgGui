@@ -56,8 +56,10 @@ const std::array<XY<double>, 1000> HALF_UNIT_CIRCLE = unitCirclePoints(0.5);
 void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
     VectorPlot& plot = std::get<VectorPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
-    ImGui::Begin(name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-    if (showPlotContextMenu(plot_base)) {
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoNavFocus
+        | (visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_NoMove);
+    ImGui::Begin(name.c_str(), nullptr, flags);
+    if (showPlotHeader(plot_base)) {
         ImGui::End();
         return;
     }
@@ -69,6 +71,8 @@ void CsvPlotter::showVectorPlot(PlotBase& plot_base, int visible_plot_idx) {
 
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding, ImVec2(0.1f, 0.1f));
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, ImGui::GetContentRegionAvail().y), ImPlotFlags_Equal)) {
+        ImPlotAxisFlags axis_flags = m_options.autofit_y_axis ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+        ImPlot::SetupAxes(nullptr, nullptr, axis_flags, axis_flags);
         // Plot unit circle
         ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.5f, 0.5f, 0.5f, 0.2f));
         ImPlot::PlotLine("##Unit circle",

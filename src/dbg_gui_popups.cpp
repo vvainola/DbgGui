@@ -32,6 +32,22 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
     }
     static std::string window_or_plot_name;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Center modal
+    if (modal_name == str::ADD_GRID_WINDOW) {
+        if (ImGui::BeginPopupModal(modal_name.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::IsWindowAppearing()) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            bool const submitted = ImGui::InputText("Name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue);
+            if (ImGui::Button("Create") || submitted) {
+                auto const name = window_or_plot_name.empty() ? std::string("Grid window") : window_or_plot_name;
+                m_grid_windows.emplace_back(name, hashWithTime(name));
+                window_or_plot_name.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        return;
+    }
     if (modal_name == str::ADD_PLOT) {
         if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::SetKeyboardFocusHere();
@@ -50,34 +66,6 @@ void DbgGui::addPopupModal(std::string const& modal_name) {
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("Custom window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 m_custom_windows.push_back(CustomWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            };
-            ImGui::EndPopup();
-        }
-    } else if (modal_name == str::ADD_PANEL) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (ImGui::IsWindowAppearing()) {
-                ImGui::SetKeyboardFocusHere();
-            }
-            if (ImGui::InputText("Panel name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_panels.emplace_back(window_or_plot_name, hashWithTime(window_or_plot_name));
-                window_or_plot_name.clear();
-                ImGui::CloseCurrentPopup();
-            }
-            if (ImGui::Button("Import panel...")) {
-                if (importPanel()) {
-                    window_or_plot_name.clear();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            ImGui::EndPopup();
-        }
-    } else if (modal_name == str::ADD_GRID_WINDOW) {
-        if (ImGui::BeginPopupModal(modal_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("Grid window name", &window_or_plot_name, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                m_grid_windows.emplace_back(GridWindow(window_or_plot_name, hashWithTime(window_or_plot_name)));
                 window_or_plot_name.clear();
                 ImGui::CloseCurrentPopup();
             };

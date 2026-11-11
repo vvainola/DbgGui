@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "panel_slider.h"
+#include "grid_slider.h"
 
 #include <memory>
 
@@ -31,11 +31,11 @@ struct SliderTest {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos({20, 20});
         ImGui::SetNextWindowSize({400, 200});
-        ImGui::Begin("Panel slider");
+        ImGui::Begin("Grid slider");
         slider_id = ImGui::GetID("##slider");
         double candidate = value;
         ImGui::SetNextItemWidth(300);
-        if (panelSliderDouble("##slider", &candidate, 0, 100)) {
+        if (gridSliderDouble("##slider", &candidate, 0, 100)) {
             value = candidate;
             ++writes;
         }
@@ -60,7 +60,7 @@ struct SliderTest {
 };
 }
 
-TEST_CASE("Panel sliders defer typed changes until Enter") {
+TEST_CASE("Grid sliders defer typed changes until Enter") {
     SliderTest slider;
     slider.startTyping();
     auto& io = ImGui::GetIO();
@@ -114,7 +114,7 @@ TEST_CASE("Panel sliders defer typed changes until Enter") {
     }
 }
 
-TEST_CASE("Panel sliders apply dragging immediately") {
+TEST_CASE("Grid sliders apply dragging immediately") {
     SliderTest slider;
     auto& io = ImGui::GetIO();
     io.AddMousePosEvent(slider.slider_rect.GetCenter().x, slider.slider_rect.GetCenter().y);

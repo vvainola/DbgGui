@@ -52,8 +52,10 @@ std::vector<std::complex<double>> realImagToComplex(std::vector<double> const& r
 void CsvPlotter::showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx) {
     SpectrumPlot& plot = std::get<SpectrumPlot>(plot_base.variant);
     std::string name = plotWindowName(visible_plot_idx);
-    ImGui::Begin(name.c_str(), NULL, ImGuiWindowFlags_NoNavFocus);
-    if (showPlotContextMenu(plot_base)) {
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoNavFocus
+        | (visible_plot_idx >= dockedPlotCount() ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_NoMove);
+    ImGui::Begin(name.c_str(), nullptr, flags);
+    if (showPlotHeader(plot_base)) {
         ImGui::End();
         return;
     }

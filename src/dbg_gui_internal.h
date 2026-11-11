@@ -26,7 +26,7 @@
 #include "symbols/variant_symbol.h"
 #include "scrolling_buffer.h"
 #include "sample_clipboard.h"
-#include "panel_window.h"
+#include "grid_window.h"
 #include "imgui.h"
 #include "imgui_helpers.h"
 #include "nlohmann/json.hpp"
@@ -54,14 +54,12 @@ inline constexpr const char* USER_SETTINGS_LOCATION = "HOME";
 #endif
 inline constexpr ImVec4 COLOR_TEAL = ImVec4(0.0f, 1.0f, 1.0f, 1);
 inline constexpr ImVec4 COLOR_GREEN = ImVec4(0.3f, 0.9f, 0.3f, 1);
-inline constexpr ImVec4 COLOR_WHITE = ImVec4(1, 1, 1, 1);
 inline constexpr int32_t MIN_FONT_SIZE = 8;
 inline constexpr int32_t MAX_FONT_SIZE = 100;
 
 namespace str {
 inline constexpr const char* ADD_PLOT = "Add plot";
 inline constexpr const char* ADD_CUSTOM_WINDOW = "Add custom window";
-inline constexpr const char* ADD_PANEL = "Add panel";
 inline constexpr const char* ADD_GRID_WINDOW = "Add grid window";
 inline constexpr const char* ADD_DOCKSPACE = "Add dockspace";
 inline constexpr const char* PAUSE_AFTER = "Pause after";
@@ -126,24 +124,19 @@ class DbgGui {
     void showSymbolsWindow();
     void showCustomWindow();
     void showScriptWindow();
-    void showGridWindow();
-    void showPanels();
+    void showGridWindows();
+    void renderGrid(GridWindow& grid);
     // Lua's C++ functions run on the sampling thread with m_sampling_mutex held
     // to coordinate signal access with sampling and GUI changes to registered scalars.
     LuaScriptHost createLuaScriptHost();
-    void processPanelScripts(double timestamp);
-    void renderPanelButtonGrid(PanelWidget& widget, PanelWindow& panel);
-    void renderPanelValueGrid(PanelWidget& widget);
-    void renderPanelSliderGrid(PanelWidget& widget);
-    void renderPanelLedGrid(PanelWidget& widget);
-    nlohmann::json panelSettings(PanelWindow& panel);
-    void copyPanelWidgets(PanelWindow& panel);
-    void pastePanelWidgets(PanelWindow& panel, ImVec2 position);
-    void exportPanel(PanelWindow& panel);
-    bool importPanel();
-    void addPanelScalarDropTarget(std::optional<uint64_t>& scalar_id);
-    void addPanelScalarBinding(std::optional<uint64_t>& scalar_id);
-    void renderPanelCheckboxGrid(PanelWidget& widget, PanelWindow& panel);
+    void processGridScripts(double timestamp);
+    void renderButtonCell(GridWindow& grid, size_t index);
+    bool renderValueCell(GridWindow& grid, size_t index, bool focus_value);
+    void renderSliderCell(GridWindow& grid, size_t index);
+    void renderLedCell(GridWindow& grid, size_t index);
+    void addGridScalarDropTarget(std::optional<uint64_t>& scalar_id);
+    void addGridScalarBinding(GridWindow& grid, size_t index, std::optional<uint64_t>& scalar_id);
+    void renderCheckboxCell(GridWindow& grid, size_t index);
 
     struct Message {
         std::string text;
@@ -157,8 +150,7 @@ class DbgGui {
     std::string commandHotkeyName(std::string_view command_id, ImGuiKeyChord default_hotkey) const;
     void addCustomWindowDragAndDrop(CustomWindow& custom_window);
     void showPlots();
-    void renderPlotContents(PlotWindow& plot_window);
-    void restorePanelPlotSettings(std::optional<uint64_t> registered_id = std::nullopt);
+    void renderPlotContents(PlotWindow& plot_window, double vertical_line_time, double& vertical_line_time_next);
     void reconcilePlotSettings(PlotWindow& plot, nlohmann::json& saved);
     void renderScalarSubplot(PlotWindow::Subplot& subplot,
                              int subplot_idx,
@@ -172,9 +164,8 @@ class DbgGui {
                                double time_range,
                                SpectrumWindow window,
                                bool logarithmic_y_axis);
-    void showCustomSignalCreator();
     void loadPreviousSessionSettings();
-    void updateSavedSettings();
+    void updateSavedSettings(bool force = false);
     void saveSettings();
     void loadSettings();
     void setInitialFocus();
@@ -213,7 +204,6 @@ class DbgGui {
                                   bool filter_to_search_path);
     void showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbol_name);
     void addPopupModal(std::string const& modal_name);
-    void addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col);
     void saveSnapshot();
     void loadSnapshot();
 
@@ -244,7 +234,6 @@ class DbgGui {
     std::vector<VariantSymbol*> m_visible_tree_symbols;
     std::vector<Scalar*> m_selected_scalars;
     std::vector<Scalar*> m_visible_scalars;
-    bool m_show_custom_signal_creator = false;
 
     ScrollingBuffer m_sampler{int(1e6)};
     std::vector<std::unique_ptr<Scalar>> m_scalars;
@@ -257,14 +246,12 @@ class DbgGui {
     GLFWwindow* m_window = nullptr;
     std::vector<CustomWindow> m_custom_windows;
     std::vector<GridWindow> m_grid_windows;
-    std::vector<PanelWindow> m_panels;
     struct {
         // GUI registers runtimes under m_sampling_mutex; sampling never accesses widgets.
-        std::vector<std::weak_ptr<PanelLedState>> led_scripts;
-        std::vector<std::weak_ptr<PanelActionState>> actions;
+        std::vector<std::weak_ptr<GridLedState>> led_scripts;
+        std::vector<std::weak_ptr<GridActionState>> actions;
         std::atomic<bool> scripts_requested = false;
-        nlohmann::json widget_clipboard = nlohmann::json::array();
-    } m_panel;
+    } m_grid_scripts;
     std::vector<ScriptWindow> m_script_windows;
     std::optional<uint64_t> m_selected_script_id;
     std::vector<PlotWindow> m_plot_windows;

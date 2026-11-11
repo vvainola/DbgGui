@@ -153,7 +153,7 @@ inline std::vector<Scalar*> restoreSpectra(PlotWindow::Subplot& subplot,
     return to_sample;
 }
 
-// Restore all styles through the same path for standalone and embedded plots.
+// Restore scalar, vector, and spectrum placements through the same path.
 inline std::vector<Scalar*> restorePlot(PlotWindow& plot,
                                         nlohmann::json const& saved,
                                         std::vector<std::unique_ptr<Scalar>> const& scalars,
@@ -286,18 +286,15 @@ inline void remapScalarId(nlohmann::json& settings,
     for (auto& plot : settings["scalar_plots"]) {
         remap_plot(plot);
     }
-    for (auto& panel : settings["panels"]) {
-        for (auto& widget : panel["widgets"]) {
-            if (widget.contains("plot")) {
-                remap_plot(widget["plot"]);
-            }
-        }
-    }
     for (auto& window : settings["custom_windows"]) {
         remap_signals(window, old_custom_key, scalar.group + " " + scalar.name);
     }
     for (auto& window : settings["grid_windows"]) {
-        remap_ids(remap_ids, window["signals"]);
+        for (auto& cell : window["grid"]["cells"]) {
+            if (cell.contains("scalar_id")) {
+                remap_ids(remap_ids, cell["scalar_id"]);
+            }
+        }
     }
     for (auto key : {"scalars", "scalar_symbols"}) {
         auto& entries = settings[key];

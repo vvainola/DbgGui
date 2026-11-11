@@ -2,6 +2,7 @@
 
 #include "imgui/imgui.h"
 #include "settings_migration.h"
+#include "grid_window.h"
 #include "plot_settings.h"
 
 namespace {
@@ -72,7 +73,7 @@ TEST_CASE("Version zero settings migrate scalar placements once") {
         {"layout", "unchanged"}
     };
     REQUIRE(settings_migration::migrate(settings));
-    REQUIRE(settings["format_version"] == 1);
+    REQUIRE(settings["format_version"] == settings_migration::FORMAT_VERSION);
     auto const& plot = settings["scalar_plots"]["1"];
     REQUIRE_FALSE(plot.contains("signals"));
     REQUIRE(plot["subplots"][0]["signals"] == nlohmann::json({{"7", 7}, {"99", 99}}));
@@ -148,10 +149,10 @@ TEST_CASE("Migration rejects conflicting window IDs and unsupported versions") {
         settings["vector_plots"]["1"] = {{"id", 1}, {"signals", nlohmann::json::object()}};
     }
     SECTION("Unsupported future version") {
-        settings["format_version"] = 2;
+        settings["format_version"] = settings_migration::FORMAT_VERSION + 1;
     }
     REQUIRE_THROWS_AS(settings_migration::migrate(settings), std::runtime_error);
-    REQUIRE(settings.value("format_version", 0) != 1);
+    REQUIRE(settings.value("format_version", 0) != settings_migration::FORMAT_VERSION);
 }
 
 TEST_CASE("Missing vector definitions do not prevent settings migration") {
@@ -166,7 +167,7 @@ TEST_CASE("Missing vector definitions do not prevent settings migration") {
         {"scalar_plots", {{"3", {{"id", 3}, {"signals", {{"pending", 99}}}}}}}
     };
     REQUIRE(settings_migration::migrate(settings));
-    REQUIRE(settings["format_version"] == 1);
+    REQUIRE(settings["format_version"] == settings_migration::FORMAT_VERSION);
     REQUIRE(settings["scalar_plots"]["1"]["subplots"][0]["vectors"] == nlohmann::json::array({{x_id, y_id}}));
     REQUIRE(settings["scalar_plots"]["2"]["subplots"][0]["vectors"].empty());
     REQUIRE(settings["scalar_plots"]["3"]["subplots"][0]["signals"]["pending"] == 99);
@@ -193,8 +194,99 @@ TEST_CASE("Malformed vector entries do not prevent valid settings from migrating
     settings["scalar_plots"]["2"] = {{"id", 2}, {"signals", {{"pending", 99}}}};
 
     REQUIRE(settings_migration::migrate(settings));
-    REQUIRE(settings["format_version"] == 1);
+    REQUIRE(settings["format_version"] == settings_migration::FORMAT_VERSION);
     REQUIRE(settings["scalar_plots"]["1"]["subplots"][0]["vectors"] == nlohmann::json::array({{x_id, y_id}}));
     REQUIRE(settings["scalar_plots"]["2"]["subplots"][0]["signals"]["pending"] == 99);
     REQUIRE(settings["scalar_symbols"].size() == 2);
+}
+
+TEST_CASE("Original Grid windows upgrade with stable IDs and dock layout") {
+    std::vector<uint64_t> signals(200, 0);
+    signals[0] = 11;
+    signals[1] = 12;
+    signals[10] = 21;
+    signals[11] = 22;
+    signals[2] = 999; // Hidden column: it must not become the next visible row.
+    signals[199] = 9999; // Hidden row and column must also survive migration.
+    std::string const layout = "[Window][Values###42]\nPos=20,30\nSize=400,200\nDockId=0x1234,1\n";
+    nlohmann::json original = {
+        {"format_version", 1}, {"layout", layout},
+        {"grid_windows", {{"42", {{"id", 42}, {"name", "Values"}, {"initial_focus", true},
+            {"rows", 2}, {"columns", 2}, {"text_to_value_ratio", 0.45f}, {"signals", signals}}}}}
+    };
+    SECTION("Version 1 settings") {}
+    SECTION("Unversioned settings") { original.erase("format_version"); }
+    auto settings = original;
+    REQUIRE(settings_migration::migrate(settings));
+    REQUIRE(settings["format_version"] == settings_migration::FORMAT_VERSION);
+    REQUIRE(settings["grid_windows"].is_array());
+    REQUIRE(settings["layout"] == layout);
+    REQUIRE(settings["grid_windows"].size() == 1);
+    auto const& window = settings["grid_windows"][0];
+    REQUIRE(window["id"] == 42);
+    REQUIRE(window["name"] == "Values");
+    REQUIRE(window["initial_focus"] == true);
+    REQUIRE(window["grid"]["rows"] == 2);
+    REQUIRE(window["grid"]["columns"] == 2);
+    REQUIRE(window["grid"]["text_to_value_ratio"] == 0.45f);
+    REQUIRE(window["grid"]["cells"].size() == 200);
+    REQUIRE(window["grid"]["cells"][0]["scalar_id"] == 11);
+    REQUIRE(window["grid"]["cells"][1]["scalar_id"] == 12);
+    REQUIRE(window["grid"]["cells"][10]["scalar_id"] == 21);
+    REQUIRE(window["grid"]["cells"][11]["scalar_id"] == 22);
+    REQUIRE(window["grid"]["cells"][2]["scalar_id"] == 999);
+    REQUIRE(window["grid"]["cells"][199]["scalar_id"] == 9999);
+    GridWindow restored(window);
+    restored.resize(20, 10);
+    REQUIRE(restored.cells[2].value.scalar_id == 999);
+    REQUIRE(restored.cells[199].value.scalar_id == 9999);
+    auto const migrated = settings;
+    REQUIRE_FALSE(settings_migration::migrate(settings));
+    REQUIRE(settings == migrated);
+}
+
+TEST_CASE("Grid window migration keeps empty cells unbound and rejects conflicting IDs") {
+    nlohmann::json settings = {{"format_version", 1}, {"grid_windows", {{"1", {
+        {"id", 1}, {"name", "Empty"}, {"rows", 1}, {"columns", 2}, {"signals", {0, 99}}
+    }}}}};
+    SECTION("Empty and unresolved bindings") {
+        REQUIRE(settings_migration::migrate(settings));
+        REQUIRE_FALSE(settings["grid_windows"][0]["grid"]["cells"][0].contains("scalar_id"));
+        REQUIRE(settings["grid_windows"][0]["grid"]["cells"][1]["scalar_id"] == 99);
+    }
+    SECTION("Conflicting IDs") {
+        settings["grid_windows"]["duplicate"] = settings["grid_windows"]["1"];
+        auto const before = settings;
+        REQUIRE_THROWS(settings_migration::migrate(settings));
+        REQUIRE(settings == before);
+    }
+}
+
+TEST_CASE("Grid window creation keeps its committed hotkey ID") {
+    nlohmann::json settings = {{"format_version", settings_migration::FORMAT_VERSION}, {"hotkeys", {{"add-grid-window", 123}}}};
+    auto const before = settings;
+    REQUIRE_FALSE(settings_migration::migrate(settings));
+    REQUIRE(settings == before);
+}
+
+TEST_CASE("Version one upgrades preserve normalized plots, scripts, and hotkeys") {
+    nlohmann::json settings = {
+        {"format_version", 1}, {"hotkeys", {{"add-grid-window", 123}}},
+        {"scalar_plots", {{"1", {{"id", 1}, {"name", "Measurements"},
+            {"subplots", nlohmann::json::array({
+                {{"type", PlotType::Scalar}, {"signals", {{"source", 7}}}},
+                {{"type", PlotType::Vector}, {"vectors", {{7, 99}}}},
+                {{"type", PlotType::Spectrum}, {"spectrums", {{7, 0}}}}
+            })}
+        }}}},
+        {"custom_windows", {{"2", {{"id", 2}, {"signals", {{"source", 7}}}}}}},
+        {"script_windows", nlohmann::json::array({{{"id", 3}, {"loop_count", 2}, {"text", "wait(1)"}}})},
+        {"layout", "[Window][Measurements###1]\nDockId=0x1234,0\n"}
+    };
+    auto expected = settings;
+    expected["format_version"] = settings_migration::FORMAT_VERSION;
+    REQUIRE(settings_migration::migrate(settings));
+    REQUIRE(settings == expected);
+    REQUIRE_FALSE(settings_migration::migrate(settings));
+    REQUIRE(settings == expected);
 }

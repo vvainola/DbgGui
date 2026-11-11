@@ -26,7 +26,7 @@
 #include "str_helpers.h"
 #include "imgui_internal.h"
 #include "lua_syntax_highlighter.h"
-#include "lua_script_editor.h"
+#include "script_editor.h"
 #include "themes.h"
 #include "multi_select_helpers.h"
 
@@ -70,41 +70,6 @@ void showLuaHelpMarker() {
     show_function("save_csv('filename')", "    Save all current scalars to a CSV file.");
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
-}
-
-float scriptLineNumberGutterWidth(int line_count) {
-    ImGuiStyle const& style = ImGui::GetStyle();
-    return ImGui::CalcTextSize(std::to_string(std::max(1, line_count)).c_str()).x + 2.0f * style.FramePadding.x;
-}
-
-void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua) {
-    int const line_count = static_cast<int>(lines.size());
-    float const gutter_width = scriptLineNumberGutterWidth(line_count);
-    if (ImGui::BeginTable("##running_script_lines", 2, ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("##line", ImGuiTableColumnFlags_WidthFixed, gutter_width);
-        ImGui::TableSetupColumn("##source", ImGuiTableColumnFlags_WidthStretch);
-        bool inside_block_comment = false;
-        for (int i = 0; i < line_count; ++i) {
-            if (i == current_line) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TableNextColumn();
-                ImGui::Separator();
-            }
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            std::string line_number = std::to_string(i + 1);
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gutter_width - ImGui::GetStyle().FramePadding.x - ImGui::CalcTextSize(line_number.c_str()).x);
-            ImGui::TextDisabled("%s", line_number.c_str());
-            ImGui::TableNextColumn();
-            if (highlight_lua) {
-                showLuaHighlightedText(lines[i], inside_block_comment);
-            } else {
-                ImGui::TextUnformatted(lines[i].data(), lines[i].data() + lines[i].size());
-            }
-        }
-        ImGui::EndTable();
-    }
 }
 
 std::string getSymbolScaleStr(VariantSymbol const& sym,
@@ -556,16 +521,10 @@ void DbgGui::showMainMenuBar() {
                 HelpMarker(std::format("Hotkey to add new custom window is {}.", commandHotkeyName("add-custom-window", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_4)).c_str());
                 addPopupModal(str::ADD_CUSTOM_WINDOW);
 
-                // Grid window
                 if (ImGui::Button("Grid window")) {
                     ImGui::OpenPopup(str::ADD_GRID_WINDOW);
                 }
                 addPopupModal(str::ADD_GRID_WINDOW);
-
-                if (ImGui::Button("Panel")) {
-                    ImGui::OpenPopup(str::ADD_PANEL);
-                }
-                addPopupModal(str::ADD_PANEL);
 
                 // Dockspace
                 if (ImGui::Button("Dockspace")) {
@@ -1275,13 +1234,6 @@ void DbgGui::showLeafSymbolTreeNode(VariantSymbol* sym, std::string const& symbo
     ImGui::TreePop();
     m_visible_tree_symbols.push_back(sym);
 
-    // The multi-select API handles plain-click select, ctrl-toggle (with toggle-off),
-    // shift-range, Ctrl+A, and Escape. We only intercept Ctrl+Shift to open
-    // the Custom Signal Creator, since that is an application-specific action.
-    if (ImGui::IsItemClicked() && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift) {
-        m_show_custom_signal_creator = true;
-    }
-
     bool const arithmetic_or_enum = sym->getType() == VariantSymbol::Type::Arithmetic
                                  || sym->getType() == VariantSymbol::Type::Enum;
     if (arithmetic_or_enum && ImGui::BeginDragDropSource()) {
@@ -1561,143 +1513,4 @@ void DbgGui::showScriptWindow() {
         ImGui::EndTable();
     }
     ImGui::End();
-}
-
-void DbgGui::addGridWindowDragAndDrop(GridWindow& grid_window, int row, int col) {
-    if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_ID_MULTI")) {
-            std::span<uint64_t> ids(reinterpret_cast<uint64_t*>(payload->Data),
-                                    payload->DataSize / sizeof(uint64_t));
-            if (!ids.empty()) {
-                Scalar* scalar = findScalar(m_scalars, ids[0]);
-                if (scalar) {
-                    grid_window.scalars[row][col] = scalar->id;
-                }
-            }
-        }
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCALAR_SYMBOL_MULTI")) {
-            std::span<VariantSymbol*> symbols(reinterpret_cast<VariantSymbol**>(payload->Data),
-                                              payload->DataSize / sizeof(VariantSymbol*));
-            if (!symbols.empty()) {
-                Scalar* scalar = addScalarSymbol(symbols[0], m_group_to_add_symbols);
-                if (scalar) {
-                    grid_window.scalars[row][col] = scalar->id;
-                }
-            }
-        }
-        ImGui::EndDragDropTarget();
-    }
-}
-
-void DbgGui::showGridWindow() {
-    for (GridWindow& grid_window : m_grid_windows) {
-        if (!grid_window.open) {
-            continue;
-        }
-        grid_window.focus.focused = ImGui::Begin(grid_window.title().c_str(), NULL, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoScrollbar);
-        grid_window.closeOnMiddleClick();
-        grid_window.contextMenu();
-        if (!grid_window.focus.focused) {
-            ImGui::End();
-            continue;
-        }
-        // Calculate text & value font sizes. Not accurate but seems to be roughly correct
-        auto const& style = ImGui::GetStyle();
-        float padding = style.FramePadding.y + style.CellPadding.y + style.ItemSpacing.y * 0.5;
-        float row_font_size = ((ImGui::GetContentRegionAvail().y - style.WindowPadding.y) / grid_window.rows - padding);
-        row_font_size = (float)std::clamp((int)(row_font_size), MIN_FONT_SIZE, MAX_FONT_SIZE - 1);
-        float text_font_size = grid_window.text_to_value_ratio * row_font_size;
-        float value_font_size = (1.0f - grid_window.text_to_value_ratio) * row_font_size;
-
-        float available_y = ImGui::GetContentRegionAvail().y;
-        float needed_y = (padding * 2 + row_font_size) * grid_window.rows;
-        if (available_y < needed_y) {
-            float scale = available_y / needed_y;
-            text_font_size *= scale;
-            value_font_size *= scale;
-        }
-        text_font_size = std::max(text_font_size, float(MIN_FONT_SIZE));
-        value_font_size = std::max(value_font_size, float(MIN_FONT_SIZE));
-
-        if (ImGui::BeginTable("grid_table",
-                              grid_window.columns,
-                              ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
-            for (int row = 0; row < grid_window.rows; ++row) {
-                for (int col = 0; col < grid_window.columns; ++col) {
-                    ImGui::TableNextColumn();
-
-                    Scalar* scalar = findScalar(m_scalars, grid_window.scalars[row][col]);
-                    if (scalar) {
-                        // Resize text so that it fits the cell
-                        ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);
-                        ImVec2 text_size = ImGui::CalcTextSize(scalar->alias_and_group.c_str());
-                        ImVec2 available = ImGui::GetContentRegionAvail();
-                        if (available.x < text_size.x) {
-                            ImGui::PopFont();
-                            ImGui::PushFont(ImGui::GetDefaultFont(), (text_font_size * (available.x / text_size.x)));
-                        }
-
-                        // Name
-                        if (scalar->customScaleOrOffset()) {
-                            ImGui::TextColored(COLOR_LIGHT_BLUE, "%s", scalar->alias_and_group.c_str());
-                        } else {
-                            ImGui::TextUnformatted(scalar->alias_and_group.c_str());
-                        }
-                        bool const delete_pressed = ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Delete);
-                        bool const delete_clicked = addScalarContextMenu(scalar);
-                        if (delete_pressed || delete_clicked) {
-                            grid_window.scalars[row][col] = 0;
-                        }
-                        ImGui::PopFont();
-                        // Make text drag-and-droppable
-                        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                            ImGui::SetDragDropPayload("SCALAR_ID_MULTI", &scalar->id, sizeof(uint64_t));
-                            ImGui::Text("Drag to plot\n  %s", scalar->name_and_group.c_str());
-                            ImGui::EndDragDropSource();
-                        }
-
-                        // Value. Manual keyboard navigation because the text in the same cell messes up default navigation.
-                        ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
-                        if (grid_window.isCellFocused({row, col})) {
-                            ImGui::SetKeyboardFocusHere();
-                        }
-                        addInputScalar(scalar->src,
-                                       "##grid_" + scalar->name_and_group,
-                                       scalar->getScale(),
-                                       scalar->getOffset(),
-                                       scalar->read_only);
-                        if (ImGui::IsItemFocused()) {
-                            if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_DownArrow)) {
-                                grid_window.focusCell({std::min(row + 1, grid_window.rows - 1), col});
-                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_UpArrow)) {
-                                grid_window.focusCell({std::max(row - 1, 0), col});
-                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_RightArrow)) {
-                                grid_window.focusCell({row, std::min(col + 1, grid_window.columns - 1)});
-                            } else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_LeftArrow)) {
-                                grid_window.focusCell({row, std::max(col - 1, 0)});
-                            }
-                        }
-                        ImGui::PopFont();
-                    } else {
-                        ImGui::PushFont(ImGui::GetDefaultFont(), text_font_size);
-                        ImGui::Text("");
-                        ImGui::PopFont();
-
-                        ImGui::PushFont(ImGui::GetDefaultFont(), value_font_size);
-                        ImGui::Text("-");
-                        ImGui::PopFont();
-                    }
-                    addGridWindowDragAndDrop(grid_window, row, col);
-
-                    // Make the empty space also valid drop target
-                    ImGui::SameLine();
-                    ImGui::InvisibleButton(std::format("##canvas_{}_{}", row, col).c_str(), ImVec2(std::max(ImGui::GetContentRegionAvail().x, 1.f), value_font_size));
-                    addGridWindowDragAndDrop(grid_window, row, col);
-                }
-            }
-
-            ImGui::EndTable();
-        }
-        ImGui::End();
-    }
 }

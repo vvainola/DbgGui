@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2025 vvainola
+// Copyright (c) 2026 vvainola
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,16 @@
 
 #pragma once
 
+#include "imgui.h"
+
 #include <string>
+#include <string_view>
 #include <vector>
 
-inline constexpr int MAX_CUSTOM_SIGNALS_IN_EQ = 10;
-inline constexpr int MAX_CUSTOM_EQ_LENGTH = 1000;
-inline constexpr int MAX_CUSTOM_EQ_NAME = 256;
+// Keep the minimum height and expand width for the longest line, up to the viewport.
+ImVec2 scriptEditorSizeToFit(std::string_view text, ImVec2 minimum_size);
 
-std::string getFormattedEqForSample(std::string_view fmt, std::vector<double> const& samples);
+void inputScriptTextWithLineNumbers(std::string& text, ImVec2 size, bool highlight_lua);
+
+// Read-only script view with a progress separator after current_line source lines.
+void showRunningScriptWithLineNumbers(std::vector<std::string_view> const& lines, int current_line, bool highlight_lua);

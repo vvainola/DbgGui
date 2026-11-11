@@ -121,7 +121,7 @@ class CsvPlotter {
     void showVectorPlot(PlotBase& plot_base, int visible_plot_idx);
     void showSpectrumPlot(PlotBase& plot_base, int visible_plot_idx);
     void showXSignalCombo();
-    bool showPlotContextMenu(PlotBase& plot);
+    bool showPlotHeader(PlotBase& plot);
 
     std::vector<double> getVisibleSamples(CsvSignal const& signal);
     std::span<double const> getXSignalSamples(CsvFileData const& file);
@@ -157,6 +157,7 @@ class CsvPlotter {
     void removeFileFromPlots(CsvFileData& file);
     void removeAllFiles();
     void openFilesFromDialog();
+    std::vector<std::string> openDialogMultiple();
     void clearPlots();
     void copyPlottedSignalArgumentsToClipboard();
     void addClipboardFileFromClipboard();
@@ -167,6 +168,7 @@ class CsvPlotter {
     };
 
     std::vector<std::unique_ptr<CsvFileData>> m_csv_data;
+    std::string m_last_opened_directory = std::filesystem::current_path().string();
     std::map<std::string, CsvSignalTransform> m_signal_transform_settings;
     std::map<std::string, CsvPlotStyle> m_signal_plot_style_settings;
     std::map<std::string, std::string> m_signal_alias_settings;
@@ -180,9 +182,9 @@ class CsvPlotter {
     bool m_save_settings = true;
     int m_rows = 1;
     int m_cols = 1;
-    // Docked plots are stored in stable row/column slots: row * MAX_PLOTS + col.
-    // plotAt() still receives a visible row-major index from render loops, but maps
-    // it through the current grid dimensions so adding columns does not move lower rows.
+    // Grid plots use fixed slots (row * MAX_PLOTS + column) to preserve contents
+    // when the grid is resized. plotAt() maps visible indices to these slots.
+    // Floating plots stay undocked because the grid layout is rebuilt every frame.
     int m_undocked_plot_count = 0;
     float m_signals_window_width = 0.15f;
     struct {
@@ -205,15 +207,11 @@ class CsvPlotter {
     double m_drag_x2 = 0;
     std::string m_error_message;
     int m_clipboard_file_count = 0;
-    // Comparison selection persists between Alt holds, while the per-plot name
-    // snapshots are refreshed for each new hold and never store signal pointers.
     struct {
         bool active = false;
         float alt_hold_duration = 0;
         // Retained after Alt is released so the next comparison starts here.
         int selected_file_index = 0;
-        std::array<CsvPlotSignalSettings, MAX_PLOT_WINDOWS> docked_plot_settings;
-        std::array<CsvPlotSignalSettings, MAX_UNDOCKED_PLOTS> undocked_plot_settings;
     } m_comparison;
 
     std::vector<CsvSignal*> m_selected_signals;
@@ -225,4 +223,5 @@ class CsvPlotter {
     std::vector<CsvSignal*> m_visible_signals;
     std::array<PlotBase, MAX_PLOT_WINDOWS> m_docked_plots;
     std::array<PlotBase, MAX_UNDOCKED_PLOTS> m_undocked_plots;
+    std::optional<std::pair<PlotBase*, PlotBase*>> m_pending_plot_swap;
 };

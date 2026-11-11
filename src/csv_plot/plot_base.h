@@ -71,12 +71,6 @@ struct ScalarPlot {
         }
         remove(signals, signal);
     }
-
-    void clear() {
-        for (int i = (int)signals.size() - 1; i >= 0; --i) {
-            removeSignal(signals[i]);
-        }
-    }
 };
 
 struct VectorPlot {
@@ -125,13 +119,13 @@ struct SpectrumPlot {
     }
 };
 
-// PlotBase owns both the persistable signal-name lists (settings) and the live plot
-// data (variant). Bundling them removes the need for a parallel settings array and
-// lets callers use plot.settings / plot.variant directly instead of going through an
-// index-based accessor.
+// Keep live data, saved bindings, and comparison snapshots together so they move
+// as one unit when plots are swapped.
 class PlotBase {
   public:
     CsvPlotSignalSettings settings;
+    // Refreshed when comparison starts; names survive files with missing signals and move with the plot.
+    CsvPlotSignalSettings comparison_settings;
     std::variant<ScalarPlot, VectorPlot, SpectrumPlot> variant = ScalarPlot{};
 
     PlotBase() = default;
