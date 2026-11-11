@@ -250,13 +250,27 @@ char const* renderGridScalarLabel(Scalar const* scalar, bool bound, float font_s
     return label;
 }
 
-void drawGridScriptErrorBorder() {
-    ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),
-                                        ImGui::GetItemRectMax(),
-                                        SCRIPT_ERROR_RED,
-                                        ImGui::GetStyle().FrameRounding,
-                                        ImDrawFlags_None,
-                                        2.0f);
+// Leave the button as the last item for the cell's context menu and check mark.
+bool gridControlButton(char const* label, bool highlighted, bool has_error) {
+    float const height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
+    if (highlighted) {
+        ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, RUNNING_BUTTON_PRESSED_DARK_GREEN);
+    }
+    bool const clicked = ImGui::Button(label, {-1, height});
+    if (highlighted) {
+        ImGui::PopStyleColor(3);
+    }
+    if (has_error) {
+        ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),
+                                          ImGui::GetItemRectMax(),
+                                          SCRIPT_ERROR_RED,
+                                          ImGui::GetStyle().FrameRounding,
+                                          ImDrawFlags_None,
+                                          2.0f);
+    }
+    return clicked;
 }
 
 void showGridScriptError(std::string_view error, float width) {
@@ -373,14 +387,8 @@ void DbgGui::processGridScripts(double timestamp) {
 void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
     auto& cell = grid.cells[index].button;
     GridActionScript& on_click = cell.on_click;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
     bool const running = on_click.action && on_click.action->running.load();
-    if (running) {
-        ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, RUNNING_BUTTON_PRESSED_DARK_GREEN);
-    }
-    if (ImGui::Button((cell.label + "###action").c_str(), {-1, cell_height})) {
+    if (gridControlButton((cell.label + "###action").c_str(), running, on_click.hasError())) {
         if (running) {
             on_click.action->stop_requested.store(true);
         } else {
@@ -389,13 +397,6 @@ void DbgGui::renderButtonCell(GridWindow& grid, size_t index) {
             m_grid_scripts.actions.push_back(on_click.action);
         }
     }
-    if (running) {
-        ImGui::PopStyleColor(3);
-    }
-    if (on_click.hasError()) {
-        drawGridScriptErrorBorder();
-    }
-
     bool const editor_open = ImGui::BeginPopupContextItem("button_settings");
     on_click.updateEditor(editor_open);
     if (editor_open) {
@@ -541,28 +542,16 @@ void DbgGui::renderSliderCell(GridWindow& grid, size_t index) {
 
 void DbgGui::renderCheckboxCell(GridWindow& grid, size_t index) {
     auto& cell = grid.cells[index].checkbox;
-    float const cell_height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 4);
-    bool const checked = cell.checked;
-    if (checked) {
-        ImGui::PushStyleColor(ImGuiCol_Button, RUNNING_BUTTON_GREEN);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, RUNNING_BUTTON_HOVERED_LIGHT_GREEN);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, RUNNING_BUTTON_PRESSED_DARK_GREEN);
-    }
-    if (ImGui::Button((cell.label + "###toggle").c_str(), {-1, cell_height})) {
+    if (gridControlButton((cell.label + "###toggle").c_str(), cell.checked,
+                          cell.on_enable.hasError() || cell.on_disable.hasError())) {
         auto action = cell.setChecked(!cell.checked, createLuaScriptHost());
         std::scoped_lock lock(m_sampling_mutex);
         m_grid_scripts.actions.push_back(action);
     }
-    if (checked) {
-        ImGui::PopStyleColor(3);
-    }
-    if (cell.on_enable.hasError() || cell.on_disable.hasError()) {
-        drawGridScriptErrorBorder();
-    }
     if (cell.checked) {
         ImVec2 const min = ImGui::GetItemRectMin();
         ImVec2 const max = ImGui::GetItemRectMax();
-        float const mark_size = std::min(ImGui::GetFontSize(), cell_height);
+        float const mark_size = std::min(ImGui::GetFontSize(), max.y - min.y);
         ImGui::RenderCheckMark(ImGui::GetWindowDrawList(),
                                {min.x + ImGui::GetStyle().FramePadding.x, (min.y + max.y - mark_size) * 0.5f},
                                ImGui::GetColorU32(ImGuiCol_Text),
